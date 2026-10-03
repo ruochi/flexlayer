@@ -15,7 +15,7 @@ export async function renderFvg(source: string | FvgNode, options: RenderOptions
   await initFontsForMeasure({ fontsCacheDir: options.fontsCacheDir })
   const baseDir = options.baseDir ?? process.cwd()
   const doc = await layoutSource(source, baseDir)
-  const png = paintDocument(doc.root, {
+  const png = await paintDocument(doc.root, {
     width: doc.width,
     height: doc.height,
     background: doc.background,

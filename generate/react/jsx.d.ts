@@ -136,6 +136,44 @@ declare global {
       polyline: FvgCommon & { points?: string }
       polygon: FvgCommon & { points?: string; fill?: string }
       path: FvgCommon & { d?: string; fill?: string }
+      sphere: FvgPositioned &
+        FvgEffects & {
+          r?: number | string
+          fill?: string
+          rotate?: number | string
+          rotateX?: number | string
+          rotateY?: number | string
+          z?: number | string
+          scale?: number | string
+          opacity?: number | string
+        }
+      box: FvgPositioned &
+        FvgEffects & {
+          width?: number | string
+          height?: number | string
+          depth?: number | string
+          fill?: string
+          rotate?: number | string
+          rotateX?: number | string
+          rotateY?: number | string
+          z?: number | string
+          scale?: number | string
+          opacity?: number | string
+        }
+      extrude: FvgPositioned &
+        FvgEffects & {
+          d?: string
+          depth?: number | string
+          fill?: string
+          rotate?: number | string
+          rotateX?: number | string
+          rotateY?: number | string
+          z?: number | string
+          scale?: number | string
+          opacity?: number | string
+        }
+      /** 外部 glb。位置和宽高写在外包的 layer 上，src 只写在这里。 */
+      model: FvgCommon & { src?: string }
       curve: FvgCommon & { points?: string; closed?: boolean | string; fill?: string; stroke?: string }
       h1: FvgCommon
       h2: FvgCommon

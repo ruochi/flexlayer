@@ -3,7 +3,7 @@ import { ATTRS, HTML_STYLE_ATTRS, attrByName, issueFor } from './schema.js'
 import { parseStyle } from './style.js'
 import { isTextBoxTag } from './text.js'
 import type { Issue, IssueLevel } from './types.js'
-import { isImageTag, isLineTag, isShapeTag } from './tags.js'
+import { isImageTag, isLineTag, isMeshTag, isShapeTag } from './tags.js'
 
 const BLOCK_IN_TEXT = new Set(['h1', 'h2', 'h3', 'p', 'div'])
 
@@ -49,6 +49,7 @@ function usesAttributes(node: FvgNode): boolean {
     node.tag === 'use' ||
     isShapeTag(node.tag) ||
     isLineTag(node.tag) ||
+    isMeshTag(node.tag) ||
     Boolean(node.draw)
   )
 }
@@ -94,6 +95,30 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
         path,
           'cx、cy、anchor 只写在 layer 上',
           '定位写在外层 layer 上，flex 子元素跟着排布走',
+      ),
+    )
+  }
+
+  if (node.tag === 'model' && (positioned || present(attrs, 'width') || present(attrs, 'height'))) {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        'model 的位置和尺寸写在外包的 layer 上',
+        '例如 <layer cx="320" cy="180" width="200" height="200"><model src="hero.glb" /></layer>',
+      ),
+    )
+  }
+
+  if (parent === 'flex' && isMeshTag(node.tag)) {
+    out.push(
+      flagged(
+        'info',
+        'non-canonical',
+        path,
+        '网格放在 flex 里不是规范写法',
+        '包一层有 perspective 的 layer，例如 <layer perspective="700"><sphere cx="80" cy="80" r="40" /></layer>',
       ),
     )
   }

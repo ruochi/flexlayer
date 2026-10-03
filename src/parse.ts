@@ -12,7 +12,7 @@ export type FvgNode = {
 
 export type FvgChild = string | FvgNode
 
-const VOID_TAGS = new Set(['br', 'font', 'img', 'image'])
+const VOID_TAGS = new Set(['br', 'font', 'img', 'image', 'sphere', 'box', 'extrude', 'model'])
 
 const CLOSE_TAG_RE = /<\s*\/\s*([a-zA-Z][\w-]*)\s*>/y
 const OPEN_TAG_RE = /<\s*([a-zA-Z][\w-]*)((?:\s+[^\s=>/]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'>]+))?)*)\s*(\/)?\s*>/y

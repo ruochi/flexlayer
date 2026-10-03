@@ -16,6 +16,7 @@ import { parseFvg } from './parse.js'
 import { ensureBuiltinFonts, registerFontsFromDocument } from './fonts.js'
 import { catmullRomPath } from './curve.js'
 import { isGradient, parseGradient, solidPaint } from './gradient.js'
+import { resolveModelFile } from './glb.js'
 import { translateSvgPath } from './path.js'
 import { perspectiveIssues } from './perspective.js'
 import {
@@ -44,7 +45,7 @@ import {
   layoutText,
 } from './text.js'
 import { checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, rowColumnHint } from './rules.js'
-import { canonicalTag, FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isShapeTag } from './tags.js'
+import { canonicalTag, FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag } from './tags.js'
 import type {
   Anchor,
   Box,
@@ -63,6 +64,7 @@ import type {
   GradeSpec,
   LineGeometry,
   LineLayoutNode,
+  MeshLayoutNode,
   NoiseSpec,
   OverlaySpec,
   ShadowSpec,
@@ -903,6 +905,124 @@ function layoutShape(node: FvgNode, ctx: LayoutContext, defaultStroke: string): 
   }
 }
 
+function pathBoundsOf(d: string): Box {
+  if (!d.trim()) return { x: 0, y: 0, width: 0, height: 0 }
+  const p = new Path2D(d)
+  const b = p.getBounds?.() ?? p.computeTightBounds?.()
+  if (b && b.length >= 4) return { x: b[0], y: b[1], width: Math.max(0, b[2] - b[0]), height: Math.max(0, b[3] - b[1]) }
+  return { x: 0, y: 0, width: 0, height: 0 }
+}
+
+function readDepth(raw: string | undefined, fallback: number, ctx: LayoutContext, tag: string): number {
+  const fb = fallback > 0 ? fallback : 1
+  if (raw == null || raw.trim() === '') {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `${tag} 缺少 depth，已用 ${fb}`,
+      hint: '写成像素厚度，例如 depth="40"',
+    })
+    return fb
+  }
+  const parsed = parseNumber(raw)
+  if (parsed == null || !(parsed > 0)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 depth: ${raw}`,
+      hint: '写成正的像素厚度，例如 depth="40"',
+    })
+    return fb
+  }
+  return parsed
+}
+
+function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
+  warnNestedMasks(node, ctx)
+  const appearance = readAttrAppearance(node.attrs)
+  const fill = readPaint(node.attrs.fill ?? '#000000', '#000000', ctx, 'fill')
+  let width = 0
+  let height = 0
+  let mesh: MeshLayoutNode['mesh']
+  if (node.tag === 'sphere') {
+    const r = parseNumber(node.attrs.r) ?? 0
+    if (!(r > 0)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'sphere 需要正的 r',
+        hint: '例如 <sphere cx="220" cy="340" r="90" />',
+      })
+    }
+    width = height = Math.max(0, r) * 2
+    mesh = { type: 'sphere', r: Math.max(0, r) }
+  } else if (node.tag === 'box') {
+    width = parseNumber(node.attrs.width) ?? 0
+    height = parseNumber(node.attrs.height) ?? 0
+    if (!(width > 0) || !(height > 0)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'box 需要正的 width 和 height',
+        hint: '例如 <box cx="430" cy="400" width="150" height="100" depth="60" />',
+      })
+    }
+    const depth = readDepth(node.attrs.depth, Math.min(width, height), ctx, 'box')
+    mesh = { type: 'box', depth }
+  } else if (node.tag === 'extrude') {
+    const d = node.attrs.d ?? ''
+    if (!d.trim()) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'extrude 缺少 d',
+        hint: 'd 和 path 一样，是 y 向下的 SVG 路径',
+      })
+    }
+    const box = pathBoundsOf(d)
+    width = box.width
+    height = box.height
+    const depth = readDepth(node.attrs.depth, Math.min(width, height), ctx, 'extrude')
+    mesh = { type: 'extrude', d: translateSvgPath(d, -box.x, -box.y), depth }
+  } else {
+    const src = node.attrs.src ?? ''
+    const resolved = resolveModelFile(src, ctx.baseDir)
+    if (resolved.reason !== 'ok') {
+      const message =
+        resolved.reason === 'empty' ? 'model 缺少 src' : resolved.reason === 'type' ? 'model 只接受 .glb' : `模型无法加载: ${src.trim()}`
+      ctx.issues.push({
+        level: 'warn',
+        code: 'missing-model',
+        path: ctx.pathPrefix,
+        message,
+        hint: 'src 相对 .layer 所在目录，例如 <model src="hero.glb" />',
+      })
+    }
+    mesh = { type: 'model', src, ...(resolved.file ? { file: resolved.file } : {}) }
+  }
+  return {
+    kind: 'mesh',
+    path: ctx.pathPrefix,
+    id: node.attrs.id,
+    tag: node.tag,
+    x: 0,
+    y: 0,
+    width,
+    height,
+    ink: { x: 0, y: 0, width, height },
+    ...appearance,
+    mesh,
+    fill,
+    ...readEffects(node.attrs, ctx, solidPaint(fill, ctx.color)),
+    ...layoutDrawMeta(node, ctx),
+  }
+}
+
 function layoutLineNode(node: FvgNode, ctx: LayoutContext, defaultStroke: string): LineLayoutNode {
   warnNestedMasks(node, ctx)
   let geom: LineGeometry
@@ -1073,6 +1193,26 @@ async function measureFlexChild(node: FvgNode, ctx: LayoutContext, direction: 'r
       preferredMain: direction === 'row' ? laid.width : laid.height,
       preferredCross: direction === 'row' ? laid.height : laid.width,
       isText: true,
+    }
+  }
+  if (isMeshTag(node.tag)) {
+    const laid = layoutMesh(node, ctx)
+    if (laid.mesh.type === 'model' && laid.width <= 0) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'missing-model',
+        path: ctx.pathPrefix,
+        message: 'model 没有可放入的宽高',
+        hint: '外包一层有宽高的 layer，例如 <layer width="200" height="200"><model src="hero.glb" /></layer>',
+      })
+    }
+    return {
+      node: laid,
+      minMain: direction === 'row' ? laid.width : laid.height,
+      minCross: direction === 'row' ? laid.height : laid.width,
+      preferredMain: direction === 'row' ? laid.width : laid.height,
+      preferredCross: direction === 'row' ? laid.height : laid.width,
+      isText: false,
     }
   }
   if (isShapeTag(node.tag)) {
@@ -1429,6 +1569,7 @@ async function layoutLayer(node: FvgNode, ctx: LayoutContext): Promise<LayerLayo
     else if (isImageTag(ch.tag)) laid = await layoutImage(ch, subCtx)
     else if (isTextBoxTag(ch.tag)) laid = layoutTextBox(ch, subCtx, ctx.maxContentWidth)
     else if (isShapeTag(ch.tag)) laid = layoutShape(ch, subCtx, ctx.color)
+    else if (isMeshTag(ch.tag)) laid = layoutMesh(ch, subCtx)
     else if (ch.tag === 'layer') laid = await layoutLayer(ch, subCtx)
     else {
       laid = layoutUnknownOrCustom(ch, subCtx)
@@ -1487,6 +1628,26 @@ async function layoutLayer(node: FvgNode, ctx: LayoutContext): Promise<LayerLayo
     layerH = fixedH != null && fixedH > 0 ? fixedH : Math.max(0, maxBottom, maxDefaultH)
     for (const p of placed) {
       if (p.useDefaultCenter && !p.coords) positionOne(p, layerW, layerH)
+    }
+  }
+
+  for (const p of placed) {
+    const child = p.child
+    if (child.kind !== 'mesh' || child.mesh.type !== 'model') continue
+    if (layerW > 0 && layerH > 0) {
+      child.width = layerW
+      child.height = layerH
+      child.ink = { x: 0, y: 0, width: layerW, height: layerH }
+      child.x = 0
+      child.y = 0
+    } else {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'missing-model',
+        path: child.path,
+        message: 'model 没有可放入的宽高',
+        hint: '外包一层有宽高的 layer，例如 <layer width="200" height="200"><model src="hero.glb" /></layer>',
+      })
     }
   }
 

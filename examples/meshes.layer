@@ -1,0 +1,8 @@
+<layer width="640" height="800" background="#0f1115" perspective="700">
+  <sphere cx="220" cy="340" r="90" z="50" fill="#4CC3D9" />
+  <box cx="430" cy="400" width="150" height="100" depth="60" z="-20" fill="#EF2D5E" />
+  <extrude d="M0 0 H140 V36 H90 V80 H0 Z" depth="18" cx="320" cy="640" fill="#f4f1ea" />
+  <layer cx="320" cy="180" width="200" height="200" z="10">
+    <model src="box.glb" />
+  </layer>
+</layer>
