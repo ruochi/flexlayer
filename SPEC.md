@@ -71,7 +71,9 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 `rotate`、`scale` 只影响绘制，不影响布局。报告里的 `box` 是变换前的布局盒子（只累加平移），`ink` 是变换后的外接矩形。有透视时 `ink` 改成投影后的外接矩形，并多一个 `quad`（投影后的四个角）。
 
-`perspective` 只写在 `layer` 上，单位是像素，是直接子元素共用的视距。灭点是这一层盒子的中心，`z` 正方向朝观众，数值越大看起来越大。`rotateX`、`rotateY`、`z` 的归属和 `rotate` 相同，写在要转动或推近的那一层上，不改变布局。没有祖先写 `perspective` 时仍按二维绘制，并报 `flatten-3d`。子元素的 `z` 大于等于视距时报 `behind-camera`，该元素不绘制。带三维姿态的平面先按 4 倍分辨率绘制，再平均缩回逻辑像素，斜边因此抗锯齿。平面上的 `shadow` 和 `glow` 画在这张位图的外侧，再一起投影，不会被裁在平面自己的框里。没有三维姿态的内容仍走原来的二维绘制。灯光和网格不在这一步。
+`perspective` 只写在 `layer` 上，单位是像素，是直接子元素共用的视距。灭点是这一层盒子的中心，`z` 正方向朝观众，数值越大看起来越大。`rotateX`、`rotateY`、`z` 的归属和 `rotate` 相同，写在要转动或推近的那一层上，不改变布局。没有祖先写 `perspective` 时仍按二维绘制，并报 `flatten-3d`。子元素的 `z` 大于等于视距时报 `behind-camera`，该元素不绘制。带三维姿态的平面先按 4 倍分辨率绘制，再平均缩回逻辑像素，斜边因此抗锯齿。平面上的 `shadow` 和 `glow` 画在这张位图的外侧，再一起投影，不会被裁在平面自己的框里。没有三维姿态、也没有网格的内容仍走原来的二维绘制。
+
+同一层里如果出现 `sphere`、`box`、`extrude` 或 `model`，这一层改成一台三维场景，和带姿态的平面共用这一个 `perspective`。没有这些标签时，像素和上面的平面透视一致。`sphere` 写 `cx` `cy` `r`，布局盒子是边长 `2r` 的正方形。`box` 写 `cx` `cy` `width` `height` `depth`，布局只看宽高。`extrude` 的 `d` 和 `path` 相同，沿 z 挤出 `depth`，厚度以所在平面为中心。`model` 只写 `src`，指向一个 `.glb`；位置和宽高写在外包的 `layer` 上，模型按 contain 居中放进这个盒子，文件里的相机忽略。单位都是像素。没写 `depth` 时报 `invalid-attr`，并退回宽高里较小的一边。作者只写 `fill`，渲染器自带默认光，所以长方体的几个面会有明暗；`model` 用文件里的材质。网格没有落在 `perspective` 里时报 `flatten-3d`，并且不绘制。`src` 缺失、不是 `.glb` 或读不到时报 `missing-model`。这一层用 headless-three 按 2 倍分辨率绘制再缩回。`Scene3D` 仍不使用。
 
 属性归属（由 [src/schema.ts](src/schema.ts) 生成，不要手改两行标记之间的表）：
 
@@ -80,8 +82,8 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | --- | --- |
 | `width`、`height`、`opacity`、`rotate`、`rotateX`、`rotateY`、`z`、`scale`、`origin`、`cx`、`cy`、`anchor` | `layer` 的属性。HTML 上写了报 `warn` |
 | `background`、`padding`、`font-size`、`color`、`flex`、`flex-grow`、`flex-shrink`、`gap`、`border`、`border-radius`、`max-width`、`align-items`、`justify-content`、`writing-mode`、`object-fit`、`object-position` | HTML 的 `style`。`layer` 或图形写了 `style` 报 `warn` |
-| `x1`、`y1`、`x2`、`y2`、`points`、`d`、`fill`、`stroke` | 图形属性，坐标是所在 `layer` 的局部坐标 |
-| `src`、`alt` | 只写在 `img` 上。宽高仍放进 `style` |
+| `x1`、`y1`、`x2`、`y2`、`points`、`d`、`depth`、`fill`、`stroke` | 图形属性，坐标是所在 `layer` 的局部坐标 |
+| `src`、`alt` | 只写在 `img` 或 `model` 上。图片宽高仍放进 `style` |
 | `shadow`、`glow`、`inner-shadow`、`inner-glow`、`blur`、`backdrop-blur`、`glass`、`noise`、`filter`、`blend` | 图形和 `layer` 写属性；文字写在 `style`。见第 9 章 |
 | `perspective`、`overlay`、`grade`、`grade-mask` | 只写在 `layer` 上。写在别处或写进 `style` 报 `warn` |
 <!-- attrs:ownership:end -->
@@ -526,12 +528,13 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 | `empty-mask` | warn | `mask` 里没有可用的形状或图片，不生效 |
 | `invalid-draw` | error / warn | `<draw>` 语法错误（error）或内容为空（warn） |
 | `missing-image` | warn | `img` 的 `src` 读不到 |
+| `missing-model` | warn | `model` 的 `src` 缺失、不是 `.glb`，或文件读不到；没有可放入的宽高时也是这个码 |
 | `missing-symbol` | warn | `use` 的 `href` 没有对应的 `symbol` |
 | `symbol-cycle` | warn | `symbol` 通过 `use` 引用了自己 |
 | `open-curve-fill` | warn | 开口的 `curve` 写了 `fill`，没有填充 |
 | `effect-clipped` | warn | 本体在画布内，阴影、光晕或图层模糊超出画布 |
-| `flatten-3d` | warn | `rotateX`、`rotateY`、`z` 没有落在带 `perspective` 的 layer 里。仍按二维绘制 |
-| `behind-camera` | warn | 平面的 `z` 大于等于所在 layer 的 `perspective`，不绘制 |
+| `flatten-3d` | warn | `rotateX`、`rotateY`、`z` 没有落在带 `perspective` 的 layer 里，仍按二维绘制。`sphere`、`box`、`extrude`、`model` 同样报这个码，并且不绘制 |
+| `behind-camera` | warn | 平面或网格的 `z` 大于等于所在 layer 的 `perspective`，不绘制 |
 
 每条问题都可以带 `hint`，是可以直接照做的改法。
 
@@ -647,5 +650,5 @@ const { frames, contactSheet } = await renderComposition(scene)
 - 把帧序列编码成视频，以及时间轴预览。
 - 墨迹布局：按着墨范围计算间距、居中、包裹。
 - `Icon`。
-- `Scene3D` 这个名字仍保留，不要挪作他用。`rotateX`、`rotateY`、`z`、`perspective` 已写在 `layer` 上，见第 3 章。灯光、网格和 `headless-three` 还没有，讨论见 [docs/proposals/3D.md](docs/proposals/3D.md)。
+- `Scene3D` 这个名字仍保留，不要挪作他用。`sphere`、`box`、`extrude`、`model` 画在父 `layer` 的 `perspective` 里，见第 3 章。单独的视口、作者灯光和阴影还没有，讨论见 [docs/proposals/3D.md](docs/proposals/3D.md)。
 - 滤镜设计说明见 [docs/EFFECTS.md](docs/EFFECTS.md)。勿占用：`outer-glow`、`drop-shadow`、`backdrop-filter`、`texture`。

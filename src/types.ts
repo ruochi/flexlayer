@@ -323,6 +323,18 @@ export type CustomLayoutNode = LayoutNodeBase & {
   kind: 'custom'
 }
 
+export type MeshSpec =
+  | { type: 'sphere'; r: number }
+  | { type: 'box'; depth: number }
+  | { type: 'extrude'; d: string; depth: number }
+  | { type: 'model'; src: string; file?: string }
+
+export type MeshLayoutNode = LayoutNodeBase & {
+  kind: 'mesh'
+  mesh: MeshSpec
+  fill: string
+}
+
 export type LayoutNode =
   | LayerLayoutNode
   | FlexLayoutNode
@@ -331,6 +343,7 @@ export type LayoutNode =
   | ShapeLayoutNode
   | LineLayoutNode
   | CustomLayoutNode
+  | MeshLayoutNode
 
 export type FvgDocument = {
   width: number

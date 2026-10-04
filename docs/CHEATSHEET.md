@@ -21,6 +21,10 @@
 | `rect` | `cx cy width height`，或 `x1 y1 x2 y2`。`rx` 是圆角，两种都能加 | 包一层有宽高的 layer，或改用 div |
 | `ellipse` | `cx cy rx ry`，或两点写法 | 同上 |
 | `circle` | `cx cy r` | 同上 |
+| `sphere` | `cx cy r`，再加上 `z`。布局盒子是边长 `2r` 的正方形 | 放进有 `perspective` 的 layer |
+| `box` | `cx cy width height depth`。布局不计厚度 | 放进有 `perspective` 的 layer |
+| `extrude` | `d` 与 `path` 相同，`depth` 是沿 z 的厚度，以平面为中心 | 放进有 `perspective` 的 layer |
+| `model` | 只写 `src`（一个 `.glb`）。宽高和 `cx cy z` 写在外包的 layer 上，contain 居中 | 放进有 `perspective` 的 layer |
 | `line` `arrow` `polyline` `polygon` `path` `curve` | `x1 y1 x2 y2` / `points` / `d`。`curve` 闭合加 `closed` | 包一层 `<layer>` |
 | `symbol` / `use` | `symbol` 不画。`use href="#id"` 用 `cx cy` 摆放 | `use` 按它的宽高排进去 |
 | `mask` | 只作为 `layer` 的直接子元素。里面写 `rect` `circle` `ellipse` `polygon` `path` 或 `img`。省略 `fill` 为 `#fff`，只看 alpha | 不排进去，会 `warn` |
@@ -36,6 +40,8 @@
 整层裁切用 `<mask>`，和内容并列写在 `layer` 里：`<mask><circle cx="160" cy="90" r="90" /></mask>`。实心是硬边，`fill="linear-gradient(to bottom, #fff, #fff0)"` 是软边。`overflow="hidden"` 只裁子元素。
 
 透视：`<layer perspective="700"><rect rotateY="28" z="40" /></layer>`。`z` 越大越靠近观众。没有 `perspective` 的祖先时，`rotateX`、`rotateY`、`z` 仍按二维画，并报 `flatten-3d`。例子见 [examples/perspective.layer](../examples/perspective.layer)。
+
+网格和透视共用这一层：`<layer perspective="700"><sphere cx="220" cy="340" r="90" z="50" fill="#4CC3D9" /><box cx="430" cy="400" width="150" height="100" depth="60" fill="#EF2D5E" /></layer>`。`extrude` 用 `d` 和 `depth`。`model` 放在有宽高的 layer 里，`src` 指向 `.glb`。没有 `perspective` 时不绘制。例子见 [examples/meshes.layer](../examples/meshes.layer)。
 
 竖排：`style="writing-mode:vertical-rl"`。字体名 `Song`、`Kai`、`Brush` 不用自带字体文件。
 

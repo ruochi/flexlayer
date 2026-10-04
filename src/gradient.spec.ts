@@ -38,7 +38,7 @@ async function pixelAt(png: Buffer, x: number, y: number): Promise<[number, numb
 
 async function render(source: string, scale = 1) {
   const doc = await layoutSource(source, process.cwd())
-  const png = paintDocument(doc.root, {
+  const png = await paintDocument(doc.root, {
     width: doc.width,
     height: doc.height,
     background: doc.background,

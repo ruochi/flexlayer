@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { h } from './h.js'
 import { checkFvg } from './render.js'
-import { posePoint, project } from './perspective.js'
+import { applyPoseMatrix, poseMatrix, poseOffset, posePoint, project } from './perspective.js'
 import type { LayoutNode } from './types.js'
 
 function node(partial: Partial<LayoutNode> & Pick<LayoutNode, 'kind'>): LayoutNode {
@@ -43,6 +43,28 @@ describe('perspective', () => {
     // 绕中心转 90° 再放大 2：局部 (-40,-20) → (40,-80)，加回中心 (50,40)
     expect(corner.x).toBeCloseTo(90)
     expect(corner.y).toBeCloseTo(-40)
+  })
+
+  it('poseMatrix 与 posePoint、poseOffset 一致', () => {
+    const box = node({ kind: 'shape', x: 12, y: 8, width: 80, height: 40, rotate: 25, rotateX: 15, rotateY: -20, z: 30, scale: 1.5, origin: 'top-left' })
+    const matrix = poseMatrix(box)
+    for (const [u, v, z] of [
+      [0, 0, 0],
+      [80, 40, 0],
+      [10, 20, 6],
+    ] as const) {
+      const posed = applyPoseMatrix(matrix, u, v, z)
+      const offset = poseOffset(box, u, v, z)
+      expect(posed.x).toBeCloseTo(offset.x)
+      expect(posed.y).toBeCloseTo(offset.y)
+      expect(posed.z).toBeCloseTo(offset.z)
+      if (z === 0) {
+        const point = posePoint(box, u, v)
+        expect(posed.x).toBeCloseTo(point.x)
+        expect(posed.y).toBeCloseTo(point.y)
+        expect(posed.z).toBeCloseTo(point.z)
+      }
+    }
   })
 
   it('没有 perspective 时 rotateY 报 flatten-3d', async () => {

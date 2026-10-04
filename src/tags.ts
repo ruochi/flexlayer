@@ -27,11 +27,16 @@ const KNOWN_TAGS = new Set([
   'br',
   'img',
   'image',
+  'sphere',
+  'box',
+  'extrude',
+  'model',
 ])
 
 export const ROOT_TAGS = new Set(['layer'])
 export const SHAPE_TAGS = new Set(['rect', 'circle', 'ellipse'])
 export const LINE_TAGS = new Set(['line', 'arrow', 'polyline', 'polygon', 'path', 'curve'])
+export const MESH_TAGS = new Set(['sphere', 'box', 'extrude', 'model'])
 export const FONT_TAG = 'font'
 
 /** HTML 图片。`image` 与 `img` 是同一个标签。 */
@@ -59,6 +64,10 @@ export function isLineTag(tag: string): boolean {
 
 export function isShapeTag(tag: string): boolean {
   return SHAPE_TAGS.has(canonicalTag(tag))
+}
+
+export function isMeshTag(tag: string): boolean {
+  return MESH_TAGS.has(canonicalTag(tag))
 }
 
 /** mask 里允许的内容：有面积的形状，以及带 alpha 的图片。 */

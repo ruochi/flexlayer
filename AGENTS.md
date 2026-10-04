@@ -36,6 +36,7 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 | 多段文字用 flex | `<p><div>…</div></p>` | `<div style="display:flex; flex-direction:column">` | `invalid-child` |
 | 整层裁切用 `<mask>`，里面直接写形状或 `<img>` | 把 mask 写成属性，或放进 flex | `<layer><mask><circle cx="160" cy="90" r="90" /></mask>…</layer>`。省略 `fill` 为不透明白 | `invalid-child` |
 | 透视写在父 `layer`，转动和 `z` 写在子元素 | `<rect perspective="900" rotateY="20">` | `<layer perspective="900"><rect rotateY="20" z="40" /></layer>` | `invalid-attr`、`flatten-3d` |
+| 球体、长方体、拉伸和 glb 放在带 `perspective` 的 layer 里 | `<sphere r="40">` 没有视距 | `<layer perspective="700"><sphere cx="80" cy="80" r="40" /></layer>`。`model` 只写 `src`，尺寸写在外包 layer | `flatten-3d`、`missing-model` |
 
 根节点 `<layer width height background>` 上的 `background` 是画布底色，只有这一处可以写。
 
@@ -122,7 +123,7 @@ flowchart TD
 | [docs/CHEATSHEET.md](docs/CHEATSHEET.md) | 一页写法 |
 | [docs/GALLERY.md](docs/GALLERY.md) | 效果对应哪张图的哪一格 |
 | [docs/EFFECTS.md](docs/EFFECTS.md) | 算法与实现备注 |
-| [docs/proposals/3D.md](docs/proposals/3D.md) | 3D 讨论。`perspective` 已能投影平面，并带抗锯齿；灯光还没有 |
+| [docs/proposals/3D.md](docs/proposals/3D.md) | 3D 讨论。平面透视和 `sphere` / `box` / `extrude` / `model` 已接上；作者灯光还没有 |
 | [GENERATE.md](GENERATE.md) | Vue / React 怎么生成 `.layer` |
 | [README.md](README.md) | 安装与命令 |
 | **本文** | 硬性约定和验证闭环 |

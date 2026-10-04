@@ -36,12 +36,15 @@ export function has3dPose(node: LayoutNode): boolean {
   return (node.rotateX ?? 0) !== 0 || (node.rotateY ?? 0) !== 0 || (node.z ?? 0) !== 0
 }
 
-/** 盒子局部 (u, v) 先缩放，再平移 z，再 rotateX、rotateY、rotate，回到父级坐标。z 朝观众。 */
-export function posePoint(node: LayoutNode, u: number, v: number): Vec3 {
+/**
+ * 相对支点的偏移，先缩放，再平移 z，再 rotateX、rotateY、rotate，回到父级坐标。
+ * du 向右，dv 向下，dz 朝观众。z 属性加在缩放之后、旋转之前。
+ */
+export function poseOffset(node: LayoutNode, du: number, dv: number, dz: number): Vec3 {
   const pose = poseOf(node)
-  let x = (u - pose.originX) * pose.scale
-  let y = (v - pose.originY) * pose.scale
-  let z = pose.z
+  let x = du * pose.scale
+  let y = dv * pose.scale
+  let z = pose.z + dz * pose.scale
   const rx = (pose.rotateX * Math.PI) / 180
   const ry = (pose.rotateY * Math.PI) / 180
   const rz = (pose.rotate * Math.PI) / 180
@@ -58,6 +61,36 @@ export function posePoint(node: LayoutNode, u: number, v: number): Vec3 {
   const xz = xy * cz - yx * sz
   const yz = xy * sz + yx * cz
   return { x: pose.x + pose.originX + xz, y: pose.y + pose.originY + yz, z: zy }
+}
+
+/** 盒子局部 (u, v) 回到父级坐标。z 朝观众。 */
+export function posePoint(node: LayoutNode, u: number, v: number): Vec3 {
+  const pose = poseOf(node)
+  return poseOffset(node, u - pose.originX, v - pose.originY, 0)
+}
+
+/** 列主序。把盒子局部 (u, v, z)（左上角为原点，y 向下）变到父级坐标。 */
+export function poseMatrix(node: LayoutNode): number[] {
+  const pose = poseOf(node)
+  const at = (u: number, v: number, z: number) => poseOffset(node, u - pose.originX, v - pose.originY, z)
+  const p0 = at(0, 0, 0)
+  const px = at(1, 0, 0)
+  const py = at(0, 1, 0)
+  const pz = at(0, 0, 1)
+  return [
+    px.x - p0.x, px.y - p0.y, px.z - p0.z, 0,
+    py.x - p0.x, py.y - p0.y, py.z - p0.z, 0,
+    pz.x - p0.x, pz.y - p0.y, pz.z - p0.z, 0,
+    p0.x, p0.y, p0.z, 1,
+  ]
+}
+
+export function applyPoseMatrix(m: number[], u: number, v: number, z: number): Vec3 {
+  return {
+    x: m[0]! * u + m[4]! * v + m[8]! * z + m[12]!,
+    y: m[1]! * u + m[5]! * v + m[9]! * z + m[13]!,
+    z: m[2]! * u + m[6]! * v + m[10]! * z + m[14]!,
+  }
 }
 
 /** 视距像素。灭点 (vx, vy)。z 越大越近。观众身后返回 null。 */
@@ -271,16 +304,39 @@ export function drawTexturedPlane(
   ctx.drawImage(resolved, x0, y0, lw, lh)
 }
 
-/** 直接子级才进入这一层的镜头。再往里的子孙先画进父平面。 */
+/**
+ * 直接子级的平面才进入这一层的镜头。再往里的子孙先画进父平面。
+ * 网格沿着祖先里最近的 perspective 走，不要求自己是直接子级。
+ */
 export function perspectiveIssues(root: LayoutNode): Issue[] {
   const issues: Issue[] = []
   const visit = (node: LayoutNode, inCamera: boolean, distance: number | undefined) => {
+    if (node.kind === 'mesh') {
+      if (distance == null) {
+        issues.push({
+          level: 'warn',
+          code: 'flatten-3d',
+          path: node.path,
+          message: `${node.tag} 没有落在带 perspective 的 layer 里`,
+          hint: '在父 layer 上写 perspective，例如 <layer perspective="900">',
+        })
+      } else if ((node.z ?? 0) >= distance) {
+        issues.push({
+          level: 'warn',
+          code: 'behind-camera',
+          path: node.path,
+          message: '网格在观众身后，不绘制',
+          hint: `把 z 减小到小于 perspective（${distance}）`,
+        })
+      }
+      return
+    }
     if (has3dPose(node) && !inCamera) {
       issues.push({
         level: 'warn',
         code: 'flatten-3d',
         path: node.path,
-        message: 'rotateX、rotateY、z 没有落在带 perspective 的 Layer 里',
+        message: 'rotateX、rotateY、z 没有落在带 perspective 的 layer 里',
         hint: '在父 layer 上写 perspective，例如 <layer perspective="900">',
       })
     }
@@ -295,7 +351,7 @@ export function perspectiveIssues(root: LayoutNode): Issue[] {
     }
     const children = node.kind === 'layer' || node.kind === 'flex' ? node.children : []
     const opens = node.kind === 'layer' && node.perspective != null && node.perspective > 0
-    for (const child of children) visit(child, opens, opens ? node.perspective : undefined)
+    for (const child of children) visit(child, opens, opens ? node.perspective : distance)
   }
   visit(root, false, undefined)
   return issues

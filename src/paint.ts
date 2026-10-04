@@ -27,6 +27,7 @@ import { applyGrade } from './grade.js'
 import { canvasPaint, isGradient } from './gradient.js'
 import { gradientStyle, isGradientPaint, type GradientBox } from './gradientField.js'
 import { invert, multiply, originOffset } from './matrix.js'
+import { ownsMeshScene, renderMeshLayer } from './mesh.js'
 import { drawTexturedPlane, has3dPose, PERSPECTIVE_AA, planeDepth, posePoint, project } from './perspective.js'
 import { colorFilterToCss } from './style.js'
 import type {
@@ -54,7 +55,7 @@ export type PaintOptions = {
   t: number
 }
 
-type PaintState = { canvasWidth: number; canvasHeight: number }
+type PaintState = { canvasWidth: number; canvasHeight: number; meshFrames?: Map<LayerLayoutNode, Canvas> }
 
 const SILHOUETTE = '#000000'
 
@@ -1084,7 +1085,11 @@ function paintBody(ctx: PaintCtx, node: LayoutNode, debug: boolean, t: number, s
       ctx.rect(0, 0, node.width, node.height)
       ctx.clip()
     }
-    if (node.kind === 'layer' && node.perspective != null && node.perspective > 0 && node.children.some(has3dPose)) {
+    const meshFrame = node.kind === 'layer' ? state.meshFrames?.get(node) : undefined
+    if (meshFrame) {
+      ctx.imageSmoothingEnabled = true
+      ctx.drawImage(meshFrame, 0, 0, node.width, node.height)
+    } else if (node.kind === 'layer' && node.perspective != null && node.perspective > 0 && node.children.some(has3dPose)) {
       paintPerspectiveChildren(ctx, node, debug, t, state)
     } else {
       for (const ch of node.children) paintNode(ctx, ch, debug, t, state)
@@ -1282,15 +1287,34 @@ function paintNode(
   pctx.restore()
 }
 
-export function paintDocument(
+async function prepareMeshFrames(root: LayerLayoutNode, scale: number, t: number): Promise<Map<LayerLayoutNode, Canvas>> {
+  const frames = new Map<LayerLayoutNode, Canvas>()
+  const state: PaintState = { canvasWidth: 0, canvasHeight: 0, meshFrames: frames }
+  const visit = async (node: LayoutNode) => {
+    if (node.kind === 'layer' || node.kind === 'flex') {
+      for (const child of node.children) await visit(child)
+    }
+    if (node.kind !== 'layer' || !ownsMeshScene(node)) return
+    const canvas = await renderMeshLayer(node, scale, (peeled) => paintChildBitmap(peeled, Math.max(scale, 1e-3) * 2, t, state))
+    if (canvas) frames.set(node, canvas)
+  }
+  await visit(root)
+  return frames
+}
+
+export async function paintDocument(
   root: LayerLayoutNode,
   opts: PaintOptions,
-): Buffer {
+): Promise<Buffer> {
   const w = Math.round(opts.width * opts.scale)
   const h = Math.round(opts.height * opts.scale)
   const canvas = createCanvas(w, h)
   const ctx = canvas.getContext('2d')
-  const state = { canvasWidth: w, canvasHeight: h }
+  const state: PaintState = {
+    canvasWidth: w,
+    canvasHeight: h,
+    meshFrames: await prepareMeshFrames(root, opts.scale, opts.t),
+  }
   const rootPaintsBackground =
     root.background != null &&
     root.background !== 'transparent' &&
