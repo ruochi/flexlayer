@@ -3,7 +3,7 @@ import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { initFontsForMeasure } from './fonts.js'
-import { renderFvg } from './render.js'
+import { checkFvg, renderFvg } from './render.js'
 
 beforeAll(async () => {
   await initFontsForMeasure({ fontsCacheDir: join(homedir(), '.cache', 'flexlayer', 'fonts') })
@@ -288,4 +288,81 @@ describe('绘制', () => {
     }
     expect(red).toBeGreaterThan(20)
   })
+
+  it('stroke-dasharray 在线条和形状上留下空隙，写错会警告', async () => {
+    const { png } = await renderFvg(`
+      <layer width="160" height="90" background="#000000">
+        <line x1="10" y1="20" x2="150" y2="20" stroke="#ffffff" stroke-width="4" stroke-dasharray="12 12" />
+        <rect cx="80" cy="60" width="120" height="28" fill="none" stroke="#ffffff" stroke-width="4" stroke-dasharray="12,12" />
+      </layer>
+    `)
+    const { at } = await pixels(png)
+    const on = (at(16, 20)[0] ?? 0) > 200
+    const off = (at(28, 20)[0] ?? 0) < 30
+    expect(on).toBe(true)
+    expect(off).toBe(true)
+    const edgeOn = (at(26, 46)[0] ?? 0) > 200
+    const edgeOff = (at(38, 46)[0] ?? 0) < 30
+    expect(edgeOn).toBe(true)
+    expect(edgeOff).toBe(true)
+    const bad = await checkFvg(
+      `<layer width="80" height="40"><line x1="0" y1="10" x2="40" y2="10" stroke="#fff" stroke-dasharray="8 foo" /></layer>`,
+    )
+    expect(bad.issues.some((issue) => issue.code === 'invalid-attr' && issue.message.includes('stroke-dasharray'))).toBe(true)
+  })
+
+  it('layer 上的 shadow 跟着子树，透视和网格也能投下', async () => {
+    const flat = await renderFvg(`
+      <layer width="200" height="160" background="#ffffff">
+        <layer cx="100" cy="60" width="80" height="40" shadow="0 28 0 #ff0000">
+          <rect cx="40" cy="20" width="80" height="40" fill="#0000ff" />
+        </layer>
+      </layer>
+    `)
+    const { at } = await pixels(flat.png)
+    const body = at(100, 60)
+    const below = at(100, 96)
+    expect(body[2]).toBeGreaterThan(200)
+    expect(below[0]).toBeGreaterThan(200)
+    expect(below[2]).toBeLessThan(40)
+
+    const inside = await checkFvg(`
+      <layer width="200" height="160" background="#ffffff">
+        <layer cx="100" cy="60" width="80" height="40" shadow="0 28 0 #ff0000">
+          <rect cx="40" cy="20" width="80" height="40" fill="#0000ff" />
+        </layer>
+      </layer>
+    `)
+    expect(inside.issues.some((issue) => issue.code === 'effect-clipped')).toBe(false)
+
+    const tilted = await renderFvg(`
+      <layer width="240" height="220" background="#ffffff" perspective="800">
+        <layer cx="120" cy="80" width="100" height="50" rotateY="18" shadow="0 36 0 #ff0000">
+          <rect cx="50" cy="25" width="100" height="50" fill="#0000ff" />
+        </layer>
+      </layer>
+    `)
+    const view = await pixels(tilted.png)
+    let red = 0
+    for (let y = 70; y < 200; y++) {
+      for (let x = 60; x < 190; x++) {
+        const p = view.at(x, y)
+        if (p[0] > 180 && p[2] < 80) red++
+      }
+    }
+    expect(red).toBeGreaterThan(20)
+
+    const mesh = await renderFvg(`
+      <layer width="180" height="150" background="#ffffff" perspective="500" shadow="0 48 0 #ff0000">
+        <box cx="90" cy="50" width="40" height="36" depth="16" fill="#0000ff" />
+      </layer>
+    `)
+    const scene = await pixels(mesh.png)
+    let meshRed = 0
+    for (let y = 80; y < 140; y++) {
+      const p = scene.at(90, y)
+      if (p[0] > 180 && p[2] < 80) meshRed++
+    }
+    expect(meshRed).toBeGreaterThan(4)
+  }, 30000)
 })

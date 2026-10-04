@@ -334,6 +334,29 @@ function readLayerGrade(attrs: Record<string, string>, ctx: LayoutContext): { gr
   return { grade, gradeMask: maskRaw }
 }
 
+/** SVG 虚线。奇数段会再重复一遍，和描边相位对齐。非法值警告并当成实线。 */
+function readDash(raw: string | undefined, ctx: LayoutContext): number[] | undefined {
+  if (raw == null) return undefined
+  const text = raw.trim()
+  if (text === '' || text === 'none') return undefined
+  const parts = text.split(/[\s,]+/).filter((part) => part.length > 0)
+  const nums: number[] = []
+  for (const part of parts) {
+    const n = Number(part)
+    if (!Number.isFinite(n) || n < 0) {
+      warnInvalid(ctx, 'stroke-dasharray', raw, '写成像素长度，例如 8 8 或 12,4,2,4')
+      return undefined
+    }
+    nums.push(n)
+  }
+  if (nums.length === 0 || nums.every((n) => n === 0)) {
+    warnInvalid(ctx, 'stroke-dasharray', raw, '写成像素长度，例如 8 8 或 12,4,2,4')
+    return undefined
+  }
+  if (nums.length % 2 === 1) nums.push(...nums)
+  return nums
+}
+
 function readPaint(raw: string, fallback: string, ctx: LayoutContext, label: string): string {
   if (!isGradient(raw)) return raw
   if (parseGradient(raw)) return raw
@@ -880,6 +903,7 @@ function layoutShape(node: FvgNode, ctx: LayoutContext, defaultStroke: string): 
   const fill = readPaint(node.attrs.fill ?? fillFallback, fillFallback, ctx, 'fill')
   const stroke = readPaint(node.attrs.stroke ?? 'none', 'none', ctx, 'stroke')
   const strokeWidth = parseNumber(node.attrs['stroke-width']) ?? 1
+  const dash = readDash(node.attrs['stroke-dasharray'], ctx)
   const ink = { x: 0, y: 0, width: w, height: h }
   return {
     kind: 'shape',
@@ -896,6 +920,7 @@ function layoutShape(node: FvgNode, ctx: LayoutContext, defaultStroke: string): 
     fill,
     stroke,
     strokeWidth,
+    ...(dash ? { dash } : {}),
     rx: parseNumber(node.attrs.rx),
     r: parseNumber(node.attrs.r),
     rxEllipse: twoPoint ? undefined : parseNumber(node.attrs.rx),
@@ -1083,6 +1108,7 @@ function layoutLineNode(node: FvgNode, ctx: LayoutContext, defaultStroke: string
     geom = { kind: 'path', d: node.attrs.d ?? '' }
   }
   const strokeWidth = parseNumber(node.attrs['stroke-width']) ?? 4
+  const dash = readDash(node.attrs['stroke-dasharray'], ctx)
   const strokeFallback = ctx.fillDefault != null ? 'none' : defaultStroke
   const stroke = readPaint(node.attrs.stroke ?? strokeFallback, strokeFallback, ctx, 'stroke')
   const fillFallback = ctx.fillDefault ?? 'none'
@@ -1120,6 +1146,7 @@ function layoutLineNode(node: FvgNode, ctx: LayoutContext, defaultStroke: string
     stroke,
     strokeWidth,
     fill,
+    ...(dash ? { dash } : {}),
     ...readEffects(node.attrs, ctx, solidPaint(fill !== 'none' ? fill : stroke, defaultStroke)),
     ...layoutDrawMeta(node, ctx),
   }

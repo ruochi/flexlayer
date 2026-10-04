@@ -177,6 +177,12 @@ function drawTextNode(ctx: CanvasRenderingContext2D, node: TextLayoutNode, inkCo
   }
 }
 
+function strokeDashed(ctx: CanvasRenderingContext2D, dash: number[] | undefined, draw: () => void) {
+  if (dash?.length) ctx.setLineDash(dash)
+  draw()
+  if (dash?.length) ctx.setLineDash([])
+}
+
 function drawShape(ctx: CanvasRenderingContext2D, node: ShapeLayoutNode) {
   const x = node.x
   const y = node.y
@@ -192,7 +198,7 @@ function drawShape(ctx: CanvasRenderingContext2D, node: ShapeLayoutNode) {
       if (node.stroke !== 'none') {
         ctx.strokeStyle = paintOf(ctx, node.stroke, node.x, node.y, node.width, node.height, pad)
         ctx.lineWidth = node.strokeWidth
-        ctx.stroke()
+        strokeDashed(ctx, node.dash, () => ctx.stroke())
       }
     } else {
       if (node.fill !== 'none') {
@@ -202,7 +208,7 @@ function drawShape(ctx: CanvasRenderingContext2D, node: ShapeLayoutNode) {
       if (node.stroke !== 'none') {
         ctx.strokeStyle = paintOf(ctx, node.stroke, node.x, node.y, node.width, node.height, pad)
         ctx.lineWidth = node.strokeWidth
-        ctx.strokeRect(x, y, node.width, node.height)
+        strokeDashed(ctx, node.dash, () => ctx.strokeRect(x, y, node.width, node.height))
       }
     }
   } else if (node.shape === 'circle') {
@@ -215,7 +221,7 @@ function drawShape(ctx: CanvasRenderingContext2D, node: ShapeLayoutNode) {
     if (node.stroke !== 'none') {
       ctx.strokeStyle = paintOf(ctx, node.stroke, node.x, node.y, node.width, node.height, pad)
       ctx.lineWidth = node.strokeWidth
-      ctx.stroke()
+      strokeDashed(ctx, node.dash, () => ctx.stroke())
     }
   } else {
     ctx.beginPath()
@@ -235,7 +241,7 @@ function drawShape(ctx: CanvasRenderingContext2D, node: ShapeLayoutNode) {
     if (node.stroke !== 'none') {
       ctx.strokeStyle = paintOf(ctx, node.stroke, node.x, node.y, node.width, node.height, pad)
       ctx.lineWidth = node.strokeWidth
-      ctx.stroke()
+      strokeDashed(ctx, node.dash, () => ctx.stroke())
     }
   }
 }
@@ -267,6 +273,7 @@ function drawLine(ctx: CanvasRenderingContext2D, node: LineLayoutNode, silhouett
   }
   ctx.lineCap = node.strokeLinecap ?? 'round'
   ctx.lineJoin = node.strokeLinejoin ?? 'round'
+  if (node.dash?.length) ctx.setLineDash(node.dash)
   const g = node.geometry
   if (g.kind === 'line' || g.kind === 'arrow') {
     if (!stroked) {
@@ -437,6 +444,36 @@ function shadowEffect(shadow: ShadowSpec) {
   return { dx: shadow.x, dy: shadow.y, blur: shadow.blur, spread: shadow.spread, color: shadow.color }
 }
 
+/** 三维场景的画面当成一层墨迹，好让写在这层上的阴影跟着已经画出来的物体。 */
+function drawMeshFrameInk(ctx: CanvasRenderingContext2D, node: LayerLayoutNode, state: PaintState) {
+  const frame = state.meshFrames?.get(node)
+  if (!frame || frame.width <= 0 || frame.height <= 0) return
+  const k = transformScale(ctx)
+  const tw = Math.max(1, Math.ceil(frame.width * k))
+  const th = Math.max(1, Math.ceil(frame.height * k))
+  const off = createCanvas(tw, th)
+  const octx = off.getContext('2d')
+  octx.drawImage(frame.canvas as unknown as Canvas, 0, 0, tw, th)
+  octx.globalCompositeOperation = 'source-in'
+  octx.fillStyle = SILHOUETTE
+  octx.fillRect(0, 0, tw, th)
+  ;(ctx as PaintCtx).drawImage(off, node.x + frame.x, node.y + frame.y, frame.width, frame.height)
+}
+
+/** 外阴影和外发光的墨迹。layer / flex 跟着子树，不跟着空的布局盒子。 */
+function drawOuterInk(ctx: CanvasRenderingContext2D, state: PaintState, node: LayoutNode, spread: number) {
+  if (node.kind === 'layer' && state.meshFrames?.has(node)) {
+    drawNodeInk(ctx, node, spread)
+    drawMeshFrameInk(ctx, node, state)
+    return
+  }
+  if (node.kind === 'layer' || node.kind === 'flex') {
+    drawSubtreeInk(ctx, node, spread)
+    return
+  }
+  drawNodeInk(ctx, node, spread)
+}
+
 function paintGlow(ctx: CanvasRenderingContext2D, state: PaintState, node: LayoutNode, glow: GlowSpec, drawSilhouette: (spread: number) => void) {
   const wide = { dx: 0, dy: 0, blur: glow.blur, spread: glow.spread, color: glow.color }
   drawEffect(ctx, state, node, wide, drawSilhouette, 'screen')
@@ -446,6 +483,7 @@ function paintGlow(ctx: CanvasRenderingContext2D, state: PaintState, node: Layou
 /**
  * 效果用的着墨轮廓：跟真实画出来的像素走，不跟布局盒子。
  * 文字 = 背景 chrome（若有）+ 字形；形状/线 = 几何墨迹；layer/flex = 仅自身背景/边框。
+ * layer / flex 的外阴影和外发光不走这里，改走子树，见 drawOuterInk。
  */
 function drawNodeInk(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: number, ink = SILHOUETTE) {
   if (node.kind === 'line') {
@@ -1116,7 +1154,7 @@ function paintNodeEffectsAndBody(
   // glass 未写 shadow 时补一层柔和投影，接近系统控件浮起感
   const drawShadow = () => {
     if (node.shadow) {
-      drawEffect(ctx, state, node, shadowEffect(node.shadow), (spread) => drawNodeInk(ctx, node, spread))
+      drawEffect(ctx, state, node, shadowEffect(node.shadow), (spread) => drawOuterInk(ctx, state, node, spread))
     } else if (node.glass) {
       const depth = node.glass.variant === 'thick' ? 18 : node.glass.variant === 'clear' ? 12 : 14
       drawEffect(
@@ -1135,7 +1173,7 @@ function paintNodeEffectsAndBody(
     if (opts.sampleBackdrop && node.backdropBlur) paintBackdropBlur(ctx, node, node.backdropBlur)
     drawShadow()
   }
-  if (node.glow) paintGlow(ctx, state, node, node.glow, (spread) => drawNodeInk(ctx, node, spread))
+  if (node.glow) paintGlow(ctx, state, node, node.glow, (spread) => drawOuterInk(ctx, state, node, spread))
   paintBody(ctx, node, debug, t, state)
   if (node.innerShadow) {
     paintInnerEffect(ctx, node, node.innerShadow, 'source-over')

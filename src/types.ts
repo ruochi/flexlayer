@@ -306,6 +306,7 @@ export type ShapeLayoutNode = LayoutNodeBase & {
   r?: number
   rxEllipse?: number
   ry?: number
+  dash?: number[]
 }
 
 export type LineLayoutNode = LayoutNodeBase & {
