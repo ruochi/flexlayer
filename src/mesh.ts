@@ -153,7 +153,7 @@ function srgbChannels(hex: string): [number, number, number] {
 
 /**
  * 正对镜头的面等于 fill，其余面更暗。
- * MeshStandard 的能量守恒会把纯白压到 #aaa 左右，浅色发灰。
+ * 朝向用世界 +Z（相机在 +Z 看向原点），整面同一个色。按每个像素的视线来比，偏离光轴的浅色会暗 1 到 2 档。
  */
 function fillMaterial(THREE: any, fill: string, opacity: number, side: any) {
   const color = parseFill(fill, opacity)
@@ -165,10 +165,8 @@ function fillMaterial(THREE: any, fill: string, opacity: number, side: any) {
     },
     vertexShader: `
       varying vec3 vNormal;
-      varying vec3 vWorldPos;
       void main() {
         vec4 world = modelMatrix * vec4(position, 1.0);
-        vWorldPos = world.xyz;
         vNormal = normalize(normalMatrix * normal);
         gl_Position = projectionMatrix * viewMatrix * world;
       }
@@ -177,7 +175,6 @@ function fillMaterial(THREE: any, fill: string, opacity: number, side: any) {
       uniform vec3 uColor;
       uniform float uOpacity;
       varying vec3 vNormal;
-      varying vec3 vWorldPos;
       float lit(vec3 n) {
         vec3 key = normalize(vec3(-0.6, 0.85, 1.0));
         vec3 fillL = normalize(vec3(0.75, -0.2, 0.45));
@@ -186,8 +183,7 @@ function fillMaterial(THREE: any, fill: string, opacity: number, side: any) {
       void main() {
         vec3 N = normalize(vNormal);
         if (!gl_FrontFacing) N = -N;
-        vec3 V = normalize(cameraPosition - vWorldPos);
-        float shade = min(1.0, lit(N) / max(lit(V), 1.0e-3));
+        float shade = min(1.0, lit(N) / max(lit(vec3(0.0, 0.0, 1.0)), 1.0e-3));
         gl_FragColor = vec4(uColor * shade, uOpacity);
       }
     `,

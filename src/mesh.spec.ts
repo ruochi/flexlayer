@@ -153,6 +153,19 @@ describe('网格绘制', () => {
     expect(face[2]).toBeGreaterThan(245)
   }, 30000)
 
+  it('偏离光轴的浅色正面仍是写下的 fill', async () => {
+    const { png } = await renderFvg(`
+      <layer width="220" height="80" background="#ffffff" perspective="500">
+        <box cx="36" cy="40" width="48" height="48" depth="12" fill="#d9ccff" />
+        <box cx="184" cy="40" width="48" height="48" depth="12" fill="#a9dcff" />
+      </layer>
+    `)
+    const left = await pixelAt(png, 36, 40)
+    const right = await pixelAt(png, 184, 40)
+    expect([left[0], left[1], left[2]]).toEqual([0xd9, 0xcc, 0xff])
+    expect([right[0], right[1], right[2]]).toEqual([0xa9, 0xdc, 0xff])
+  }, 30000)
+
   it('extrude 的并排形状都留下，洞仍然是洞', async () => {
     const { png } = await renderFvg(`
       <layer width="220" height="120" background="#101010" perspective="800">

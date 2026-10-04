@@ -30,8 +30,8 @@
 | --- | --- |
 | 文字 | 字形（若有 `background` 则加上背景块） |
 | 形状 / 线 | 填充与描边几何 |
-| layer | 自身 `border` / `<draw>` 着墨（**无** `background`；子元素各自算） |
-| flex | 自身的 `background` / `border`（子元素各自算） |
+| layer | `shadow` / `glow` 跟着子树墨迹；这一层是三维场景时跟着已经画好的画面。其余效果只算自身 `border` / `<draw>`（**无** `background`） |
+| flex | `shadow` / `glow` 跟着子树墨迹（含自身 `background` / `border`）。其余效果只算自身背景和边框 |
 | `blur` / `filter` / `blend` | 该节点已绘制像素（含子树合成） |
 
 因此文字 `shadow` 是字形投影，不会落成一块矩形雾斑。
