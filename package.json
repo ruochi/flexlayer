@@ -30,7 +30,6 @@
   "license": "MIT",
   "dependencies": {
     "@napi-rs/canvas": "^1.0.9",
-    "@xsyetopz/easel": "^0.8.0",
     "headless-three": "^1.9.0",
     "yoga-layout": "^3.2.1"
   },

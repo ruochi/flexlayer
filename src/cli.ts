@@ -6,7 +6,7 @@ import { formatIssueLine } from './report.js'
 
 function usage(): never {
   console.error(`用法:
-  flexlayer render <file.layer> [-o out.png] [--report out.json] [--scale 0.5] [--debug] [--mesh webgl|canvas2d]
+  flexlayer render <file.layer> [-o out.png] [--report out.json] [--scale 0.5] [--debug]
   flexlayer check <file.layer> [--report out.json]`)
   process.exit(2)
 }
@@ -19,24 +19,19 @@ function parseArgs(argv: string[]) {
   let report: string | undefined
   let scale = 1
   let debug = false
-  let mesh: 'webgl' | 'canvas2d' | undefined
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i]!
     if (a === '-o') out = argv[++i]
     else if (a === '--report') report = argv[++i]
     else if (a === '--scale') scale = Number(argv[++i])
     else if (a === '--debug') debug = true
-    else if (a === '--mesh') {
-      const value = argv[++i]
-      if (value !== 'webgl' && value !== 'canvas2d') usage()
-      mesh = value
-    } else usage()
+    else usage()
   }
-  return { cmd, file, out, report, scale, debug, mesh }
+  return { cmd, file, out, report, scale, debug }
 }
 
 async function main() {
-  const { cmd, file, out, report, scale, debug, mesh } = parseArgs(process.argv.slice(2))
+  const { cmd, file, out, report, scale, debug } = parseArgs(process.argv.slice(2))
   const abs = resolve(file)
   const source = await readFile(abs, 'utf8')
   const baseDir = dirname(abs)
@@ -52,7 +47,7 @@ async function main() {
 
   if (cmd !== 'render') usage()
 
-  const { png, report: rep } = await renderFvg(source, { baseDir, scale, debug, mesh })
+  const { png, report: rep } = await renderFvg(source, { baseDir, scale, debug })
   const outPath = out ?? abs.replace(/\.(layer|fvg)$/i, '.png')
   await writeFile(outPath, png)
   for (const issue of rep.issues) console.log(formatIssueLine(issue))

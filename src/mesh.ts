@@ -301,26 +301,14 @@ async function renderOnce(api: Headless, scene: any, camera: any, width: number,
   }
 }
 
-export type MeshRoute = 'webgl' | 'canvas2d'
-
-/** 调用方指定优先，其次是 FLEXLAYER_MESH。都没写时用 WebGL。 */
-export function resolveMeshRoute(requested?: MeshRoute): MeshRoute {
-  if (requested === 'canvas2d' || requested === 'webgl') return requested
-  const env = process.env.FLEXLAYER_MESH
-  if (env === 'canvas2d' || env === 'webgl') return env
-  return 'webgl'
-}
-
 /**
  * 把这一层的网格和兄弟平面画进同一台相机。返回的画布盖住整个 layer，背景透明。
  * 没有可画的东西时返回 null，调用方继续走原来的二维透视。
- * `canvas2d` 用 @xsyetopz/easel 画到 Canvas 2D。没指定路线时，WebGL 失败会改走这一条。
  */
 export async function renderMeshLayer(
   layer: LayerLayoutNode,
   scale: number,
   raster: (node: LayoutNode) => MeshRaster,
-  route?: MeshRoute,
 ): Promise<Canvas | null> {
   const perspective = layer.perspective
   if (perspective == null || perspective <= 0 || layer.width <= 0 || layer.height <= 0) return null
@@ -335,19 +323,7 @@ export async function renderMeshLayer(
   }
   if (meshes.length === 0 && planes.length === 0) return null
 
-  const scene = { layer, perspective, meshes, planes, scale, raster }
-  const selected = resolveMeshRoute(route)
-  if (selected === 'canvas2d') {
-    const { renderMeshCanvas } = await import('./mesh-canvas.js')
-    return renderMeshCanvas(scene)
-  }
-  try {
-    return await renderMeshWebgl(scene)
-  } catch (error) {
-    if (route === 'webgl' || process.env.FLEXLAYER_MESH === 'webgl') throw error
-    const { renderMeshCanvas } = await import('./mesh-canvas.js')
-    return renderMeshCanvas(scene)
-  }
+  return renderMeshWebgl({ layer, perspective, meshes, planes, scale, raster })
 }
 
 async function renderMeshWebgl(sceneInput: {

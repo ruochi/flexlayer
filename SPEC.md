@@ -73,9 +73,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 `perspective` 只写在 `layer` 上，单位是像素，是直接子元素共用的视距。灭点是这一层盒子的中心，`z` 正方向朝观众，数值越大看起来越大。`rotateX`、`rotateY`、`z` 的归属和 `rotate` 相同，写在要转动或推近的那一层上，不改变布局。没有祖先写 `perspective` 时仍按二维绘制，并报 `flatten-3d`。子元素的 `z` 大于等于视距时报 `behind-camera`，该元素不绘制。带三维姿态的平面先按 4 倍分辨率绘制，再平均缩回逻辑像素，斜边因此抗锯齿。平面上的 `shadow` 和 `glow` 画在这张位图的外侧，再一起投影，不会被裁在平面自己的框里。没有三维姿态、也没有网格的内容仍走原来的二维绘制。
 
-同一层里如果出现 `sphere`、`box`、`extrude` 或 `model`，这一层改成一台三维场景，和带姿态的平面共用这一个 `perspective`。没有这些标签时，像素和上面的平面透视一致。`sphere` 写 `cx` `cy` `r`，布局盒子是边长 `2r` 的正方形。`box` 写 `cx` `cy` `width` `height` `depth`，布局只看宽高。`extrude` 的 `d` 和 `path` 相同，沿 z 挤出 `depth`，厚度以所在平面为中心。`model` 只写 `src`，指向一个 `.glb`；位置和宽高写在外包的 `layer` 上，模型按 contain 居中放进这个盒子，文件里的相机忽略。单位都是像素。没写 `depth` 时报 `invalid-attr`，并退回宽高里较小的一边。作者只写 `fill`，渲染器自带默认光，所以长方体的几个面会有明暗；`model` 用文件里的材质。网格没有落在 `perspective` 里时报 `flatten-3d`，并且不绘制。`src` 缺失、不是 `.glb` 或读不到时报 `missing-model`。这一层按 2 倍分辨率绘制再缩回。`Scene3D` 仍不使用。
-
-网格有两条绘制路线，标记相同。默认用 headless-three 的 WebGL。`renderLayer(source, { mesh: 'canvas2d' })`、命令行 `--mesh canvas2d`，或环境变量 `FLEXLAYER_MESH=canvas2d`，改用 [`@xsyetopz/easel`](https://github.com/xsyetopz/easel.js) 在 Canvas 2D 上做 CPU 光栅，不依赖本机 WebGL。没指定路线时，WebGL 画不出来会改走 Canvas 2D。Canvas 2D 用 Lambert 光；和网格同一层的平面纹理最长边缩到 128 像素；`model` 取文件里的基色。
+同一层里如果出现 `sphere`、`box`、`extrude` 或 `model`，这一层改成一台三维场景，和带姿态的平面共用这一个 `perspective`。没有这些标签时，像素和上面的平面透视一致。`sphere` 写 `cx` `cy` `r`，布局盒子是边长 `2r` 的正方形。`box` 写 `cx` `cy` `width` `height` `depth`，布局只看宽高。`extrude` 的 `d` 和 `path` 相同，沿 z 挤出 `depth`，厚度以所在平面为中心。`model` 只写 `src`，指向一个 `.glb`；位置和宽高写在外包的 `layer` 上，模型按 contain 居中放进这个盒子，文件里的相机忽略。单位都是像素。没写 `depth` 时报 `invalid-attr`，并退回宽高里较小的一边。作者只写 `fill`，渲染器自带默认光，所以长方体的几个面会有明暗；`model` 用文件里的材质。网格没有落在 `perspective` 里时报 `flatten-3d`，并且不绘制。`src` 缺失、不是 `.glb` 或读不到时报 `missing-model`。这一层用 headless-three 按 2 倍分辨率绘制再缩回。`Scene3D` 仍不使用。
 
 属性归属（由 [src/schema.ts](src/schema.ts) 生成，不要手改两行标记之间的表）：
 
