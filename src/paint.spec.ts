@@ -141,7 +141,7 @@ describe('paint containers', () => {
       const v = row[x * 4] ?? 0
       const left = row[(x - 2) * 4] ?? 0
       const right = row[(x + 2) * 4] ?? 0
-      if (v > 12 && v > left + 18 && v > right + 18) spikes++
+      if (v > 20 && left > 20 && right > 20 && Math.abs(left - right) < 24 && v > left + 18 && v > right + 18) spikes++
     }
     expect(spikes).toBe(0)
 

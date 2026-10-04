@@ -139,7 +139,7 @@ describe('buildReport', () => {
     )
     expect(inside.issues.some((issue) => issue.code === 'effect-clipped')).toBe(false)
     const clipped = await checkFvg(
-      `<layer width="480" height="220" background="#000"><layer perspective="700"><rect cx="240" cy="160" width="180" height="110" fill="#222" rotateY="36" shadow="0 12 24 #fff" /></layer></layer>`,
+      `<layer width="480" height="240" background="#000" perspective="700"><rect cx="240" cy="190" width="180" height="80" fill="#222" rotateY="36" shadow="0 8 20 #fff" /></layer>`,
     )
     expect(clipped.issues.some((issue) => issue.code === 'effect-clipped')).toBe(true)
   })
