@@ -27,7 +27,7 @@ import { applyGrade } from './grade.js'
 import { canvasPaint, isGradient } from './gradient.js'
 import { gradientStyle, isGradientPaint, type GradientBox } from './gradientField.js'
 import { invert, multiply, originOffset } from './matrix.js'
-import { ownsMeshScene, renderMeshLayer } from './mesh.js'
+import { ownsMeshScene, renderMeshLayer, type MeshFrame } from './mesh.js'
 import { drawTexturedPlane, has3dPose, PERSPECTIVE_AA, planeDepth, posePoint, project } from './perspective.js'
 import { colorFilterToCss } from './style.js'
 import type {
@@ -55,7 +55,7 @@ export type PaintOptions = {
   t: number
 }
 
-type PaintState = { canvasWidth: number; canvasHeight: number; meshFrames?: Map<LayerLayoutNode, Canvas> }
+type PaintState = { canvasWidth: number; canvasHeight: number; meshFrames?: Map<LayerLayoutNode, MeshFrame> }
 
 const SILHOUETTE = '#000000'
 
@@ -992,18 +992,25 @@ function paintChildBitmap(
   k: number,
   t: number,
   state: PaintState,
-): { canvas: Canvas; pad: number; logicalWidth: number; logicalHeight: number } {
+): { canvas: Canvas; pad: number; logicalWidth: number; logicalHeight: number; localX: number; localY: number } {
   const pad = planeBitmapPad(child)
-  const logicalWidth = child.width + pad * 2
-  const logicalHeight = child.height + pad * 2
+  const frame = child.kind === 'layer' ? state.meshFrames?.get(child) : undefined
+  const extraL = frame ? Math.max(0, Math.ceil(-frame.x)) : 0
+  const extraT = frame ? Math.max(0, Math.ceil(-frame.y)) : 0
+  const extraR = frame ? Math.max(0, Math.ceil(frame.x + frame.width - child.width)) : 0
+  const extraB = frame ? Math.max(0, Math.ceil(frame.y + frame.height - child.height)) : 0
+  const localX = -(pad + extraL)
+  const localY = -(pad + extraT)
+  const logicalWidth = child.width + pad * 2 + extraL + extraR
+  const logicalHeight = child.height + pad * 2 + extraT + extraB
   const w = Math.max(1, Math.ceil(logicalWidth * k))
   const h = Math.max(1, Math.ceil(logicalHeight * k))
   const canvas = createCanvas(w, h)
   const octx = canvas.getContext('2d') as PaintCtx
   // 位图是平面局部像素。rotate / scale 交给 posePoint，避免和投影各转一次。
-  octx.setTransform(k, 0, 0, k, (-child.x + pad) * k, (-child.y + pad) * k)
+  octx.setTransform(k, 0, 0, k, (-child.x - localX) * k, (-child.y - localY) * k)
   paintNode(octx, child, false, t, state, true)
-  return { canvas, pad, logicalWidth, logicalHeight }
+  return { canvas, pad, logicalWidth, logicalHeight, localX, localY }
 }
 
 function paintPerspectiveChildren(ctx: PaintCtx, node: LayerLayoutNode, debug: boolean, t: number, state: PaintState) {
@@ -1021,9 +1028,9 @@ function paintPerspectiveChildren(ctx: PaintCtx, node: LayerLayoutNode, debug: b
       paintNode(ctx, child, debug, t, state)
       continue
     }
-    const { canvas: bitmap, pad, logicalWidth, logicalHeight } = paintChildBitmap(child, k * PERSPECTIVE_AA, t, state)
+    const { canvas: bitmap, localX, localY, logicalWidth, logicalHeight } = paintChildBitmap(child, k * PERSPECTIVE_AA, t, state)
     const at = (u: number, v: number) => {
-      const p = posePoint(child, u - pad, v - pad)
+      const p = posePoint(child, u + localX, v + localY)
       return project(vx, vy, perspective, p)
     }
     drawTexturedPlane(ctx, bitmap, logicalWidth, logicalHeight, at)
@@ -1088,7 +1095,7 @@ function paintBody(ctx: PaintCtx, node: LayoutNode, debug: boolean, t: number, s
     const meshFrame = node.kind === 'layer' ? state.meshFrames?.get(node) : undefined
     if (meshFrame) {
       ctx.imageSmoothingEnabled = true
-      ctx.drawImage(meshFrame, 0, 0, node.width, node.height)
+      ctx.drawImage(meshFrame.canvas, meshFrame.x, meshFrame.y, meshFrame.width, meshFrame.height)
     } else if (node.kind === 'layer' && node.perspective != null && node.perspective > 0 && node.children.some(has3dPose)) {
       paintPerspectiveChildren(ctx, node, debug, t, state)
     } else {
@@ -1287,16 +1294,16 @@ function paintNode(
   pctx.restore()
 }
 
-async function prepareMeshFrames(root: LayerLayoutNode, scale: number, t: number): Promise<Map<LayerLayoutNode, Canvas>> {
-  const frames = new Map<LayerLayoutNode, Canvas>()
+async function prepareMeshFrames(root: LayerLayoutNode, scale: number, t: number): Promise<Map<LayerLayoutNode, MeshFrame>> {
+  const frames = new Map<LayerLayoutNode, MeshFrame>()
   const state: PaintState = { canvasWidth: 0, canvasHeight: 0, meshFrames: frames }
   const visit = async (node: LayoutNode) => {
     if (node.kind === 'layer' || node.kind === 'flex') {
       for (const child of node.children) await visit(child)
     }
     if (node.kind !== 'layer' || !ownsMeshScene(node)) return
-    const canvas = await renderMeshLayer(node, scale, (peeled) => paintChildBitmap(peeled, Math.max(scale, 1e-3) * 2, t, state))
-    if (canvas) frames.set(node, canvas)
+    const frame = await renderMeshLayer(node, scale, (peeled) => paintChildBitmap(peeled, Math.max(scale, 1e-3) * 2, t, state))
+    if (frame) frames.set(node, frame)
   }
   await visit(root)
   return frames

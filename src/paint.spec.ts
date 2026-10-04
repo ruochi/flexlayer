@@ -125,6 +125,26 @@ describe('paint containers', () => {
     expect(bodyPx[0]).toBeGreaterThan(220)
     expect(bodyPx[1]).toBeGreaterThan(220)
 
+    const grid = h(
+      'layer',
+      { width: '640', height: '400', background: '#000000', perspective: '900' },
+      h('rect', { cx: '320', cy: '200', width: '360', height: '200', fill: '#000000', rotateY: '32', glow: '36 #ffffff' }),
+    )
+    const gridPng = (await renderFvg(grid)).png
+    const gridImg = await loadImage(gridPng)
+    const gridCanvas = createCanvas(gridImg.width, gridImg.height)
+    const gridCtx = gridCanvas.getContext('2d')
+    gridCtx.drawImage(gridImg, 0, 0)
+    const row = gridCtx.getImageData(0, 150, 640, 1).data
+    let spikes = 0
+    for (let x = 2; x < 638; x++) {
+      const v = row[x * 4] ?? 0
+      const left = row[(x - 2) * 4] ?? 0
+      const right = row[(x + 2) * 4] ?? 0
+      if (v > 12 && v > left + 18 && v > right + 18) spikes++
+    }
+    expect(spikes).toBe(0)
+
     const shadow = h(
       'layer',
       { width: '180', height: '180', background: '#000000', perspective: '400' },

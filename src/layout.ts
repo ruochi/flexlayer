@@ -16,7 +16,7 @@ import { parseFvg } from './parse.js'
 import { ensureBuiltinFonts, registerFontsFromDocument } from './fonts.js'
 import { catmullRomPath } from './curve.js'
 import { isGradient, parseGradient, solidPaint } from './gradient.js'
-import { resolveModelFile } from './glb.js'
+import { glbSpan, resolveModelFile } from './glb.js'
 import { translateSvgPath } from './path.js'
 import { perspectiveIssues } from './perspective.js'
 import {
@@ -1003,7 +1003,36 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
         hint: 'src 相对 .layer 所在目录，例如 <model src="hero.glb" />',
       })
     }
-    mesh = { type: 'model', src, ...(resolved.file ? { file: resolved.file } : {}) }
+    const span = resolved.file ? glbSpan(resolved.file) ?? undefined : undefined
+    mesh = { type: 'model', src, ...(resolved.file ? { file: resolved.file } : {}), ...(span ? { span } : {}) }
+  }
+  const effects = readEffects(node.attrs, ctx, solidPaint(fill, ctx.color))
+  if (isGradient(node.attrs.fill)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `${node.tag} 的 fill 不支持渐变，只使用第一个颜色`,
+      hint: '改成纯色，或把渐变画在平面上',
+    })
+  }
+  if (effects.shadow) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `${node.tag} 不支持 shadow`,
+      hint: 'shadow 写在平面上；网格只使用 fill',
+    })
+  }
+  if (effects.glow) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `${node.tag} 不支持 glow`,
+      hint: 'glow 写在平面上；网格只使用 fill',
+    })
   }
   return {
     kind: 'mesh',
@@ -1018,7 +1047,7 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
     ...appearance,
     mesh,
     fill,
-    ...readEffects(node.attrs, ctx, solidPaint(fill, ctx.color)),
+    ...effects,
     ...layoutDrawMeta(node, ctx),
   }
 }

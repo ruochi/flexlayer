@@ -1,5 +1,5 @@
 import { isAbsolute, resolve } from 'node:path'
-import { statSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 
 export type GlbPrimitive = {
   positions: Float32Array
@@ -252,6 +252,34 @@ function pad4(buf: Buffer, fill: number): Buffer {
   const extra = (4 - (buf.length % 4)) % 4
   if (extra === 0) return buf
   return Buffer.concat([buf, Buffer.alloc(extra, fill)])
+}
+
+/** 模型在 glTF 空间里的包围盒尺寸。拟合前的原始跨度。 */
+export function glbSpan(file: string): { x: number; y: number; z: number } | null {
+  try {
+    const prims = parseGlb(readFileSync(file))
+    let minX = Infinity
+    let minY = Infinity
+    let minZ = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    let maxZ = -Infinity
+    for (const prim of prims) {
+      const src = prim.positions
+      for (let i = 0; i < src.length; i += 3) {
+        minX = Math.min(minX, src[i]!)
+        minY = Math.min(minY, src[i + 1]!)
+        minZ = Math.min(minZ, src[i + 2]!)
+        maxX = Math.max(maxX, src[i]!)
+        maxY = Math.max(maxY, src[i + 1]!)
+        maxZ = Math.max(maxZ, src[i + 2]!)
+      }
+    }
+    if (!Number.isFinite(minX)) return null
+    return { x: maxX - minX, y: maxY - minY, z: maxZ - minZ }
+  } catch {
+    return null
+  }
 }
 
 /** 一个轴对齐的单位立方体，边长 2，中心在原点。给例子和测试用。 */

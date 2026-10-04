@@ -161,4 +161,19 @@ describe('行内空白', () => {
     expect(ink(600)).not.toBe(ink(400))
     expect(ink(600)).not.toBe(ink(700))
   })
+
+  it('不是 100 倍数的字重仍按这个字号排', () => {
+    if (!hasFont) return
+    const width = (weight: number) => {
+      const canvas = createCanvas(10, 10)
+      const ctx = canvas.getContext('2d')
+      applyCanvasFont(ctx, 'ChillDuanSans', weight, 40)
+      return ctx.measureText('字重四五').width
+    }
+    const w400 = width(400)
+    const w450 = width(450)
+    expect(w450).toBeGreaterThan(w400 * 0.8)
+    expect(w450).toBeLessThan(w400 * 1.25)
+    expect(w450).toBeLessThan(200)
+  })
 })
