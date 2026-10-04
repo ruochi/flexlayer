@@ -537,6 +537,19 @@ export function buildReport(doc: FvgDocument): FvgReport {
     }
   }
 
+  const sources = doc.sources
+  if (sources && sources.size > 0) {
+    for (const el of elements) {
+      const source = sources.get(el.path)
+      if (source) el.source = source
+    }
+    for (const issue of issues) {
+      if (issue.source) continue
+      const source = sources.get(issue.path)
+      if (source) issue.source = source
+    }
+  }
+
   return {
     flexlayer: '0.1',
     width: doc.width,
@@ -548,6 +561,7 @@ export function buildReport(doc: FvgDocument): FvgReport {
 
 export function formatIssueLine(issue: Issue): string {
   const sym = issue.level === 'error' ? '✗ error' : issue.level === 'warn' ? '! warn' : '· info'
-  const line = `${sym}  ${issue.code.padEnd(16)} ${issue.path.padEnd(24)} ${issue.message}`
+  const at = issue.source ? `${issue.source}  ` : ''
+  const line = `${at}${sym}  ${issue.code.padEnd(16)} ${issue.path.padEnd(24)} ${issue.message}`
   return issue.hint ? `${line}\n         ${issue.hint}` : line
 }

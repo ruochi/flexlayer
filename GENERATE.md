@@ -4,9 +4,12 @@ Flex Layer 的**生成**和**画图**是两层。可复用块的写法见 [gener
 
 ```text
 Vue 模板 / React JSX  →  .layer 文本  →  renderFvg / flexlayer render  →  PNG
+.tsx（内置 JSX）      →  节点树        →  同一条渲染路径
 ```
 
-生成层只产出 `.layer` 字符串，不调用 canvas。标签和属性以 [SPEC.md](SPEC.md) 为准，一页规则见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)。
+生成层只产出 `.layer` 字符串或节点树，不调用 canvas。标签和属性以 [SPEC.md](SPEC.md) 为准，一页规则见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)。
+
+要循环、组件或动画，又希望 `flexlayer render` 直接出图时，写 `.tsx` 并加上 `/** @jsxImportSource @dc/flexlayer */`，不用 React。默认导出节点或函数；动画导出 `composition`。见 `examples/hello.tsx` 和 `examples/slide.tsx`。下面的 Vue / React 路径仍然把结果序列化成 `.layer` 字符串。
 
 ## 规则（AI 必守）
 

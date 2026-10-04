@@ -8,6 +8,16 @@ export type FvgProps = Record<string, unknown> & {
   children?: FvgChild | FvgChild[]
 }
 
+function styleToString(style: Record<string, unknown>): string {
+  const parts: string[] = []
+  for (const [key, value] of Object.entries(style)) {
+    if (value == null || value === false) continue
+    const name = key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)
+    parts.push(`${name}:${typeof value === 'number' ? String(value) : String(value)}`)
+  }
+  return parts.join('; ')
+}
+
 function flattenChildren(parts: unknown[]): FvgChild[] {
   const out: FvgChild[] = []
   for (const part of parts) {
@@ -29,9 +39,10 @@ export function h(tag: string, props: FvgProps | null, ...children: unknown[]): 
       draw = value as DrawFn
       continue
     }
-    if (key === 'children') continue
-    if (value == null) continue
-    attrs[key] = String(value)
+    if (key === 'children' || key === 'key' || key === 'ref') continue
+    if (typeof value === 'function') continue
+    if (value == null || value === false) continue
+    attrs[key] = key === 'style' && typeof value === 'object' ? styleToString(value as Record<string, unknown>) : String(value)
   }
 
   const fromProps = p.children

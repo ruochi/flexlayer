@@ -72,6 +72,7 @@ import type {
   TextLayoutNode,
 } from './types.js'
 import { emptyBox, translateBox, unionBoxes } from './types.js'
+import { formatSourceLoc } from './source-loc.js'
 import { ensureYoga } from './yoga.js'
 
 export type LayoutContext = {
@@ -84,6 +85,8 @@ export type LayoutContext = {
   useStack: string[]
   /** 解析 img 的相对路径。 */
   baseDir: string
+  /** path → `file:line:column`，给报告里的 source。 */
+  sources: Map<string, string>
   /** 设了之后，省略的 fill 用这个值，省略的 stroke 为 none。mask 里用 #ffffff。 */
   fillDefault?: string
 }
@@ -145,6 +148,11 @@ function parseSafe(raw: string | undefined, w: number, h: number): Edges {
 
 function nodePath(prefix: string, tag: string, index: number): string {
   return `${prefix}/${tag}[${index}]`
+}
+
+function track(ctx: LayoutContext, path: string, node: FvgNode) {
+  if (!node.loc || ctx.sources.has(path)) return
+  ctx.sources.set(path, formatSourceLoc(node.loc))
 }
 
 const DEFAULT_SHADOW_COLOR = '#00000066'
@@ -1323,7 +1331,9 @@ async function layoutFlex(node: FvgNode, ctx: LayoutContext): Promise<FlexLayout
   const measures: FlexMeasure[] = []
   for (let i = 0; i < childNodes.length; i++) {
     const ch = childNodes[i]!
-    const m = await measureFlexChild(ch, { ...ctx, pathPrefix: nodePath(ctx.pathPrefix, ch.tag, i) }, direction)
+    const path = nodePath(ctx.pathPrefix, ch.tag, i)
+    track(ctx, path, ch)
+    const m = await measureFlexChild(ch, { ...ctx, pathPrefix: path }, direction)
     if (m) measures.push(m)
   }
 
@@ -1539,6 +1549,7 @@ async function layoutMask(maskNode: FvgNode, ctx: LayoutContext, layerW: number,
   for (let i = 0; i < children.length; i++) {
     const ch = children[i]!
     const path = nodePath(ctx.pathPrefix, ch.tag, i)
+    track(ctx, path, ch)
     const sub: LayoutContext = { ...ctx, pathPrefix: path, fillDefault: '#ffffff' }
     if (!isMaskContentTag(ch.tag)) {
       ctx.issues.push({
@@ -1586,6 +1597,7 @@ async function layoutLayer(node: FvgNode, ctx: LayoutContext): Promise<LayerLayo
     const ch = childFvg[i]!
     if (ch.tag !== 'mask') continue
     const path = nodePath(ctx.pathPrefix, ch.tag, i)
+    track(ctx, path, ch)
     if (!chosenMask) {
       chosenMask = ch
       chosenMaskPath = path
@@ -1610,12 +1622,18 @@ async function layoutLayer(node: FvgNode, ctx: LayoutContext): Promise<LayerLayo
 
   for (let i = 0; i < childFvg.length; i++) {
     const ch = childFvg[i]!
-    if (ch.tag === 'symbol' || ch.tag === 'draw' || ch.tag === 'mask') continue
+    if (ch.tag === 'symbol' || ch.tag === 'draw' || ch.tag === 'mask') {
+      if (ch.tag === 'symbol') track(ctx, nodePath(ctx.pathPrefix, ch.tag, i), ch)
+      continue
+    }
     if (ch.tag.toLowerCase() === FONT_TAG) {
-      if (ctx.pathPrefix !== 'layer') warnMisplacedFont(ctx, nodePath(ctx.pathPrefix, ch.tag, i))
+      const path = nodePath(ctx.pathPrefix, ch.tag, i)
+      track(ctx, path, ch)
+      if (ctx.pathPrefix !== 'layer') warnMisplacedFont(ctx, path)
       continue
     }
     const path = nodePath(ctx.pathPrefix, ch.tag, i)
+    track(ctx, path, ch)
     ctx.issues.push(...checkChildAttrs(ch, 'layer', path))
     const subCtx = { ...ctx, pathPrefix: path }
     let laid: LayoutNode | null = null
@@ -1869,6 +1887,7 @@ export async function layoutSource(source: string | FvgNode, baseDir: string): P
   const maxContentWidth = width - safe.left - safe.right
 
   const issues: Issue[] = []
+  const sources = new Map<string, string>()
   const symbols = new Map<string, FvgNode>()
   collectSymbols(rootNode, symbols, issues, 'layer')
   const families = new Set<string>([fontFamily])
@@ -1898,7 +1917,9 @@ export async function layoutSource(source: string | FvgNode, baseDir: string): P
     symbols,
     useStack: [],
     baseDir,
+    sources,
   }
+  track(paintCtx, 'layer', rootNode)
   const hadBackground = attrs.background != null && attrs.background.trim() !== ''
   const background = hadBackground ? readPaint(attrs.background, '#ffffff', paintCtx, 'background') : '#ffffff'
   const root = await layoutLayer(rootNode, paintCtx)
@@ -1907,7 +1928,7 @@ export async function layoutSource(source: string | FvgNode, baseDir: string): P
   root.height = height
   issues.push(...perspectiveIssues(root))
 
-  return { width, height, background, color, fontFamily, safe, root, issues }
+  return { width, height, background, color, fontFamily, safe, root, issues, sources }
 }
 
 export type { FvgDocument }

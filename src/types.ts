@@ -78,6 +78,8 @@ export type Issue = {
   message: string
   /** 可直接照做的改法。 */
   hint?: string
+  /** 源码位置，例如 `examples/hello.tsx:18:5`。从 `.tsx` 来的节点才有。 */
+  source?: string
 }
 
 export type Anchor =
@@ -144,6 +146,8 @@ export type ElementReport = {
   path: string
   id?: string
   tag: string
+  /** 源码位置，例如 `examples/hello.tsx:18:5`。 */
+  source?: string
   box: Rect
   /** 变换并裁剪后的着墨外接矩形。有透视时是投影后的范围。 */
   ink: Rect
@@ -355,6 +359,8 @@ export type FvgDocument = {
   safe: { top: number; right: number; bottom: number; left: number }
   root: LayerLayoutNode
   issues: Issue[]
+  /** path → `file:line:column`。只有从 JSX 进来的树才有。 */
+  sources?: Map<string, string>
 }
 
 export type RenderOptions = {

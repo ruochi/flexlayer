@@ -1,6 +1,6 @@
 # Flex Layer 速查
 
-写法规则见 [AGENTS.md](../AGENTS.md) 的硬性约定。数字都是像素，y 轴向下。根元素 `<layer width height>` 就是一个 layer。
+写法规则见 [AGENTS.md](../AGENTS.md) 的硬性约定。数字都是像素，y 轴向下。根元素 `<layer width height>` 就是一个 layer。有循环或组件时把同一套标签写进 `.tsx`（`/** @jsxImportSource @dc/flexlayer */`），`flexlayer render file.tsx` 会先执行再渲染。
 
 ## 结构
 

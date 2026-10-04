@@ -76,10 +76,12 @@ describe('属性注册表', () => {
     for (const name of EFFECT_ATTRS) {
       expect(ATTR_ORDER).toContain(name)
     }
-    const jsx = readFileSync(new URL('../generate/react/jsx.d.ts', import.meta.url), 'utf8')
-    expect(between(jsx, 'jsx-effects', 'line')).toBe(jsxFieldBlock(JSX_EFFECT_NAMES))
-    expect(between(jsx, 'jsx-overlay', 'line')).toBe(jsxFieldBlock(JSX_OVERLAY_NAMES))
-    expect(between(jsx, 'jsx-grade', 'line')).toBe(jsxFieldBlock(JSX_GRADE_NAMES))
+    for (const file of ['../generate/react/jsx.d.ts', '../src/jsx-intrinsics.ts']) {
+      const jsx = readFileSync(new URL(file, import.meta.url), 'utf8')
+      expect(between(jsx, 'jsx-effects', 'line')).toBe(jsxFieldBlock(JSX_EFFECT_NAMES))
+      expect(between(jsx, 'jsx-overlay', 'line')).toBe(jsxFieldBlock(JSX_OVERLAY_NAMES))
+      expect(between(jsx, 'jsx-grade', 'line')).toBe(jsxFieldBlock(JSX_GRADE_NAMES))
+    }
   })
 
   it('效果属性都有语法、示例和问题码', () => {

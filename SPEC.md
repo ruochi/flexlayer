@@ -535,8 +535,10 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 | `effect-clipped` | warn | 本体在画布内，阴影、光晕或图层模糊超出画布 |
 | `flatten-3d` | warn | `rotateX`、`rotateY`、`z` 没有落在带 `perspective` 的 layer 里，仍按二维绘制。`sphere`、`box`、`extrude`、`model` 同样报这个码，并且不绘制 |
 | `behind-camera` | warn | 平面或网格的 `z` 大于等于所在 layer 的 `perspective`，不绘制 |
+| `emit-draw` | warn | `--emit` 时 `draw` 函数用了外部变量，或读不出函数体。写出的 `<draw>` 可能跑不起来 |
+| `nondeterministic` | warn | `.tsx` 里用了 `Math.random`、`Date.now`、`crypto.randomUUID` 或 `crypto.getRandomValues`。同一帧可能得到不同的图 |
 
-每条问题都可以带 `hint`，是可以直接照做的改法。
+每条问题都可以带 `hint`，是可以直接照做的改法。从 `.tsx` 来的节点，问题和元素还可以带 `source`，形如 `examples/hello.tsx:18:5`。`.layer` 解析出来的节点没有这个字段。
 
 ## 11. 命令行
 
@@ -545,7 +547,12 @@ flexlayer render scene.layer -o scene.png --report scene.json   # 渲染 PNG + �
 flexlayer render scene.layer --debug                             # 叠加画出盒子（蓝）和着墨范围（红）
 flexlayer render scene.layer --scale 0.5                         # 缩小输出，方便 AI 快速查看
 flexlayer check scene.layer                                      # 只输出检查结果，不出图
+flexlayer render scene.tsx -o scene.png --emit scene.layer       # 执行 JSX，再渲染；--emit 写回 .layer
+flexlayer render scene.tsx --frame 12 -o frame.png               # Composition 的第 12 帧
+flexlayer render scene.tsx --frames out/                         # Composition 的每一帧
 ```
+
+`.tsx`、`.jsx`、`.ts`、`.js` 会先执行。文件里写 `/** @jsxImportSource @dc/flexlayer */`，标签和属性与 `.layer` 相同。默认导出一个 `<layer>` 节点，或返回该节点的函数。命名导出 `composition`（或默认导出）可以是第 13 章的 `Composition`。执行结果是同一棵节点树，后面的布局、问题码和绘制都不变。`--emit` 把树写回 `.layer`；`draw` 函数若用了外部变量，记 `emit-draw`，函数体仍会写出来。帧数超过 300 且没有 `--frame` 或 `--frames` 时不渲染联系表。
 
 默认字体寒蝉端黑体首次使用时自动下载到 `~/.cache/flexlayer/fonts`。
 
@@ -643,7 +650,7 @@ const { frames, contactSheet } = await renderComposition(scene)
 | `spring({ frame, fps })` | 阻尼弹簧，从 0 趋近 1。`frame` 为 0 时是 0 |
 | `sequence(input, { from, durationInFrames }, render)` | 当前帧落在区间内时，把减去 `from` 的局部 `frame` 和 `t` 交给 `render`；否则返回 `null` |
 
-同一 `frame` 调用两次，得到同一张 PNG。命令行仍只渲染 `.layer` 文件。
+同一 `frame` 调用两次，得到同一张 PNG。命令行对 `.layer` 渲染这一帧；对导出 `Composition` 的 `.tsx`，用 `--frame` 取一帧，或输出联系表和 `--frames` 目录里的帧序列。`.tsx` 里不要用 `Math.random` 或 `Date.now`，否则报 `nondeterministic`。
 
 ## 14. 预留
 

@@ -2,7 +2,7 @@
 
 Flex Layer 用标签描述一帧画面：图形用 SVG 的写法，文字用 HTML 的写法，布局用 CSS flexbox。渲染器读入 `.layer`，输出 PNG 和一份布局报告。
 
-规范见 [SPEC.md](SPEC.md)。给模型的入口见 [AGENTS.md](AGENTS.md)，一页写法见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)。当前版本是单帧 v0.1.6。
+规范见 [SPEC.md](SPEC.md)。给模型的入口见 [AGENTS.md](AGENTS.md)，一页写法见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)。当前版本是单帧 v0.1.7。
 
 `layer` 上的 `perspective` 让直接子元素共用一个视距。`rotateX`、`rotateY`、`z` 写在要转动或推近的那一层上。`sphere`、`box`、`extrude`、`model` 和这些平面共用同一台视距。例子：`npx tsx src/cli.ts render examples/perspective.layer -o perspective.png`，`npx tsx src/cli.ts render examples/meshes.layer -o meshes.png`。
 
@@ -24,6 +24,8 @@ npx tsx src/cli.ts render examples/hello.layer -o hello.png --report hello.json
 npx tsx src/cli.ts render examples/draw-layer.layer -o draw-layer.png   # layer + <draw>
 npx tsx src/cli.ts render examples/hello.layer --debug --scale 0.5
 npx tsx src/cli.ts check examples/hello.layer
+npx tsx src/cli.ts render examples/hello.tsx -o hello.png --emit hello.out.layer
+npx tsx src/cli.ts render examples/slide.tsx --frame 1 -o slide.png
 ```
 
 构建之后也可以：

@@ -1,6 +1,6 @@
 {
   "name": "@dc/flexlayer",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Flex Layer: AI-friendly 2D frame markup with flex layout, HTML text and SVG-style shapes, rendered to PNG",
   "type": "module",
   "main": "dist/index.js",
@@ -13,6 +13,10 @@
     "./jsx-runtime": {
       "types": "./dist/jsx-runtime.d.ts",
       "import": "./dist/jsx-runtime.js"
+    },
+    "./jsx-dev-runtime": {
+      "types": "./dist/jsx-dev-runtime.d.ts",
+      "import": "./dist/jsx-dev-runtime.js"
     }
   },
   "bin": {
@@ -30,6 +34,7 @@
   "license": "MIT",
   "dependencies": {
     "@napi-rs/canvas": "^1.0.9",
+    "esbuild": "^0.25.12",
     "headless-three": "^1.9.0",
     "yoga-layout": "^3.2.1"
   },

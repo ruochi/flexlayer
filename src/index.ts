@@ -10,6 +10,9 @@ export type {
 } from './frame.js'
 export { parseFvg } from './parse.js'
 export { h } from './h.js'
+export { emitLayer } from './emit.js'
+export { formatSourceLoc } from './source-loc.js'
+export type { SourceLoc } from './parse.js'
 export { buildReport, formatIssueLine } from './report.js'
 export type {
   FvgReport,

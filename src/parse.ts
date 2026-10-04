@@ -1,6 +1,13 @@
 import { canonicalTag } from './tags.js'
 import type { DrawFn } from './types.js'
 
+/** JSX 自动运行时记下来的位置。行和列都从 1 开始。 */
+export type SourceLoc = {
+  file: string
+  line: number
+  column: number
+}
+
 export type FvgNode = {
   tag: string
   attrs: Record<string, string>
@@ -8,6 +15,8 @@ export type FvgNode = {
   draw?: DrawFn
   /** 源码里的标签名。仅当和规范小写不同时记下，用来报 non-canonical。 */
   writtenTag?: string
+  /** `.tsx` 里这个标签所在的位置。`.layer` 解析出来的节点没有。 */
+  loc?: SourceLoc
 }
 
 export type FvgChild = string | FvgNode
