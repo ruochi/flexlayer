@@ -26,7 +26,9 @@ function runtimePaths(): { baseUrl: string; paths: Record<string, string[]> } {
 export function typecheckLayerFile(file: string): Issue[] {
   if (!CODE_EXT.has(extname(file).toLowerCase())) return []
   const { baseUrl, paths } = runtimePaths()
-  const program = ts.createProgram([file], {
+  // 直接传给 createProgram 的 lib 是文件名，不是 tsconfig 里的 "ES2022"。
+  // 标准库从 typescript 安装目录加载，不依赖文件旁边有没有 node_modules/@types。
+  const options: ts.CompilerOptions = {
     strict: true,
     noEmit: true,
     skipLibCheck: true,
@@ -35,10 +37,15 @@ export function typecheckLayerFile(file: string): Issue[] {
     module: ts.ModuleKind.ESNext,
     moduleResolution: ts.ModuleResolutionKind.Bundler,
     target: ts.ScriptTarget.ES2022,
-    lib: ['ES2022'],
+    lib: ['lib.es2022.d.ts'],
+    types: [],
+    allowImportingTsExtensions: true,
     baseUrl,
     paths,
-  })
+  }
+  const host = ts.createCompilerHost(options)
+  host.getCurrentDirectory = () => dirname(file)
+  const program = ts.createProgram([file], options, host)
   const issues: Issue[] = []
   for (const diagnostic of ts.getPreEmitDiagnostics(program)) {
     if (!diagnostic.file || diagnostic.file.fileName !== file) continue
@@ -47,11 +54,16 @@ export function typecheckLayerFile(file: string): Issue[] {
       const pos = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start)
       source = formatSourceLoc({ file, line: pos.line + 1, column: pos.character + 1 })
     }
+    let message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')
+    if (diagnostic.file && diagnostic.start != null && diagnostic.length) {
+      const span = diagnostic.file.text.slice(diagnostic.start, diagnostic.start + diagnostic.length)
+      if (span && !message.includes(span)) message = `${span}：${message}`
+    }
     issues.push({
       level: 'error',
       code: 'type-error',
       path: 'layer',
-      message: ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'),
+      message,
       source,
     })
   }
