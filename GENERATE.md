@@ -12,7 +12,7 @@ Vue 模板 / React JSX  →  .layer 文本  →  renderFvg / flexlayer render  �
 
 | 写什么 | 放哪里 |
 | --- | --- |
-| 根 `<layer>` 的 `width`、`height`、`background`（画布底色）、`color`、`safe` | 根元素**属性** |
+| 根 `<layer>` 的 `width`、`height`、`background`（画布底色，省略则透明 PNG）、`color`、`safe` | 根元素**属性** |
 | `layer`、`rect`、`circle`、`ellipse`、`line`、`arrow`、`path`、`curve` 的位置、尺寸、`fill`、`stroke`、效果（`shadow`/`glow`/`blur` 等） | 标签**属性** |
 | 字号、颜色、`gap`、`padding`、`background` | HTML 的 **`style`** |
 | 图片 | `<img src="…" alt="…">`，宽高和 `object-fit` 写 **`style`**。`image` 同样可用 |
