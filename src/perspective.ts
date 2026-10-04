@@ -207,8 +207,8 @@ function paintGrid(
   }
 }
 
-/** 把高分辨率的平面平均缩回目标像素。颜色按预乘 alpha 平均，避免边缘发暗。 */
-function resolveSamples(src: Canvas, dw: number, dh: number): Canvas {
+/** 把高分辨率画面平均缩回目标像素。颜色按预乘 alpha 平均，避免边缘发暗。透视平面和网格共用。 */
+export function resolveSamples(src: Canvas, dw: number, dh: number): Canvas {
   const sw = src.width
   const sh = src.height
   const srcData = src.getContext('2d').getImageData(0, 0, sw, sh).data

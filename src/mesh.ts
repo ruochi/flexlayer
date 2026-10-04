@@ -3,13 +3,13 @@ import { readFileSync } from 'node:fs'
 import { solidPaint } from './gradient.js'
 import { parseGlb, type GlbPrimitive } from './glb.js'
 import { originOffset } from './matrix.js'
-import { applyPoseMatrix, planeDepth, poseMatrix, project } from './perspective.js'
+import { applyPoseMatrix, PERSPECTIVE_AA, planeDepth, poseMatrix, project, resolveSamples } from './perspective.js'
 import { tessellateSvgPath } from './path.js'
 import type { LayerLayoutNode, LayoutNode, MeshLayoutNode } from './types.js'
 
-/** 网格场景的超采样。只作用在进了三维场景的层上，二维绘制不经过这里。 */
-const MESH_AA = 2
-const MAX_RASTER_SIDE = 4096
+/** 网格和透视平面用同一套超采样：高分辨率绘制，再平均缩回。二维绘制不经过这里。 */
+const MESH_AA = PERSPECTIVE_AA
+const MAX_RASTER_SIDE = 8192
 
 type Mat4 = number[]
 type Headless = {
@@ -612,9 +612,16 @@ async function renderMeshWebgl(sceneInput: {
   const image = await loadImage(png)
   const outW = Math.max(1, Math.round(viewW * base))
   const outH = Math.max(1, Math.round(viewH * base))
-  const out = createCanvas(outW, outH)
-  const ctx = out.getContext('2d')
-  ctx.imageSmoothingEnabled = true
-  ctx.drawImage(image as unknown as Canvas, 0, 0, outW, outH)
+  const hi = createCanvas(image.width, image.height)
+  hi.getContext('2d').drawImage(image as unknown as Canvas, 0, 0)
+  let out: Canvas
+  if (image.width >= outW && image.height >= outH) {
+    out = resolveSamples(hi, outW, outH)
+  } else {
+    out = createCanvas(outW, outH)
+    const ctx = out.getContext('2d')
+    ctx.imageSmoothingEnabled = true
+    ctx.drawImage(hi, 0, 0, outW, outH)
+  }
   return { canvas: out, x: -padL, y: -padT, width: viewW, height: viewH }
 }

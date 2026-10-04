@@ -201,6 +201,42 @@ describe('网格绘制', () => {
     expect(messages.some((message) => message.includes('glow'))).toBe(true)
   })
 
+  it('网格斜边有抗锯齿过渡', async () => {
+    const { png } = await renderFvg(
+      `<layer width="200" height="200" background="#000000" perspective="800"><box cx="100" cy="100" width="160" height="14" depth="2" rotate="24" fill="#ffffff" /></layer>`,
+    )
+    const img = await loadImage(png)
+    const canvas = createCanvas(img.width, img.height)
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    const data = ctx.getImageData(0, 0, img.width, img.height).data
+    const at = (x: number, y: number) => data[(y * img.width + x) * 4] ?? 0
+    let hard = 0
+    let soft = 0
+    for (let x = 30; x < 170; x++) {
+      let kind = 'none'
+      let prev = at(x, 30)
+      for (let y = 31; y < 170; y++) {
+        const v = at(x, y)
+        if (prev < 12 && v > 243) {
+          kind = 'hard'
+          break
+        }
+        if (prev < 12 && v >= 12) {
+          kind = 'soft'
+          break
+        }
+        prev = v
+      }
+      if (kind === 'hard') hard++
+      else if (kind === 'soft') soft++
+    }
+    expect(at(100, 100)).toBeGreaterThan(250)
+    expect(at(8, 8)).toBeLessThan(8)
+    expect(soft).toBeGreaterThan(80)
+    expect(hard).toBeLessThan(8)
+  }, 30000)
+
   it('圆弧挤出的采样比八个切面更密', () => {
     const rings = tessellateSvgPath('M -40 0 A 40 40 0 1 1 40 0 A 40 40 0 1 1 -40 0 Z', 16, Math.PI / 24)
     expect(rings[0]!.points.length).toBeGreaterThan(40)
