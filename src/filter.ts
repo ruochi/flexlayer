@@ -12,7 +12,10 @@ export type FilterPixels = {
   height: number
   /** 这一层的盒子在缓冲里的位置，单位是像素。暗角一类效果用它。 */
   frame: { x: number; y: number; width: number; height: number }
-  /** 同尺寸 RGBA。alpha 是强度；没有就是整幅全强度。 */
+  /**
+   * 同尺寸 RGBA，alpha 是强度。
+   * apply 按满强度写。返回后引擎用这份 alpha 和调用前的像素混合，所以 apply 里不要再乘一次遮罩。
+   */
   mask?: Uint8ClampedArray
 }
 
@@ -252,7 +255,7 @@ registerFilter<GradeSpec>({
   maskPaintHint: '写成 linear-gradient(to right, #fff, #fff0)、radial-gradient(#fff0 30%, #fff) 或 gradient(...)；alpha 是强度',
   parse: parseGrade,
   apply(pixels, spec) {
-    applyGrade(pixels.data, pixels.width, pixels.height, spec, pixels.frame, pixels.mask)
+    applyGrade(pixels.data, pixels.width, pixels.height, spec, pixels.frame)
   },
 })
 

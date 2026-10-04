@@ -1234,7 +1234,19 @@ function applyPixelFilters(
       mctx.fillRect(-originX, -originY, pw / k, ph / k)
       mask = mctx.getImageData(0, 0, pw, ph).data
     }
+    const before = mask ? image.data.slice() : undefined
     apply({ data: image.data, width: pw, height: ph, frame, mask }, item.spec)
+    if (before && mask) {
+      const data = image.data
+      for (let i = 0; i < data.length; i += 4) {
+        const m = mask[i + 3]! / 255
+        if (m >= 1) continue
+        data[i] = before[i]! + (data[i]! - before[i]!) * m
+        data[i + 1] = before[i + 1]! + (data[i + 1]! - before[i + 1]!) * m
+        data[i + 2] = before[i + 2]! + (data[i + 2]! - before[i + 2]!) * m
+        data[i + 3] = before[i + 3]! + (data[i + 3]! - before[i + 3]!) * m
+      }
+    }
   }
   cctx.putImageData(image, 0, 0)
 }

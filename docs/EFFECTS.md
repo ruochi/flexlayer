@@ -92,7 +92,7 @@
 
 阴影、发光、玻璃、背景模糊、噪点、叠加不走这里：它们要墨迹轮廓或背后的像素，不是「这一层画完再改」。
 
-`pixel` 滤镜的 `apply` 拿到非预乘 RGBA，可选用 `mask` 的 alpha 当强度，用 `frame` 知道盒子在缓冲里的位置。`includeBackdrop: true` 时，写在根 layer 上会连画布底色一起处理。`canvas` 滤镜只返回一段 CSS filter 字符串。
+`pixel` 滤镜的 `apply` 拿到非预乘 RGBA，按满强度改像素，用 `frame` 知道盒子在缓冲里的位置。有遮罩时，引擎在 `apply` 之后用遮罩 alpha 和调用前的像素混合。`includeBackdrop: true` 时，写在根 layer 上会连画布底色一起处理。`canvas` 滤镜只返回一段 CSS filter 字符串。
 
 规范写法见 [SPEC.md 第 9.3 节](../SPEC.md)。
 

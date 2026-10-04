@@ -480,7 +480,7 @@ registerFilter({
 | `name` | 小写属性名。不能占用已有属性。同名再登记会换掉原来的实现，`grade` 和 `filter` 也一样 |
 | `kind` | `pixel` 原地改 RGBA；`canvas` 返回一段 canvas filter CSS |
 | `layerOnly` | 缺省时 `pixel` 只写在 `layer` 上，`canvas` 可以写在图形属性或文字 `style` 里，和 `filter` 一样 |
-| `maskAttr` | 可选。配套属性，paint 的 alpha 是强度，坐标按这一层的盒子 |
+| `maskAttr` | 可选。配套属性，paint 的 alpha 是强度，坐标按这一层的盒子。`apply` 按满强度写，引擎再用遮罩和原图混合 |
 | `includeBackdrop` | 写在根 `layer` 上时连画布底色一起处理。`grade` 为 true |
 | `order` | 同 kind 里越小越先，缺省 0 |
 | `pad` | 可选。离屏要额外留出的逻辑像素 |
