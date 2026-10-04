@@ -33,7 +33,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | 属性 | 默认值 | 说明 |
 | --- | --- | --- |
 | `width`、`height` | 必填 | 画布尺寸 |
-| `background` | `#ffffff` | 画布背景色，写 `transparent` 输出透明 PNG |
+| `background` | `transparent` | 画布背景色。没写，或写 `transparent`，不铺底色，PNG 里空出来的像素是透明的。要白底写 `#ffffff` |
 | `color` | `#111111` | 全局文字色、线条默认色 |
 | `font-family` | `ChillDuanSans` | 全局字体。也可以写 `Song`（宋体）、`Kai`（楷体）、`Brush`（书法），第一次用到时自动下载 |
 | `safe` | 画布短边的 4% | 安全区边距，`上 右 下 左` 或一个数字，只用于检查 |
@@ -116,7 +116,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 没写 `fill` 时按 `#fff` 画满。实心形状是硬边；`fill` 的 alpha 和渐变里的透明处是软边。颜色不算，只看 alpha。没画到的像素藏起来。多个形状按书写顺序叠上，后写的盖住先写的；半透明不会把底下挖空。要挖洞，用带洞的 `path`。形状自己的 `rotate`、`scale` 仍然有效。
 
-画布底色先铺好，不进 `mask`。根 `layer` 的 `grade` 仍作用整幅画布，包括底色。`grade-mask` 只控制调色强度。`mask` 放进 flex、写在图形或 HTML 上、写成属性或写进 `style`，都会 `warn` 并忽略。
+写了画布底色就先铺好，不进 `mask`。没写 `background` 时不铺色，空出来的像素在 PNG 里是透明的。根 `layer` 的 `grade` 仍作用整幅画布，包括已经铺上的底色；完全透明的像素不参与调色。`grade-mask` 只控制调色强度。`mask` 放进 flex、写在图形或 HTML 上、写成属性或写进 `style`，都会 `warn` 并忽略。
 
 ```html
 <layer width="320" height="180">
@@ -133,7 +133,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 </mask>
 ```
 
-`border`、`border-radius`、`overflow` 写在 `layer` 的属性上，不写 `style`。**`layer` 不填背景**：它只合成子元素画出来的内容。色块用 `rect` 的 `fill`、HTML 的 `style="background: …"`，或子标签 `<draw>` 自己画。`layer` / `use` 上写 `background` 会警告并忽略。画布底色只写在根节点 `<layer background>`。
+`border`、`border-radius`、`overflow` 写在 `layer` 的属性上，不写 `style`。**`layer` 不填背景**：它只合成子元素画出来的内容。色块用 `rect` 的 `fill`、HTML 的 `style="background: …"`，或子标签 `<draw>` 自己画。`layer` / `use` 上写 `background` 会警告并忽略。画布底色只写在根节点 `<layer background>`。根上没写时不铺底色，输出的 PNG 背景是透明的。
 
 一组 HTML 要放到画面上，包一层 `layer`，把 `cx`、`cy`、`anchor` 写在 `layer` 上。
 

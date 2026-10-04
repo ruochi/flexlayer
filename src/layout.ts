@@ -1682,8 +1682,9 @@ export async function layoutSource(source: string | FvgNode, baseDir: string): P
     useStack: [],
     baseDir,
   }
-  const hadBackground = attrs.background != null && attrs.background.trim() !== ''
-  const background = hadBackground ? readPaint(attrs.background, '#ffffff', paintCtx, 'background') : '#ffffff'
+  // 没写 background 时不铺底色，PNG 里空出来的像素保持透明。
+  const rawBackground = attrs.background?.trim() ?? ''
+  const background = rawBackground ? readPaint(rawBackground, '#ffffff', paintCtx, 'background') : 'transparent'
   const root = await layoutLayer(rootNode, paintCtx)
 
   root.width = width
