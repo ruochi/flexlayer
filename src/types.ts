@@ -140,6 +140,26 @@ export type BlendMode =
   | 'lighten'
   | 'darken'
 
+/** 已经套到某个节点上的滤镜。绘制时按 kind 和 order 排序。 */
+export type AppliedFilter = {
+  name: string
+  kind: 'pixel' | 'canvas'
+  order: number
+  /** 注册顺序，order 相同时用它。 */
+  seq: number
+  spec: unknown
+  /** 遮罩 paint，alpha 是强度。 */
+  mask?: string
+  /** 写在根 layer 上时连画布底色一起处理。 */
+  includeBackdrop: boolean
+}
+
+export type FilterReport = {
+  name: string
+  mask?: string
+  value: unknown
+}
+
 export type ElementReport = {
   path: string
   id?: string
@@ -167,6 +187,8 @@ export type ElementReport = {
   /** 预设展开后的调色参数。 */
   grade?: GradeSpec
   gradeMask?: string
+  /** 已套用的滤镜，像素滤镜在前，画布滤镜在后。 */
+  filters?: FilterReport[]
 }
 
 export type FvgReport = {
@@ -261,6 +283,8 @@ export type LayoutNodeBase = {
   grade?: GradeSpec
   /** 纯色或渐变，alpha 是调色强度。 */
   gradeMask?: string
+  /** grade、filter 以及 registerFilter 登记的滤镜。 */
+  filters?: AppliedFilter[]
 }
 
 export type LayerLayoutNode = LayoutNodeBase & {

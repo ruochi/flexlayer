@@ -1,4 +1,6 @@
 export { renderFvg, checkFvg, renderLayer, checkLayer, type RenderResult } from './render.js'
+export { getFilter, listFilters, registerFilter, unregisterFilter } from './filter.js'
+export type { FilterParseResult, FilterPixels, LayerFilter } from './filter.js'
 export { renderComposition, interpolate, spring, sequence } from './frame.js'
 export type {
   Composition,

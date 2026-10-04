@@ -1,3 +1,4 @@
+import { filtersInPaintOrder, getFilter } from './filter.js'
 import { apply, applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset, translated, type Matrix } from './matrix.js'
 import { applyPoseMatrix, has3dPose, planeDepth, poseMatrix, posePoint, project as projectPoint } from './perspective.js'
 import type { Box, ElementReport, FvgDocument, FvgReport, Issue, LayoutNode, MeshLayoutNode } from './types.js'
@@ -311,6 +312,14 @@ function walk(
   if (node.blend) entry.blend = node.blend
   if (node.grade) entry.grade = node.grade
   if (node.gradeMask) entry.gradeMask = node.gradeMask
+  const paintedFilters = filtersInPaintOrder(node.filters)
+  if (paintedFilters.length) {
+    entry.filters = paintedFilters.map((item) => ({
+      name: item.name,
+      ...(item.mask ? { mask: item.mask } : {}),
+      value: getFilter(item.name)?.report?.(item.spec) ?? item.spec,
+    }))
+  }
   if (node.kind === 'text') {
     const contentX = node.x + node.padding.left + (node.border?.width ?? 0)
     const contentY = node.y + node.padding.top + (node.border?.width ?? 0)

@@ -51,6 +51,8 @@ import { renderLayer } from '@dc/flexlayer'
 const { png, report } = await renderLayer(source, { baseDir: process.cwd() })
 ```
 
+新滤镜用 `registerFilter`。内置的 `grade` 和 `filter` 也走这个接口。像素滤镜默认只写在 `layer` 上，见 [SPEC.md 第 9.3 节](SPEC.md)。
+
 ## 4. 验证：由轻到重
 
 ### 4.1 `flexlayer check`

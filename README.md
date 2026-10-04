@@ -42,7 +42,7 @@ import { renderLayer } from '@dc/flexlayer'
 const { png, report } = await renderLayer(source, { scale: 0.5 })
 ```
 
-`renderFvg` 与 `renderLayer` 是同一个函数。嵌套 `layer` 不填背景，色块写法见 [AGENTS.md](AGENTS.md)。`.layer` 里可以用 `<draw>`，程序侧用 `draw={fn}`：
+`renderFvg` 与 `renderLayer` 是同一个函数。嵌套 `layer` 不填背景，色块写法见 [AGENTS.md](AGENTS.md)。新的像素滤镜用 `registerFilter` 登记，内置的 `grade` 和 `filter` 也在这个接口上，见 [SPEC.md](SPEC.md) 第 9.3 节。`.layer` 里可以用 `<draw>`，程序侧用 `draw={fn}`：
 
 ```html
 <layer width="400" height="300" background="#0f1115">

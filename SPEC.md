@@ -319,7 +319,7 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 
 效果只影响绘制，不改变布局盒子。**一律按着墨（墨迹 / alpha）计算，不按布局盒子**：文字跟字形，形状跟几何填充。`layer` / `flex` 的 `shadow` 和 `glow` 跟着这一层实际画出来的子树，不跟空的布局盒子；这一层若是三维场景，就跟着已经画好的那张画面。其余效果里，layer 只算自身边框，flex 只算自身背景和边框。`blur` / `filter` / `blend` 作用在已绘制像素上。
 
-绘制顺序只此一份：`backdrop-blur` / `glass` 取样 → `shadow` → `glow` → 本体（`overflow="hidden"` 在这里裁子元素）→ `inner-shadow` → `inner-glow` → `overlay` → `noise`。若有 `blur`、`filter`、`grade` 或 `<mask>`，先画进离屏，依次做 `grade`、`blur` / `filter`，有 `grade` 时再叠 `noise`，然后按 `<mask>` 的 alpha 裁掉，再贴回。画布底色不进 `<mask>`。写了 `grade` 时颗粒不被染色。同时写了 `blur` 与 `filter` 时，图层模糊以 `blur` 为准，并报 `info`。`glass` 与 `backdrop-blur` 同时出现时以 `glass` 为准，并报 `info`。
+绘制顺序只此一份：`backdrop-blur` / `glass` 取样 → `shadow` → `glow` → 本体（`overflow="hidden"` 在这里裁子元素）→ `inner-shadow` → `inner-glow` → `overlay` → `noise`。若有 `blur`、`filter`、`grade`、其它已注册滤镜或 `<mask>`，先画进离屏，依次做像素滤镜（含 `grade`，`order` 小的在前）、`blur` / 画布滤镜（含 `filter`），有像素滤镜时再叠 `noise`，然后按 `<mask>` 的 alpha 裁掉，再贴回。画布底色不进 `<mask>`。写了像素滤镜时颗粒不被染色。同时写了 `blur` 与 `filter` 时，图层模糊以 `blur` 为准，并报 `info`。`glass` 与 `backdrop-blur` 同时出现时以 `glass` 为准，并报 `info`。
 
 每个效果都按同一套字段描述：归属、语法、是否复用 paint、作用范围、在上面这条顺序里的位置、报告与问题码、图格。实现取舍见 [docs/EFFECTS.md](docs/EFFECTS.md)。图在 [docs/GALLERY.md](docs/GALLERY.md)。
 
@@ -444,6 +444,50 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 | 位置 | 离屏里、`blur` / `filter` 之前 |
 | 报告 | `grade` 回显预设展开后的完整参数 |
 | 图 | [docs/gallery/color.png](docs/gallery/color.png) |
+
+#### 注册滤镜
+
+`grade` 和 `filter` 走同一套滤镜接口，新滤镜也登记在这里。名字就是属性名。像素滤镜（`kind: "pixel"`）在离屏里、`blur` 之前按 `order` 从小到大执行，相同则按注册顺序。画布滤镜（`kind: "canvas"`）返回一段 canvas filter CSS，和 `blur` 合成一条，`blur` 在前。
+
+```ts
+import { registerFilter, renderLayer } from '@dc/flexlayer'
+
+registerFilter({
+  name: 'wash',
+  kind: 'pixel',
+  parse(value) {
+    const n = Number(value)
+    if (!Number.isFinite(n) || n < 0 || n > 1) return { error: '强度要在 0 到 1 之间' }
+    return { spec: n }
+  },
+  apply(pixels, amount) {
+    for (let i = 0; i < pixels.data.length; i += 4) {
+      if (pixels.data[i + 3] === 0) continue
+      pixels.data[i] = pixels.data[i]! + (255 - pixels.data[i]!) * amount
+    }
+  },
+})
+```
+
+```html
+<layer width="200" height="200" wash="0.4">
+  <rect x1="0" y1="0" x2="200" y2="200" fill="#808080" />
+</layer>
+```
+
+| 项 | 说明 |
+| --- | --- |
+| `name` | 小写属性名。不能占用已有属性。同名再登记会换掉原来的实现，`grade` 和 `filter` 也一样 |
+| `kind` | `pixel` 原地改 RGBA；`canvas` 返回一段 canvas filter CSS |
+| `layerOnly` | 缺省时 `pixel` 只写在 `layer` 上，`canvas` 可以写在图形属性或文字 `style` 里，和 `filter` 一样 |
+| `maskAttr` | 可选。配套属性，paint 的 alpha 是强度，坐标按这一层的盒子 |
+| `includeBackdrop` | 写在根 `layer` 上时连画布底色一起处理。`grade` 为 true |
+| `order` | 同 kind 里越小越先，缺省 0 |
+| `pad` | 可选。离屏要额外留出的逻辑像素 |
+| 报告 | `filters` 按绘制顺序列出。`grade` 和 `filter` 仍单独回显 |
+| 卸下 | `unregisterFilter` 只卸后加的滤镜。`grade` 和 `filter` 不能卸 |
+
+写在图形或文字 `style` 上的像素滤镜报 `invalid-attr` 并忽略。遮罩单独出现、或遮罩 paint 无法解析，同样报 `invalid-attr`。
 
 #### overlay
 

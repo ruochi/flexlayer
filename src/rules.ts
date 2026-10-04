@@ -1,3 +1,4 @@
+import { filterIsLayerOnly, listFilters } from './filter.js'
 import type { FvgNode } from './parse.js'
 import { ATTRS, HTML_STYLE_ATTRS, attrByName, issueFor } from './schema.js'
 import { parseStyle } from './style.js'
@@ -10,6 +11,18 @@ const BLOCK_IN_TEXT = new Set(['h1', 'h2', 'h3', 'p', 'div'])
 const LAYER_ONLY_ATTR_NAMES = ATTRS.filter((attr) => attr.layerOnlyAttr).map((attr) => attr.name)
 const FORBID_IN_STYLE = new Set(ATTRS.filter((attr) => attr.forbidInStyle).map((attr) => attr.name))
 const FORBID_IN_HTML_STYLE = new Set(ATTRS.filter((attr) => attr.forbidInHtmlStyle).map((attr) => attr.name))
+
+/** 后注册的滤镜。grade / grade-mask 已经在属性表里，这里不再报第二次。 */
+function registeredLayerOnlyNames(): string[] {
+  const known = new Set(LAYER_ONLY_ATTR_NAMES)
+  const names: string[] = []
+  for (const def of listFilters()) {
+    if (!filterIsLayerOnly(def)) continue
+    if (!known.has(def.name)) names.push(def.name)
+    if (def.maskAttr && !known.has(def.maskAttr)) names.push(def.maskAttr)
+  }
+  return names
+}
 
 function flagged(level: IssueLevel, code: string, path: string, message: string, hint: string): Issue {
   return { level, code, path, message, hint }
@@ -253,6 +266,31 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
   }
   const styleMap = parseStyle(attrs.style)
   const styleKeys = Object.keys(styleMap)
+  const registeredOnly = registeredLayerOnlyNames()
+  const misplacedRegistered = registeredOnly.filter((key) => present(attrs, key))
+  if (node.tag !== 'layer' && misplacedRegistered.length > 0) {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        `${misplacedRegistered.join('、')} 只写在 layer 上`,
+        `外包一层 layer，例如 <layer ${misplacedRegistered[0]}="…">`,
+      ),
+    )
+  }
+  const registeredInStyle = styleKeys.filter((key) => registeredOnly.includes(key))
+  if (registeredInStyle.length > 0) {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        `${registeredInStyle.join('、')} 只写在 layer 的属性上`,
+        `不要写进 style；外包 <layer ${registeredInStyle[0]}="…">`,
+      ),
+    )
+  }
   const forbiddenStyle = styleKeys.filter((key) => FORBID_IN_STYLE.has(key))
   if (forbiddenStyle.length > 0) {
     const first = attrByName(forbiddenStyle[0]!)
