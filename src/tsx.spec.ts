@@ -2,7 +2,6 @@ import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import { mergeFrameIssues, sampleFrames } from './check-frames.js'
 import { emitLayer } from './emit.js'
@@ -50,46 +49,75 @@ describe('jsx 运行时', () => {
   })
 })
 
-function typeErrors(files: string[]): string[] {
-  const program = ts.createProgram(files, {
-    strict: true,
-    noEmit: true,
-    skipLibCheck: true,
-    jsx: ts.JsxEmit.ReactJSX,
-    jsxImportSource: '@dc/flexlayer',
-    module: ts.ModuleKind.ESNext,
-    moduleResolution: ts.ModuleResolutionKind.Bundler,
-    target: ts.ScriptTarget.ES2022,
-    baseUrl: pkgDir,
-    paths: {
-      '@dc/flexlayer': ['src/index.ts'],
-      '@dc/flexlayer/jsx-runtime': ['src/jsx-runtime.ts'],
-      '@dc/flexlayer/jsx-dev-runtime': ['src/jsx-dev-runtime.ts'],
-    },
-  })
-  return ts
-    .getPreEmitDiagnostics(program)
-    .filter((d) => d.file && files.includes(d.file.fileName))
-    .map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n'))
+function typeMessages(file: string): string[] {
+  return typecheckLayerFile(file).map((issue) => issue.message)
 }
 
 describe('JSX 类型', () => {
   it('examples 里的 .tsx 通过类型检查', () => {
-    const files = ['hello.tsx', 'slide.tsx'].map((name) => join(pkgDir, 'examples', name))
-    expect(typeErrors(files)).toEqual([])
+    for (const name of ['hello.tsx', 'slide.tsx']) {
+      expect(typeMessages(join(pkgDir, 'examples', name)), name).toEqual([])
+    }
+  })
+
+  it('仓库外的目录也能认到数组和 Math', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'flexlayer-outside-'))
+    const file = join(dir, 'hello.tsx')
+    await writeFile(
+      file,
+      `const tags = ['甲', '乙']
+      export default (
+        <layer width="32" height="32" background="#000">
+          {tags.map((text, i) => <circle key={text} cx={8 + i * 12} cy={Math.min(16, 20)} r="4" fill="#fff" />)}
+        </layer>
+      )
+      `,
+    )
+    expect(typeMessages(file)).toEqual([])
+  })
+
+  it('import 可以带 .tsx 扩展名', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'flexlayer-import-'))
+    await writeFile(join(dir, 'piece.tsx'), `export const title = '甲'\n`)
+    const file = join(dir, 'main.tsx')
+    await writeFile(
+      file,
+      `import { title } from './piece.tsx'
+      export default <layer width="32" height="32"><p style="font-size:12px">{title}</p></layer>
+      `,
+    )
+    expect(typeMessages(file)).toEqual([])
+  })
+
+  it('线条可以写 stroke，不认识的属性留给 draw', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'flexlayer-stroke-'))
+    const file = join(dir, 'lines.tsx')
+    await writeFile(
+      file,
+      `export default (
+        <layer width="80" height="40">
+          <polyline points="0,0 10,10" stroke="#fff" strokeWidth="2" />
+          <polygon points="0,0 10,0 10,10" stroke="#fff" strokeWidth="2" fill="none" />
+          <path d="M0 0 L10 10" stroke="#fff" strokeWidth="2" />
+          <rect width="10" height="10" fill="#fff" bogus="1" />
+        </layer>
+      )
+      `,
+    )
+    expect(typeMessages(file)).toEqual([])
   })
 
   it('写错位置的属性是类型错误', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'flexlayer-types-'))
     const cases = [
-      [`export default <layer width="10" height="10"><p cx="3">hi</p></layer>\n`, "'cx'"],
-      [`export default <layer width="10" height="10"><circle cx="4" cy="4" r="2" style="fill:#fff" /></layer>\n`, "'style'"],
-      [`export default <layer width="10" height="10"><p font-size="40">hi</p></layer>\n`, "'font-size'"],
+      [`export default <layer width="10" height="10"><p cx="3">hi</p></layer>\n`, 'cx：'],
+      [`export default <layer width="10" height="10"><circle cx="4" cy="4" r="2" style="fill:#fff" /></layer>\n`, 'style：'],
+      [`export default <layer width="10" height="10"><p font-size="40">hi</p></layer>\n`, 'font-size'],
     ] as const
     for (const [source, token] of cases) {
       const file = join(dir, `${token.replace(/'/g, '')}.tsx`)
       await writeFile(file, source)
-      const errors = typeErrors([file])
+      const errors = typeMessages(file)
       expect(errors.some((message) => message.includes(token)), token).toBe(true)
     }
   })

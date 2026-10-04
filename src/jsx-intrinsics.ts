@@ -6,12 +6,20 @@ type FvgStyle = string | Record<string, string | number | undefined>
 
 type JsxChild = string | number | boolean | null | undefined | FvgNode | JsxChild[]
 
-/** 图形和 layer 不带 style。不认识的属性名在 JSX 里是类型错误；自定义数据放进 draw 的闭包。 */
+/**
+ * 不认识的属性名留给 draw，和 .layer 一样保留。
+ * 放错位置的已知属性另外标成 never，否则索引签名会把它们也放行。
+ */
+type JsxAttr = string | number | boolean | undefined | FvgStyle | DrawFn | JsxChild
+
 type FvgNodeBase = {
   id?: string
   draw?: DrawFn
   children?: JsxChild
+  [name: string]: JsxAttr
 }
+
+type NoStyle = { style?: never }
 
 /**
  * TypeScript 不检查 JSX 里的连字符属性。这些名字属于 style，写成 never 才会报错。
@@ -39,16 +47,67 @@ type HtmlHyphenBan = {
   'text-align'?: never
 }
 
+/** 写在 HTML 属性上会进 style 或只属于图形。标成 never，索引签名才拦得住。 */
+type HtmlMisplacedBan = {
+  cx?: never
+  cy?: never
+  anchor?: never
+  r?: never
+  rx?: never
+  ry?: never
+  fill?: never
+  stroke?: never
+  strokeWidth?: never
+  'stroke-width'?: never
+  width?: never
+  height?: never
+  opacity?: never
+  rotate?: never
+  rotateX?: never
+  rotateY?: never
+  z?: never
+  scale?: never
+  origin?: never
+  perspective?: never
+  background?: never
+  padding?: never
+  gap?: never
+  border?: never
+  color?: never
+  flex?: never
+  x1?: never
+  y1?: never
+  x2?: never
+  y2?: never
+  points?: never
+  d?: never
+}
+
 /** 文字和图片。视觉属性写 style，不写 cx、fill。 */
 type FvgHtml = FvgNodeBase &
-  HtmlHyphenBan & {
+  HtmlHyphenBan &
+  HtmlMisplacedBan & {
     style?: FvgStyle
   }
 
-type FvgPositioned = FvgNodeBase & {
+type FvgGraphic = FvgNodeBase & NoStyle
+
+type FvgPositioned = FvgGraphic & {
   cx?: number | string
   cy?: number | string
   anchor?: string
+}
+
+/** 线条类。stroke-width 默认 4，fill 默认 none。 */
+type FvgLinePaint = {
+  fill?: string
+  stroke?: string
+  strokeWidth?: number | string
+  'stroke-width'?: number | string
+  'stroke-dasharray'?: string
+  'stroke-linecap'?: string
+  'stroke-linejoin'?: string
+  opacity?: number | string
 }
 
 type FvgEffects = {
@@ -148,13 +207,13 @@ export namespace JSX {
         'border-radius'?: string | number
       }
     /** 子标签：正文 JS，可用 ctx、el；不参与布局 */
-    draw: FvgNodeBase
-    symbol: FvgNodeBase & { width?: number | string; height?: number | string }
+    draw: FvgGraphic
+    symbol: FvgGraphic & { width?: number | string; height?: number | string }
     /**
      * 蒙版。只作为 layer 的直接子元素。
      * 里面写 rect / circle / ellipse / polygon / path / img；省略 fill 为 #fff，只取 alpha。
      */
-    mask: FvgNodeBase
+    mask: FvgGraphic
     use: FvgPositioned & {
       href?: string
       rotate?: number | string
@@ -165,26 +224,24 @@ export namespace JSX {
     rect: FvgShape & { x1?: number | string; y1?: number | string; x2?: number | string; y2?: number | string }
     circle: FvgShape
     ellipse: FvgShape & { x1?: number | string; y1?: number | string; x2?: number | string; y2?: number | string }
-    line: FvgNodeBase & {
-      x1?: number | string
-      y1?: number | string
-      x2?: number | string
-      y2?: number | string
-      stroke?: string
-      strokeWidth?: number | string
-    }
-    arrow: FvgNodeBase & {
-      x1?: number | string
-      y1?: number | string
-      x2?: number | string
-      y2?: number | string
-      head?: number | string
-      stroke?: string
-      strokeWidth?: number | string
-    }
-    polyline: FvgNodeBase & { points?: string }
-    polygon: FvgNodeBase & { points?: string; fill?: string }
-    path: FvgNodeBase & { d?: string; fill?: string }
+    line: FvgGraphic &
+      FvgLinePaint & {
+        x1?: number | string
+        y1?: number | string
+        x2?: number | string
+        y2?: number | string
+      }
+    arrow: FvgGraphic &
+      FvgLinePaint & {
+        x1?: number | string
+        y1?: number | string
+        x2?: number | string
+        y2?: number | string
+        head?: number | string
+      }
+    polyline: FvgGraphic & FvgLinePaint & { points?: string }
+    polygon: FvgGraphic & FvgLinePaint & { points?: string }
+    path: FvgGraphic & FvgLinePaint & { d?: string }
     sphere: FvgPositioned &
       FvgEffects & {
         r?: number | string
@@ -222,8 +279,8 @@ export namespace JSX {
         opacity?: number | string
       }
     /** 外部 glb。位置和宽高写在外包的 layer 上，src 只写在这里。 */
-    model: FvgNodeBase & { src?: string }
-    curve: FvgNodeBase & { points?: string; closed?: boolean | string; fill?: string; stroke?: string }
+    model: FvgGraphic & { src?: string }
+    curve: FvgGraphic & FvgLinePaint & { points?: string; closed?: boolean | string }
     h1: FvgHtml
     h2: FvgHtml
     h3: FvgHtml
