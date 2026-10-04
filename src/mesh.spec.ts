@@ -137,3 +137,62 @@ describe('网格绘制', () => {
     expect(corner[1]).toBeLessThan(15)
   }, 30000)
 })
+
+describe('canvas 2d 网格绘制', () => {
+  it('球体中心有颜色，画布角仍是背景', async () => {
+    const { png } = await renderFvg(
+      `<layer width="160" height="160" background="#123456" perspective="500"><sphere cx="80" cy="80" r="36" fill="#ff2244" /></layer>`,
+      { mesh: 'canvas2d' },
+    )
+    const center = await pixelAt(png, 80, 80)
+    const corner = await pixelAt(png, 4, 4)
+    expect(center[0]).toBeGreaterThan(140)
+    expect(center[0]).toBeGreaterThan(center[1] + 30)
+    expect(center[0]).toBeGreaterThan(center[2] + 30)
+    expect(corner[0]).toBeGreaterThan(10)
+    expect(corner[0]).toBeLessThan(40)
+    expect(corner[2]).toBeGreaterThan(70)
+  }, 30000)
+
+  it('更近的球体挡住长方体和平面', async () => {
+    const { png } = await renderFvg(
+      `
+      <layer width="200" height="200" background="#000000" perspective="600">
+        <box cx="100" cy="100" width="120" height="80" depth="40" fill="#2244ff" />
+        <rect cx="100" cy="100" width="160" height="120" fill="#22cc44" z="-30" />
+        <sphere cx="100" cy="100" r="26" z="50" fill="#ff2244" />
+      </layer>
+    `,
+      { mesh: 'canvas2d' },
+    )
+    const center = await pixelAt(png, 100, 100)
+    const onBox = await pixelAt(png, 52, 100)
+    expect(center[0]).toBeGreaterThan(center[2] + 20)
+    expect(onBox[2]).toBeGreaterThan(onBox[0] + 20)
+  }, 30000)
+
+  it('extrude 的剪影跟着路径走', async () => {
+    const { png } = await renderFvg(
+      `<layer width="220" height="160" background="#101010" perspective="800"><extrude d="M0 0 H140 V36 H90 V80 H0 Z" depth="16" cx="110" cy="80" fill="#f4f1ea" /></layer>`,
+      { mesh: 'canvas2d' },
+    )
+    const inside = await pixelAt(png, 60, 60)
+    const notch = await pixelAt(png, 160, 100)
+    expect(inside[0]).toBeGreaterThan(90)
+    expect(inside[0]).toBeGreaterThan(notch[0] + 80)
+    expect(notch[0]).toBeLessThan(40)
+  }, 30000)
+
+  it('glb 按外包 layer 居中，并使用文件里的颜色', async () => {
+    const { png } = await renderFvg(
+      `<layer width="180" height="180" background="#000000" perspective="700"><layer cx="90" cy="90" width="70" height="70"><model src="box.glb" /></layer></layer>`,
+      { baseDir: dir, mesh: 'canvas2d' },
+    )
+    const center = await pixelAt(png, 90, 90)
+    const corner = await pixelAt(png, 4, 4)
+    expect(center[1]).toBeGreaterThan(center[0] + 20)
+    expect(center[1]).toBeGreaterThan(center[2] + 20)
+    expect(corner[0]).toBeLessThan(15)
+    expect(corner[1]).toBeLessThan(15)
+  }, 30000)
+})

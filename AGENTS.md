@@ -123,7 +123,7 @@ flowchart TD
 | [docs/CHEATSHEET.md](docs/CHEATSHEET.md) | 一页写法 |
 | [docs/GALLERY.md](docs/GALLERY.md) | 效果对应哪张图的哪一格 |
 | [docs/EFFECTS.md](docs/EFFECTS.md) | 算法与实现备注 |
-| [docs/proposals/3D.md](docs/proposals/3D.md) | 3D 讨论。平面透视和 `sphere` / `box` / `extrude` / `model` 已接上；作者灯光还没有 |
+| [docs/proposals/3D.md](docs/proposals/3D.md) | 3D 讨论。平面透视和 `sphere` / `box` / `extrude` / `model` 已接上。网格默认 WebGL，`mesh: 'canvas2d'` 用 `@xsyetopz/easel`。作者灯光还没有 |
 | [GENERATE.md](GENERATE.md) | Vue / React 怎么生成 `.layer` |
 | [README.md](README.md) | 安装与命令 |
 | **本文** | 硬性约定和验证闭环 |

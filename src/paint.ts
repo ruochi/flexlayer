@@ -27,7 +27,7 @@ import { applyGrade } from './grade.js'
 import { canvasPaint, isGradient } from './gradient.js'
 import { gradientStyle, isGradientPaint, type GradientBox } from './gradientField.js'
 import { invert, multiply, originOffset } from './matrix.js'
-import { ownsMeshScene, renderMeshLayer } from './mesh.js'
+import { ownsMeshScene, renderMeshLayer, type MeshRoute } from './mesh.js'
 import { drawTexturedPlane, has3dPose, PERSPECTIVE_AA, planeDepth, posePoint, project } from './perspective.js'
 import { colorFilterToCss } from './style.js'
 import type {
@@ -53,6 +53,7 @@ export type PaintOptions = {
   scale: number
   debug: boolean
   t: number
+  mesh?: MeshRoute
 }
 
 type PaintState = { canvasWidth: number; canvasHeight: number; meshFrames?: Map<LayerLayoutNode, Canvas> }
@@ -1287,7 +1288,7 @@ function paintNode(
   pctx.restore()
 }
 
-async function prepareMeshFrames(root: LayerLayoutNode, scale: number, t: number): Promise<Map<LayerLayoutNode, Canvas>> {
+async function prepareMeshFrames(root: LayerLayoutNode, scale: number, t: number, mesh?: MeshRoute): Promise<Map<LayerLayoutNode, Canvas>> {
   const frames = new Map<LayerLayoutNode, Canvas>()
   const state: PaintState = { canvasWidth: 0, canvasHeight: 0, meshFrames: frames }
   const visit = async (node: LayoutNode) => {
@@ -1295,7 +1296,7 @@ async function prepareMeshFrames(root: LayerLayoutNode, scale: number, t: number
       for (const child of node.children) await visit(child)
     }
     if (node.kind !== 'layer' || !ownsMeshScene(node)) return
-    const canvas = await renderMeshLayer(node, scale, (peeled) => paintChildBitmap(peeled, Math.max(scale, 1e-3) * 2, t, state))
+    const canvas = await renderMeshLayer(node, scale, (peeled) => paintChildBitmap(peeled, Math.max(scale, 1e-3) * 2, t, state), mesh)
     if (canvas) frames.set(node, canvas)
   }
   await visit(root)
@@ -1313,7 +1314,7 @@ export async function paintDocument(
   const state: PaintState = {
     canvasWidth: w,
     canvasHeight: h,
-    meshFrames: await prepareMeshFrames(root, opts.scale, opts.t),
+    meshFrames: await prepareMeshFrames(root, opts.scale, opts.t, opts.mesh),
   }
   const rootPaintsBackground =
     root.background != null &&

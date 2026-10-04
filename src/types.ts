@@ -363,4 +363,6 @@ export type RenderOptions = {
   fontsCacheDir?: string
   /** 当前帧的时间，单位秒。缺省为 0。 */
   t?: number
+  /** 网格绘制路线。缺省 webgl；canvas2d 用 Canvas 2D 光栅。 */
+  mesh?: 'webgl' | 'canvas2d'
 }
