@@ -151,6 +151,7 @@ function sampleArc(
   sweep: number,
   x2: number,
   y2: number,
+  arcStep: number,
 ) {
   if (Math.hypot(x2 - x1, y2 - y1) < 1e-6) return
   if (rx === 0 || ry === 0) {
@@ -191,7 +192,7 @@ function sampleArc(
   let dtheta = angle((x1p - cxp) / rx, (y1p - cyp) / ry, (-x1p - cxp) / rx, (-y1p - cyp) / ry)
   if (!sweep && dtheta > 0) dtheta -= Math.PI * 2
   if (sweep && dtheta < 0) dtheta += Math.PI * 2
-  const steps = Math.max(2, Math.ceil(Math.abs(dtheta) / (Math.PI / 8)))
+  const steps = Math.max(2, Math.ceil(Math.abs(dtheta) / arcStep))
   for (let i = 1; i <= steps; i++) {
     const t = theta1 + (dtheta * i) / steps
     const ct = Math.cos(t)
@@ -201,7 +202,7 @@ function sampleArc(
 }
 
 /** 把 SVG 路径收成折线环。曲线和圆弧会采样。坐标仍是路径自己的 y 向下。 */
-export function tessellateSvgPath(d: string, steps = 8): PathRing[] {
+export function tessellateSvgPath(d: string, steps = 8, arcStep = Math.PI / 8): PathRing[] {
   const rings: PathRing[] = []
   let ring: Array<{ x: number; y: number }> | null = null
   let closed = false
@@ -308,7 +309,7 @@ export function tessellateSvgPath(d: string, steps = 8): PathRing[] {
       const large = command.args[3] ?? 0
       const sweep = command.args[4] ?? 0
       const p = abs(op, command.args, 5, 6)
-      sampleArc(ring!, cx, cy, rx, ry, rot, large ? 1 : 0, sweep ? 1 : 0, p.x, p.y)
+      sampleArc(ring!, cx, cy, rx, ry, rot, large ? 1 : 0, sweep ? 1 : 0, p.x, p.y, arcStep)
       cx = p.x
       cy = p.y
     }

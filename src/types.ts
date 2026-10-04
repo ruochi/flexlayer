@@ -327,7 +327,7 @@ export type MeshSpec =
   | { type: 'sphere'; r: number }
   | { type: 'box'; depth: number }
   | { type: 'extrude'; d: string; depth: number }
-  | { type: 'model'; src: string; file?: string }
+  | { type: 'model'; src: string; file?: string; span?: { x: number; y: number; z: number } }
 
 export type MeshLayoutNode = LayoutNodeBase & {
   kind: 'mesh'
