@@ -4,11 +4,13 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
+import { mergeFrameIssues, sampleFrames } from './check-frames.js'
 import { emitLayer } from './emit.js'
 import { h } from './h.js'
 import { Fragment, jsx, jsxDEV, type JsxSource } from './jsx-runtime.js'
 import { loadLayerFile } from './load-source.js'
 import { checkFvg } from './render.js'
+import { typecheckLayerFile } from './typecheck.js'
 
 const pkgDir = join(fileURLToPath(import.meta.url), '..', '..')
 
@@ -77,12 +79,19 @@ describe('JSX 类型', () => {
     expect(typeErrors(files)).toEqual([])
   })
 
-  it('文字上写 cx 是类型错误', async () => {
+  it('写错位置的属性是类型错误', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'flexlayer-types-'))
-    const file = join(dir, 'bad.tsx')
-    await writeFile(file, `export default <layer width="10" height="10"><p cx="3">hi</p></layer>\n`)
-    const errors = typeErrors([file])
-    expect(errors.some((message) => message.includes("'cx'"))).toBe(true)
+    const cases = [
+      [`export default <layer width="10" height="10"><p cx="3">hi</p></layer>\n`, "'cx'"],
+      [`export default <layer width="10" height="10"><circle cx="4" cy="4" r="2" style="fill:#fff" /></layer>\n`, "'style'"],
+      [`export default <layer width="10" height="10"><p font-size="40">hi</p></layer>\n`, "'font-size'"],
+    ] as const
+    for (const [source, token] of cases) {
+      const file = join(dir, `${token.replace(/'/g, '')}.tsx`)
+      await writeFile(file, source)
+      const errors = typeErrors([file])
+      expect(errors.some((message) => message.includes(token)), token).toBe(true)
+    }
   })
 })
 
@@ -220,5 +229,56 @@ describe('load .tsx', () => {
     const report = await checkFvg(node, { baseDir: pkgDir })
     const issue = report.issues.find((item) => item.code === 'invalid-attr')
     expect(issue?.source).toMatch(/t\.tsx:4:3/)
+  })
+
+  it('类型错误写进 type-error，并带上源码位置', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'flexlayer-tsx-'))
+    const file = join(dir, 'bad.tsx')
+    await writeFile(file, `export default <layer width="10" height="10"><p cx="3">hi</p></layer>\n`)
+    const issues = typecheckLayerFile(file)
+    expect(issues.map((issue) => issue.code)).toContain('type-error')
+    expect(issues.every((issue) => issue.level === 'error')).toBe(true)
+    expect(issues.some((issue) => /bad\.tsx:\d+:\d+/.test(issue.source ?? ''))).toBe(true)
+    expect(typecheckLayerFile(join(pkgDir, 'examples', 'hello.layer'))).toEqual([])
+    expect(typecheckLayerFile(join(pkgDir, 'examples', 'hello.tsx'))).toEqual([])
+    expect(typecheckLayerFile(join(pkgDir, 'examples', 'slide.tsx'))).toEqual([])
+  })
+
+  it('末帧才超出画布时，抽查记在最后一帧', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'flexlayer-tsx-'))
+    const file = join(dir, 'spill.tsx')
+    await writeFile(
+      file,
+      `import type { Composition } from '@dc/flexlayer'
+      export const composition: Composition = {
+        id: 'spill',
+        width: 40,
+        height: 40,
+        fps: 1,
+        durationInFrames: 5,
+        component: ({ frame }) => (
+          <layer width="40" height="40" background="#000">
+            <circle cx={frame === 4 ? 80 : 20} cy="20" r="4" fill="#fff" />
+          </layer>
+        ),
+      }
+      `,
+    )
+    const loaded = await loadLayerFile(file)
+    expect(loaded.kind).toBe('composition')
+    if (loaded.kind !== 'composition') return
+    const { composition } = loaded
+    const frames = sampleFrames(composition.durationInFrames)
+    expect(frames).toEqual([0, 2, 4])
+    const parts = []
+    for (const frame of frames) {
+      const node = composition.component({ frame, fps: composition.fps, t: frame / composition.fps })
+      const report = await checkFvg(node, { baseDir: dir })
+      parts.push({ frame, issues: report.issues })
+    }
+    const overflow = mergeFrameIssues(parts).filter((issue) => issue.code === 'overflow-canvas')
+    expect(overflow.length).toBeGreaterThan(0)
+    expect(overflow.every((issue) => issue.frame === 4)).toBe(true)
+    expect(parts[0]?.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
   })
 })

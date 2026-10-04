@@ -6,14 +6,46 @@ type FvgStyle = string | Record<string, string | number | undefined>
 
 type JsxChild = string | number | boolean | null | undefined | FvgNode | JsxChild[]
 
-type FvgCommon = {
+/** 图形和 layer 不带 style。不认识的属性名在 JSX 里是类型错误；自定义数据放进 draw 的闭包。 */
+type FvgNodeBase = {
   id?: string
-  style?: FvgStyle
   draw?: DrawFn
   children?: JsxChild
 }
 
-type FvgPositioned = FvgCommon & {
+/**
+ * TypeScript 不检查 JSX 里的连字符属性。这些名字属于 style，写成 never 才会报错。
+ */
+type HtmlHyphenBan = {
+  'font-size'?: never
+  'font-family'?: never
+  'font-weight'?: never
+  'line-height'?: never
+  'letter-spacing'?: never
+  'flex-direction'?: never
+  'flex-grow'?: never
+  'flex-shrink'?: never
+  'align-items'?: never
+  'justify-content'?: never
+  'writing-mode'?: never
+  'object-fit'?: never
+  'object-position'?: never
+  'max-width'?: never
+  'max-height'?: never
+  'min-width'?: never
+  'min-height'?: never
+  'border-radius'?: never
+  'white-space'?: never
+  'text-align'?: never
+}
+
+/** 文字和图片。视觉属性写 style，不写 cx、fill。 */
+type FvgHtml = FvgNodeBase &
+  HtmlHyphenBan & {
+    style?: FvgStyle
+  }
+
+type FvgPositioned = FvgNodeBase & {
   cx?: number | string
   cy?: number | string
   anchor?: string
@@ -116,13 +148,13 @@ export namespace JSX {
         'border-radius'?: string | number
       }
     /** 子标签：正文 JS，可用 ctx、el；不参与布局 */
-    draw: FvgCommon
-    symbol: FvgCommon & { width?: number | string; height?: number | string }
+    draw: FvgNodeBase
+    symbol: FvgNodeBase & { width?: number | string; height?: number | string }
     /**
      * 蒙版。只作为 layer 的直接子元素。
      * 里面写 rect / circle / ellipse / polygon / path / img；省略 fill 为 #fff，只取 alpha。
      */
-    mask: FvgCommon
+    mask: FvgNodeBase
     use: FvgPositioned & {
       href?: string
       rotate?: number | string
@@ -133,7 +165,7 @@ export namespace JSX {
     rect: FvgShape & { x1?: number | string; y1?: number | string; x2?: number | string; y2?: number | string }
     circle: FvgShape
     ellipse: FvgShape & { x1?: number | string; y1?: number | string; x2?: number | string; y2?: number | string }
-    line: FvgCommon & {
+    line: FvgNodeBase & {
       x1?: number | string
       y1?: number | string
       x2?: number | string
@@ -141,7 +173,7 @@ export namespace JSX {
       stroke?: string
       strokeWidth?: number | string
     }
-    arrow: FvgCommon & {
+    arrow: FvgNodeBase & {
       x1?: number | string
       y1?: number | string
       x2?: number | string
@@ -150,9 +182,9 @@ export namespace JSX {
       stroke?: string
       strokeWidth?: number | string
     }
-    polyline: FvgCommon & { points?: string }
-    polygon: FvgCommon & { points?: string; fill?: string }
-    path: FvgCommon & { d?: string; fill?: string }
+    polyline: FvgNodeBase & { points?: string }
+    polygon: FvgNodeBase & { points?: string; fill?: string }
+    path: FvgNodeBase & { d?: string; fill?: string }
     sphere: FvgPositioned &
       FvgEffects & {
         r?: number | string
@@ -190,20 +222,20 @@ export namespace JSX {
         opacity?: number | string
       }
     /** 外部 glb。位置和宽高写在外包的 layer 上，src 只写在这里。 */
-    model: FvgCommon & { src?: string }
-    curve: FvgCommon & { points?: string; closed?: boolean | string; fill?: string; stroke?: string }
-    h1: FvgCommon
-    h2: FvgCommon
-    h3: FvgCommon
-    p: FvgCommon
-    div: FvgCommon
-    span: FvgCommon
-    strong: FvgCommon
-    b: FvgCommon
-    em: FvgCommon
-    br: FvgCommon
+    model: FvgNodeBase & { src?: string }
+    curve: FvgNodeBase & { points?: string; closed?: boolean | string; fill?: string; stroke?: string }
+    h1: FvgHtml
+    h2: FvgHtml
+    h3: FvgHtml
+    p: FvgHtml
+    div: FvgHtml
+    span: FvgHtml
+    strong: FvgHtml
+    b: FvgHtml
+    em: FvgHtml
+    br: FvgHtml
     /** HTML 图片。src、alt 是属性，宽高写 style。`image` 与 `img` 相同。 */
-    img: FvgCommon & { src?: string; alt?: string }
-    image: FvgCommon & { src?: string; alt?: string }
+    img: FvgHtml & { src?: string; alt?: string }
+    image: FvgHtml & { src?: string; alt?: string }
   }
 }

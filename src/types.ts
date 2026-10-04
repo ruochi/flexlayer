@@ -80,6 +80,8 @@ export type Issue = {
   hint?: string
   /** 源码位置，例如 `examples/hello.tsx:18:5`。从 `.tsx` 来的节点才有。 */
   source?: string
+  /** Composition 抽查时，这条问题第一次出现的帧。 */
+  frame?: number
 }
 
 export type Anchor =

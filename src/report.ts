@@ -562,6 +562,7 @@ export function buildReport(doc: FvgDocument): FvgReport {
 export function formatIssueLine(issue: Issue): string {
   const sym = issue.level === 'error' ? '✗ error' : issue.level === 'warn' ? '! warn' : '· info'
   const at = issue.source ? `${issue.source}  ` : ''
-  const line = `${at}${sym}  ${issue.code.padEnd(16)} ${issue.path.padEnd(24)} ${issue.message}`
+  const frame = issue.frame != null ? `第${issue.frame}帧  ` : ''
+  const line = `${at}${frame}${sym}  ${issue.code.padEnd(16)} ${issue.path.padEnd(24)} ${issue.message}`
   return issue.hint ? `${line}\n         ${issue.hint}` : line
 }

@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
+import { mergeFrameIssues, sampleFrames } from './check-frames.js'
 import { emitLayer } from './emit.js'
 import type { FrameInput } from './frame.js'
 import { renderComposition } from './frame.js'
 import { loadLayerFile, type LoadedLayer } from './load-source.js'
 import { formatIssueLine } from './report.js'
 import { checkFvg, renderFvg } from './render.js'
+import { typecheckLayerFile } from './typecheck.js'
+import type { FvgNode } from './parse.js'
 import type { FvgReport, Issue } from './types.js'
 
 const CONTACT_LIMIT = 300
@@ -81,27 +84,47 @@ async function main() {
   const abs = resolve(args.file)
   const loaded: LoadedLayer = await loadLayerFile(abs)
   const baseDir = dirname(abs)
+  const typeIssues = typecheckLayerFile(abs)
 
   if (args.frame != null && loaded.kind !== 'composition') usage()
   if (args.emit && loaded.kind === 'markup') throw new Error('--emit 只用于 .tsx 等会展开的源文件')
 
-  if (args.cmd === 'check') {
-    const frame = args.frame ?? 0
-    if (loaded.kind === 'composition' && frame >= loaded.composition.durationInFrames) {
-      throw new Error(`--frame ${frame} 超出范围，这段共 ${loaded.composition.durationInFrames} 帧`)
-    }
-    const node =
-      loaded.kind === 'markup'
-        ? loaded.source
-        : loaded.kind === 'node'
-          ? loaded.node
-          : loaded.composition.component(frameInput(frame, loaded.composition.fps))
-    const report = await checkFvg(node, { baseDir })
+  const attachFileIssues = (report: FvgReport) => {
     if (loaded.kind !== 'markup') appendIssues(report, loaded.issues)
-    if (typeof node !== 'string') await emitNode(node, args.emit, report)
-    printIssues(report)
+    appendIssues(report, typeIssues)
+  }
+
+  if (args.cmd === 'check') {
+    if (loaded.kind === 'composition' && args.frame != null && args.frame >= loaded.composition.durationInFrames) {
+      throw new Error(`--frame ${args.frame} 超出范围，这段共 ${loaded.composition.durationInFrames} 帧`)
+    }
+    if (loaded.kind !== 'composition') {
+      const node = loaded.kind === 'markup' ? loaded.source : loaded.node
+      const report = await checkFvg(node, { baseDir })
+      if (typeof node !== 'string') await emitNode(node, args.emit, report)
+      attachFileIssues(report)
+      printIssues(report)
+      if (args.report) await writeFile(args.report, JSON.stringify(report, null, 2))
+      failIfErrors(report)
+      return
+    }
+    const frames = sampleFrames(loaded.composition.durationInFrames, args.frame)
+    const parts: Array<{ frame: number; issues: Issue[] }> = []
+    let report: FvgReport | undefined
+    let emitAt: FvgNode | undefined
+    for (const frame of frames) {
+      const node = loaded.composition.component(frameInput(frame, loaded.composition.fps))
+      const one = await checkFvg(node, { baseDir })
+      if (!report) report = one
+      if (frame === (args.frame ?? 0)) emitAt = node
+      parts.push({ frame, issues: one.issues })
+    }
+    report!.issues = mergeFrameIssues(parts)
+    if (emitAt) await emitNode(emitAt, args.emit, report!)
+    attachFileIssues(report!)
+    printIssues(report!)
     if (args.report) await writeFile(args.report, JSON.stringify(report, null, 2))
-    failIfErrors(report)
+    failIfErrors(report!)
     return
   }
 
@@ -119,7 +142,7 @@ async function main() {
       const input = frameInput(one, comp.fps)
       const node = comp.component(input)
       const { png, report } = await renderFvg(node, { baseDir, scale: args.scale, debug: args.debug, t: input.t })
-      appendIssues(report, loaded.issues)
+      attachFileIssues(report)
       await emitNode(node, args.emit, report)
       await writeFile(outPath, png)
       printIssues(report)
@@ -140,7 +163,7 @@ async function main() {
       if (one == null) {
         const node = comp.component(frameInput(0, comp.fps))
         const report = reports[0]!
-        appendIssues(report, loaded.issues)
+        attachFileIssues(report)
         await emitNode(node, args.emit, report)
         await writeFile(outPath, contactSheet)
         printIssues(report)
@@ -154,10 +177,8 @@ async function main() {
 
   const source = loaded.kind === 'markup' ? loaded.source : loaded.node
   const { png, report } = await renderFvg(source, { baseDir, scale: args.scale, debug: args.debug })
-  if (loaded.kind === 'node') {
-    appendIssues(report, loaded.issues)
-    await emitNode(loaded.node, args.emit, report)
-  }
+  if (loaded.kind === 'node') await emitNode(loaded.node, args.emit, report)
+  attachFileIssues(report)
   const outPath = args.out ?? abs.replace(/\.(tsx|jsx|ts|js|layer|fvg)$/i, '.png')
   await writeFile(outPath, png)
   printIssues(report)
