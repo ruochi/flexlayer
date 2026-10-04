@@ -383,34 +383,69 @@ function drawBoxSilhouette(ctx: CanvasRenderingContext2D, node: LayoutNode, spre
 }
 
 function drawShapeSilhouette(ctx: CanvasRenderingContext2D, node: ShapeLayoutNode, spread: number, ink = SILHOUETTE) {
+  const hasFill = node.fill !== 'none'
+  const hasStroke = node.stroke !== 'none' && node.strokeWidth > 0
+  if (!hasFill && !hasStroke) return
+  ctx.save()
   ctx.fillStyle = ink
-  if (node.shape === 'rect') {
-    const x = node.x - spread
-    const y = node.y - spread
-    const w = node.width + spread * 2
-    const h = node.height + spread * 2
-    if (w <= 0 || h <= 0) return
-    const radius = Math.max(0, (node.rx ?? node.borderRadius ?? 0) + spread)
-    if (radius > 0) {
-      roundRectPath(ctx, x, y, w, h, radius)
-      ctx.fill()
-    } else ctx.fillRect(x, y, w, h)
-    return
+  ctx.strokeStyle = ink
+  if (hasFill) {
+    if (node.shape === 'rect') {
+      const x = node.x - spread
+      const y = node.y - spread
+      const w = node.width + spread * 2
+      const h = node.height + spread * 2
+      if (w > 0 && h > 0) {
+        const radius = Math.max(0, (node.rx ?? node.borderRadius ?? 0) + spread)
+        if (radius > 0) {
+          roundRectPath(ctx, x, y, w, h, radius)
+          ctx.fill()
+        } else ctx.fillRect(x, y, w, h)
+      }
+    } else if (node.shape === 'circle') {
+      const radius = (node.r ?? node.width / 2) + spread
+      if (radius > 0) {
+        ctx.beginPath()
+        ctx.arc(node.x + node.width / 2, node.y + node.height / 2, radius, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    } else {
+      const rx = (node.rxEllipse ?? node.width / 2) + spread
+      const ry = (node.ry ?? node.height / 2) + spread
+      if (rx > 0 && ry > 0) {
+        ctx.beginPath()
+        ctx.ellipse(node.x + node.width / 2, node.y + node.height / 2, rx, ry, 0, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    }
   }
-  if (node.shape === 'circle') {
-    const radius = (node.r ?? node.width / 2) + spread
-    if (radius <= 0) return
-    ctx.beginPath()
-    ctx.arc(node.x + node.width / 2, node.y + node.height / 2, radius, 0, Math.PI * 2)
-    ctx.fill()
-    return
+  if (hasStroke) {
+    ctx.lineWidth = Math.max(0.5, node.strokeWidth + spread * 2)
+    if (node.dash?.length) ctx.setLineDash(node.dash)
+    if (node.shape === 'rect') {
+      const r = node.rx ?? node.borderRadius ?? 0
+      if (r > 0) {
+        roundRectPath(ctx, node.x, node.y, node.width, node.height, r)
+        ctx.stroke()
+      } else ctx.strokeRect(node.x, node.y, node.width, node.height)
+    } else if (node.shape === 'circle') {
+      const radius = node.r ?? node.width / 2
+      if (radius > 0) {
+        ctx.beginPath()
+        ctx.arc(node.x + node.width / 2, node.y + node.height / 2, radius, 0, Math.PI * 2)
+        ctx.stroke()
+      }
+    } else {
+      const rx = node.rxEllipse ?? node.width / 2
+      const ry = node.ry ?? node.height / 2
+      if (rx > 0 && ry > 0) {
+        ctx.beginPath()
+        ctx.ellipse(node.x + node.width / 2, node.y + node.height / 2, rx, ry, 0, 0, Math.PI * 2)
+        ctx.stroke()
+      }
+    }
   }
-  const rx = (node.rxEllipse ?? node.width / 2) + spread
-  const ry = (node.ry ?? node.height / 2) + spread
-  if (rx <= 0 || ry <= 0) return
-  ctx.beginPath()
-  ctx.ellipse(node.x + node.width / 2, node.y + node.height / 2, rx, ry, 0, 0, Math.PI * 2)
-  ctx.fill()
+  ctx.restore()
 }
 
 function drawEffect(
