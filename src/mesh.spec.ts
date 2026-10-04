@@ -166,6 +166,17 @@ describe('网格绘制', () => {
     expect([right[0], right[1], right[2]]).toEqual([0xa9, 0xdc, 0xff])
   }, 30000)
 
+  it('三维场景里的平面颜色保持原色阶', async () => {
+    const { png } = await renderFvg(`
+      <layer width="180" height="80" background="#ffffff" perspective="500">
+        <rect cx="50" cy="40" width="60" height="40" fill="#2b6b5e" />
+        <sphere cx="130" cy="40" r="18" fill="#888888" />
+      </layer>
+    `)
+    const ink = await pixelAt(png, 50, 40)
+    expect([ink[0], ink[1], ink[2]]).toEqual([0x2b, 0x6b, 0x5e])
+  }, 30000)
+
   it('extrude 的并排形状都留下，洞仍然是洞', async () => {
     const { png } = await renderFvg(`
       <layer width="220" height="120" background="#101010" perspective="800">

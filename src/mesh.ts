@@ -499,7 +499,8 @@ async function renderMeshWebgl(sceneInput: {
     if (painted.logicalWidth <= 0 || painted.logicalHeight <= 0) continue
     const pixels = painted.canvas.getContext('2d').getImageData(0, 0, painted.canvas.width, painted.canvas.height)
     const texture = new THREE.DataTexture(new Uint8Array(pixels.data), painted.canvas.width, painted.canvas.height, THREE.RGBAFormat)
-    texture.colorSpace = THREE.SRGBColorSpace
+    // 像素已经是 sRGB。标成 sRGB 再由 MeshBasic 编回去会差 1 个色阶。这里原样采样、原样写出。
+    texture.colorSpace = THREE.NoColorSpace
     texture.flipY = true
     texture.generateMipmaps = false
     texture.minFilter = THREE.LinearFilter
@@ -528,7 +529,27 @@ async function renderMeshWebgl(sceneInput: {
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
     geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
     geometry.computeVertexNormals()
-    const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide, depthWrite: true })
+    const material = new THREE.ShaderMaterial({
+      uniforms: { uMap: { value: texture } },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D uMap;
+        varying vec2 vUv;
+        void main() {
+          gl_FragColor = texture2D(uMap, vUv);
+        }
+      `,
+      transparent: true,
+      depthWrite: true,
+      toneMapped: false,
+      side: THREE.DoubleSide,
+    })
     const mesh = new THREE.Mesh(geometry, material)
     place(mesh, matrixFor(THREE, layer.width, layer.height, plane.toLayer, o.x, o.y))
     add(mesh)

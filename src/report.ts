@@ -250,6 +250,7 @@ function walk(
   plane: PlaneSpace | undefined,
   planeRoot: boolean,
   meshView: MeshView | undefined,
+  inkSlack: number[],
 ) {
   const absX = ox + node.x
   const absY = oy + node.y
@@ -327,6 +328,14 @@ function walk(
     })
   }
   elements.push(entry)
+  // 线条贴边时，描边半径不算超出。layer / flex 的 ink 只是子元素的并集，超出与否由子元素自己报。
+  const slack =
+    node.kind === 'line' && node.stroke !== 'none' && node.strokeWidth > 0
+      ? node.strokeWidth / 2
+      : node.kind === 'layer' || node.kind === 'flex'
+        ? Number.POSITIVE_INFINITY
+        : 0
+  inkSlack.push(slack)
 
   const inset = node.kind === 'flex' ? node.padding.left + (node.border?.width ?? 0) : 0
   const insetY = node.kind === 'flex' ? node.padding.top + (node.border?.width ?? 0) : 0
@@ -398,11 +407,12 @@ function walk(
           },
           true,
           childMesh,
+          inkSlack,
         )
       } else if (childPlane) {
-        walk(ch, childMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, childPlane, false, childMesh)
+        walk(ch, childMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, childPlane, false, childMesh, inkSlack)
       } else {
-        walk(ch, childMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, undefined, false, childMesh)
+        walk(ch, childMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, undefined, false, childMesh, inkSlack)
       }
     }
     let union: Box | null = null
@@ -464,7 +474,8 @@ function effectOutside(box: Box, doc: FvgDocument): boolean {
 export function buildReport(doc: FvgDocument): FvgReport {
   const elements: ElementReport[] = []
   const effects: EffectRecord[] = []
-  walk(doc.root, IDENTITY, 1, 0, 0, undefined, elements, effects, undefined, false, undefined)
+  const inkSlack: number[] = []
+  walk(doc.root, IDENTITY, 1, 0, 0, undefined, elements, effects, undefined, false, undefined, inkSlack)
 
   const issues: Issue[] = [...doc.issues]
   const visible = elements.filter((el) => el.opacity >= VISIBLE_OPACITY && hasArea(el.ink))
@@ -472,7 +483,9 @@ export function buildReport(doc: FvgDocument): FvgReport {
   for (let index = 0; index < elements.length; index++) {
     const el = elements[index]!
     if (el.opacity < VISIBLE_OPACITY || !hasArea(el.ink)) continue
-    const inkOutside = el.ink.right > doc.width + 1e-3 || el.ink.bottom > doc.height + 1e-3 || el.ink.left < -1e-3 || el.ink.top < -1e-3
+    const slack = inkSlack[index] ?? 0
+    const edge = 1e-3 + slack
+    const inkOutside = el.ink.right > doc.width + edge || el.ink.bottom > doc.height + edge || el.ink.left < -edge || el.ink.top < -edge
     if (inkOutside) {
       issues.push({
         level: 'error',

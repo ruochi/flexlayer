@@ -66,6 +66,17 @@ function minimalDoc(overrides: Partial<FvgDocument> = {}): FvgDocument {
 }
 
 describe('buildReport', () => {
+  it('线条端点贴着画布边不算 overflow-canvas，中心线越出去仍然算', async () => {
+    const onEdge = await checkFvg(
+      `<layer width="200" height="80"><line x1="0" y1="40" x2="200" y2="40" stroke="#000" stroke-width="4" /></layer>`,
+    )
+    expect(onEdge.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
+    const past = await checkFvg(
+      `<layer width="200" height="80"><line x1="10" y1="40" x2="210" y2="40" stroke="#000" stroke-width="4" /></layer>`,
+    )
+    expect(past.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(true)
+  })
+
   it('overflow-canvas', () => {
     const rep = buildReport(minimalDoc())
     expect(rep.issues.some((i) => i.code === 'overflow-canvas')).toBe(true)

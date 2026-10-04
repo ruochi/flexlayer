@@ -365,4 +365,32 @@ describe('绘制', () => {
     }
     expect(meshRed).toBeGreaterThan(4)
   }, 30000)
+
+  it('空心图形和图层上的光影只跟着描边，不填满内部', async () => {
+    const shadow = await renderFvg(`
+      <layer width="220" height="140" background="#ffffff">
+        <circle cx="70" cy="70" r="36" fill="none" stroke="#2244aa" stroke-width="8" shadow="70 0 0 #ff0000" />
+      </layer>
+    `)
+    const { at } = await pixels(shadow.png)
+    const hole = at(140, 70)
+    const ring = at(140, 36)
+    expect(hole[0]).toBeGreaterThan(240)
+    expect(hole[1]).toBeGreaterThan(240)
+    expect(ring[0]).toBeGreaterThan(180)
+    expect(ring[2]).toBeLessThan(80)
+
+    const layer = await renderFvg(`
+      <layer width="160" height="160" background="#101014">
+        <layer cx="80" cy="80" width="120" height="120" glow="0 #ff88aa" shadow="0 0 0 #000000">
+          <circle cx="60" cy="60" r="40" fill="none" stroke="#2244aa" stroke-width="8" />
+        </layer>
+      </layer>
+    `)
+    const view = await pixels(layer.png)
+    const center = view.at(80, 80)
+    expect(center[0]).toBeLessThan(40)
+    expect(center[1]).toBeLessThan(40)
+    expect(center[2]).toBeLessThan(40)
+  })
 })
