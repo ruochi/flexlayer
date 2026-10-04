@@ -77,11 +77,14 @@ type FvgShape = FvgPositioned &
   }
 
 export namespace JSX {
-  type Element = FvgNode | null
-  interface ElementChildrenAttribute {
+  export type Element = FvgNode
+  export interface ElementChildrenAttribute {
     children: {}
   }
-  interface IntrinsicElements {
+  export interface IntrinsicAttributes {
+    key?: string | number
+  }
+  export interface IntrinsicElements {
     font: { family?: string; src?: string }
     /**
      * 根画布与定位容器。

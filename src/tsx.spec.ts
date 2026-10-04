@@ -2,6 +2,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import { emitLayer } from './emit.js'
 import { h } from './h.js'
@@ -44,6 +45,44 @@ describe('jsx 运行时', () => {
       line: 18,
       column: 5,
     })
+  })
+})
+
+function typeErrors(files: string[]): string[] {
+  const program = ts.createProgram(files, {
+    strict: true,
+    noEmit: true,
+    skipLibCheck: true,
+    jsx: ts.JsxEmit.ReactJSX,
+    jsxImportSource: '@dc/flexlayer',
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    target: ts.ScriptTarget.ES2022,
+    baseUrl: pkgDir,
+    paths: {
+      '@dc/flexlayer': ['src/index.ts'],
+      '@dc/flexlayer/jsx-runtime': ['src/jsx-runtime.ts'],
+      '@dc/flexlayer/jsx-dev-runtime': ['src/jsx-dev-runtime.ts'],
+    },
+  })
+  return ts
+    .getPreEmitDiagnostics(program)
+    .filter((d) => d.file && files.includes(d.file.fileName))
+    .map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n'))
+}
+
+describe('JSX 类型', () => {
+  it('examples 里的 .tsx 通过类型检查', () => {
+    const files = ['hello.tsx', 'slide.tsx'].map((name) => join(pkgDir, 'examples', name))
+    expect(typeErrors(files)).toEqual([])
+  })
+
+  it('文字上写 cx 是类型错误', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'flexlayer-types-'))
+    const file = join(dir, 'bad.tsx')
+    await writeFile(file, `export default <layer width="10" height="10"><p cx="3">hi</p></layer>\n`)
+    const errors = typeErrors([file])
+    expect(errors.some((message) => message.includes("'cx'"))).toBe(true)
   })
 })
 
