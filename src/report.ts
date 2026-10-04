@@ -1,6 +1,6 @@
 import { apply, applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset, translated, type Matrix } from './matrix.js'
-import { has3dPose, planeDepth, posePoint, project as projectPoint } from './perspective.js'
-import type { Box, ElementReport, FvgDocument, FvgReport, Issue, LayoutNode } from './types.js'
+import { applyPoseMatrix, has3dPose, planeDepth, poseMatrix, posePoint, project as projectPoint } from './perspective.js'
+import type { Box, ElementReport, FvgDocument, FvgReport, Issue, LayoutNode, MeshLayoutNode } from './types.js'
 import { boxToRect, emptyBox, translateBox, unionBoxes } from './types.js'
 
 const VISIBLE_OPACITY = 0.01
@@ -18,6 +18,89 @@ type PlaneSpace = {
 }
 
 type EffectRecord = { plane: true; box: Box | null } | { plane: false; clip?: Box }
+
+type Mat4 = number[]
+const IDENTITY4: Mat4 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+
+function mul4(a: Mat4, b: Mat4): Mat4 {
+  const o = new Array<number>(16).fill(0)
+  for (let c = 0; c < 4; c++) {
+    for (let r = 0; r < 4; r++) {
+      o[c * 4 + r] =
+        a[r]! * b[c * 4]! + a[4 + r]! * b[c * 4 + 1]! + a[8 + r]! * b[c * 4 + 2]! + a[12 + r]! * b[c * 4 + 3]!
+    }
+  }
+  return o
+}
+
+function translation4(x: number, y: number): Mat4 {
+  return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, 0, 1]
+}
+
+/** 网格在这台 perspective 相机里的投影。toParent 把父级内容坐标变到该 layer。 */
+type MeshView = {
+  perspective: number
+  vx: number
+  vy: number
+  mapLayerLocal: (x: number, y: number) => Pt | null
+  toParent: Mat4
+  canvasClip?: Box
+}
+
+function meshHalfDepth(node: MeshLayoutNode): number {
+  const mesh = node.mesh
+  if (mesh.type === 'sphere') return mesh.r
+  if (mesh.type === 'box' || mesh.type === 'extrude') return mesh.depth / 2
+  if (!mesh.span || node.width <= 0 || node.height <= 0) return 0
+  const sx = mesh.span.x > 1e-6 ? node.width / mesh.span.x : Infinity
+  const sy = mesh.span.y > 1e-6 ? node.height / mesh.span.y : Infinity
+  const s = Math.min(sx, sy)
+  if (!Number.isFinite(s) || s <= 0) return 0
+  return (mesh.span.z * s) / 2
+}
+
+function meshSamples(node: MeshLayoutNode): Array<[number, number, number]> {
+  if (node.mesh.type === 'sphere') {
+    const r = node.mesh.r
+    const cx = node.width / 2
+    const cy = node.height / 2
+    const pts: Array<[number, number, number]> = []
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2
+      for (const tz of [-0.65, 0, 0.65, 0.92]) {
+        const rad = Math.sqrt(Math.max(0, 1 - tz * tz)) * r
+        pts.push([cx + Math.cos(a) * rad, cy + Math.sin(a) * rad, tz * r])
+      }
+    }
+    return pts
+  }
+  const half = meshHalfDepth(node)
+  const pts: Array<[number, number, number]> = []
+  for (const u of [0, node.width]) {
+    for (const v of [0, node.height]) {
+      for (const z of [-half, half]) pts.push([u, v, z])
+    }
+  }
+  return pts
+}
+
+function projectMeshInk(node: MeshLayoutNode, view: MeshView, toLayer: Mat4): Box | null {
+  const center = applyPoseMatrix(toLayer, node.width / 2, node.height / 2, 0)
+  if (center.z >= view.perspective) return null
+  const pts: Pt[] = []
+  for (const [u, v, z] of meshSamples(node)) {
+    const p = applyPoseMatrix(toLayer, u, v, z)
+    const q = projectPoint(view.vx, view.vy, view.perspective, p)
+    if (!q) continue
+    const mapped = view.mapLayerLocal(q.x, q.y)
+    if (mapped) pts.push(mapped)
+  }
+  const box = boxFromPoints(pts)
+  if (!box) return null
+  return clipInk(box, view.canvasClip)
+}
+
+const MESH_TAGS = new Set(['sphere', 'box', 'extrude', 'model'])
 
 function inkOverlap(a: Box, b: Box): boolean {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
@@ -86,12 +169,35 @@ function localMaskBounds(shapes: LayoutNode[]): Box | undefined {
   return union ?? undefined
 }
 
-function projectBox(project: Projector, box: Box): Box {
+/** 方形外扩的四个角在倾斜后会被透视拉出画布，但高斯模糊到不了那个空角。按圆角采样。 */
+function roundedOutline(box: Box, radius: number): Pt[] {
+  const r = Math.min(radius, box.width / 2, box.height / 2)
+  if (r <= 1e-3) return cornerList(box).map(([x, y]) => ({ x, y }))
+  const x0 = box.x
+  const y0 = box.y
+  const x1 = box.x + box.width
+  const y1 = box.y + box.height
+  const pts: Pt[] = []
+  const arc = (cx: number, cy: number, a0: number, a1: number) => {
+    const n = 4
+    for (let i = 0; i <= n; i++) {
+      const a = a0 + ((a1 - a0) * i) / n
+      pts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r })
+    }
+  }
+  arc(x0 + r, y0 + r, Math.PI, Math.PI * 1.5)
+  arc(x1 - r, y0 + r, -Math.PI / 2, 0)
+  arc(x1 - r, y1 - r, 0, Math.PI / 2)
+  arc(x0 + r, y1 - r, Math.PI / 2, Math.PI)
+  return pts
+}
+
+function projectBox(project: Projector, box: Box, cornerRadius = 0): Box {
   if (box.width <= 1e-6 || box.height <= 1e-6) return emptyBox()
   const pts: Pt[] = []
-  for (const [x, y] of cornerList(box)) {
-    const p = project(x, y)
-    if (p) pts.push(p)
+  for (const p of cornerRadius > 0 ? roundedOutline(box, cornerRadius) : cornerList(box).map(([x, y]) => ({ x, y }))) {
+    const q = project(p.x, p.y)
+    if (q) pts.push(q)
   }
   return boxFromPoints(pts) ?? emptyBox()
 }
@@ -143,6 +249,7 @@ function walk(
   effects: EffectRecord[],
   plane: PlaneSpace | undefined,
   planeRoot: boolean,
+  meshView: MeshView | undefined,
 ) {
   const absX = ox + node.x
   const absY = oy + node.y
@@ -150,10 +257,14 @@ function walk(
   const opacity = parentOpacity * node.opacity
   const ownMask = node.kind === 'layer' && node.mask?.length ? localMaskBounds(node.mask) : undefined
 
+  const toLayer = meshView ? mul4(meshView.toParent, poseMatrix(node)) : undefined
   let ink: Box
   let quad: Quad | undefined
   let planeEffect: Box | null = null
-  if (plane) {
+  const meshInk = node.kind === 'mesh' && meshView && toLayer ? projectMeshInk(node, meshView, toLayer) : undefined
+  if (meshInk) {
+    ink = meshInk
+  } else if (plane) {
     const localInk = toPlaneBox(plane, node, node.ink, planeRoot)
     let visible = plane.localClip ? intersectBox(localInk, plane.localClip) : localInk
     if (planeRoot && ownMask) visible = intersectBox(visible, ownMask)
@@ -167,7 +278,8 @@ function walk(
         const maskPlane = planeRoot ? ownMask : applyToBox(contentToPlane(plane, node, false, 0, 0), ownMask)
         effectLocal = intersectBox(effectLocal, maskPlane)
       }
-      planeEffect = finishCanvas(projectBox(plane.project, effectLocal), plane.canvasClip)
+      const round = planeRoot && !plane.localClip && !ownMask ? pad : 0
+      planeEffect = finishCanvas(projectBox(plane.project, effectLocal, round), plane.canvasClip)
     }
   } else {
     ink = clipInk(applyToBox(matrix, translateBox(node.ink, node.x, node.y)), clip)
@@ -253,6 +365,19 @@ function walk(
       return { x: cx, y: cy }
     }
 
+    const childMesh: MeshView | undefined = opens
+      ? {
+          perspective: perspective!,
+          vx: node.width / 2,
+          vy: node.height / 2,
+          mapLayerLocal,
+          toParent: IDENTITY4,
+          canvasClip: childPlane ? childPlane.canvasClip : childClip,
+        }
+      : meshView && toLayer
+        ? { ...meshView, toParent: mul4(toLayer, translation4(inset, insetY)) }
+        : undefined
+
     const start = elements.length
     for (const ch of node.children) {
       if (opens && has3dPose(ch)) {
@@ -272,11 +397,12 @@ function walk(
             localClip: undefined,
           },
           true,
+          childMesh,
         )
       } else if (childPlane) {
-        walk(ch, childMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, childPlane, false)
+        walk(ch, childMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, childPlane, false, childMesh)
       } else {
-        walk(ch, childMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, undefined, false)
+        walk(ch, childMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, undefined, false, childMesh)
       }
     }
     let union: Box | null = null
@@ -338,7 +464,7 @@ function effectOutside(box: Box, doc: FvgDocument): boolean {
 export function buildReport(doc: FvgDocument): FvgReport {
   const elements: ElementReport[] = []
   const effects: EffectRecord[] = []
-  walk(doc.root, IDENTITY, 1, 0, 0, undefined, elements, effects, undefined, false)
+  walk(doc.root, IDENTITY, 1, 0, 0, undefined, elements, effects, undefined, false, undefined)
 
   const issues: Issue[] = [...doc.issues]
   const visible = elements.filter((el) => el.opacity >= VISIBLE_OPACITY && hasArea(el.ink))
@@ -365,7 +491,7 @@ export function buildReport(doc: FvgDocument): FvgReport {
     let effectBox: Box | null = null
     if (recorded?.plane) effectBox = recorded.box
     else if (effectPad > 0) effectBox = clipInk(expandBox(el.ink, effectPad), recorded?.clip)
-    if (!inkOutside && effectBox && hasArea(effectBox) && effectOutside(effectBox, doc)) {
+    if (!MESH_TAGS.has(el.tag) && !inkOutside && effectBox && hasArea(effectBox) && effectOutside(effectBox, doc)) {
       issues.push({
         level: 'warn',
         code: 'effect-clipped',

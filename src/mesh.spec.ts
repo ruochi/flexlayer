@@ -136,4 +136,109 @@ describe('网格绘制', () => {
     expect(corner[0]).toBeLessThan(15)
     expect(corner[1]).toBeLessThan(15)
   }, 30000)
+
+  it('平面上的深色在有网格时不变浅，正对镜头的白方块达到 fill', async () => {
+    const { png } = await renderFvg(`
+      <layer width="220" height="140" background="#ffffff" perspective="500">
+        <rect cx="50" cy="70" width="70" height="40" fill="#222222" />
+        <box cx="150" cy="70" width="48" height="48" depth="48" fill="#ffffff" />
+      </layer>
+    `)
+    const ink = await pixelAt(png, 50, 70)
+    const face = await pixelAt(png, 150, 70)
+    expect(ink[0]).toBeGreaterThan(24)
+    expect(ink[0]).toBeLessThan(50)
+    expect(face[0]).toBeGreaterThan(245)
+    expect(face[1]).toBeGreaterThan(245)
+    expect(face[2]).toBeGreaterThan(245)
+  }, 30000)
+
+  it('extrude 的并排形状都留下，洞仍然是洞', async () => {
+    const { png } = await renderFvg(`
+      <layer width="220" height="120" background="#101010" perspective="800">
+        <extrude d="M0 0 H28 V28 H0 Z M52 0 H80 V28 H52 Z" depth="12" cx="50" cy="60" fill="#f2f2f2" />
+        <extrude d="M0 0 H64 V64 H0 Z M18 18 H46 V46 H18 Z" depth="12" cx="160" cy="60" fill="#f2f2f2" />
+      </layer>
+    `)
+    const left = await pixelAt(png, 28, 60)
+    const gap = await pixelAt(png, 50, 60)
+    const right = await pixelAt(png, 72, 60)
+    const ring = await pixelAt(png, 140, 60)
+    const hole = await pixelAt(png, 160, 60)
+    expect(left[0]).toBeGreaterThan(180)
+    expect(right[0]).toBeGreaterThan(180)
+    expect(gap[0]).toBeLessThan(40)
+    expect(ring[0]).toBeGreaterThan(180)
+    expect(hole[0]).toBeLessThan(40)
+  }, 30000)
+
+  it('网格超出所在 layer 时仍画在父画布上，并在超出根画布时警告', async () => {
+    const spilled = await renderFvg(`
+      <layer width="200" height="120" background="#000000">
+        <layer cx="130" cy="60" width="80" height="70" perspective="180">
+          <sphere cx="16" cy="35" r="14" z="50" fill="#ff2244" />
+        </layer>
+      </layer>
+    `)
+    const layerLeft = 130 - 40
+    const outside = await pixelAt(spilled.png, layerLeft - 6, 60)
+    expect(outside[0]).toBeGreaterThan(80)
+    expect(spilled.report.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
+
+    const clipped = await checkFvg(
+      `<layer width="80" height="80" background="#000" perspective="160"><sphere cx="14" cy="40" r="12" z="70" fill="#ff2244" /></layer>`,
+    )
+    expect(clipped.issues.some((issue) => issue.code === 'overflow-canvas' && issue.path.includes('sphere'))).toBe(true)
+  }, 30000)
+
+  it('网格上的渐变、shadow、glow 会警告', async () => {
+    const report = await checkFvg(
+      `<layer width="160" height="120" perspective="400"><box cx="80" cy="60" width="40" height="30" depth="20" fill="linear-gradient(#fff, #000)" shadow="0 8 12 #000" glow="10 #fff" /></layer>`,
+    )
+    const messages = report.issues.filter((issue) => issue.code === 'invalid-attr').map((issue) => issue.message)
+    expect(messages.some((message) => message.includes('渐变'))).toBe(true)
+    expect(messages.some((message) => message.includes('shadow'))).toBe(true)
+    expect(messages.some((message) => message.includes('glow'))).toBe(true)
+  })
+
+  it('网格斜边有抗锯齿过渡', async () => {
+    const { png } = await renderFvg(
+      `<layer width="200" height="200" background="#000000" perspective="800"><box cx="100" cy="100" width="160" height="14" depth="2" rotate="24" fill="#ffffff" /></layer>`,
+    )
+    const img = await loadImage(png)
+    const canvas = createCanvas(img.width, img.height)
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    const data = ctx.getImageData(0, 0, img.width, img.height).data
+    const at = (x: number, y: number) => data[(y * img.width + x) * 4] ?? 0
+    let hard = 0
+    let soft = 0
+    for (let x = 30; x < 170; x++) {
+      let kind = 'none'
+      let prev = at(x, 30)
+      for (let y = 31; y < 170; y++) {
+        const v = at(x, y)
+        if (prev < 12 && v > 243) {
+          kind = 'hard'
+          break
+        }
+        if (prev < 12 && v >= 12) {
+          kind = 'soft'
+          break
+        }
+        prev = v
+      }
+      if (kind === 'hard') hard++
+      else if (kind === 'soft') soft++
+    }
+    expect(at(100, 100)).toBeGreaterThan(250)
+    expect(at(8, 8)).toBeLessThan(8)
+    expect(soft).toBeGreaterThan(80)
+    expect(hard).toBeLessThan(8)
+  }, 30000)
+
+  it('圆弧挤出的采样比八个切面更密', () => {
+    const rings = tessellateSvgPath('M -40 0 A 40 40 0 1 1 40 0 A 40 40 0 1 1 -40 0 Z', 16, Math.PI / 24)
+    expect(rings[0]!.points.length).toBeGreaterThan(40)
+  })
 })

@@ -163,13 +163,23 @@ export function effectiveFontWeight(family: string, weight: number): number {
   return 400
 }
 
+/**
+ * 画布的 font 简写只认 100–900 的整百。
+ * 450 会被当成字号，测量宽高跟着变成十几倍，排版就散了。
+ * 精确字重另写在 wght 轴上。
+ */
+function canvasFontWeight(weight: number): number {
+  const snapped = Math.round(weight / 100) * 100
+  return Math.min(900, Math.max(100, snapped))
+}
+
 export function buildFontString(family: string, weight: number, sizePx: number): string {
   const builtin = builtinFont(family)
   if (builtin) {
     const face = nearestFace(builtin, weight)
     return `400 ${sizePx}px ${face.registeredAs}, ${DEFAULT_FONT_FAMILY}, sans-serif`
   }
-  const w = effectiveFontWeight(family, weight)
+  const w = canvasFontWeight(effectiveFontWeight(family, weight))
   return `${w} ${sizePx}px ${family}, ${DEFAULT_FONT_FAMILY}, sans-serif`
 }
 

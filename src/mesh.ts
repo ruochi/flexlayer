@@ -3,13 +3,13 @@ import { readFileSync } from 'node:fs'
 import { solidPaint } from './gradient.js'
 import { parseGlb, type GlbPrimitive } from './glb.js'
 import { originOffset } from './matrix.js'
-import { applyPoseMatrix, planeDepth, poseMatrix } from './perspective.js'
+import { applyPoseMatrix, PERSPECTIVE_AA, planeDepth, poseMatrix, project, resolveSamples } from './perspective.js'
 import { tessellateSvgPath } from './path.js'
 import type { LayerLayoutNode, LayoutNode, MeshLayoutNode } from './types.js'
 
-/** 网格场景的超采样。只作用在进了三维场景的层上，二维绘制不经过这里。 */
-const MESH_AA = 2
-const MAX_RASTER_SIDE = 4096
+/** 网格和透视平面用同一套超采样：高分辨率绘制，再平均缩回。二维绘制不经过这里。 */
+const MESH_AA = PERSPECTIVE_AA
+const MAX_RASTER_SIDE = 8192
 
 type Mat4 = number[]
 type Headless = {
@@ -144,14 +144,56 @@ function parseFill(fill: string, opacity: number): { hex: string; alpha: number 
   return { hex, alpha: opacity }
 }
 
-function standardMaterial(THREE: any, fill: string, opacity: number, side: any) {
+function srgbChannels(hex: string): [number, number, number] {
+  const body = hex.replace('#', '')
+  const full = body.length === 3 ? body.split('').map((ch) => ch + ch).join('') : body
+  const n = (i: number) => Number.parseInt(full.slice(i, i + 2), 16) / 255
+  return [n(0), n(2), n(4)]
+}
+
+/**
+ * 正对镜头的面等于 fill，其余面更暗。
+ * MeshStandard 的能量守恒会把纯白压到 #aaa 左右，浅色发灰。
+ */
+function fillMaterial(THREE: any, fill: string, opacity: number, side: any) {
   const color = parseFill(fill, opacity)
-  return new THREE.MeshStandardMaterial({
-    color: color.hex,
-    roughness: 0.65,
-    metalness: 0,
+  const [r, g, b] = srgbChannels(color.hex)
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: new THREE.Vector3(r, g, b) },
+      uOpacity: { value: color.alpha },
+    },
+    vertexShader: `
+      varying vec3 vNormal;
+      varying vec3 vWorldPos;
+      void main() {
+        vec4 world = modelMatrix * vec4(position, 1.0);
+        vWorldPos = world.xyz;
+        vNormal = normalize(normalMatrix * normal);
+        gl_Position = projectionMatrix * viewMatrix * world;
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uColor;
+      uniform float uOpacity;
+      varying vec3 vNormal;
+      varying vec3 vWorldPos;
+      float lit(vec3 n) {
+        vec3 key = normalize(vec3(-0.6, 0.85, 1.0));
+        vec3 fillL = normalize(vec3(0.75, -0.2, 0.45));
+        return 0.5 + 0.85 * max(dot(n, key), 0.0) + 0.3 * max(dot(n, fillL), 0.0);
+      }
+      void main() {
+        vec3 N = normalize(vNormal);
+        if (!gl_FrontFacing) N = -N;
+        vec3 V = normalize(cameraPosition - vWorldPos);
+        float shade = min(1.0, lit(N) / max(lit(V), 1.0e-3));
+        gl_FragColor = vec4(uColor * shade, uOpacity);
+      }
+    `,
     transparent: color.alpha < 0.999,
-    opacity: color.alpha,
+    depthWrite: color.alpha >= 0.999,
+    toneMapped: false,
     side,
   })
 }
@@ -179,29 +221,92 @@ function addRing(path: any, points: Array<{ x: number; y: number }>) {
   path.closePath()
 }
 
+function pointInRing(x: number, y: number, ring: Array<{ x: number; y: number }>): boolean {
+  let inside = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i]!
+    const b = ring[j]!
+    const hit = a.y > y !== b.y > y && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y || 1e-12) + a.x
+    if (hit) inside = !inside
+  }
+  return inside
+}
+
+function ringCenter(points: Array<{ x: number; y: number }>): { x: number; y: number } {
+  let x = 0
+  let y = 0
+  for (const p of points) {
+    x += p.x
+    y += p.y
+  }
+  return { x: x / points.length, y: y / points.length }
+}
+
+/** 偶数层是实体，奇数层是包含它的那一圈实体上的洞。并排的形状不再被当成第一个的洞。 */
+function shapesFromRings(THREE: any, rings: Array<Array<{ x: number; y: number }>>) {
+  const items = rings
+    .map((points) => ({ points, area: Math.abs(ringArea(points)), parent: -1 }))
+    .filter((item) => item.points.length >= 3 && item.area > 1e-4)
+  for (let i = 0; i < items.length; i++) {
+    const sample = ringCenter(items[i]!.points)
+    let best = -1
+    let bestArea = Infinity
+    for (let j = 0; j < items.length; j++) {
+      if (i === j) continue
+      const other = items[j]!
+      if (other.area <= items[i]!.area + 1e-4 || other.area >= bestArea) continue
+      if (pointInRing(sample.x, sample.y, other.points)) {
+        best = j
+        bestArea = other.area
+      }
+    }
+    items[i]!.parent = best
+  }
+  const depthOf = (index: number) => {
+    let depth = 0
+    let parent = items[index]!.parent
+    const seen = new Set<number>()
+    while (parent >= 0 && !seen.has(parent)) {
+      seen.add(parent)
+      depth++
+      parent = items[parent]!.parent
+    }
+    return depth
+  }
+  const shapes = new Map<number, any>()
+  for (let i = 0; i < items.length; i++) {
+    if (depthOf(i) % 2 !== 0) continue
+    const shape = new THREE.Shape()
+    const area = ringArea(items[i]!.points)
+    addRing(shape, area < 0 ? items[i]!.points.slice().reverse() : items[i]!.points)
+    shapes.set(i, shape)
+  }
+  for (let i = 0; i < items.length; i++) {
+    if (depthOf(i) % 2 !== 1) continue
+    let parent = items[i]!.parent
+    const seen = new Set<number>()
+    while (parent >= 0 && !seen.has(parent) && !shapes.has(parent)) {
+      seen.add(parent)
+      parent = items[parent]!.parent
+    }
+    const shape = parent >= 0 ? shapes.get(parent) : undefined
+    if (!shape) continue
+    const hole = new THREE.Path()
+    const area = ringArea(items[i]!.points)
+    addRing(hole, area > 0 ? items[i]!.points.slice().reverse() : items[i]!.points)
+    shape.holes.push(hole)
+  }
+  return [...shapes.values()]
+}
+
 function extrudeGeometry(THREE: any, node: MeshLayoutNode) {
   if (node.mesh.type !== 'extrude') return null
   const o = originOffset(node.origin, node.width, node.height)
-  const rings = tessellateSvgPath(node.mesh.d)
+  const rings = tessellateSvgPath(node.mesh.d, 16, Math.PI / 24)
     .map((ring) => ring.points.map((p) => ({ x: p.x - o.x, y: -(p.y - o.y) })))
     .filter((points) => points.length >= 3)
-  if (rings.length === 0) return null
-  const shapes: any[] = []
-  let shape: any = null
-  for (const points of rings) {
-    const area = ringArea(points)
-    const ordered = area < 0 ? points.slice().reverse() : points.slice()
-    if (!shape) {
-      shape = new THREE.Shape()
-      addRing(shape, ordered)
-      shapes.push(shape)
-      continue
-    }
-    const holePts = ringArea(ordered) > 0 ? ordered.slice().reverse() : ordered
-    const hole = new THREE.Path()
-    addRing(hole, holePts)
-    shape.holes.push(hole)
-  }
+  const shapes = shapesFromRings(THREE, rings)
+  if (shapes.length === 0) return null
   const geometry = new THREE.ExtrudeGeometry(shapes, { depth: node.mesh.depth, bevelEnabled: false, curveSegments: 1 })
   geometry.translate(0, 0, -node.mesh.depth / 2)
   return geometry
@@ -281,7 +386,18 @@ function solidGeometry(THREE: any, node: MeshLayoutNode) {
   return null
 }
 
-export type MeshRaster = { canvas: Canvas; pad: number; logicalWidth: number; logicalHeight: number }
+export type MeshRaster = {
+  canvas: Canvas
+  pad: number
+  logicalWidth: number
+  logicalHeight: number
+  /** 位图 (0, 0) 在平面局部的位置。效果留白是负的。 */
+  localX: number
+  localY: number
+}
+
+/** 画进父层的网格画面。x、y 可以是负的，这样物体能溢出所在 layer。 */
+export type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: number }
 
 async function renderOnce(api: Headless, scene: any, camera: any, width: number, height: number): Promise<Buffer> {
   const opts = {
@@ -309,7 +425,7 @@ export async function renderMeshLayer(
   layer: LayerLayoutNode,
   scale: number,
   raster: (node: LayoutNode) => MeshRaster,
-): Promise<Canvas | null> {
+): Promise<MeshFrame | null> {
   const perspective = layer.perspective
   if (perspective == null || perspective <= 0 || layer.width <= 0 || layer.height <= 0) return null
   const meshes: MeshInstance[] = []
@@ -333,7 +449,7 @@ async function renderMeshWebgl(sceneInput: {
   planes: PlaneInstance[]
   scale: number
   raster: (node: LayoutNode) => MeshRaster
-}): Promise<Canvas> {
+}): Promise<MeshFrame> {
   const { layer, perspective, meshes, planes, scale, raster } = sceneInput
   const api = await getHeadless()
   const THREE = api.THREE
@@ -376,7 +492,7 @@ async function renderMeshWebgl(sceneInput: {
     }
     const geometry = solidGeometry(THREE, node)
     if (!geometry) continue
-    const material = standardMaterial(THREE, node.fill, node.opacity, node.mesh.type === 'extrude' ? THREE.DoubleSide : THREE.FrontSide)
+    const material = fillMaterial(THREE, node.fill, node.opacity, node.mesh.type === 'extrude' ? THREE.DoubleSide : THREE.FrontSide)
     const mesh = new THREE.Mesh(geometry, material)
     place(mesh, matrix)
     add(mesh)
@@ -387,19 +503,19 @@ async function renderMeshWebgl(sceneInput: {
     if (painted.logicalWidth <= 0 || painted.logicalHeight <= 0) continue
     const pixels = painted.canvas.getContext('2d').getImageData(0, 0, painted.canvas.width, painted.canvas.height)
     const texture = new THREE.DataTexture(new Uint8Array(pixels.data), painted.canvas.width, painted.canvas.height, THREE.RGBAFormat)
-    texture.colorSpace = THREE.NoColorSpace
+    texture.colorSpace = THREE.SRGBColorSpace
     texture.flipY = true
     texture.generateMipmaps = false
     texture.minFilter = THREE.LinearFilter
     texture.magFilter = THREE.LinearFilter
     texture.needsUpdate = true
     const o = originOffset(plane.node.origin, plane.node.width, plane.node.height)
-    const { pad } = painted
+    const { localX, localY } = painted
     const corners: Array<[number, number]> = [
-      [-pad, -pad],
-      [plane.node.width + pad, -pad],
-      [plane.node.width + pad, plane.node.height + pad],
-      [-pad, plane.node.height + pad],
+      [localX, localY],
+      [localX + painted.logicalWidth, localY],
+      [localX + painted.logicalWidth, localY + painted.logicalHeight],
+      [localX, localY + painted.logicalHeight],
     ]
     const order = [0, 1, 2, 0, 2, 3]
     const positions = new Float32Array(order.length * 3)
@@ -409,8 +525,8 @@ async function renderMeshWebgl(sceneInput: {
       positions[slot * 3] = u - o.x
       positions[slot * 3 + 1] = -(v - o.y)
       positions[slot * 3 + 2] = 0
-      uvs[slot * 2] = (u + pad) / painted.logicalWidth
-      uvs[slot * 2 + 1] = 1 - (v + pad) / painted.logicalHeight
+      uvs[slot * 2] = (u - localX) / painted.logicalWidth
+      uvs[slot * 2 + 1] = 1 - (v - localY) / painted.logicalHeight
     })
     const geometry = new THREE.BufferGeometry()
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
@@ -422,25 +538,90 @@ async function renderMeshWebgl(sceneInput: {
     add(mesh)
   }
 
-  const fov = (2 * Math.atan(layer.height / 2 / perspective) * 180) / Math.PI
-  const camera = new THREE.PerspectiveCamera(fov, layer.width / layer.height, 0.1, perspective + 20000)
-  camera.position.set(0, 0, perspective)
-  camera.up.set(0, 1, 0)
-  camera.lookAt(0, 0, 0)
   scene.updateMatrixWorld(true)
+  const bounds = new THREE.Box3().setFromObject(scene)
+  let minX = 0
+  let minY = 0
+  let maxX = layer.width
+  let maxY = layer.height
+  if (!bounds.isEmpty()) {
+    const xs = [bounds.min.x, bounds.max.x]
+    const ys = [bounds.min.y, bounds.max.y]
+    const zs = [bounds.min.z, bounds.max.z]
+    for (const x of xs) {
+      for (const y of ys) {
+        for (const z of zs) {
+          const q = project(layer.width / 2, layer.height / 2, perspective, {
+            x: x + layer.width / 2,
+            y: layer.height / 2 - y,
+            z,
+          })
+          if (!q) continue
+          minX = Math.min(minX, q.x)
+          minY = Math.min(minY, q.y)
+          maxX = Math.max(maxX, q.x)
+          maxY = Math.max(maxY, q.y)
+        }
+      }
+    }
+  }
+  let padL = Math.max(0, -minX)
+  let padT = Math.max(0, -minY)
+  let padR = Math.max(0, maxX - layer.width)
+  let padB = Math.max(0, maxY - layer.height)
+  if (padL + padT + padR + padB > 0.5) {
+    padL = Math.ceil(padL + 1)
+    padT = Math.ceil(padT + 1)
+    padR = Math.ceil(padR + 1)
+    padB = Math.ceil(padB + 1)
+  } else {
+    padL = 0
+    padT = 0
+    padR = 0
+    padB = 0
+  }
+  const base = Math.max(scale, 1e-3)
+  const maxSide = MAX_RASTER_SIDE / base
+  let viewW = layer.width + padL + padR
+  let viewH = layer.height + padT + padB
+  if (viewW > maxSide || viewH > maxSide) {
+    const sx = padL + padR > 0 ? Math.max(0, (maxSide - layer.width) / (padL + padR)) : 1
+    const sy = padT + padB > 0 ? Math.max(0, (maxSide - layer.height) / (padT + padB)) : 1
+    const fit = Math.min(1, sx, sy)
+    padL *= fit
+    padR *= fit
+    padT *= fit
+    padB *= fit
+    viewW = layer.width + padL + padR
+    viewH = layer.height + padT + padB
+  }
+  const camX = (padR - padL) / 2
+  const camY = (padT - padB) / 2
+  const fov = (2 * Math.atan(viewH / 2 / perspective) * 180) / Math.PI
+  const camera = new THREE.PerspectiveCamera(fov, viewW / viewH, 0.1, perspective + 20000)
+  camera.position.set(camX, camY, perspective)
+  camera.up.set(0, 1, 0)
+  camera.lookAt(camX, camY, 0)
+  camera.updateProjectionMatrix()
 
   let samples = MESH_AA
-  const base = Math.max(scale, 1e-3)
-  while (samples > 1 && (layer.width * base * samples > MAX_RASTER_SIDE || layer.height * base * samples > MAX_RASTER_SIDE)) samples /= 2
-  const pw = Math.max(1, Math.round(layer.width * base * samples))
-  const ph = Math.max(1, Math.round(layer.height * base * samples))
+  while (samples > 1 && (viewW * base * samples > MAX_RASTER_SIDE || viewH * base * samples > MAX_RASTER_SIDE)) samples /= 2
+  const pw = Math.max(1, Math.round(viewW * base * samples))
+  const ph = Math.max(1, Math.round(viewH * base * samples))
   const png = await renderOnce(api, scene, camera, pw, ph)
   const image = await loadImage(png)
-  const outW = Math.max(1, Math.round(layer.width * base))
-  const outH = Math.max(1, Math.round(layer.height * base))
-  const out = createCanvas(outW, outH)
-  const ctx = out.getContext('2d')
-  ctx.imageSmoothingEnabled = true
-  ctx.drawImage(image as unknown as Canvas, 0, 0, outW, outH)
-  return out
+  const outW = Math.max(1, Math.round(viewW * base))
+  const outH = Math.max(1, Math.round(viewH * base))
+  const hi = createCanvas(image.width, image.height)
+  hi.getContext('2d').drawImage(image as unknown as Canvas, 0, 0)
+  let out: Canvas
+  if (image.width >= outW && image.height >= outH) {
+    out = resolveSamples(hi, outW, outH)
+  } else {
+    out = createCanvas(outW, outH)
+    const ctx = out.getContext('2d')
+    ctx.imageSmoothingEnabled = true
+    ctx.drawImage(hi, 0, 0, outW, outH)
+  }
+  return { canvas: out, x: -padL, y: -padT, width: viewW, height: viewH }
 }

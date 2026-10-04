@@ -207,8 +207,8 @@ function paintGrid(
   }
 }
 
-/** 把高分辨率的平面平均缩回目标像素。颜色按预乘 alpha 平均，避免边缘发暗。 */
-function resolveSamples(src: Canvas, dw: number, dh: number): Canvas {
+/** 把高分辨率画面平均缩回目标像素。颜色按预乘 alpha 平均，避免边缘发暗。透视平面和网格共用。 */
+export function resolveSamples(src: Canvas, dw: number, dh: number): Canvas {
   const sw = src.width
   const sh = src.height
   const srcData = src.getContext('2d').getImageData(0, 0, sw, sh).data
@@ -251,7 +251,168 @@ function resolveSamples(src: Canvas, dw: number, dh: number): Canvas {
   return out
 }
 
-/** 把位图贴到投影后的平面上。网格点用真实投影，避免整张图只做一次仿射。 */
+function solveLinear(rows: number[][], rhs: number[]): number[] | null {
+  const n = rhs.length
+  const m = rows.map((row, i) => [...row, rhs[i]!])
+  for (let col = 0; col < n; col++) {
+    let pivot = col
+    for (let r = col + 1; r < n; r++) if (Math.abs(m[r]![col]!) > Math.abs(m[pivot]![col]!)) pivot = r
+    const pivotRow = m[pivot]
+    if (!pivotRow || Math.abs(pivotRow[col]!) < 1e-10) return null
+    if (pivot !== col) {
+      m[pivot] = m[col]!
+      m[col] = pivotRow
+    }
+    const div = m[col]![col]!
+    for (let c = col; c <= n; c++) m[col]![c] = m[col]![c]! / div
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue
+      const factor = m[r]![col]!
+      if (factor === 0) continue
+      for (let c = col; c <= n; c++) m[r]![c] = m[r]![c]! - factor * m[col]![c]!
+    }
+  }
+  return m.map((row) => row[n]!)
+}
+
+/** 四点决定的投影。平面透视是单应，不是一格一格的仿射。 */
+function fitHomography(from: Vec2[], to: Vec2[]): number[] | null {
+  const rows: number[][] = []
+  const rhs: number[] = []
+  for (let i = 0; i < 4; i++) {
+    const x = from[i]!.x
+    const y = from[i]!.y
+    const u = to[i]!.x
+    const v = to[i]!.y
+    rows.push([x, y, 1, 0, 0, 0, -u * x, -u * y])
+    rhs.push(u)
+    rows.push([0, 0, 0, x, y, 1, -v * x, -v * y])
+    rhs.push(v)
+  }
+  return solveLinear(rows, rhs)
+}
+
+function applyHomography(h: number[], x: number, y: number): Vec2 | null {
+  const w = h[6]! * x + h[7]! * y + 1
+  if (Math.abs(w) < 1e-8) return null
+  return { x: (h[0]! * x + h[1]! * y + h[2]!) / w, y: (h[3]! * x + h[4]! * y + h[5]!) / w }
+}
+
+/** 相邻三角形叠在一起时，半透明的阴影和发光会在接缝上叠两次，看起来像网格。这里每个像素只采样一次。 */
+function paintHomography(
+  off: Canvas,
+  bitmap: Canvas,
+  logicalWidth: number,
+  logicalHeight: number,
+  at: (u: number, v: number) => Vec2 | null,
+  x0: number,
+  y0: number,
+  raster: number,
+): boolean {
+  const src: Vec2[] = [
+    { x: 0, y: 0 },
+    { x: logicalWidth, y: 0 },
+    { x: logicalWidth, y: logicalHeight },
+    { x: 0, y: logicalHeight },
+  ]
+  const dst: Vec2[] = []
+  for (const p of src) {
+    const q = at(p.x, p.y)
+    if (!q) return false
+    dst.push(q)
+  }
+  const h = fitHomography(dst, src)
+  if (!h) return false
+  const mid = at(logicalWidth / 2, logicalHeight / 2)
+  if (mid) {
+    const back = applyHomography(h, mid.x, mid.y)
+    if (!back || Math.hypot(back.x - logicalWidth / 2, back.y - logicalHeight / 2) > 1.5) return false
+  }
+  const bw = bitmap.width
+  const bh = bitmap.height
+  const srcData = bitmap.getContext('2d').getImageData(0, 0, bw, bh).data
+  const pw = off.width
+  const ph = off.height
+  const octx = off.getContext('2d')
+  const image = octx.createImageData(pw, ph)
+  const dstData = image.data
+  const sample = (fx: number, fy: number) => {
+    if (fx < -0.5 || fy < -0.5 || fx > bw - 0.5 || fy > bh - 0.5) return
+    const x = Math.max(0, Math.min(bw - 1.0001, fx))
+    const y = Math.max(0, Math.min(bh - 1.0001, fy))
+    const x0p = Math.floor(x)
+    const y0p = Math.floor(y)
+    const x1p = Math.min(bw - 1, x0p + 1)
+    const y1p = Math.min(bh - 1, y0p + 1)
+    const tx = x - x0p
+    const ty = y - y0p
+    const atPx = (px: number, py: number) => {
+      const i = (py * bw + px) * 4
+      const a = (srcData[i + 3] ?? 0) / 255
+      return [(srcData[i] ?? 0) * a, (srcData[i + 1] ?? 0) * a, (srcData[i + 2] ?? 0) * a, a] as const
+    }
+    const p00 = atPx(x0p, y0p)
+    const p10 = atPx(x1p, y0p)
+    const p01 = atPx(x0p, y1p)
+    const p11 = atPx(x1p, y1p)
+    const mix = (a: number, b: number, c: number, d: number) => a + (b - a) * tx + (c - a) * ty + (a - b - c + d) * tx * ty
+    const pr = mix(p00[0], p10[0], p01[0], p11[0])
+    const pg = mix(p00[1], p10[1], p01[1], p11[1])
+    const pb = mix(p00[2], p10[2], p01[2], p11[2])
+    const pa = mix(p00[3], p10[3], p01[3], p11[3])
+    return { r: pr, g: pg, b: pb, a: pa }
+  }
+  for (let py = 0; py < ph; py++) {
+    const ly = y0 + (py + 0.5) / raster
+    for (let px = 0; px < pw; px++) {
+      const lx = x0 + (px + 0.5) / raster
+      const uv = applyHomography(h, lx, ly)
+      if (!uv || uv.x < 0 || uv.y < 0 || uv.x > logicalWidth || uv.y > logicalHeight) continue
+      const color = sample((uv.x / logicalWidth) * bw - 0.5, (uv.y / logicalHeight) * bh - 0.5)
+      if (!color || color.a <= 0) continue
+      const di = (py * pw + px) * 4
+      dstData[di] = Math.round(color.r / color.a)
+      dstData[di + 1] = Math.round(color.g / color.a)
+      dstData[di + 2] = Math.round(color.b / color.a)
+      dstData[di + 3] = Math.round(color.a * 255)
+    }
+  }
+  octx.putImageData(image, 0, 0)
+  return true
+}
+
+/** 不重叠绘制时，裁剪会在共享边上留下一条全透明的缝。只补两侧都有颜色的缝，不把外轮廓撑大。 */
+function closeInteriorCracks(canvas: Canvas) {
+  const ctx = canvas.getContext('2d')
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const src = image.data
+  const w = canvas.width
+  const h = canvas.height
+  const dst = new Uint8ClampedArray(src)
+  const alpha = (x: number, y: number) => src[(y * w + x) * 4 + 3] ?? 0
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = (y * w + x) * 4
+      if ((src[i + 3] ?? 0) !== 0) continue
+      const left = alpha(x - 1, y)
+      const right = alpha(x + 1, y)
+      const up = alpha(x, y - 1)
+      const down = alpha(x, y + 1)
+      let from = -1
+      if (left > 0 && right > 0) from = (y * w + (x - 1)) * 4
+      else if (up > 0 && down > 0) from = ((y - 1) * w + x) * 4
+      if (from < 0) continue
+      dst[i] = src[from]!
+      dst[i + 1] = src[from + 1]!
+      dst[i + 2] = src[from + 2]!
+      dst[i + 3] = src[from + 3]!
+    }
+  }
+  image.data.set(dst)
+  ctx.putImageData(image, 0, 0)
+}
+
+/** 把位图贴到投影后的平面上。平面是一次投影，每个像素只采样一次，柔和的阴影和发光不会出现网格。 */
 export function drawTexturedPlane(
   ctx: DrawCtx,
   bitmap: Canvas,
@@ -289,17 +450,16 @@ export function drawTexturedPlane(
   let samples = PERSPECTIVE_AA
   while (samples > 1 && (lw * base * samples > MAX_RASTER_SIDE || lh * base * samples > MAX_RASTER_SIDE)) samples /= 2
   const raster = base * samples
-  if (samples <= 1) {
-    paintGrid(ctx, bitmap, logicalWidth, logicalHeight, n, pts, 1 / base)
-    return
-  }
   const pw = Math.max(1, Math.round(lw * raster))
   const ph = Math.max(1, Math.round(lh * raster))
   const off = createCanvas(pw, ph)
   const octx = off.getContext('2d') as DrawCtx
-  octx.setTransform(raster, 0, 0, raster, -x0 * raster, -y0 * raster)
-  paintGrid(octx, bitmap, logicalWidth, logicalHeight, n, pts, 1 / raster)
-  const resolved = resolveSamples(off, Math.max(1, Math.round(lw * base)), Math.max(1, Math.round(lh * base)))
+  if (!paintHomography(off, bitmap, logicalWidth, logicalHeight, at, x0, y0, raster)) {
+    octx.setTransform(raster, 0, 0, raster, -x0 * raster, -y0 * raster)
+    paintGrid(octx, bitmap, logicalWidth, logicalHeight, n, pts, 0)
+    closeInteriorCracks(off)
+  }
+  const resolved = samples > 1 ? resolveSamples(off, Math.max(1, Math.round(lw * base)), Math.max(1, Math.round(lh * base))) : off
   ctx.imageSmoothingEnabled = true
   ctx.drawImage(resolved, x0, y0, lw, lh)
 }
