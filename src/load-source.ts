@@ -7,13 +7,13 @@ import { pathToFileURL, fileURLToPath } from 'node:url'
 import * as esbuild from 'esbuild'
 import type { Composition } from './frame.js'
 import type { FvgNode } from './parse.js'
+import { formatSourceLoc } from './source-loc.js'
+import { nondeterministicCalls } from './syntax.js'
 import type { Issue } from './types.js'
 
 const CODE_EXT = new Set(['.tsx', '.jsx', '.ts', '.js'])
 const require = createRequire(import.meta.url)
 const BUILTINS = new Set(builtinModules)
-
-const NONDET = /\b(?:Math\.random|Date\.now|crypto\.randomUUID|crypto\.getRandomValues)\b/g
 
 export type LoadedLayer =
   | { kind: 'markup'; source: string }
@@ -54,22 +54,14 @@ function displayFile(file: string): string {
 }
 
 function nondeterministicIssues(source: string, file: string): Issue[] {
-  const issues: Issue[] = []
-  for (const match of source.matchAll(NONDET)) {
-    const index = match.index ?? 0
-    const line = source.slice(0, index).split('\n').length
-    const lineStart = source.lastIndexOf('\n', index - 1) + 1
-    const column = index - lineStart + 1
-    issues.push({
-      level: 'warn',
-      code: 'nondeterministic',
-      path: 'layer',
-      message: `用了 ${match[0]}，同一帧可能得到不同的图`,
-      hint: '改成由 frame、t 或传入的数据计算',
-      source: `${displayFile(file)}:${line}:${column}`,
-    })
-  }
-  return issues
+  return nondeterministicCalls(source, file).map((call) => ({
+    level: 'warn' as const,
+    code: 'nondeterministic' as const,
+    path: 'layer',
+    message: `用了 ${call.name}，同一帧可能得到不同的图`,
+    hint: '改成由 frame、t 或传入的数据计算',
+    source: formatSourceLoc({ file, line: call.line, column: call.column }),
+  }))
 }
 
 function resolveExport(mod: Record<string, unknown>, file: string): ExecutedLayer {
