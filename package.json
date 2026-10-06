@@ -1,6 +1,6 @@
 {
   "name": "@dc/flexlayer",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Flex Layer: AI-friendly 2D frame markup with flex layout, HTML text and SVG-style shapes, rendered to PNG",
   "type": "module",
   "main": "dist/index.js",
@@ -25,7 +25,6 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
-    "test:generate": "vitest run --config generate/vitest.config.ts",
     "pythagoras": "tsx examples/render-pythagoras.ts",
     "flexlayer": "tsx src/cli.ts",
     "docs:attrs": "tsx scripts/gen-attr-docs.ts",

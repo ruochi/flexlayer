@@ -76,7 +76,7 @@ describe('属性注册表', () => {
     for (const name of EFFECT_ATTRS) {
       expect(ATTR_ORDER).toContain(name)
     }
-    for (const file of ['../generate/react/jsx.d.ts', '../src/jsx-intrinsics.ts']) {
+    for (const file of ['../src/jsx-intrinsics.ts']) {
       const jsx = readFileSync(new URL(file, import.meta.url), 'utf8')
       expect(between(jsx, 'jsx-effects', 'line')).toBe(jsxFieldBlock(JSX_EFFECT_NAMES))
       expect(between(jsx, 'jsx-overlay', 'line')).toBe(jsxFieldBlock(JSX_OVERLAY_NAMES))

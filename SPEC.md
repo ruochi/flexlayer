@@ -560,7 +560,7 @@ flexlayer render scene.tsx --frames out/                         # Composition �
 
 ## 12. 自定义绘制 draw
 
-程序调用（React / Vue JSX 或 `h()`）时，任意元素可挂 `draw={(ctx, el) => { ... }}`。
+程序调用（`.tsx` 或 `h()`）时，任意元素可挂 `draw={(ctx, el) => { ... }}`。
 
 在 `.layer` 文件里用子标签 `<draw>…</draw>`，正文是 JavaScript，可用变量只有 `ctx` 与 `el`（与回调参数相同）。`<draw>` 不参与布局，画在父元素默认内容之后；同一个元素只能有一个 `<draw>`。程序侧已挂 `draw` 回调时，忽略标签并警告。
 

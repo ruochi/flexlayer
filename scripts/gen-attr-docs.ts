@@ -23,7 +23,7 @@ function fill(path: string, marker: string, body: string, kind: 'html' | 'line' 
 
 fill('SPEC.md', 'attrs:ownership', ownershipTableBody())
 fill('docs/CHEATSHEET.md', 'attrs:effects', effectCheatLine())
-for (const file of ['generate/react/jsx.d.ts', 'src/jsx-intrinsics.ts']) {
+for (const file of ['src/jsx-intrinsics.ts']) {
   fill(file, 'jsx-effects', jsxFieldBlock(JSX_EFFECT_NAMES), 'line')
   fill(file, 'jsx-overlay', jsxFieldBlock(JSX_OVERLAY_NAMES), 'line')
   fill(file, 'jsx-grade', jsxFieldBlock(JSX_GRADE_NAMES), 'line')

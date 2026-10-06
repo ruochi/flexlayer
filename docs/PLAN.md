@@ -22,7 +22,7 @@ AGENTS.md          入口：硬性约定表 + 工作流
   └─ GALLERY.md    效果 → 代码片段 → 图格
        └─ docs/gallery/*.layer + png
 
-GENERATE.md / COMPONENTS.md  只写 Vue / React 特有的坑，规则链接回 AGENTS
+有数据或动画时写 .tsx（examples/）。不再另接 Vue 或 React。
 ```
 
 规则正文只在 SPEC 里写一次。其它文档只做索引、速查或备注。规则一律通过问题码（如 `invalid-attr`）引用。
@@ -58,8 +58,8 @@ GENERATE.md / COMPONENTS.md  只写 Vue / React 特有的坑，规则链接回 A
 
 - `AI.md` 改名为 `AGENTS.md`。写出唯一一份硬性约定表，列：规则、错误写法、正确写法、问题码。原来 §2.1、§5、§6 里重复的内容合并进这张表。
 - `docs/CHEATSHEET.md`：保留写法示例，删掉规则解释，改成链接到硬性约定。
-- `GENERATE.md`：删掉「规则（AI 必守）」表，只保留 Vue / React 特有的注意点。
-- `generate/COMPONENTS.md` §3、`README.md`：删掉重复的 layer 背景等规则，改成一句话加链接。
+- `GENERATE.md`、`generate/COMPONENTS.md` 后来随 Vue / React 生成层一起删除。规则只留在 SPEC 和 AGENTS。
+- `README.md`：删掉重复的 layer 背景等规则，改成一句话加链接。
 - `docs/EFFECTS.md`：删掉「已实现」表和绘制顺序，只保留算法、取舍和实现触点。
 - 全仓替换文档里的 `AI.md` 链接。
 
@@ -86,11 +86,11 @@ SPEC 第 9 章分四个小节：
 
 ## 第 5 步（可选）：属性注册表、语法统一、API 改名
 
-- 新建 `src/schema.ts`，每个属性记录名称、归属、语法、默认值、示例和问题码。`src/rules.ts` 的 `HTML_STYLE_ATTRS` 和「仅 layer」检查改为读取这张表。`generate/serialize.ts` 和 `generate/react/jsx.d.ts` 也对齐到这张表。
+- 新建 `src/schema.ts`，每个属性记录名称、归属、语法、默认值、示例和问题码。`src/rules.ts` 的 `HTML_STYLE_ATTRS` 和「仅 layer」检查改为读取这张表。`src/jsx-intrinsics.ts` 也对齐到这张表。
 - 增加一个脚本，从注册表生成 SPEC 归属总表和 CHEATSHEET 效果行（写入标记区块之间）。
 - `glass` 支持 `clear, blur 8, tint #fff2` 这种逗号写法，旧写法继续兼容；在 `src/style.ts` 中实现，并补测试。
 - 在 `src/index.ts` 导出 `renderLayer`，保留 `renderFvg` 作为别名；文档统一改用新名字。
 
 ## 验证
 
-每一步都要通过 `npm test` 和 `npm run test:generate`。第 4 步之后还要跑 `npm run gallery`，并用肉眼核对生成的图。
+每一步都要通过 `npm test`。第 4 步之后还要跑 `npm run gallery`，并用肉眼核对生成的图。
