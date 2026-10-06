@@ -120,7 +120,7 @@ describe('gradient()', () => {
   it('画布上的矩形和线条用同一套采样', async () => {
     const { png } = await render(
       `<layer width="21" height="11" background="#000000">
-        <rect cx="10.5" cy="5.5" width="21" height="11" fill="gradient(#000000, #ffffff)" />
+        <rect x="0" y="0" width="21" height="11" fill="gradient(#000000, #ffffff)" />
       </layer>`,
     )
     const g = parseGradient('gradient(#000000, #ffffff)')
@@ -132,7 +132,7 @@ describe('gradient()', () => {
 
     const scaled = await render(
       `<layer width="21" height="1" background="#000000">
-        <rect cx="10.5" cy="0.5" width="21" height="1" fill="gradient(#000000, #ffffff)" />
+        <rect x="0" y="0" width="21" height="1" fill="gradient(#000000, #ffffff)" />
       </layer>`,
       2,
     )
@@ -172,7 +172,7 @@ describe('gradient()', () => {
   })
 
   it('写错的渐变退回纯色并报告', async () => {
-    const { doc } = await render(`<layer width="20" height="20"><rect cx="10" cy="10" width="10" height="10" fill="gradient(nope)" /></layer>`)
+    const { doc } = await render(`<layer width="20" height="20"><rect x="5" y="5" width="10" height="10" fill="gradient(nope)" /></layer>`)
     expect(doc.issues.some((issue) => issue.code === 'invalid-attr' && issue.message.includes('fill'))).toBe(true)
     const shape = doc.root.children[0]
     expect(shape && shape.kind === 'shape' && shape.fill).toBe('#000000')

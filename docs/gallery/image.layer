@@ -1,21 +1,79 @@
-<layer width="1080" height="520" background="#12161c" color="#e8e4dc" font-family="Kai">
-  <layer cx="80" cy="36" anchor="top-left">
-    <h1 style="font-size:48px; color:#f2ebe0">图片 object-fit</h1>
+<layer width="1080" height="520" background="#12161c" color="#e8e4dc" font-family="Kai" x="0" y="0">
+  
+  
+  <layer x="80" y="36">
+    
+    
+    <h1 style="font-size:48px; color:#f2ebe0">
+      图片 object-fit
+    </h1>
+    
+  
   </layer>
-  <layer cx="150" cy="220" anchor="center">
+  
+  
+  <layer x="50" y="140">
+    
+    
     <img src="swatch.png" alt="色块" style="width:200px; height:160px; object-fit:fill; background:#222" />
+    
+  
   </layer>
-  <layer cx="410" cy="220" anchor="center">
+  
+  
+  <layer x="310" y="140">
+    
+    
     <img src="swatch.png" alt="色块" style="width:200px; height:160px; object-fit:contain; background:#222" />
+    
+  
   </layer>
-  <layer cx="670" cy="220" anchor="center">
+  
+  
+  <layer x="570" y="140">
+    
+    
     <img src="swatch.png" alt="色块" style="width:200px; height:160px; object-fit:cover; background:#222" />
+    
+  
   </layer>
-  <layer cx="930" cy="220" anchor="center">
+  
+  
+  <layer x="830" y="140">
+    
+    
     <img src="swatch.png" alt="色块" style="width:200px; height:160px; object-fit:none; background:#222" />
+    
+  
   </layer>
-  <layer cx="150" cy="360" anchor="top"><p style="font-size:26px; color:#9aa7b5">fill</p></layer>
-  <layer cx="410" cy="360" anchor="top"><p style="font-size:26px; color:#9aa7b5">contain</p></layer>
-  <layer cx="670" cy="360" anchor="top"><p style="font-size:26px; color:#9aa7b5">cover</p></layer>
-  <layer cx="930" cy="360" anchor="top"><p style="font-size:26px; color:#9aa7b5">none</p></layer>
+  
+  
+  <layer x="134.935" y="360">
+    <p style="font-size:26px; color:#9aa7b5">
+      fill
+    </p>
+  </layer>
+  
+  
+  <layer x="364.94" y="360">
+    <p style="font-size:26px; color:#9aa7b5">
+      contain
+    </p>
+  </layer>
+  
+  
+  <layer x="636.785" y="360">
+    <p style="font-size:26px; color:#9aa7b5">
+      cover
+    </p>
+  </layer>
+  
+  
+  <layer x="900.345" y="360">
+    <p style="font-size:26px; color:#9aa7b5">
+      none
+    </p>
+  </layer>
+  
+
 </layer>

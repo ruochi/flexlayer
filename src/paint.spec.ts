@@ -29,7 +29,7 @@ describe('paint containers', () => {
       { width: '200', height: '200', background: '#000000' },
       h(
         'layer',
-        { cx: '100', cy: '100' },
+        { x: '60', y: '80' },
         h('div', { style: 'display:flex; flex-direction:column; width:80px' }, h('div', { style: 'width:80px; height:40px; background:#ffffff' }, 'A')),
       ),
     )
@@ -59,12 +59,12 @@ describe('paint containers', () => {
     const flat = h(
       'Layer',
       { width: '200', height: '200', background: '#000000' },
-      h('Rect', { cx: '100', cy: '100', width: '80', height: '80', fill: '#ffffff' }),
+      h('Rect', { x: '60', y: '60',  width: '80', height: '80', fill: '#ffffff' }),
     )
     const turned = h(
       'Layer',
       { width: '200', height: '200', background: '#000000', perspective: '300' },
-      h('Rect', { cx: '100', cy: '100', width: '80', height: '80', fill: '#ffffff', rotateY: '70' }),
+      h('Rect', { x: '60', y: '60',  width: '80', height: '80', fill: '#ffffff', rotateY: '70' }),
     )
     const flatPx = await pixelAt((await renderFvg(flat)).png, 62, 100)
     const center = await pixelAt((await renderFvg(turned)).png, 100, 108)
@@ -78,7 +78,7 @@ describe('paint containers', () => {
     const root = h(
       'Layer',
       { width: '80', height: '80', background: '#000000' },
-      h('Rect', { cx: '40', cy: '40', width: '40', height: '40', fill: '#ffffff' }),
+      h('Rect', { x: '20', y: '20',  width: '40', height: '40', fill: '#ffffff' }),
     )
     const png = (await renderFvg(root)).png
     expect((await pixelAt(png, 22, 40))[0]).toBe(255)
@@ -89,7 +89,7 @@ describe('paint containers', () => {
     const root = h(
       'Layer',
       { width: '200', height: '200', background: '#000000', perspective: '500' },
-      h('Rect', { cx: '100', cy: '100', width: '120', height: '80', fill: '#ffffff', rotateY: '32' }),
+      h('Rect', { x: '40', y: '60',  width: '120', height: '80', fill: '#ffffff', rotateY: '32' }),
     )
     const png = (await renderFvg(root)).png
     const box = { x: 40, y: 60, width: 120, height: 80, rotateY: 32, scale: 1, rotate: 0 } as LayoutNode
@@ -113,7 +113,7 @@ describe('paint containers', () => {
     const glow = h(
       'layer',
       { width: '180', height: '180', background: '#000000', perspective: '400' },
-      h('rect', { cx: '90', cy: '90', width: '50', height: '50', fill: '#ffffff', rotateX: '14', glow: '16 #00ff00' }),
+      h('rect', { x: '65', y: '65',  width: '50', height: '50', fill: '#ffffff', rotateX: '14', glow: '16 #00ff00' }),
     )
     const glowPng = (await renderFvg(glow)).png
     const plane = { x: 65, y: 65, width: 50, height: 50, rotateX: 14, scale: 1, rotate: 0 } as LayoutNode
@@ -128,7 +128,7 @@ describe('paint containers', () => {
     const grid = h(
       'layer',
       { width: '640', height: '400', background: '#000000', perspective: '900' },
-      h('rect', { cx: '320', cy: '200', width: '360', height: '200', fill: '#000000', rotateY: '32', glow: '36 #ffffff' }),
+      h('rect', { x: '140', y: '100',  width: '360', height: '200', fill: '#000000', rotateY: '32', glow: '36 #ffffff' }),
     )
     const gridPng = (await renderFvg(grid)).png
     const gridImg = await loadImage(gridPng)
@@ -148,7 +148,7 @@ describe('paint containers', () => {
     const shadow = h(
       'layer',
       { width: '180', height: '180', background: '#000000', perspective: '400' },
-      h('rect', { cx: '90', cy: '90', width: '50', height: '50', fill: '#ffffff', rotateX: '14', shadow: '18 0 4 #ff0000' }),
+      h('rect', { x: '65', y: '65',  width: '50', height: '50', fill: '#ffffff', rotateX: '14', shadow: '18 0 4 #ff0000' }),
     )
     const shadowPng = (await renderFvg(shadow)).png
     const shadowAt = project(90, 90, 400, posePoint(plane, 62, 25))!
@@ -165,8 +165,8 @@ describe('paint containers', () => {
     const root = h(
       'Layer',
       { width: '120', height: '120', background: '#000000', perspective: '400' },
-      h('Rect', { cx: '60', cy: '60', width: '50', height: '50', fill: '#ff0000', z: '40' }),
-      h('Rect', { cx: '60', cy: '60', width: '50', height: '50', fill: '#0000ff', z: '-30' }),
+      h('Rect', { x: '35', y: '35',  width: '50', height: '50', fill: '#ff0000', z: '40' }),
+      h('Rect', { x: '35', y: '35',  width: '50', height: '50', fill: '#0000ff', z: '-30' }),
     )
     const px = await pixelAt((await renderFvg(root)).png, 60, 68)
     expect(px[0]).toBeGreaterThan(200)
@@ -179,7 +179,7 @@ describe('paint containers', () => {
       { width: '200', height: '200', background: '#000000' },
       h(
         'layer',
-        { cx: '100', cy: '100', width: '100', height: '100', rotate: '90' },
+        { x: '50', y: '50',  width: '100', height: '100', rotate: '90' },
         h('rect', { x1: '0', y1: '10', x2: '100', y2: '30', fill: '#ffffff' }),
       ),
     )
@@ -197,8 +197,8 @@ describe('paint containers', () => {
       { width: '200', height: '200', background: '#000000' },
       h(
         'layer',
-        { cx: '100', cy: '100', width: '100', height: '100', scale: '2' },
-        h('rect', { cx: '50', cy: '50', width: '20', height: '20', fill: '#ffffff' }),
+        { x: '50', y: '50',  width: '100', height: '100', scale: '2' },
+        h('rect', { x: '40', y: '40',  width: '20', height: '20', fill: '#ffffff' }),
       ),
     )
     const { png } = await renderFvg(root)
@@ -215,7 +215,7 @@ describe('paint containers', () => {
       { width: '220', height: '160', background: '#000000' },
       h(
         'layer',
-        { cx: '100', cy: '20', anchor: 'top-left', width: '100', height: '100', rotate: '90', origin: 'top-left' },
+        { x: '100', y: '20',  width: '100', height: '100', rotate: '90', origin: 'top-left' },
         h('rect', { x1: '0', y1: '40', x2: '10', y2: '80', fill: '#ffffff' }),
       ),
     )
@@ -233,8 +233,8 @@ describe('paint containers', () => {
       { width: '200', height: '100', background: '#000000' },
       h(
         'layer',
-        { cx: '0', cy: '0', anchor: 'top-left', width: '100', height: '100', overflow: 'hidden' },
-        h('rect', { cx: '90', cy: '50', width: '40', height: '40', fill: '#ffffff' }),
+        { x: '0', y: '0',  width: '100', height: '100', overflow: 'hidden' },
+        h('rect', { x: '70', y: '30',  width: '40', height: '40', fill: '#ffffff' }),
       ),
     )
     const { png } = await renderFvg(root)
@@ -248,7 +248,7 @@ describe('paint containers', () => {
     const text = h(
       'layer',
       { width: '200', height: '200', background: '#000000' },
-      h('div', { style: 'width:120px; height:20px; background:#ffffff; rotate:90' }, 'A'),
+      h('layer', { x: '40', y: '90' }, h('div', { style: 'width:120px; height:20px; background:#ffffff; rotate:90' }, 'A')),
     )
     const textPng = await renderFvg(text)
     expect((await pixelAt(textPng.png, 100, 50))[0]).toBeGreaterThan(200)
@@ -267,7 +267,7 @@ describe('paint containers', () => {
     const root = h(
       'layer',
       { width: '120', height: '80', background: '#000000' },
-      h('layer', { cx: '10', cy: '10', anchor: 'top-left' }, h('div', { style: 'display:flex; gap:8px' }, h('div', { style: 'width:28px; height:28px; background:#ffffff' }))),
+      h('layer', { x: '10', y: '10',  }, h('div', { style: 'display:flex; gap:8px' }, h('div', { style: 'width:28px; height:28px; background:#ffffff' }))),
     )
     const { png, report } = await renderFvg(root)
     expect(report.issues.some((issue) => issue.code === 'text-overflow')).toBe(false)
@@ -280,7 +280,7 @@ describe('paint containers', () => {
       { width: '300', height: '80', background: '#000000' },
       h(
         'layer',
-        { cx: '10', cy: '30', anchor: 'top-left' },
+        { x: '10', y: '30',  },
         h(
           'div',
           { style: 'display:flex; width:280px; gap:8px; align-items:center' },
@@ -297,7 +297,7 @@ describe('paint containers', () => {
 
   it('flex 放进 layer 后位置由 layer 决定', async () => {
     const row = () => h('div', { style: 'display:flex; gap:12px; align-items:center' }, h('p', { style: 'font-size:32px; color:#ffffff' }, '甲乙'))
-    const wrapped = h('layer', { width: '400', height: '120', background: '#000000' }, h('layer', { cx: '20', cy: '30', anchor: 'top-left' }, row()))
+    const wrapped = h('layer', { width: '400', height: '120', background: '#000000' }, h('layer', { x: '20', y: '30',  }, row()))
     const bare = h('layer', { width: '400', height: '120', background: '#000000' }, row())
     const placed = await renderFvg(wrapped)
     const centered = await renderFvg(bare)
@@ -305,6 +305,7 @@ describe('paint containers', () => {
     const centeredBox = centered.report.elements.find((element) => element.tag === 'div')!.box
     expect(placedBox.left).toBeCloseTo(20, 0)
     expect(placedBox.top).toBeCloseTo(30, 0)
-    expect(centeredBox.left).toBeGreaterThan(placedBox.left + 20)
+    expect(centeredBox.left).toBeCloseTo(0, 0)
+    expect(centeredBox.top).toBeCloseTo(0, 0)
   })
 })

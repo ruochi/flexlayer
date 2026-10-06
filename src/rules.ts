@@ -1,6 +1,6 @@
 import type { FvgNode } from './parse.js'
 import { ATTRS, HTML_STYLE_ATTRS, attrByName, issueFor } from './schema.js'
-import { parseStyle } from './style.js'
+import { parseNumber, parseStyle } from './style.js'
 import { isTextBoxTag } from './text.js'
 import type { Issue, IssueLevel } from './types.js'
 import { isImageTag, isLineTag, isMeshTag, isShapeTag } from './tags.js'
@@ -38,7 +38,7 @@ function hasStyle(attrs: Record<string, string>): boolean {
   return present(attrs, 'style') && attrs.style.trim() !== ''
 }
 
-/** 文字和图片都按 HTML：视觉属性进 style，不写 cx。 */
+/** 文字和图片都按 HTML：视觉属性进 style，位置写在外包的 layer 上。 */
 export function isHtmlTag(tag: string): boolean {
   return isTextBoxTag(tag) || isImageTag(tag)
 }
@@ -55,12 +55,75 @@ function usesAttributes(node: FvgNode): boolean {
   )
 }
 
+const LEGACY_CENTER_TAGS = new Set(['layer', 'use', 'rect', 'box', 'extrude'])
+
+function fmtHint(n: number): string {
+  const rounded = Math.round(n * 1000) / 1000
+  return String(Object.is(rounded, -0) ? 0 : rounded)
+}
+
+function topLeftFromPoint(x: number, y: number, w: number, h: number, anchor: string): { x: number; y: number } | null {
+  switch (anchor) {
+    case 'top-left':
+      return { x, y }
+    case 'top':
+      return { x: x - w / 2, y }
+    case 'top-right':
+      return { x: x - w, y }
+    case 'left':
+      return { x, y: y - h / 2 }
+    case 'center':
+      return { x: x - w / 2, y: y - h / 2 }
+    case 'right':
+      return { x: x - w, y: y - h / 2 }
+    case 'bottom-left':
+      return { x, y: y - h }
+    case 'bottom':
+      return { x: x - w / 2, y: y - h }
+    case 'bottom-right':
+      return { x: x - w, y: y - h }
+    default:
+      return null
+  }
+}
+
+function legacyCenterHint(attrs: Record<string, string>): string {
+  const cx = parseNumber(attrs.cx)
+  const cy = parseNumber(attrs.cy)
+  const w = parseNumber(attrs.width)
+  const h = parseNumber(attrs.height)
+  const anchor = (attrs.anchor ?? 'center').trim().toLowerCase()
+  if (cx != null && cy != null && anchor === 'top-left') return `改成 x="${fmtHint(cx)}" y="${fmtHint(cy)}"`
+  if (cx != null && cy != null && w != null && h != null && w > 0 && h > 0) {
+    const tl = topLeftFromPoint(cx, cy, w, h, anchor)
+    if (tl) return `改成 x="${fmtHint(tl.x)}" y="${fmtHint(tl.y)}"`
+  }
+  return '改成 x、y，表示左上角。原先的 cx、cy 是定位点，anchor 默认 center'
+}
+
+/** layer、use、rect、box、extrude 上的 cx、cy 已忽略。hint 给出等价的 x、y。 */
+export function legacyCenterIssues(node: FvgNode, path: string): Issue[] {
+  if (!LEGACY_CENTER_TAGS.has(node.tag)) return []
+  if (!present(node.attrs, 'cx') && !present(node.attrs, 'cy')) return []
+  return [
+    flagged(
+      'warn',
+      'invalid-attr',
+      path,
+      'cx、cy 已不再使用，已忽略',
+      legacyCenterHint(node.attrs),
+    ),
+  ]
+}
+
 /** 只检查归属表里的已知属性。不认识的属性留给 draw 使用，不报错。 */
 export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: string): Issue[] {
   const out: Issue[] = []
   const attrs = node.attrs
-  const positioned = present(attrs, 'cx') || present(attrs, 'cy') || present(attrs, 'anchor')
+  const positioned =
+    present(attrs, 'x') || present(attrs, 'y') || present(attrs, 'cx') || present(attrs, 'cy') || present(attrs, 'anchor')
   const html = isHtmlTag(node.tag)
+  out.push(...legacyCenterIssues(node, path))
 
   if (html) {
     if (positioned) {
@@ -69,8 +132,8 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
           'warn',
           'invalid-attr',
           path,
-          'cx、cy、anchor 只写在 layer 上',
-          '外包一层 layer，例如 <layer cx="120" cy="64" anchor="top-left"><div style="display:flex">…</div></layer>',
+          '定位写在外包的 layer 上',
+          '例如 <layer x="120" y="64"><h1>…</h1></layer>',
         ),
       )
     }
@@ -106,8 +169,8 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
         'warn',
         'invalid-attr',
         path,
-          'cx、cy、anchor 只写在 layer 上',
-          '定位写在外层 layer 上，flex 子元素跟着排布走',
+          '定位写在外层 layer 上',
+          'flex 子元素跟着排布走，不要写 x、y、cx、cy、anchor',
       ),
     )
   }
@@ -119,7 +182,7 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
         'invalid-attr',
         path,
         'model 的位置和尺寸写在外包的 layer 上',
-        '例如 <layer cx="320" cy="180" width="200" height="200"><model src="hero.glb" /></layer>',
+        '例如 <layer x="220" y="80" width="200" height="200"><model src="hero.glb" /></layer>',
       ),
     )
   }
@@ -179,8 +242,8 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
           'warn',
           'invalid-attr',
           path,
-          '线条用自身坐标定位，cx、cy、anchor 无效',
-          '删掉 cx、cy、anchor，直接写 x1、y1 或 points',
+          '线条用自身坐标定位，x、y、cx、cy、anchor 无效',
+          '删掉这些属性，直接写 x1、y1 或 points',
         ),
       )
     }
@@ -191,18 +254,7 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
           'non-canonical',
           path,
           '形状不用 anchor',
-          '用 cx、cy 表示中心，或改用 x1、y1、x2、y2',
-        ),
-      )
-    }
-    if (node.tag === 'rect' && (present(attrs, 'x') || present(attrs, 'y')) && !hasTwoPoint(attrs)) {
-      out.push(
-        flagged(
-          'info',
-          'non-canonical',
-          path,
-          'rect 的 x、y 按左上角理解',
-          '改成 cx、cy，或 x1、y1、x2、y2',
+          'rect 用 x、y 表示左上角；circle、ellipse 用 cx、cy 表示圆心',
         ),
       )
     }
@@ -211,6 +263,8 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
       const mixed =
         present(attrs, 'width') ||
         present(attrs, 'height') ||
+        present(attrs, 'x') ||
+        present(attrs, 'y') ||
         present(attrs, 'cx') ||
         present(attrs, 'cy') ||
         (node.tag === 'ellipse' && (present(attrs, 'rx') || present(attrs, 'ry')))
@@ -221,7 +275,7 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
             'invalid-attr',
             path,
             '两点写法和尺寸写法只能选一种，已按两点绘制',
-            '只保留 x1、y1、x2、y2，或只保留 cx、cy 和尺寸',
+            '只保留 x1、y1、x2、y2。rect 用 x、y、width、height；ellipse 用 cx、cy、rx、ry',
           ),
         )
       }

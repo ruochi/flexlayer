@@ -1,5 +1,6 @@
+import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, writeFile, access } from 'node:fs/promises'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -11,6 +12,12 @@ const DEFAULT_FONT_URL =
 const DEFAULT_FONT_FILE = 'ChillDuanSansVF.ttf'
 
 const registered = new Set<string>()
+let freshFontLoads = 0
+
+/** 真正读过或下载过的字体次数。已经记住的名字不会再加。 */
+export function freshFontLoadsCount(): number {
+  return freshFontLoads
+}
 
 let cacheDirOverride: string | undefined
 
@@ -22,62 +29,77 @@ export function getFontsCacheDir(): string {
   return cacheDirOverride ?? join(homedir(), '.cache', 'flexlayer', 'fonts')
 }
 
-async function fileExists(path: string): Promise<boolean> {
+/** 缺文件时在子进程里下载，调用方不用 await。同一地址落到缓存后不再下。 */
+function downloadSync(url: string, dest: string): void {
+  mkdirSync(dirname(dest), { recursive: true })
+  let buf: Buffer
   try {
-    await access(path)
-    return true
-  } catch {
-    return false
+    buf = execFileSync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        `const res = await fetch(${JSON.stringify(url)}); if (!res.ok) { process.stderr.write(String(res.status)); process.exit(2) } process.stdout.write(new Uint8Array(await res.arrayBuffer()))`,
+      ],
+      { encoding: 'buffer', maxBuffer: 80 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] },
+    )
+  } catch (err) {
+    const failure = err as { stderr?: Buffer }
+    const status = failure.stderr?.toString().trim()
+    throw new Error(`字体下载失败 ${url}: ${status || '网络错误'}`)
   }
+  writeFileSync(dest, buf)
 }
 
-async function download(url: string, dest: string): Promise<void> {
-  await mkdir(dirname(dest), { recursive: true })
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`字体下载失败 ${url}: ${res.status}`)
-  const buf = Buffer.from(await res.arrayBuffer())
-  await writeFile(dest, buf)
+export function ensureDefaultFontSync(): string {
+  const dest = join(getFontsCacheDir(), DEFAULT_FONT_FILE)
+  if (registered.has(DEFAULT_FONT_FAMILY)) return dest
+  if (!existsSync(dest)) downloadSync(DEFAULT_FONT_URL, dest)
+  registerFontPath(DEFAULT_FONT_FAMILY, dest)
+  return dest
 }
 
 export async function ensureDefaultFont(): Promise<string> {
-  const cache = getFontsCacheDir()
-  const dest = join(cache, DEFAULT_FONT_FILE)
-  if (!(await fileExists(dest))) {
-    await download(DEFAULT_FONT_URL, dest)
-  }
-  registerFontPath(DEFAULT_FONT_FAMILY, dest)
-  return dest
+  return ensureDefaultFontSync()
 }
 
 export function registerFontPath(family: string, filePath: string): void {
   if (registered.has(family)) return
   GlobalFonts.registerFromPath(filePath, family)
   registered.add(family)
+  freshFontLoads += 1
 }
 
-export async function resolveFontSrc(src: string, baseDir: string): Promise<string> {
+export function resolveFontSrcSync(src: string, baseDir: string): string {
   const trimmed = src.trim()
   if (/^https?:\/\//i.test(trimmed)) {
     const hash = createHash('sha256').update(trimmed).digest('hex').slice(0, 16)
     const ext = trimmed.match(/\.(ttf|otf|woff2?)(\?|$)/i)?.[1] ?? 'ttf'
     const dest = join(getFontsCacheDir(), `${hash}.${ext}`)
-    if (!(await fileExists(dest))) await download(trimmed, dest)
+    if (!existsSync(dest)) downloadSync(trimmed, dest)
     return dest
   }
   const local = isAbsolute(trimmed) ? trimmed : resolve(baseDir, trimmed)
-  if (!(await fileExists(local))) throw new Error(`字体文件不存在: ${local}`)
+  if (!existsSync(local)) throw new Error(`字体文件不存在: ${local}`)
   return local
+}
+
+export async function resolveFontSrc(src: string, baseDir: string): Promise<string> {
+  return resolveFontSrcSync(src, baseDir)
+}
+
+export function registerFontsFromDocumentSync(fontNodes: Array<{ family: string; src: string }>, baseDir: string): void {
+  ensureDefaultFontSync()
+  for (const f of fontNodes) {
+    registerFontPath(f.family, resolveFontSrcSync(f.src, baseDir))
+  }
 }
 
 export async function registerFontsFromDocument(
   fontNodes: Array<{ family: string; src: string }>,
   baseDir: string,
 ): Promise<void> {
-  await ensureDefaultFont()
-  for (const f of fontNodes) {
-    const path = await resolveFontSrc(f.src, baseDir)
-    registerFontPath(f.family, path)
-  }
+  registerFontsFromDocumentSync(fontNodes, baseDir)
 }
 
 type FontFace = { file: string; weight: number; url: string; registeredAs: string }
@@ -224,23 +246,27 @@ export function applyCanvasFont(
   ctx.fontVariationSettings = `'wght' ${value}`
 }
 
-async function ensureFace(face: FontFace): Promise<void> {
+function ensureFaceSync(face: FontFace): void {
   if (registered.has(face.registeredAs)) return
   const dest = join(getFontsCacheDir(), face.file)
-  if (!(await fileExists(dest))) await download(face.url, dest)
+  if (!existsSync(dest)) downloadSync(face.url, dest)
   registerFontPath(face.registeredAs, dest)
 }
 
-/** 按字体名下载并注册内置宋体、楷体、书法。已经注册过的名字跳过。 */
-export async function ensureBuiltinFonts(families: Iterable<string>): Promise<void> {
+/** 按字体名准备内置宋体、楷体、书法。已经记住的名字直接跳过。 */
+export function ensureBuiltinFontsSync(families: Iterable<string>): void {
   const seen = new Set<string>()
   for (const family of families) {
     const font = builtinFont(family)
     if (!font || seen.has(font.cssFamily) || registered.has(font.cssFamily)) continue
     seen.add(font.cssFamily)
-    for (const face of font.faces) await ensureFace(face)
+    for (const face of font.faces) ensureFaceSync(face)
     registered.add(font.cssFamily)
   }
+}
+
+export async function ensureBuiltinFonts(families: Iterable<string>): Promise<void> {
+  ensureBuiltinFontsSync(families)
 }
 
 export type OutlineFont = {
@@ -267,11 +293,11 @@ function variationWeight(family: string): { def: number } | null {
  * 内置宋体、楷体按最近的字重文件选。可变字体的轮廓只在默认字重上，请求其它字重会抛错。
  */
 export async function resolveOutlineFont(family: string | undefined, weight: number | undefined): Promise<OutlineFont> {
-  await ensureDefaultFont()
+  ensureDefaultFontSync()
   const requested = family?.trim() || DEFAULT_FONT_FAMILY
   const builtin = builtinFont(requested)
   if (builtin) {
-    await ensureBuiltinFonts([requested])
+    ensureBuiltinFontsSync([requested])
     const face = nearestFace(builtin, weight ?? 400)
     return { family: builtin.cssFamily, canvasFamily: face.registeredAs, weight: face.weight }
   }
@@ -292,14 +318,9 @@ export async function resolveOutlineFont(family: string | undefined, weight: num
 /** 测量用：若默认字体未注册则尝试读缓存路径（测试可预先放入字体） */
 export async function initFontsForMeasure(options?: { fontsCacheDir?: string }): Promise<boolean> {
   if (options?.fontsCacheDir) setFontsCacheDir(options.fontsCacheDir)
-  const cache = getFontsCacheDir()
-  const dest = join(cache, DEFAULT_FONT_FILE)
-  if (await fileExists(dest)) {
-    registerFontPath(DEFAULT_FONT_FAMILY, dest)
-    return true
-  }
+  if (registered.has(DEFAULT_FONT_FAMILY)) return true
   try {
-    await ensureDefaultFont()
+    ensureDefaultFontSync()
     return true
   } catch {
     return false

@@ -1,4 +1,10 @@
-<layer width="640" height="800" background="#0f1115" perspective="700">
-  <rect cx="250" cy="360" width="220" height="280" fill="#4CC3D9" rotateY="28" z="40" />
-  <rect cx="400" cy="440" width="160" height="200" fill="#EF2D5E" rotateY="-18" z="-50" />
+<layer width="640" height="800" background="#0f1115" perspective="700" x="0" y="0">
+  
+  
+  <rect width="220" height="280" fill="#4CC3D9" rotateY="28" z="40" x="140" y="220" />
+  
+  
+  <rect width="160" height="200" fill="#EF2D5E" rotateY="-18" z="-50" x="320" y="340" />
+  
+
 </layer>

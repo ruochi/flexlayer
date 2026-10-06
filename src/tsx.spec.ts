@@ -57,7 +57,7 @@ function typeMessages(file: string): string[] {
 
 describe('JSX 类型', () => {
   it('examples 里的 .tsx 通过类型检查', () => {
-    for (const name of ['hello.tsx', 'slide.tsx']) {
+    for (const name of ['hello.tsx', 'slide.tsx', 'poster.tsx']) {
       expect(typeMessages(join(pkgDir, 'examples', name)), name).toEqual([])
     }
   })
@@ -127,7 +127,7 @@ describe('JSX 类型', () => {
     const file = join(dir, 'spin.tsx')
     await writeFile(
       file,
-      `export default <layer width="40" height="40"><rect cx="20" cy="20" width="10" height="4" rotate="15" fill="#fff" /></layer>\n`,
+      `export default <layer width="40" height="40"><rect x="15" y="18" width="10" height="4" rotate="15" fill="#fff" /></layer>\n`,
     )
     expect(typeMessages(file)).toEqual([])
   })
@@ -161,7 +161,7 @@ describe('JSX 类型', () => {
   it('写错位置的属性由检查报 invalid-attr，类型检查不报', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'flexlayer-types-'))
     const cases = [
-      [`export default <layer width="10" height="10"><p cx="3">hi</p></layer>\n`, '外包一层 layer'],
+      [`export default <layer width="10" height="10"><p cx="3">hi</p></layer>\n`, '外包的 layer'],
       [`export default <layer width="10" height="10"><circle cx="4" cy="4" r="2" style="fill:#fff" /></layer>\n`, '不使用 style'],
       [`export default <layer width="10" height="10"><p font-size="40">hi</p></layer>\n`, '应写在 style'],
     ] as const
@@ -328,8 +328,8 @@ describe('load .tsx', () => {
     const rect = (node: typeof a) => node.children.find((child) => typeof child !== 'string' && child.tag === 'rect')
     const left = rect(a)
     const right = rect(b)
-    expect(typeof left !== 'string' && left && 'attrs' in left && left.attrs.cx).toBe('40')
-    expect(typeof right !== 'string' && right && 'attrs' in right && right.attrs.cx).toBe('110')
+    expect(typeof left !== 'string' && left && 'attrs' in left && left.attrs.x).toBe('20')
+    expect(typeof right !== 'string' && right && 'attrs' in right && right.attrs.x).toBe('90')
   })
 
   it('可以从 @dc/flexlayer 引用运行时函数', async () => {

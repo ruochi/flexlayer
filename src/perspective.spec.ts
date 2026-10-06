@@ -69,14 +69,14 @@ describe('perspective', () => {
 
   it('没有 perspective 时 rotateY 报 flatten-3d', async () => {
     const report = await checkFvg(
-      h('Layer', { width: '100', height: '100' }, h('Rect', { cx: '50', cy: '50', width: '40', height: '40', rotateY: '20', fill: '#fff' })),
+      h('Layer', { width: '100', height: '100' }, h('Rect', { x: '30', y: '30',  width: '40', height: '40', rotateY: '20', fill: '#fff' })),
     )
     expect(report.issues.some((issue) => issue.code === 'flatten-3d')).toBe(true)
   })
 
   it('倾斜后落在画布里的大平面不报 overflow-canvas，并给出 quad', async () => {
     const report = await checkFvg(
-      `<layer width="300" height="200" background="#111" perspective="400"><rect cx="150" cy="100" width="360" height="80" fill="#fff" z="-200" rotateX="25" /></layer>`,
+      `<layer width="300" height="200" background="#111" perspective="400"><rect x="-30" y="60" width="360" height="80" fill="#fff" z="-200" rotateX="25" /></layer>`,
     )
     const rect = report.elements.find((el) => el.tag === 'rect')
     expect(rect?.quad).toHaveLength(4)
@@ -113,7 +113,7 @@ describe('perspective', () => {
 
   it('平面里的子元素也按投影报告 quad', async () => {
     const report = await checkFvg(
-      `<layer width="300" height="200" perspective="400"><layer cx="150" cy="100" width="360" height="80" z="-200" rotateX="25"><rect x1="20" y1="10" x2="80" y2="40" fill="#fff" /></layer></layer>`,
+      `<layer width="300" height="200" perspective="400"><layer x="-30" y="60" width="360" height="80" z="-200" rotateX="25"><rect x1="20" y1="10" x2="80" y2="40" fill="#fff" /></layer></layer>`,
     )
     const layer = report.elements.find((el) => el.tag === 'layer' && el.quad)
     const rect = report.elements.find((el) => el.tag === 'rect')
@@ -137,7 +137,7 @@ describe('perspective', () => {
 
   it('嵌套 layer 上的 perspective 把 quad 算到画布坐标', async () => {
     const report = await checkFvg(
-      `<layer width="400" height="300"><layer cx="200" cy="160" width="200" height="120" perspective="300"><rect cx="100" cy="60" width="40" height="30" fill="#fff" rotateY="20" /></layer></layer>`,
+      `<layer width="400" height="300"><layer x="100" y="100" width="200" height="120" perspective="300"><rect x="80" y="45" width="40" height="30" fill="#fff" rotateY="20" /></layer></layer>`,
     )
     const rect = report.elements.find((el) => el.tag === 'rect')
     const node = {
@@ -160,7 +160,7 @@ describe('perspective', () => {
       h(
         'Layer',
         { width: '100', height: '100', perspective: '80' },
-        h('Rect', { cx: '50', cy: '50', width: '20', height: '20', z: '80', fill: '#fff' }),
+        h('Rect', { x: '40', y: '40',  width: '20', height: '20', z: '80', fill: '#fff' }),
       ),
     )
     expect(report.issues.some((issue) => issue.code === 'behind-camera')).toBe(true)

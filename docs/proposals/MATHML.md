@@ -49,7 +49,7 @@ Flex Layer 只复用规则，自己画。建议抽一个两边都能用的小模
 Flex Layer 的文字盒子里不能再套布局。公式实现之后，`<math>` 是布局节点，放在 `layer` 里，或放进 `display:flex` 的 `div`。和正文同一行时：
 
 ```html
-<layer cx="80" cy="120" anchor="top-left">
+<layer x="80" y="120">
   <div style="display:flex; gap:8px; align-items:center">
     <span>因此</span>
     <math>

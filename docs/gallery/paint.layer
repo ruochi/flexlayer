@@ -1,13 +1,55 @@
-<layer width="1080" height="980" background="#12161c" color="#e8e4dc" font-family="Kai">
-  <layer cx="80" cy="40" anchor="top-left">
-    <h1 style="font-size:48px; color:#f2ebe0">填充</h1>
+<layer width="1080" height="980" background="#12161c" color="#e8e4dc" font-family="Kai" x="0" y="0">
+  
+  
+  <layer x="80" y="40">
+    
+    
+    <h1 style="font-size:48px; color:#f2ebe0">
+      填充
+    </h1>
+    
+  
   </layer>
-  <rect cx="280" cy="340" width="400" height="240" rx="16" fill="linear-gradient(to bottom, #0c1424, #1a3352 55%, #6e7c72)" />
-  <layer cx="280" cy="490" anchor="top"><p style="font-size:26px; color:#9aa7b5">linear-gradient</p></layer>
+  
+  
+  <rect width="400" height="240" rx="16" fill="linear-gradient(to bottom, #0c1424, #1a3352 55%, #6e7c72)" x="80" y="220" />
+  
+  
+  <layer x="189.965" y="490">
+    <p style="font-size:26px; color:#9aa7b5">
+      linear-gradient
+    </p>
+  </layer>
+  
+  
   <circle cx="780" cy="340" r="120" fill="radial-gradient(at 40% 35%, #fff, #f4efe4 40%, #d9d0c0)" />
-  <layer cx="780" cy="490" anchor="top"><p style="font-size:26px; color:#9aa7b5">radial-gradient</p></layer>
-  <rect cx="280" cy="700" width="360" height="80" fill="gradient(#ff0000 #00ff00 / #0000ff #ffffff)" />
-  <layer cx="280" cy="770" anchor="top"><p style="font-size:26px; color:#9aa7b5">gradient 矩阵</p></layer>
-  <rect cx="780" cy="700" width="200" height="200" fill="gradient(conic 100 100, #ff0000, #00ff00, #0000ff, #ff0000)" />
-  <layer cx="780" cy="820" anchor="top"><p style="font-size:26px; color:#9aa7b5">gradient conic</p></layer>
+  
+  
+  <layer x="689.715" y="490">
+    <p style="font-size:26px; color:#9aa7b5">
+      radial-gradient
+    </p>
+  </layer>
+  
+  
+  <rect width="360" height="80" fill="gradient(#ff0000 #00ff00 / #0000ff #ffffff)" x="100" y="660" />
+  
+  
+  <layer x="198.57" y="770">
+    <p style="font-size:26px; color:#9aa7b5">
+      gradient 矩阵
+    </p>
+  </layer>
+  
+  
+  <rect width="200" height="200" fill="gradient(conic 100 100, #ff0000, #00ff00, #0000ff, #ff0000)" x="680" y="600" />
+  
+  
+  <layer x="692.42" y="820">
+    <p style="font-size:26px; color:#9aa7b5">
+      gradient conic
+    </p>
+  </layer>
+  
+
 </layer>

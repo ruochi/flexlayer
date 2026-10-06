@@ -1,4 +1,4 @@
-import { layoutSource } from './layout.js'
+import { layoutSync, prepareAssets, readLayerRoot } from './layout.js'
 import { paintDocument } from './paint.js'
 import { buildReport } from './report.js'
 import type { FvgReport, RenderOptions } from './types.js'
@@ -14,7 +14,9 @@ export async function renderFvg(source: string | FvgNode, options: RenderOptions
   if (options.fontsCacheDir) setFontsCacheDir(options.fontsCacheDir)
   await initFontsForMeasure({ fontsCacheDir: options.fontsCacheDir })
   const baseDir = options.baseDir ?? process.cwd()
-  const doc = await layoutSource(source, baseDir)
+  const opened = readLayerRoot(source)
+  const assets = await prepareAssets(opened.root, baseDir, { fonts: opened.fonts })
+  const doc = layoutSync(opened.root, assets)
   const png = await paintDocument(doc.root, {
     width: doc.width,
     height: doc.height,
@@ -30,7 +32,10 @@ export async function renderFvg(source: string | FvgNode, options: RenderOptions
 export async function checkFvg(source: string | FvgNode, options: RenderOptions = {}): Promise<FvgReport> {
   if (options.fontsCacheDir) setFontsCacheDir(options.fontsCacheDir)
   await initFontsForMeasure({ fontsCacheDir: options.fontsCacheDir })
-  const doc = await layoutSource(source, options.baseDir ?? process.cwd())
+  const baseDir = options.baseDir ?? process.cwd()
+  const opened = readLayerRoot(source)
+  const assets = await prepareAssets(opened.root, baseDir, { fonts: opened.fonts })
+  const doc = layoutSync(opened.root, assets)
   return buildReport(doc)
 }
 

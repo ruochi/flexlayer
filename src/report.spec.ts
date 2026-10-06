@@ -89,7 +89,7 @@ describe('buildReport', () => {
 
   it('旋转后的 ink 是外接矩形', async () => {
     const rep = await checkFvg(
-      `<layer width="400" height="400" background="#000"><rect cx="200" cy="200" width="100" height="20" rotate="90" fill="#fff" /></layer>`,
+      `<layer width="400" height="400" background="#000"><rect x="150" y="190" width="100" height="20" rotate="90" fill="#fff" /></layer>`,
     )
     const rect = rep.elements.find((e) => e.tag === 'rect')
     expect(rect).toBeTruthy()
@@ -113,7 +113,7 @@ describe('buildReport', () => {
 
   it('嵌套 layer 的透明度相乘', async () => {
     const rep = await checkFvg(
-      `<layer width="200" height="200"><layer cx="100" cy="100" width="100" height="100" opacity="0.5"><rect cx="50" cy="50" width="20" height="20" opacity="0.4" fill="#fff" /></layer></layer>`,
+      `<layer width="200" height="200"><layer x="50" y="50" width="100" height="100" opacity="0.5"><rect x="40" y="40" width="20" height="20" opacity="0.4" fill="#fff" /></layer></layer>`,
     )
     const rect = rep.elements.find((e) => e.tag === 'rect')
     expect(rect?.opacity).toBeCloseTo(0.2, 5)
@@ -121,40 +121,40 @@ describe('buildReport', () => {
 
   it('被 overflow=hidden 裁掉的内容不报 overflow-canvas', async () => {
     const clipped = await checkFvg(
-      `<layer width="100" height="100"><layer cx="0" cy="0" anchor="top-left" width="80" height="80" overflow="hidden"><rect cx="70" cy="10" anchor="top-left" width="50" height="20" fill="#fff" /></layer></layer>`,
+      `<layer width="100" height="100"><layer x="0" y="0" width="80" height="80" overflow="hidden"><rect x="70" y="10" width="50" height="20" fill="#fff" /></layer></layer>`,
     )
     expect(clipped.issues.some((i) => i.code === 'overflow-canvas')).toBe(false)
     const rect = clipped.elements.find((e) => e.tag === 'rect')
     expect(rect!.ink.right).toBeLessThanOrEqual(80 + 1e-6)
 
     const visible = await checkFvg(
-      `<layer width="100" height="100"><layer cx="0" cy="0" anchor="top-left" width="80" height="80"><rect cx="70" cy="10" anchor="top-left" width="50" height="20" fill="#fff" /></layer></layer>`,
+      `<layer width="100" height="100"><layer x="0" y="0" width="80" height="80"><rect x="70" y="10" width="50" height="20" fill="#fff" /></layer></layer>`,
     )
     expect(visible.issues.some((i) => i.code === 'overflow-canvas')).toBe(true)
   })
 
   it('overflow=hidden 裁掉的光晕不报 effect-clipped', async () => {
     const clipped = await checkFvg(
-      `<layer width="140" height="140" background="#fff"><layer cx="70" cy="70" width="100" height="100" overflow="hidden"><rect cx="50" cy="50" width="70" height="70" fill="#000" glow="48 #fff" /></layer></layer>`,
+      `<layer width="140" height="140" background="#fff"><layer x="20" y="20" width="100" height="100" overflow="hidden"><rect x="15" y="15" width="70" height="70" fill="#000" glow="48 #fff" /></layer></layer>`,
     )
     expect(clipped.issues.some((issue) => issue.code === 'effect-clipped')).toBe(false)
     const inside = await checkFvg(
-      `<layer width="140" height="140" background="#fff"><layer cx="70" cy="70" width="100" height="100"><rect cx="50" cy="50" width="70" height="70" fill="#000" glow="28 #fff" /></layer></layer>`,
+      `<layer width="140" height="140" background="#fff"><layer x="20" y="20" width="100" height="100"><rect x="15" y="15" width="70" height="70" fill="#000" glow="28 #fff" /></layer></layer>`,
     )
     expect(inside.issues.some((issue) => issue.code === 'effect-clipped')).toBe(false)
     const open = await checkFvg(
-      `<layer width="140" height="140" background="#fff"><layer cx="70" cy="70" width="100" height="100"><rect cx="50" cy="50" width="70" height="70" fill="#000" glow="48 #fff" /></layer></layer>`,
+      `<layer width="140" height="140" background="#fff"><layer x="20" y="20" width="100" height="100"><rect x="15" y="15" width="70" height="70" fill="#000" glow="48 #fff" /></layer></layer>`,
     )
     expect(open.issues.some((issue) => issue.code === 'effect-clipped')).toBe(true)
   })
 
   it('倾斜平面的光晕还在画布里时不报 effect-clipped', async () => {
     const inside = await checkFvg(
-      `<layer width="480" height="320" background="#000"><layer perspective="700"><rect cx="240" cy="160" width="180" height="110" fill="#222" rotateY="36" shadow="0 8 16 #fff" /></layer></layer>`,
+      `<layer width="480" height="320" background="#000"><layer perspective="700"><rect x="150" y="105" width="180" height="110" fill="#222" rotateY="36" shadow="0 8 16 #fff" /></layer></layer>`,
     )
     expect(inside.issues.some((issue) => issue.code === 'effect-clipped')).toBe(false)
     const clipped = await checkFvg(
-      `<layer width="480" height="240" background="#000" perspective="700"><rect cx="240" cy="190" width="180" height="80" fill="#222" rotateY="36" shadow="0 8 20 #fff" /></layer>`,
+      `<layer width="480" height="240" background="#000" perspective="700"><rect x="150" y="150" width="180" height="80" fill="#222" rotateY="36" shadow="0 8 20 #fff" /></layer>`,
     )
     expect(clipped.issues.some((issue) => issue.code === 'effect-clipped')).toBe(true)
   })

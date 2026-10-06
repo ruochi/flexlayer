@@ -1,4 +1,4 @@
-import type { CanvasRenderingContext2D, Image } from '@napi-rs/canvas'
+import type { Canvas, CanvasRenderingContext2D, Image } from '@napi-rs/canvas'
 
 export type StyleMap = Record<string, string>
 
@@ -297,7 +297,7 @@ export type TextLayoutNode = LayoutNodeBase & {
 
 export type ImageLayoutNode = LayoutNodeBase & {
   kind: 'image'
-  bitmap: Image | null
+  bitmap: Canvas | Image | null
   objectFit: 'fill' | 'contain' | 'cover' | 'none'
   objectPosition: { x: number; y: number }
 }

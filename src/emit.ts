@@ -55,9 +55,11 @@ function emitNode(node: FvgNode, indent: string, path: string, issues: Issue[]):
   const parts: string[] = []
   let elementIndex = 0
   let textRun = ''
+  const rawDraw = node.tag === 'draw'
   const flushText = () => {
     if (textRun.length === 0) return
-    parts.push(`${childIndent}${escapeText(textRun)}\n`)
+    const text = rawDraw ? textRun.replace(/<\//g, '<\\/') : escapeText(textRun)
+    parts.push(`${childIndent}${text}\n`)
     textRun = ''
   }
   for (const child of node.children) {
