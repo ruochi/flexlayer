@@ -1,50 +1,186 @@
-<layer width="1080" height="1500" background="#12161c" color="#e8e4dc" font-family="Kai">
+<layer width="1080" height="1500" background="#12161c" color="#e8e4dc" font-family="Kai" x="0" y="0">
+  
+  
   <rect x1="0" y1="0" x2="1080" y2="1500" fill="#12161c" />
-  <layer cx="80" cy="40" anchor="top-left">
-    <h1 style="font-size:48px; color:#f2ebe0">调色</h1>
+  
+  
+  <layer x="80" y="40">
+    
+    
+    <h1 style="font-size:48px; color:#f2ebe0">
+      调色
+    </h1>
+    
+  
   </layer>
+  
 
-  <rect cx="220" cy="240" width="260" height="150" rx="16" fill="#e85d4c" filter="grayscale(1)" />
-  <rect cx="540" cy="240" width="260" height="150" rx="16" fill="#3ecfc4" filter="saturate(1.8) contrast(1.15)" />
-  <layer cx="220" cy="340" anchor="top"><p style="font-size:24px; color:#9aa7b5">filter grayscale</p></layer>
-  <layer cx="540" cy="340" anchor="top"><p style="font-size:24px; color:#9aa7b5">filter saturate</p></layer>
+  
+  <rect width="260" height="150" rx="16" fill="#e85d4c" filter="grayscale(1)" x="90" y="165" />
+  
+  
+  <rect width="260" height="150" rx="16" fill="#3ecfc4" filter="saturate(1.8) contrast(1.15)" x="410" y="165" />
+  
+  
+  <layer x="134.98" y="340">
+    <p style="font-size:24px; color:#9aa7b5">
+      filter grayscale
+    </p>
+  </layer>
+  
+  
+  <layer x="461.735" y="340">
+    <p style="font-size:24px; color:#9aa7b5">
+      filter saturate
+    </p>
+  </layer>
+  
 
-  <layer width="260" height="150" cx="220" cy="520" overlay="#00000066">
-    <rect cx="130" cy="75" width="260" height="150" rx="16" fill="#f4efe4" />
+  
+  <layer width="260" height="150" overlay="#00000066" x="90" y="445">
+    
+    
+    <rect width="260" height="150" rx="16" fill="#f4efe4" x="0" y="0" />
+    
+  
   </layer>
-  <layer width="260" height="150" cx="540" cy="520" overlay="#ff8800 0.45 multiply">
-    <rect cx="130" cy="75" width="260" height="150" rx="16" fill="#3ecfc4" />
+  
+  
+  <layer width="260" height="150" overlay="#ff8800 0.45 multiply" x="410" y="445">
+    
+    
+    <rect width="260" height="150" rx="16" fill="#3ecfc4" x="0" y="0" />
+    
+  
   </layer>
-  <layer width="260" height="150" cx="860" cy="520" overlay="linear-gradient(to bottom, #ffffff00, #1a2430cc) soft-light">
-    <rect cx="130" cy="75" width="260" height="150" rx="16" fill="#6aa1ff" />
+  
+  
+  <layer width="260" height="150" overlay="linear-gradient(to bottom, #ffffff00, #1a2430cc) soft-light" x="730" y="445">
+    
+    
+    <rect width="260" height="150" rx="16" fill="#6aa1ff" x="0" y="0" />
+    
+  
   </layer>
-  <layer cx="220" cy="620" anchor="top"><p style="font-size:24px; color:#9aa7b5">overlay 纯色</p></layer>
-  <layer cx="540" cy="620" anchor="top"><p style="font-size:24px; color:#9aa7b5">overlay multiply</p></layer>
-  <layer cx="860" cy="620" anchor="top"><p style="font-size:24px; color:#9aa7b5">overlay 渐变</p></layer>
+  
+  
+  <layer x="151.445" y="620">
+    <p style="font-size:24px; color:#9aa7b5">
+      overlay 纯色
+    </p>
+  </layer>
+  
+  
+  <layer x="451.92" y="620">
+    <p style="font-size:24px; color:#9aa7b5">
+      overlay multiply
+    </p>
+  </layer>
+  
+  
+  <layer x="791.445" y="620">
+    <p style="font-size:24px; color:#9aa7b5">
+      overlay 渐变
+    </p>
+  </layer>
+  
 
-  <layer width="260" height="150" cx="200" cy="860" grade="lomo">
+  
+  <layer width="260" height="150" grade="lomo" x="70" y="785">
+    
+    
     <img src="scene.png" alt="风景" style="width:260px; height:150px; object-fit:cover; border-radius:16px" />
+    
+  
   </layer>
-  <layer width="260" height="150" cx="540" cy="860" grade="matte">
+  
+  
+  <layer width="260" height="150" grade="matte" x="410" y="785">
+    
+    
     <img src="scene.png" alt="风景" style="width:260px; height:150px; object-fit:cover; border-radius:16px" />
+    
+  
   </layer>
-  <layer width="260" height="150" cx="880" cy="860" grade="chrome">
+  
+  
+  <layer width="260" height="150" grade="chrome" x="750" y="785">
+    
+    
     <img src="scene.png" alt="风景" style="width:260px; height:150px; object-fit:cover; border-radius:16px" />
+    
+  
   </layer>
-  <layer cx="200" cy="960" anchor="top"><p style="font-size:24px; color:#9aa7b5">grade lomo</p></layer>
-  <layer cx="540" cy="960" anchor="top"><p style="font-size:24px; color:#9aa7b5">grade matte</p></layer>
-  <layer cx="880" cy="960" anchor="top"><p style="font-size:24px; color:#9aa7b5">grade chrome</p></layer>
+  
+  
+  <layer x="136.93" y="960">
+    <p style="font-size:24px; color:#9aa7b5">
+      grade lomo
+    </p>
+  </layer>
+  
+  
+  <layer x="471.515" y="960">
+    <p style="font-size:24px; color:#9aa7b5">
+      grade matte
+    </p>
+  </layer>
+  
+  
+  <layer x="801.735" y="960">
+    <p style="font-size:24px; color:#9aa7b5">
+      grade chrome
+    </p>
+  </layer>
+  
 
-  <layer width="260" height="150" cx="200" cy="1200" grade="bleach">
+  
+  <layer width="260" height="150" grade="bleach" x="70" y="1125">
+    
+    
     <img src="scene.png" alt="风景" style="width:260px; height:150px; object-fit:cover; border-radius:16px" />
+    
+  
   </layer>
-  <layer width="260" height="150" cx="540" cy="1200" grade="mono">
+  
+  
+  <layer width="260" height="150" grade="mono" x="410" y="1125">
+    
+    
     <img src="scene.png" alt="风景" style="width:260px; height:150px; object-fit:cover; border-radius:16px" />
+    
+  
   </layer>
-  <layer width="260" height="150" cx="880" cy="1200" grade="lomo" grade-mask="radial-gradient(#fff0 35%, #fff)">
+  
+  
+  <layer width="260" height="150" grade="lomo" grade-mask="radial-gradient(#fff0 35%, #fff)" x="750" y="1125">
+    
+    
     <img src="scene.png" alt="风景" style="width:260px; height:150px; object-fit:cover; border-radius:16px" />
+    
+  
   </layer>
-  <layer cx="200" cy="1300" anchor="top"><p style="font-size:24px; color:#9aa7b5">grade bleach</p></layer>
-  <layer cx="540" cy="1300" anchor="top"><p style="font-size:24px; color:#9aa7b5">grade mono</p></layer>
-  <layer cx="880" cy="1300" anchor="top"><p style="font-size:24px; color:#9aa7b5">grade-mask</p></layer>
+  
+  
+  <layer x="126.5" y="1300">
+    <p style="font-size:24px; color:#9aa7b5">
+      grade bleach
+    </p>
+  </layer>
+  
+  
+  <layer x="473.03" y="1300">
+    <p style="font-size:24px; color:#9aa7b5">
+      grade mono
+    </p>
+  </layer>
+  
+  
+  <layer x="814.435" y="1300">
+    <p style="font-size:24px; color:#9aa7b5">
+      grade-mask
+    </p>
+  </layer>
+  
+
 </layer>

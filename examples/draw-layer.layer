@@ -1,18 +1,49 @@
-<layer width="720" height="480" background="#0f1115" color="#f4f1ea">
-  <layer cx="40" cy="36" anchor="top-left">
-    <h1 style="font-size:42px">layer + draw</h1>
+<layer width="720" height="480" background="#0f1115" color="#f4f1ea" x="0" y="0">
+  
+  
+  <layer x="40" y="36">
+    
+    
+    <h1 style="font-size:42px">
+      layer + draw
+    </h1>
+    
+  
   </layer>
-  <layer cx="40" cy="96" anchor="top-left">
-    <p style="font-size:22px; color:#9aa3b2">嵌套 layer 不填背景，色块用 Rect 或 draw</p>
+  
+  
+  <layer x="40" y="96">
+    
+    
+    <p style="font-size:22px; color:#9aa3b2">
+      嵌套 layer 不填背景，色块用 Rect 或 draw
+    </p>
+    
+  
   </layer>
+  
 
-  <rect cx="148" cy="228" width="200" height="120" rx="16" fill="#1c2430" />
-  <layer cx="48" cy="200" anchor="top-left">
-    <p style="font-size:20px; color:#9aa3b2">Rect fill</p>
+  
+  <rect width="200" height="120" rx="16" fill="#1c2430" x="48" y="168" />
+  
+  
+  <layer x="48" y="200">
+    
+    
+    <p style="font-size:20px; color:#9aa3b2">
+      Rect fill
+    </p>
+    
+  
   </layer>
+  
 
-  <layer width="200" height="120" cx="396" cy="288">
+  
+  <layer width="200" height="120" x="296" y="228">
+    
+    
     <draw>
+      
       const g = ctx.createLinearGradient(0, 0, el.w, el.h)
       g.addColorStop(0, '#3ecfc4')
       g.addColorStop(1, '#2a6cf0')
@@ -29,14 +60,30 @@
       ctx.fillStyle = '#0f1115'
       ctx.font = '20px sans-serif'
       ctx.fillText('draw', 16, 36)
+    
     </draw>
+    
+  
   </layer>
-  <layer cx="296" cy="200" anchor="top-left">
-    <p style="font-size:20px; color:#9aa3b2">draw 渐变块</p>
+  
+  
+  <layer x="296" y="200">
+    
+    
+    <p style="font-size:20px; color:#9aa3b2">
+      draw 渐变块
+    </p>
+    
+  
   </layer>
+  
 
-  <layer width="160" height="160" cx="616" cy="288">
+  
+  <layer width="160" height="160" x="536" y="208">
+    
+    
     <draw>
+      
       const cx = el.w / 2
       const cy = el.h / 2
       const rays = 16
@@ -54,6 +101,11 @@
       ctx.arc(cx, cy, 28, 0, Math.PI * 2)
       ctx.fillStyle = '#0f1115'
       ctx.fill()
+    
     </draw>
+    
+  
   </layer>
+  
+
 </layer>

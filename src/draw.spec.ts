@@ -89,8 +89,8 @@ describe('draw(ctx, el)', () => {
       h(
         'Ring',
         {
-          cx: '100',
-          cy: '100',
+          x: '60',
+          y: '60',
           width: '80',
           height: '80',
           draw: (ctx, el) => {
@@ -151,8 +151,8 @@ describe('draw(ctx, el)', () => {
       'layer',
       { width: '80', height: '80' },
       h('rect', {
-        cx: '40',
-        cy: '40',
+        x: '30',
+        y: '35',
         width: '20',
         height: '10',
         'data-total': '33',
@@ -182,7 +182,7 @@ describe('draw(ctx, el)', () => {
           ctx.fillRect(0, 0, 4, 4)
         },
       },
-      h('rect', { width: '10', height: '10', cx: '70', cy: '20', fill: '#00ff00' }),
+      h('rect', { x: '65', y: '15',  width: '10', height: '10', fill: '#00ff00' }),
     )
 
     const { png } = await renderFvg(root, { t: 0.25 })
@@ -211,7 +211,7 @@ describe('draw(ctx, el)', () => {
   it('.layer 里的 <draw> 在子元素之后着色', async () => {
     const { png, report } = await renderFvg(
       `<layer width="80" height="40" background="#000000">
-        <rect width="10" height="10" cx="70" cy="20" fill="#00ff00" />
+        <rect x="65" y="15" width="10" height="10" fill="#00ff00" />
         <draw>
           ctx.fillStyle = '#ff0000'
           ctx.fillRect(0, 0, 4, 4)
@@ -229,7 +229,7 @@ describe('draw(ctx, el)', () => {
   it('嵌套 layer 用 <draw> 填色，不用 background', async () => {
     const { png, report } = await renderFvg(
       `<layer width="60" height="40" background="#0000ff">
-        <layer width="30" height="30" cx="15" cy="20">
+        <layer x="0" y="5" width="30" height="30">
           <draw>
             ctx.fillStyle = '#ff0000'
             ctx.fillRect(0, 0, el.w, el.h)

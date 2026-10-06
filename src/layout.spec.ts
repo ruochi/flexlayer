@@ -17,7 +17,7 @@ beforeAll(async () => {
 describe('layoutSource', () => {
   it('layer anchor top-left', async () => {
     const doc = await layoutSource(
-      `<layer width="400" height="300" background="#fff"><layer cx="10" cy="10" anchor="top-left"><h1>A</h1></layer></layer>`,
+      `<layer width="400" height="300" background="#fff"><layer x="10" y="10"><h1>A</h1></layer></layer>`,
       process.cwd(),
     )
     const layer = doc.root.children[0]
@@ -37,7 +37,7 @@ describe('layoutSource', () => {
 
   it('线条使用 layer 的局部坐标，不被重新居中', async () => {
     const doc = await layoutSource(
-      `<layer width="400" height="400"><layer cx="200" cy="200" width="300" height="300"><line x1="10" y1="10" x2="50" y2="10" stroke-width="4" /><polygon points="100,100 140,100 100,160" stroke-width="2" /></layer></layer>`,
+      `<layer width="400" height="400"><layer x="50" y="50" width="300" height="300"><line x1="10" y1="10" x2="50" y2="10" stroke-width="4" /><polygon points="100,100 140,100 100,160" stroke-width="2" /></layer></layer>`,
       process.cwd(),
     )
     const layer = doc.root.children[0]
@@ -86,7 +86,7 @@ describe('layoutSource', () => {
 
   it('没写宽高的 layer 原点固定，负坐标不会平移其他子元素', async () => {
     const doc = await layoutSource(
-      `<layer width="400" height="400"><layer><rect cx="10" cy="10" anchor="top-left" width="20" height="20" /><rect cx="-40" cy="30" anchor="top-left" width="20" height="20" /></layer></layer>`,
+      `<layer width="400" height="400"><layer><rect x="10" y="10" width="20" height="20" /><rect x="-40" y="30" width="20" height="20" /></layer></layer>`,
       process.cwd(),
     )
     const layer = doc.root.children[0]
@@ -125,9 +125,9 @@ describe('layoutSource', () => {
     expect(doc.issues.some((issue) => issue.code === 'open-curve-fill')).toBe(true)
   })
 
-  it('symbol 不占位，use 按 cx cy 各放一份', async () => {
+  it('symbol 不占位，use 按 x y 各放一份', async () => {
     const doc = await layoutSource(
-      `<layer width="200" height="120"><symbol id="dot" width="20" height="20"><circle cx="10" cy="10" r="8" fill="#ff0000" /></symbol><use href="#dot" cx="40" cy="30" /><use href="#dot" cx="80" cy="30" /></layer>`,
+      `<layer width="200" height="120"><symbol id="dot" width="20" height="20"><circle cx="10" cy="10" r="8" fill="#ff0000" /></symbol><use href="#dot" x="30" y="20" /><use href="#dot" x="70" y="20" /></layer>`,
       process.cwd(),
     )
     expect(doc.root.children.map((child) => child.tag)).toEqual(['use', 'use'])
@@ -163,7 +163,7 @@ describe('layoutSource', () => {
 
   it('新效果属性写进布局节点', async () => {
     const doc = await layoutSource(
-      `<layer width="200" height="200"><rect cx="40" cy="40" width="40" height="40" fill="#fff" inner-shadow="0 2 4 #00000055" blur="3" backdrop-blur="5" noise="0.1 #fff" filter="brightness(1.1)" blend="screen" /></layer>`,
+      `<layer width="200" height="200"><rect x="20" y="20" width="40" height="40" fill="#fff" inner-shadow="0 2 4 #00000055" blur="3" backdrop-blur="5" noise="0.1 #fff" filter="brightness(1.1)" blend="screen" /></layer>`,
       process.cwd(),
     )
     const rect = doc.root.children[0] as {
@@ -200,16 +200,16 @@ describe('layoutSource', () => {
     expect(named.children.map((child) => Math.round(child.x))).toEqual(atEnd.children.map((child) => Math.round(child.x)))
   })
 
-  it('没写宽度的竖排 flex 居中后仍落在定位点上', async () => {
+  it('没写宽高的 layer 从写下的左上角排，子元素不再自动居中', async () => {
     const doc = await layoutSource(
-      `<layer width="800" height="400"><layer cx="400" cy="120"><div style="display:flex; flex-direction:column; align-items:center; gap:8px"><p style="font-size:40px">甲</p><p style="font-size:40px">甲乙丙丁</p></div></layer></layer>`,
+      `<layer width="800" height="400"><layer x="400" y="120"><div style="display:flex; flex-direction:column; align-items:center; gap:8px"><p style="font-size:40px">甲</p><p style="font-size:40px">甲乙丙丁</p></div></layer></layer>`,
       process.cwd(),
     )
-    const layer = doc.root.children[0] as { x: number; children: Array<{ x: number; children: Array<{ x: number; width: number }> }> }
+    const layer = doc.root.children[0] as { x: number; y: number; children: Array<{ x: number; children: Array<{ x: number; width: number }> }> }
+    expect(layer.x).toBe(400)
+    expect(layer.y).toBe(120)
     const column = layer.children[0]!
-    for (const child of column.children) {
-      expect(layer.x + column.x + child.x + child.width / 2).toBeCloseTo(400, 0)
-    }
+    expect(column.x).toBe(0)
     const hello = await layoutSource(readFileSync(join(process.cwd(), 'examples/hello.layer'), 'utf8'), process.cwd())
     const card = hello.root.children[0] as { x: number; children: Array<{ x: number; children: Array<{ x: number; width: number }> }> }
     const title = card.children[0]!.children[0]!

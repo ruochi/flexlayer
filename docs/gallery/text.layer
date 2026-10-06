@@ -1,21 +1,73 @@
-<layer width="1080" height="640" background="#12161c" color="#f4f1ea" font-family="Kai">
-  <layer cx="80" cy="48" anchor="top-left">
-    <h1 style="font-size:72px">寒露</h1>
+<layer width="1080" height="640" background="#12161c" color="#f4f1ea" font-family="Kai" x="0" y="0">
+  
+  
+  <layer x="80" y="48">
+    
+    
+    <h1 style="font-size:72px">
+      寒露
+    </h1>
+    
+  
   </layer>
-  <layer cx="80" cy="150" anchor="top-left">
-    <h2 style="font-size:40px; color:#f5c16c">鸿雁来宾</h2>
+  
+  
+  <layer x="80" y="150">
+    
+    
+    <h2 style="font-size:40px; color:#f5c16c">
+      鸿雁来宾
+    </h2>
+    
+  
   </layer>
-  <layer cx="80" cy="230" anchor="top-left">
-    <p style="font-size:32px; max-width:640px; color:#d5d0c6">菊有黄华，候雁来宾。单行放不下时按可用宽度换行，中文在字与字之间断开。</p>
+  
+  
+  <layer x="80" y="230">
+    
+    
+    <p style="font-size:32px; max-width:640px; color:#d5d0c6">
+      菊有黄华，候雁来宾。单行放不下时按可用宽度换行，中文在字与字之间断开。
+    </p>
+    
+  
   </layer>
-  <layer cx="80" cy="420" anchor="top-left">
+  
+  
+  <layer x="80" y="420">
+    
+    
     <div style="display:flex; gap:24px; align-items:center">
-      <p style="font-size:32px">左</p>
-      <div style="width:180px; height:4px; background:#f5c16c"></div>
-      <p style="font-size:32px">右</p>
+      
+      
+      <p style="font-size:32px">
+        左
+      </p>
+      
+      
+      <div style="width:180px; height:4px; background:#f5c16c" />
+      
+      
+      <p style="font-size:32px">
+        右
+      </p>
+      
+    
     </div>
+    
+  
   </layer>
-  <layer cx="860" cy="80" anchor="top-left">
-    <p style="writing-mode:vertical-rl; font-size:36px; letter-spacing:8px">露从今夜白</p>
+  
+  
+  <layer x="860" y="80">
+    
+    
+    <p style="writing-mode:vertical-rl; font-size:36px; letter-spacing:8px">
+      露从今夜白
+    </p>
+    
+  
   </layer>
+  
+
 </layer>

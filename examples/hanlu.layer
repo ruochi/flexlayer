@@ -1,35 +1,99 @@
-<layer width="720" height="960" background="#0c1424" color="#f3ecdf">
+<layer width="720" height="960" background="#0c1424" color="#f3ecdf" x="0" y="0">
+  
+  
   <rect x1="0" y1="0" x2="720" y2="960" fill="linear-gradient(to bottom, #070d18, #16304c 58%, #8d907c)" />
+  
+  
   <circle cx="470" cy="230" r="74" fill="#f6f1e6" glow="64 #f4ecd8" />
+  
+  
   <circle cx="446" cy="208" r="18" fill="radial-gradient(at 40% 35%, #ffffff, #ffffff00)" />
+  
 
+  
   <symbol id="dew" width="40" height="40">
+    
+    
     <circle cx="20" cy="20" r="16" fill="radial-gradient(at 38% 32%, #ffffff, #d5e8f4 28%, #ffffff00)" />
+    
+    
     <circle cx="15" cy="14" r="4" fill="#ffffff" opacity="0.85" />
+    
+  
   </symbol>
-  <use href="#dew" cx="150" cy="690" />
-  <use href="#dew" cx="210" cy="760" scale="0.72" />
-  <use href="#dew" cx="250" cy="700" scale="0.5" />
+  
+  
+  <use href="#dew" x="130" y="670" />
+  
+  
+  <use href="#dew" scale="0.72" x="190" y="740" />
+  
+  
+  <use href="#dew" scale="0.5" x="230" y="680" />
+  
 
+  
   <symbol id="petal" width="48" height="110">
-    <curve points="24,8 40,34 34,86 24,102 14,86 8,34" closed fill="linear-gradient(#f7e7b4, #c9843d)" stroke="none" />
+    
+    
+    <curve points="24,8 40,34 34,86 24,102 14,86 8,34" closed="" fill="linear-gradient(#f7e7b4, #c9843d)" stroke="none" />
+    
+  
   </symbol>
-  <use href="#petal" cx="360" cy="560" />
-  <use href="#petal" cx="360" cy="560" rotate="45" />
-  <use href="#petal" cx="360" cy="560" rotate="90" />
-  <use href="#petal" cx="360" cy="560" rotate="135" />
-  <use href="#petal" cx="360" cy="560" rotate="180" />
-  <use href="#petal" cx="360" cy="560" rotate="225" />
-  <use href="#petal" cx="360" cy="560" rotate="270" />
-  <use href="#petal" cx="360" cy="560" rotate="315" />
+  
+  
+  <use href="#petal" x="336" y="505" />
+  
+  
+  <use href="#petal" rotate="45" x="336" y="505" />
+  
+  
+  <use href="#petal" rotate="90" x="336" y="505" />
+  
+  
+  <use href="#petal" rotate="135" x="336" y="505" />
+  
+  
+  <use href="#petal" rotate="180" x="336" y="505" />
+  
+  
+  <use href="#petal" rotate="225" x="336" y="505" />
+  
+  
+  <use href="#petal" rotate="270" x="336" y="505" />
+  
+  
+  <use href="#petal" rotate="315" x="336" y="505" />
+  
 
+  
   <curve points="430,620 470,700 520,760 610,820" stroke="#6d8a55" stroke-width="5" />
+  
+  
   <path d="M 500 740 C 540 700 590 730 600 780 C 560 760 520 770 500 740" fill="#7ea15c" stroke="none" />
+  
 
-  <layer cx="96" cy="150" anchor="top-left">
-    <h1 style="writing-mode:vertical-rl; font-family:Kai; font-size:92px; letter-spacing:18px; color:#f4ecdf">寒露</h1>
+  
+  <layer x="96" y="150">
+    
+    
+    <h1 style="writing-mode:vertical-rl; font-family:Kai; font-size:92px; letter-spacing:18px; color:#f4ecdf">
+      寒露
+    </h1>
+    
+  
   </layer>
-  <layer cx="210" cy="168" anchor="top-left">
-    <p style="font-family:Brush; font-size:36px; color:#ead9b0">九月</p>
+  
+  
+  <layer x="210" y="168">
+    
+    
+    <p style="font-family:Brush; font-size:36px; color:#ead9b0">
+      九月
+    </p>
+    
+  
   </layer>
+  
+
 </layer>

@@ -2,7 +2,7 @@
 
 Flex Layer 用标签描述一帧画面：图形用 SVG 的写法，文字用 HTML 的写法，布局用 CSS flexbox。渲染器读入 `.layer`，输出 PNG 和一份布局报告。
 
-规范见 [SPEC.md](SPEC.md)。给模型的入口见 [AGENTS.md](AGENTS.md)，一页写法见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)。当前版本是单帧 v0.1.11。
+规范见 [SPEC.md](SPEC.md)。给模型的入口见 [AGENTS.md](AGENTS.md)，一页写法见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)。当前版本是单帧 v0.1.14。
 
 `layer` 上的 `perspective` 让直接子元素共用一个视距。`rotateX`、`rotateY`、`z` 写在要转动或推近的那一层上。`sphere`、`box`、`extrude`、`model` 和这些平面共用同一台视距。例子：`npx tsx src/cli.ts render examples/perspective.layer -o perspective.png`，`npx tsx src/cli.ts render examples/meshes.layer -o meshes.png`。
 
@@ -38,6 +38,18 @@ node dist/cli.js render examples/hello.layer -o hello.png
 
 ## 代码调用
 
+推荐先量再摆。`canvas()` 同步准备字体和图片，并在进程里记住。`graphic.layer()` 同步量一块，`at()` 把它放到画面上：
+
+```tsx
+import { canvas } from '@dc/flexlayer'
+
+const graphic = canvas({ width: 720, height: 540, background: '#0c1424', color: '#f4ecdf', fontFamily: 'Kai' })
+const title = graphic.layer(<h1 style="font-size:160px; white-space:nowrap">春眠不觉晓</h1>)
+export default graphic.root(title.fit({ width: graphic.width - 96 }).at({ x: 48, y: 48 }))
+```
+
+文件头写 `/** @jsxImportSource @dc/flexlayer */`。例子见 `examples/poster.tsx`。也可以直接把节点交给渲染器：
+
 ```ts
 import { renderLayer } from '@dc/flexlayer'
 
@@ -48,7 +60,7 @@ const { png, report } = await renderLayer(source, { scale: 0.5 })
 
 ```html
 <layer width="400" height="300" background="#0f1115">
-  <layer width="160" height="80" cx="200" cy="150">
+  <layer width="160" height="80" x="120" y="110">
     <draw>
       ctx.fillStyle = '#3ecfc4'
       ctx.fillRect(0, 0, el.w, el.h)
@@ -66,16 +78,18 @@ const root = h(
   'layer',
   { width: '400', height: '300', background: '#fff' },
   h(
-    'h1',
-    {
-      cx: '200',
-      cy: '150',
-      draw: (ctx, el) => {
-        ctx.strokeStyle = el.computed.color
-        ctx.strokeRect(0, 0, el.w, el.h)
+    'layer',
+    { x: '120', y: '110' },
+    h(
+      'h1',
+      {
+        draw: (ctx, el) => {
+          ctx.strokeStyle = el.computed.color
+          ctx.strokeRect(0, 0, el.w, el.h)
+        },
       },
-    },
-    '标题',
+      '标题',
+    ),
   ),
 )
 
@@ -93,7 +107,7 @@ const root = h(
   { width: '640', height: '360', background: '#111111' },
   h(
     'layer',
-    { cx: '320', cy: '180', anchor: 'center', width: String(chun.width), height: String(chun.height) },
+    { x: '320', y: '180', anchor: 'center', width: String(chun.width), height: String(chun.height) },
     h('path', { d: chun.d, fill: '#f4ecdf' }),
   ),
 )
@@ -115,7 +129,7 @@ const scene: Composition = {
     h(
       'layer',
       { width: '32', height: '32', background: '#000' },
-      h('rect', { width: '8', height: '32', cx: String(4 + frame * 8), cy: '16', fill: '#fff' }),
+      h('rect', { width: '8', height: '32', x: String(frame * 8), y: '0', fill: '#fff' }),
     ),
 }
 
@@ -129,9 +143,9 @@ const { frames, contactSheet } = await renderComposition(scene)
 ```tsx
 h(
   'layer',
-  { cx: '200', cy: '200', width: '120', height: '80', scale: '1.2', origin: 'center' },
-  h('rect', { cx: '60', cy: '40', width: '120', height: '80', fill: '#fff' }),
-  h('layer', { cx: '30', cy: '20', width: '40', height: '40' }, h('circle', { cx: '20', cy: '20', r: '8', fill: '#3ecfc4' })),
+  { x: '140', y: '160', width: '120', height: '80', scale: '1.2', origin: 'center' },
+  h('rect', { x: '0', y: '0', width: '120', height: '80', fill: '#fff' }),
+  h('layer', { x: '10', y: '0', width: '40', height: '40' }, h('circle', { cx: '20', cy: '20', r: '8', fill: '#3ecfc4' })),
 )
 ```
 

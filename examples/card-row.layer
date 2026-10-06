@@ -1,14 +1,48 @@
-<layer width="1080" height="800" background="#fafafa" color="#222">
-  <layer cx="540" cy="400">
+<layer width="1080" height="800" background="#fafafa" color="#222" x="0" y="0">
+  
+  
+  <layer x="246" y="244.4">
+    
+    
     <div style="display:flex; gap:20px; padding:24px; max-width:900px">
+      
+      
       <div style="display:flex; flex-direction:column; padding:20px; background:#fff; border-radius:16px; width:260px; gap:12px">
-        <h3 style="color:#f7931a">减半</h3>
-        <p style="width:220px; font-size:32px">区块奖励减少一半，大约每四年发生一次。</p>
+        
+        
+        <h3 style="color:#f7931a">
+          减半
+        </h3>
+        
+        
+        <p style="width:220px; font-size:32px">
+          区块奖励减少一半，大约每四年发生一次。
+        </p>
+        
+      
       </div>
+      
+      
       <div style="display:flex; flex-direction:column; padding:20px; background:#fff; border-radius:16px; width:260px; gap:12px">
-        <h3>供应</h3>
-        <p style="width:220px; font-size:32px">总量上限 2100 万枚。</p>
+        
+        
+        <h3>
+          供应
+        </h3>
+        
+        
+        <p style="width:220px; font-size:32px">
+          总量上限 2100 万枚。
+        </p>
+        
+      
       </div>
+      
+    
     </div>
+    
+  
   </layer>
+  
+
 </layer>

@@ -46,6 +46,8 @@ export const ATTR_ORDER = [
   'color',
   'font-family',
   'safe',
+  'x',
+  'y',
   'cx',
   'cy',
   'anchor',
@@ -127,8 +129,10 @@ export const ATTRS: AttrDef[] = [
   { name: 'writing-mode', warnOnHtmlAttr: true, docGroup: 'html' },
   { name: 'object-fit', warnOnHtmlAttr: true, docGroup: 'html' },
   { name: 'object-position', warnOnHtmlAttr: true, docGroup: 'html' },
-  { name: 'cx', docGroup: 'layer' },
-  { name: 'cy', docGroup: 'layer' },
+  { name: 'x', docGroup: 'layer' },
+  { name: 'y', docGroup: 'layer' },
+  { name: 'cx', docGroup: 'graphic' },
+  { name: 'cy', docGroup: 'graphic' },
   { name: 'anchor', docGroup: 'layer' },
   { name: 'x1', docGroup: 'graphic' },
   { name: 'y1', docGroup: 'graphic' },
@@ -299,7 +303,7 @@ export const EFFECT_ATTRS: string[] = ATTRS.filter((attr) => attr.effect).map((a
 const DOC_GROUP_ORDER: DocGroup[] = ['layer', 'transform', 'html', 'graphic', 'image', 'effect', 'layer-only']
 
 const DOC_GROUP_LABEL: Record<DocGroup, string> = {
-  layer: '`layer` 的属性。形状用自己的宽高或 `cx` `cy`。HTML 上写了报 `warn`',
+  layer: '`width`、`height` 以及 `x`、`y`、`anchor`。`x`、`y` 是左上角，默认 0；`anchor` 默认 `top-left`。HTML 上写了报 `warn`',
   transform: '图形、线条和 `layer` 写属性；文字写在 `style`。HTML 上写成属性报 `warn`',
   html: 'HTML 的 `style`。`layer` 或图形写了 `style` 报 `warn`',
   graphic: '图形属性，坐标是所在 `layer` 的局部坐标',
