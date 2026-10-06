@@ -13,6 +13,7 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
  * 和 headless-three 并行的三角形光栅。
  * 投影用 `project` 的同一套公式（这里直接算），深度大的像素盖住深度小的。
  * 正对镜头的面是 fill，侧面按和 WebGL 着色器相同的两盏光变暗。
+ * 主光沿固定方向打一张正交深度图：不透明三角形互相挡住这盏光时，主光不计。
  * glb 只用文件里的底色乘这套明暗；金属和粗糙度仍留在 WebGL 路径。
  */
 
@@ -74,18 +75,34 @@ type ScreenVert = Vert & { sx: number; sy: number; invW: number }
 const KEY = unit(-0.6, 0.85, 1)
 const FILL_LIGHT = unit(0.75, -0.2, 0.45)
 const LIT_FRONT = lit(0, 0, 1)
+/** 主光在作者空间里指向光源的方向。three 的 y 向上，作者 y 向下，所以 y 取反。 */
+const LIGHT_BASIS = lightBasis()
 
 function unit(x: number, y: number, z: number) {
   const len = Math.hypot(x, y, z) || 1
   return { x: x / len, y: y / len, z: z / len }
 }
 
-function lit(x: number, y: number, z: number) {
-  return 0.5 + 0.85 * Math.max(x * KEY.x + y * KEY.y + z * KEY.z, 0) + 0.3 * Math.max(x * FILL_LIGHT.x + y * FILL_LIGHT.y + z * FILL_LIGHT.z, 0)
+function cross(a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) {
+  return { x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x }
+}
+
+function lightBasis() {
+  const toward = unit(KEY.x, -KEY.y, KEY.z)
+  const hint = Math.abs(toward.y) > 0.9 ? { x: 1, y: 0, z: 0 } : { x: 0, y: 1, z: 0 }
+  const side = cross(hint, toward)
+  const right = unit(side.x, side.y, side.z)
+  const up = cross(toward, right)
+  return { toward, right, up }
+}
+
+function lit(x: number, y: number, z: number, blocked = false) {
+  const key = blocked ? 0 : 0.85 * Math.max(x * KEY.x + y * KEY.y + z * KEY.z, 0)
+  return 0.5 + key + 0.3 * Math.max(x * FILL_LIGHT.x + y * FILL_LIGHT.y + z * FILL_LIGHT.z, 0)
 }
 
 /** 作者空间的法线。背面把法线翻向镜头，和着色器里的 gl_FrontFacing 一样。 */
-function shadeOf(nx: number, ny: number, nz: number, back: boolean) {
+function facing(nx: number, ny: number, nz: number, back: boolean) {
   let x = nx
   let y = -ny
   let z = nz
@@ -98,7 +115,20 @@ function shadeOf(nx: number, ny: number, nz: number, back: boolean) {
     y = -y
     z = -z
   }
-  return Math.min(1, lit(x, y, z) / Math.max(LIT_FRONT, 1e-3))
+  return { x, y, z }
+}
+
+function shadeOf(nx: number, ny: number, nz: number, back: boolean, blocked = false) {
+  const n = facing(nx, ny, nz, back)
+  return Math.min(1, lit(n.x, n.y, n.z, blocked) / Math.max(LIT_FRONT, 1e-3))
+}
+
+/** 被主光挡住时，贴图按「去掉主光 / 完整光照」变暗。没挡住的像素不乘这个系数。 */
+function shadowScale(nx: number, ny: number, nz: number, back: boolean) {
+  const n = facing(nx, ny, nz, back)
+  const open = lit(n.x, n.y, n.z, false)
+  const shut = lit(n.x, n.y, n.z, true)
+  return open > 1e-4 ? shut / open : 1
 }
 
 function byte(n: number) {
@@ -652,6 +682,150 @@ function clipNear(poly: Vert[], limit: number) {
   return out
 }
 
+type ShadowMap = {
+  depth: Float32Array
+  width: number
+  height: number
+  minU: number
+  minV: number
+  scaleU: number
+  scaleV: number
+  bias: number
+  toward: { x: number; y: number; z: number }
+  right: { x: number; y: number; z: number }
+  up: { x: number; y: number; z: number }
+}
+
+function dot(a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) {
+  return a.x * b.x + a.y * b.y + a.z * b.z
+}
+
+/** 主光正交深度图。离光源更近的不透明表面留下更大的深度。 */
+function buildShadowMap(batches: Batch[], authored: Vert[][], pixels: number): ShadowMap | null {
+  const { toward, right, up } = LIGHT_BASIS
+  let minU = Infinity
+  let minV = Infinity
+  let maxU = -Infinity
+  let maxV = -Infinity
+  let count = 0
+  for (const verts of authored) {
+    for (const v of verts) {
+      const p = { x: v.x, y: v.y, z: v.z }
+      minU = Math.min(minU, dot(p, right))
+      minV = Math.min(minV, dot(p, up))
+      maxU = Math.max(maxU, dot(p, right))
+      maxV = Math.max(maxV, dot(p, up))
+      count++
+    }
+  }
+  if (count === 0 || !Number.isFinite(minU)) return null
+  const pad = Math.max((maxU - minU) * 0.02, (maxV - minV) * 0.02, 1)
+  minU -= pad
+  maxU += pad
+  minV -= pad
+  maxV += pad
+  const spanU = Math.max(maxU - minU, 1e-3)
+  const spanV = Math.max(maxV - minV, 1e-3)
+  const side = Math.max(64, Math.min(2048, Math.round(pixels)))
+  const longest = Math.max(spanU, spanV)
+  const width = Math.max(1, Math.round((side * spanU) / longest))
+  const height = Math.max(1, Math.round((side * spanV) / longest))
+  const depth = new Float32Array(width * height)
+  depth.fill(-1e30)
+  const scaleU = width / spanU
+  const scaleV = height / spanV
+  const toLight = (v: Vert): ScreenVert => {
+    const p = { x: v.x, y: v.y, z: v.z }
+    return {
+      ...v,
+      z: dot(p, toward),
+      sx: (dot(p, right) - minU) * scaleU,
+      sy: (dot(p, up) - minV) * scaleV,
+      invW: 1,
+    }
+  }
+  batches.forEach((batch, batchIndex) => {
+    if (!batch.texture && batch.a < 128) return
+    const verts = authored[batchIndex]!
+    const indices = batch.indices
+    for (let i = 0; i < indices.length; i += 3) {
+      drawShadowTriangle(
+        depth,
+        width,
+        height,
+        toLight(verts[indices[i]!]!),
+        toLight(verts[indices[i + 1]!]!),
+        toLight(verts[indices[i + 2]!]!),
+        batch,
+      )
+    }
+  })
+  const texel = Math.max(1 / scaleU, 1 / scaleV)
+  return {
+    depth,
+    width,
+    height,
+    minU,
+    minV,
+    scaleU,
+    scaleV,
+    bias: texel * 2 + 0.35,
+    toward,
+    right,
+    up,
+  }
+}
+
+function drawShadowTriangle(
+  map: Float32Array,
+  width: number,
+  height: number,
+  a: ScreenVert,
+  b: ScreenVert,
+  c: ScreenVert,
+  batch: Batch,
+) {
+  const area = (b.sx - a.sx) * (c.sy - a.sy) - (b.sy - a.sy) * (c.sx - a.sx)
+  if (Math.abs(area) < 1e-6) return
+  const minX = Math.max(0, Math.floor(Math.min(a.sx, b.sx, c.sx)))
+  const maxX = Math.min(width - 1, Math.ceil(Math.max(a.sx, b.sx, c.sx)))
+  const minY = Math.max(0, Math.floor(Math.min(a.sy, b.sy, c.sy)))
+  const maxY = Math.min(height - 1, Math.ceil(Math.max(a.sy, b.sy, c.sy)))
+  for (let iy = minY; iy <= maxY; iy++) {
+    const py = iy + 0.5
+    for (let ix = minX; ix <= maxX; ix++) {
+      const px = ix + 0.5
+      const w0 = ((b.sy - c.sy) * (px - c.sx) + (c.sx - b.sx) * (py - c.sy)) / area
+      const w1 = ((c.sy - a.sy) * (px - c.sx) + (a.sx - c.sx) * (py - c.sy)) / area
+      const w2 = 1 - w0 - w1
+      if (w0 < -1e-4 || w1 < -1e-4 || w2 < -1e-4) continue
+      if (batch.texture) {
+        const u = w0 * a.u + w1 * b.u + w2 * c.u
+        const v = w0 * a.v + w1 * b.v + w2 * c.v
+        if (sampleTexture(batch.texture, batch.tw, batch.th, u, v)[3] < 128) continue
+      }
+      const d = w0 * a.z + w1 * b.z + w2 * c.z
+      const di = iy * width + ix
+      if (d > map[di]!) map[di] = d
+    }
+  }
+}
+
+function occluded(map: ShadowMap, x: number, y: number, z: number, nx: number, ny: number, nz: number) {
+  const p = { x, y, z }
+  const sx = (dot(p, map.right) - map.minU) * map.scaleU
+  const sy = (dot(p, map.up) - map.minV) * map.scaleV
+  const ix = Math.floor(sx)
+  const iy = Math.floor(sy)
+  if (ix < 0 || iy < 0 || ix >= map.width || iy >= map.height) return false
+  const stored = map.depth[iy * map.width + ix]!
+  if (stored < -1e20) return false
+  const nlen = Math.hypot(nx, ny, nz) || 1
+  const nd = Math.abs((nx * map.toward.x + ny * map.toward.y + nz * map.toward.z) / nlen)
+  const bias = map.bias / Math.max(nd, 0.25)
+  return stored > dot(p, map.toward) + bias
+}
+
 function drawTriangle(
   color: Uint8ClampedArray,
   depth: Float32Array,
@@ -661,6 +835,7 @@ function drawTriangle(
   b: ScreenVert,
   c: ScreenVert,
   batch: Batch,
+  shadow: ShadowMap | null,
 ) {
   const area = (b.sx - a.sx) * (c.sy - a.sy) - (b.sy - a.sy) * (c.sx - a.sx)
   if (Math.abs(area) < 1e-8) return
@@ -686,9 +861,15 @@ function drawTriangle(
       if (w0 < -1e-4 || w1 < -1e-4 || w2 < -1e-4) continue
       const iw = w0 * a.invW + w1 * b.invW + w2 * c.invW
       if (iw <= 1e-8) continue
+      const x = (w0 * a.x * a.invW + w1 * b.x * b.invW + w2 * c.x * c.invW) / iw
+      const y = (w0 * a.y * a.invW + w1 * b.y * b.invW + w2 * c.y * c.invW) / iw
       const z = (w0 * a.z * a.invW + w1 * b.z * b.invW + w2 * c.z * c.invW) / iw
       const di = iy * width + ix
       if (z < depth[di]! - 1e-4) continue
+      const nx = (w0 * a.nx * a.invW + w1 * b.nx * b.invW + w2 * c.nx * c.invW) / iw
+      const ny = (w0 * a.ny * a.invW + w1 * b.ny * b.invW + w2 * c.ny * c.invW) / iw
+      const nz = (w0 * a.nz * a.invW + w1 * b.nz * b.invW + w2 * c.nz * c.invW) / iw
+      const blocked = shadow !== null && occluded(shadow, x, y, z, nx, ny, nz)
       let sr = batch.r
       let sg = batch.g
       let sb = batch.b
@@ -697,18 +878,21 @@ function drawTriangle(
         const u = (w0 * a.u * a.invW + w1 * b.u * b.invW + w2 * c.u * c.invW) / iw
         const v = (w0 * a.v * a.invW + w1 * b.v * b.invW + w2 * c.v * c.invW) / iw
         const tex = sampleTexture(batch.texture, batch.tw, batch.th, u, v)
-        sr = tex[0]
-        sg = tex[1]
-        sb = tex[2]
+        const dim = blocked ? shadowScale(nx, ny, nz, back) : 1
+        sr = byte(tex[0] * dim)
+        sg = byte(tex[1] * dim)
+        sb = byte(tex[2] * dim)
         sa = tex[3]
       } else if (batch.shaded) {
-        const nx = (w0 * a.nx * a.invW + w1 * b.nx * b.invW + w2 * c.nx * c.invW) / iw
-        const ny = (w0 * a.ny * a.invW + w1 * b.ny * b.invW + w2 * c.ny * c.invW) / iw
-        const nz = (w0 * a.nz * a.invW + w1 * b.nz * b.invW + w2 * c.nz * c.invW) / iw
-        const shade = shadeOf(nx, ny, nz, back)
+        const shade = shadeOf(nx, ny, nz, back, blocked)
         sr = byte(batch.r * shade)
         sg = byte(batch.g * shade)
         sb = byte(batch.b * shade)
+      } else if (blocked) {
+        const dim = shadowScale(nx, ny, nz, back)
+        sr = byte(batch.r * dim)
+        sg = byte(batch.g * dim)
+        sb = byte(batch.b * dim)
       }
       if (batch.depthWrite) depth[di] = z
       const pi = di * 4
@@ -798,6 +982,7 @@ function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: number
   const color = new Uint8ClampedArray(pw * ph * 4)
   const depth = new Float32Array(pw * ph)
   depth.fill(-1e30)
+  const shadow = buildShadowMap(batches, authored, Math.max(layer.width, layer.height) * base * 2)
   const near = perspective * (1 - 1e-3)
   const toScreen = (v: Vert): ScreenVert => {
     const w = 1 - v.z / perspective
@@ -818,7 +1003,7 @@ function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: number
         const a = clipped[0]!
         const b = clipped[k]!
         const c = clipped[k + 1]!
-        drawTriangle(color, depth, pw, ph, toScreen(a), toScreen(b), toScreen(c), batch)
+        drawTriangle(color, depth, pw, ph, toScreen(a), toScreen(b), toScreen(c), batch, shadow)
       }
     }
   })
@@ -844,7 +1029,8 @@ function planeBatch(plane: SoftwareMeshInput['planes'][number], raster: Software
     [localX + painted.logicalWidth, localY + painted.logicalHeight],
     [localX, localY + painted.logicalHeight],
   ]
-  const order = [0, 1, 2, 0, 2, 3]
+  // 作者空间 y 向下，正面（法线朝镜头）的屏幕面积为负，和网格的 back 判定一致。
+  const order = [0, 2, 1, 0, 3, 2]
   const positions = new Float32Array(order.length * 3)
   const uvs = new Float32Array(order.length * 2)
   const normals = new Float32Array(order.length * 3)

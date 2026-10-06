@@ -104,6 +104,56 @@ describe('软件光栅', () => {
     expect([right[0], right[1], right[2]]).toEqual([0xa9, 0xdc, 0xff])
   })
 
+  it('球体沿主光在平面上投下影子，没挡住的地方仍是 fill', async () => {
+    const { png } = await render(`
+      <layer width="240" height="240" background="#ffffff" perspective="800">
+        <rect cx="120" cy="160" width="220" height="120" fill="#ffffff" />
+        <sphere cx="70" cy="70" r="24" z="70" fill="#ff2244" />
+      </layer>
+    `)
+    const shade = await pixelAt(png, 112, 130)
+    const open = await pixelAt(png, 210, 200)
+    const sphere = await pixelAt(png, 65, 65)
+    expect(shade[0]).toBeLessThan(180)
+    expect(Math.abs(shade[0] - shade[1])).toBeLessThan(12)
+    expect(Math.abs(shade[1] - shade[2])).toBeLessThan(12)
+    expect(open[0]).toBeGreaterThan(245)
+    expect(open[1]).toBeGreaterThan(245)
+    expect(open[2]).toBeGreaterThan(245)
+    expect(sphere[0]).toBeGreaterThan(sphere[1] + 30)
+    expect(sphere[0]).toBeGreaterThan(140)
+  })
+
+  it('球体的影子落在长方体正面，没挡住的正面仍是 fill', async () => {
+    const { png } = await render(`
+      <layer width="420" height="360" background="#d9d3c7" perspective="800">
+        <box cx="230" cy="190" width="160" height="150" depth="20" fill="#f4f1ea" />
+        <sphere cx="130" cy="110" r="28" z="48" fill="#e23d3d" />
+      </layer>
+    `)
+    const shade = await pixelAt(png, 168, 158)
+    const open = await pixelAt(png, 280, 240)
+    expect(shade[0]).toBeLessThan(open[0] - 40)
+    expect(Math.abs(shade[0] - shade[1])).toBeLessThan(12)
+    expect([open[0], open[1], open[2]]).toEqual([0xf4, 0xf1, 0xea])
+  })
+
+  it('更靠近主光的长方体挡住后面的平面', async () => {
+    const { png } = await render(`
+      <layer width="240" height="240" background="#ffffff" perspective="800">
+        <rect cx="140" cy="150" width="180" height="140" fill="#ffffff" />
+        <box cx="70" cy="80" width="36" height="70" depth="36" z="48" fill="#3355aa" />
+      </layer>
+    `)
+    const shade = await pixelAt(png, 102, 128)
+    const open = await pixelAt(png, 210, 200)
+    expect(shade[0]).toBeLessThan(180)
+    expect(Math.abs(shade[0] - shade[1])).toBeLessThan(12)
+    expect(open[0]).toBeGreaterThan(245)
+    expect(open[1]).toBeGreaterThan(245)
+    expect(open[2]).toBeGreaterThan(245)
+  })
+
   it('三维场景里的平面颜色保持原色阶', async () => {
     const { png } = await render(`
       <layer width="180" height="80" background="#ffffff" perspective="500">
