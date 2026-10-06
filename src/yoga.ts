@@ -1,21 +1,12 @@
-import { loadYoga, type Yoga as YogaApi } from 'yoga-layout/load'
+import Yoga from 'yoga-layout'
 
-let yogaApi: YogaApi | null = null
-let ready: Promise<void> | null = null
+export type YogaApi = typeof Yoga
 
-export async function ensureYoga(): Promise<YogaApi> {
-  if (!ready) {
-    ready = loadYoga().then((api) => {
-      yogaApi = api
-    })
-  }
-  await ready
-  if (!yogaApi) throw new Error('Yoga 未加载')
-  return yogaApi
+/** 模块加载时就已经备好，整个进程共用这一份。 */
+export function getYoga(): YogaApi {
+  return Yoga
 }
 
-/** 同步取已加载的 Yoga。先调用 ensureYoga。 */
-export function getYoga(): YogaApi {
-  if (!yogaApi) throw new Error('Yoga 未加载，先调用 prepareAssets')
-  return yogaApi
+export async function ensureYoga(): Promise<YogaApi> {
+  return getYoga()
 }

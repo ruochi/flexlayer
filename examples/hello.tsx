@@ -11,7 +11,7 @@ function Pill({ text, solid }: { text: string; solid: boolean }) {
   return <div style={`padding:16px 28px; border-radius:999px; font-size:40px; ${look}`}>{text}</div>
 }
 
-const graphic = await canvas({
+const graphic = canvas({
   width: 1080,
   height: 1920,
   background: '#0f1115',

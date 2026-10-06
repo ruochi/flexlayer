@@ -582,7 +582,7 @@ flexlayer render scene.tsx --frame 12 -o frame.png               # Composition �
 flexlayer render scene.tsx --frames out/                         # Composition 的每一帧
 ```
 
-`.tsx`、`.jsx`、`.ts`、`.js` 会先执行，并做类型检查，类型错误记为 `type-error`。标准库和 Node 的类型由渲染器自带，不依赖文件旁边的 `node_modules`。`import ... from 'node:fs'` 可以类型检查。不认识的属性名和 `.layer` 一样保留给 `draw`，不算 `type-error`。属性放错位置同样由检查报 `invalid-attr`，不记成类型错误。`import './x.tsx'` 这种带扩展名的引用可以通过。有类型错误时仍然出图，退出码为 1。文件里写 `/** @jsxImportSource @dc/flexlayer */`，标签和属性与 `.layer` 相同。默认导出一个 `<layer>` 节点，或返回该节点的函数。命名导出 `composition`（或默认导出）可以是第 13 章的 `Composition`。执行结果是同一棵节点树，后面的布局、问题码和绘制都不变。推荐先 `await canvas()`，再用 `graphic.layer()` 量好后 `at()` 摆上去，见第 15 章。`check` 在没有 `--frame` 时抽查第 0 帧、中间一帧和最后一帧。`--emit` 把树写回 `.layer`；`draw` 函数若用了外部变量，记 `emit-draw`，函数体仍会写出来。帧数超过 300 且没有 `--frame` 或 `--frames` 时不渲染联系表。
+`.tsx`、`.jsx`、`.ts`、`.js` 会先执行，并做类型检查，类型错误记为 `type-error`。标准库和 Node 的类型由渲染器自带，不依赖文件旁边的 `node_modules`。`import ... from 'node:fs'` 可以类型检查。不认识的属性名和 `.layer` 一样保留给 `draw`，不算 `type-error`。属性放错位置同样由检查报 `invalid-attr`，不记成类型错误。`import './x.tsx'` 这种带扩展名的引用可以通过。有类型错误时仍然出图，退出码为 1。文件里写 `/** @jsxImportSource @dc/flexlayer */`，标签和属性与 `.layer` 相同。默认导出一个 `<layer>` 节点，或返回该节点的函数。命名导出 `composition`（或默认导出）可以是第 13 章的 `Composition`。执行结果是同一棵节点树，后面的布局、问题码和绘制都不变。推荐先 `canvas()`，再用 `graphic.layer()` 量好后 `at()` 摆上去。`canvas()` 是同步的，准备在进程里记住，多帧不会重新开始。见第 15 章。`check` 在没有 `--frame` 时抽查第 0 帧、中间一帧和最后一帧。`--emit` 把树写回 `.layer`；`draw` 函数若用了外部变量，记 `emit-draw`，函数体仍会写出来。帧数超过 300 且没有 `--frame` 或 `--frames` 时不渲染联系表。
 
 默认字体寒蝉端黑体首次使用时自动下载到 `~/.cache/flexlayer/fonts`。
 
@@ -694,13 +694,13 @@ const { frames, contactSheet } = await renderComposition(scene)
 
 推荐用 `.tsx` 先量出每一块的盒子，再摆到画面上。`.layer` 仍是渲染器读的格式，`--emit` 把展开结果写回去。
 
-`await canvas()` 是唯一的异步步骤：注册字体、初始化 Yoga、预先加载 `images`。返回的对象叫 `graphic`。`graphic.layer()` 是同步的，`composition` 的 `component` 里也能调用。
+`canvas()` 是同步的。字体、图片和 Yoga 在这一次调用里备好，并在进程里记住。后面再写一帧，或渲染一段视频，已经备过的直接接着用，不会重新下载、重新解码。返回的对象叫 `graphic`。`graphic.layer()` 也是同步的，`composition` 的 `component` 里可以调用。`canvas()` 放在 `component` 外面调用一次。
 
 ```tsx
 /** @jsxImportSource @dc/flexlayer */
 import { canvas } from '@dc/flexlayer'
 
-const graphic = await canvas({
+const graphic = canvas({
   width: 720,
   height: 540,
   background: '#0c1424',
@@ -719,12 +719,12 @@ export default graphic.root(t, b)
 
 完整例子见 [examples/poster.tsx](examples/poster.tsx)、[examples/hello.tsx](examples/hello.tsx)。
 
-- `canvas({ width, height, background, color, fontFamily, safe, fonts, images, baseDir })`。没写 `color` 是 `#111111`，没写 `fontFamily` 是 `ChillDuanSans`。没写 `safe` 时按画布短边的 4% 计算，和排版一致。`fonts` 写成 `{ 字体名: 文件路径 }`，出现在根上的 `<font>`。缺文件会直接抛出。`images` 里的路径会预先加载。
+- `canvas({ width, height, background, color, fontFamily, safe, fonts, images, baseDir })` 同步返回。没写 `color` 是 `#111111`，没写 `fontFamily` 是 `ChillDuanSans`。没写 `safe` 时按画布短边的 4% 计算，和排版一致。`fonts` 写成 `{ 字体名: 文件路径 }`，出现在根上的 `<font>`。缺文件会直接抛出。`images` 里的路径会在这次调用里解码。这些准备留在进程里，下一次 `canvas()` 和后面的每一帧都接着用。
 - `graphic.layer(content, opts)` 同步量一块内容，返回 `width`、`height`（已经乘过 `scale`）、`scale`（开始是 1）、`ink`、`effect`、`issues`、`fit`、`scaled`、`at`。`opts` 写在外包的 `layer` 上，例如 `perspective`、`glow`、`shadow`、`grade`、`overlay`、`opacity`、`rotate`、`width`、`height`，以及量的时候用的 `maxWidth`。没写 `maxWidth` 时，用画布去掉 `safe` 之后的宽度。
 - 元素自己的 `style` 优先，其次用 `canvas()` 的颜色和字体，最后用规范默认值。
 - `fit({ width?, height?, by? })` 和 `scaled(k)` 返回新对象，不重新量，也不改原来的那一块。只缩小，不放大。`by: 'effect'` 按阴影和光晕的范围来缩，避免光晕被裁切。
 - `at({ x, y, anchor? })` 返回一个 `<layer>` 节点，并带上 `left`、`top`、`right`、`bottom`、`cx`、`cy`、`width`、`height`，都按缩放后的尺寸算。`scale` 不是 1 时，缩放支点 `origin` 跟着这次的 `anchor`。`anchor` 默认 `top-left`。
 - `graphic.root(...children)` 拼成根 `<layer>`，字体声明写在最前面。
-- 不经过 `canvas()` 的 `layer()` 用规范默认值，并且不按画布宽度换行。字体、图片和 Yoga 仍要先准备好，一般先 `await canvas()`。
+- 不经过 `canvas()` 的 `layer()` 用规范默认值，并且不按画布宽度换行。字体、图片和 Yoga 仍要先准备好，一般先 `canvas()`。同一进程里准备过的会接着用。
 - 最终排版和量到的盒子不一致时，报 `measure-mismatch`（warn），消息里带上两个尺寸。常见原因是量的时候的 `maxWidth`、`safe` 或字号和最终画布不一样。
 

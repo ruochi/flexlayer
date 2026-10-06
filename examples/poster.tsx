@@ -1,7 +1,7 @@
 /** @jsxImportSource @dc/flexlayer */
 import { canvas } from '@dc/flexlayer'
 
-const graphic = await canvas({
+const graphic = canvas({
   width: 720,
   height: 540,
   background: '#0c1424',

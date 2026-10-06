@@ -1,6 +1,5 @@
-import { initFontsForMeasure } from './fonts.js'
 import { h } from './h.js'
-import { measureLayer, noteMeasuredSize, parseSafe, prepareAssets, type MeasureEnv } from './layout.js'
+import { measureLayer, noteMeasuredSize, parseSafe, prepareAssetsSync, type MeasureEnv } from './layout.js'
 import type { FvgChild, FvgNode, SourceLoc } from './parse.js'
 import type { Anchor, Box, Issue, LayoutNode } from './types.js'
 import { emptyBox, translateBox, unionBoxes } from './types.js'
@@ -242,7 +241,7 @@ function measureContent(content: FvgChild | FvgChild[], opts: LayerMeasureOption
 
 /**
  * 不经过 canvas() 时用规范默认值，并且不按画布宽度换行。
- * 字体、图片和 Yoga 仍要先准备好，一般先 `await canvas()`。
+ * 字体、图片和 Yoga 仍要先准备好，一般先 `canvas()`。同一进程里准备过的会接着用。
  */
 export function layer(content: FvgChild | FvgChild[], opts?: LayerMeasureOptions): MeasuredLayer {
   return measureContent(content, opts, {
@@ -302,14 +301,15 @@ export class Graphic {
   }
 }
 
-/** 唯一的异步步骤：注册字体、加载图片、初始化 Yoga。 */
-export async function canvas(options: CanvasOptions): Promise<Graphic> {
+/**
+ * 同步拿到一块画布。字体、图片和 Yoga 在这一次调用里备好，并在进程里记住。
+ * 后面再调用，或渲染多帧，已经备过的不会重新下载、重新解码。
+ */
+export function canvas(options: CanvasOptions): Graphic {
   const baseDir = options.baseDir ?? process.cwd()
-  await initFontsForMeasure()
   const fontFamily = options.fontFamily ?? SPEC_FONT
   const fonts = Object.entries(options.fonts ?? {}).map(([family, src]) => ({ family, src }))
-  await prepareAssets(null, baseDir, { fonts, images: options.images, fontFamily })
+  prepareAssetsSync(null, baseDir, { fonts, images: options.images, fontFamily })
   const safe = parseSafe(options.safe == null ? undefined : String(options.safe), options.width, options.height)
-  const graphic = new Graphic({ ...options, baseDir, fontFamily }, options.width - safe.left - safe.right)
-  return graphic
+  return new Graphic({ ...options, baseDir, fontFamily }, options.width - safe.left - safe.right)
 }

@@ -47,13 +47,13 @@ flex 的 `align-items` 默认 `center`（CSS 里是 `stretch`）。**column 忘�
 
 ## 3. 生成
 
-推荐用 `.tsx` 先量再摆。`await canvas()` 是唯一的异步步骤，后面的 `graphic.layer()` 是同步的，动画的 `component` 里也能调用。
+推荐用 `.tsx` 先量再摆。`canvas()` 是同步的，字体、图片和 Yoga 在这一次调用里备好，并在进程里记住。多帧渲染接着用，不会每帧重新准备。`graphic.layer()` 也是同步的，动画的 `component` 里可以调用。
 
 ```tsx
 /** @jsxImportSource @dc/flexlayer */
 import { canvas } from '@dc/flexlayer'
 
-const graphic = await canvas({
+const graphic = canvas({
   width: 720,
   height: 540,
   background: '#0c1424',

@@ -1,6 +1,8 @@
 import { createCanvas, loadImage } from '@napi-rs/canvas'
 import type { FvgNode } from './parse.js'
+import { prepareAssets } from './layout.js'
 import { renderFvg } from './render.js'
+import { setFontsCacheDir } from './fonts.js'
 import type { FvgReport, RenderOptions } from './types.js'
 
 export type FrameInput = {
@@ -143,6 +145,10 @@ export async function renderComposition(
   if (!(comp.durationInFrames >= 1) || !Number.isInteger(comp.durationInFrames)) {
     throw new Error('durationInFrames 至少为 1')
   }
+  const baseDir = options.baseDir ?? process.cwd()
+  if (options.fontsCacheDir) setFontsCacheDir(options.fontsCacheDir)
+  // 字体、图片和 Yoga 在进程里只准备一次。后面的帧接着用，没见过的图再补上。
+  await prepareAssets(null, baseDir)
   const frames: Buffer[] = []
   const reports: FvgReport[] = []
   for (let frame = 0; frame < comp.durationInFrames; frame++) {
@@ -152,7 +158,7 @@ export async function renderComposition(
     const { png, report } = await renderFvg(node, {
       t,
       scale: options.scale,
-      baseDir: options.baseDir,
+      baseDir,
       fontsCacheDir: options.fontsCacheDir,
     })
     frames.push(png)

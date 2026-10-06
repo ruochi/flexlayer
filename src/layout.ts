@@ -10,10 +10,10 @@ import {
 import { attachDrawTags } from './draw-tag.js'
 import { parseGrade } from './grade.js'
 import { parseColor } from './gradientField.js'
-import { imageInk, peekLayerImage, preloadLayerImages, parseObjectFit, parseObjectPosition } from './image.js'
+import { imageInk, peekLayerImage, preloadLayerImagesSync, parseObjectFit, parseObjectPosition } from './image.js'
 import type { FvgNode } from './parse.js'
 import { parseFvg } from './parse.js'
-import { ensureBuiltinFonts, registerFontsFromDocument } from './fonts.js'
+import { ensureBuiltinFontsSync, registerFontsFromDocumentSync } from './fonts.js'
 import { catmullRomPath } from './curve.js'
 import { isGradient, parseGradient, solidPaint } from './gradient.js'
 import { glbSpan, resolveModelFile } from './glb.js'
@@ -73,7 +73,7 @@ import type {
 } from './types.js'
 import { emptyBox, translateBox, unionBoxes } from './types.js'
 import { formatSourceLoc } from './source-loc.js'
-import { ensureYoga, getYoga } from './yoga.js'
+import { getYoga } from './yoga.js'
 
 export type LayoutContext = {
   color: string
@@ -1885,9 +1885,9 @@ export type PrepareOptions = {
   fontFamily?: string
 }
 
-/** 异步准备：字体、图片、Yoga。排版本身不再等待。 */
-export async function prepareAssets(root: FvgNode | null, baseDir: string, options: PrepareOptions = {}): Promise<LayoutAssets> {
-  await ensureYoga()
+/** 准备字体、图片和 Yoga，并在这个进程里记住。已经备过的直接跳过。 */
+export function prepareAssetsSync(root: FvgNode | null, baseDir: string, options: PrepareOptions = {}): LayoutAssets {
+  getYoga()
   const fontNodes = [...(options.fonts ?? [])]
   if (root) {
     for (const child of root.children) {
@@ -1896,17 +1896,22 @@ export async function prepareAssets(root: FvgNode | null, baseDir: string, optio
       if (font) fontNodes.push(font)
     }
   }
-  await registerFontsFromDocument(
+  registerFontsFromDocumentSync(
     fontNodes.filter((font) => font.family && font.src),
     baseDir,
   )
   const families = new Set<string>([options.fontFamily ?? root?.attrs['font-family'] ?? 'ChillDuanSans'])
   if (root) collectFontFamilies(root, families)
-  await ensureBuiltinFonts(families)
+  ensureBuiltinFontsSync(families)
   const srcs = [...(options.images ?? [])]
   if (root) collectImageSrcs(root, srcs)
-  await preloadLayerImages(srcs, baseDir)
+  preloadLayerImagesSync(srcs, baseDir)
   return { baseDir }
+}
+
+/** 异步外壳。实际准备是同步的，同一进程里多帧接着用，不会重新开始。 */
+export async function prepareAssets(root: FvgNode | null, baseDir: string, options: PrepareOptions = {}): Promise<LayoutAssets> {
+  return prepareAssetsSync(root, baseDir, options)
 }
 
 export function readLayerRoot(source: string | FvgNode): { root: FvgNode; fonts: Array<{ family: string; src: string }> } {
@@ -1923,7 +1928,7 @@ export function readLayerRoot(source: string | FvgNode): { root: FvgNode; fonts:
   return { root, fonts }
 }
 
-/** 同步排版。调用前要先 prepareAssets，否则 Yoga 没加载，图片也读不到。 */
+/** 同步排版。字体、图片和 Yoga 由 prepareAssetsSync 记住，多帧不会重新准备。 */
 export function layoutSync(rootNode: FvgNode, assets: LayoutAssets): FvgDocument {
   const baseDir = assets.baseDir
   const attrs = rootNode.attrs

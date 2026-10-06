@@ -1,6 +1,6 @@
 # Flex Layer 速查
 
-写法规则见 [AGENTS.md](../AGENTS.md) 的硬性约定。数字都是像素，y 轴向下。根元素 `<layer width height>` 就是一个 layer。推荐用 `.tsx` 的 `await canvas()` 和 `graphic.layer()` 先量再摆，见 [examples/poster.tsx](../examples/poster.tsx)。同一套标签也可以手写进 `.layer`。`flexlayer render file.tsx` 会先执行再渲染。
+写法规则见 [AGENTS.md](../AGENTS.md) 的硬性约定。数字都是像素，y 轴向下。根元素 `<layer width height>` 就是一个 layer。推荐用 `.tsx` 的 `canvas()` 和 `graphic.layer()` 先量再摆，见 [examples/poster.tsx](../examples/poster.tsx)。`canvas()` 是同步的，准备好的字体和图片会留在进程里，多帧接着用。同一套标签也可以手写进 `.layer`。`flexlayer render file.tsx` 会先执行再渲染。
 
 ## 结构
 

@@ -38,12 +38,12 @@ node dist/cli.js render examples/hello.layer -o hello.png
 
 ## 代码调用
 
-推荐先量再摆。`await canvas()` 准备字体和图片，`graphic.layer()` 同步量一块，`at()` 把它放到画面上：
+推荐先量再摆。`canvas()` 同步准备字体和图片，并在进程里记住。`graphic.layer()` 同步量一块，`at()` 把它放到画面上：
 
 ```tsx
 import { canvas } from '@dc/flexlayer'
 
-const graphic = await canvas({ width: 720, height: 540, background: '#0c1424', color: '#f4ecdf', fontFamily: 'Kai' })
+const graphic = canvas({ width: 720, height: 540, background: '#0c1424', color: '#f4ecdf', fontFamily: 'Kai' })
 const title = graphic.layer(<h1 style="font-size:160px; white-space:nowrap">春眠不觉晓</h1>)
 export default graphic.root(title.fit({ width: graphic.width - 96 }).at({ x: 48, y: 48 }))
 ```
