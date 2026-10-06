@@ -1,7 +1,7 @@
-# Flex Layer 规范 v0.1
+# Flex Layer 规范
 
 Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标签用属性。结构标签只有 `layer`。文字用 HTML 写法，排布用 `display:flex`，图形用 SVG 属性。
-动画 = 程序为每个时刻生成一份 Flex Layer（v0.2 起）。
+动画 = 程序为每个时刻生成一份 Flex Layer。报告里的 `flexlayer` 是格式版本 `0.1`，和包版本不是同一个数。
 
 设计原则：
 
@@ -35,10 +35,10 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | `width`、`height` | 必填 | 画布尺寸 |
 | `background` | `#ffffff` | 画布背景色，写 `transparent` 输出透明 PNG |
 | `color` | `#111111` | 全局文字色、线条默认色 |
-| `font-family` | `ChillDuanSans` | 全局字体。也可以写 `Song`（宋体）、`Kai`（楷体）、`Brush`（书法），第一次用到时自动下载 |
+| `font-family` | `ChillDuanSans` | 全局字体。目录里的名字直接写，第一次用到时自动下载。见 [docs/RESOURCES.md](docs/RESOURCES.md) |
 | `safe` | 画布短边的 4% | 安全区边距，`上 右 下 左` 或一个数字，只用于检查 |
 
-`<font family="名字" src="路径或网址" />` 注册额外字体，只能写在根元素下。不想自己找字体文件时，直接写内置名字：`Song` / `宋体`（思源宋体）、`Kai` / `楷体`（霞鹜文楷）、`Brush` / `书法`（马善政毛笔楷书）。宋体和楷体有 regular 与 bold 两档，书法只有一档。
+`<font family="名字" src="路径或网址" />` 注册额外字体，只能写在根元素下。`src` 必须是字体文件。不想自己找文件时，写目录里的名字：`Song` / `宋体`（Noto Serif SC，思源宋体简体子集）、`Kai` / `楷体`（霞鹜文楷）、`Brush` / `书法`（马善政毛笔楷书），以及 `Inter`、`Playfair`、`NotoSans` 等。有 400 和 700 两档的取最近的一档，只登记了一档的字体始终用那一档。
 
 ## 2. 元素一览
 
@@ -53,8 +53,10 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | 线条 | `line`、`arrow`、`polyline`、`polygon`、`path`、`curve`。`arrow` 是内置组件，排版时展开成 `g` |
 | 复用 | `symbol`、`use` |
 | 蒙版 | `mask`（只作为 `layer` 的直接子元素） |
+| 网格 | `sphere`、`box`、`extrude`、`model`。放在带 `perspective` 的 `layer` 里 |
+| 字体 | `font`（只作为根元素的子元素，`family` 加 `src`） |
 
-- `layer` 和图形首字母大写，文字和图片标签全部小写（和 HTML 一样）。HTML 只写 `style`，`layer` 和图形只写属性。图片的 `src`、`alt` 仍是属性。
+- 标签一律小写。写成 `<Circle>` 仍会渲染，并报 `non-canonical`。HTML 只写 `style`，`layer` 和图形只写属性。图片的 `src`、`alt` 仍是属性。
 - 后写的元素画在上面。
 - 不认识的标签会被忽略，并在报告里给出警告。
 
@@ -208,7 +210,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | 属性 | 说明 |
 | --- | --- |
 | `font-size`、`font-weight`、`font-family`、`color`、`letter-spacing` | 同 CSS，行内标签也可以写 |
-| （字重规则） | `ChillDuanSans` 按可变字重绘制，字重轴约 300 到 800，中间的字重不会收成 400 和 700 两档。`Song`、`Kai` 在 400 和 700 两档里取最近的一档。`Brush` 和其它只注册了一个文件的字体按 400 |
+| （字重规则） | `ChillDuanSans` 按可变字重绘制，字重轴约 300 到 800，中间的字重不会收成 400 和 700 两档。登记了多档文件的字体取最近的一档。只登记了一档的字体，例如 `Brush`、`Bebas`，请求别的字重仍用这一档。自带 `<font>` 且文件没有字重轴的，按 400 |
 | `writing-mode` | `horizontal-tb`（默认）或 `vertical-rl`。竖排时字从上到下，列从右到左，`letter-spacing` 是字与字之间的额外间距 |
 | `line-height` | 倍数，单行默认 1.2，多行默认 1.4 |
 | `text-align` | `left`（默认）、`center`、`right` |
@@ -241,14 +243,18 @@ const chars = await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })
 
 | 字段 | 含义 |
 | --- | --- |
+| `text` | 这一个码位 |
 | `d` | SVG 路径。原点在字身盒子的左上角，y 向下，单位是像素 |
+| `font` | 实际用的字体名，如 `Kai` |
+| `size` | 字号，像素 |
+| `weight` | 轮廓实际对应的字重 |
 | `width` | 字宽。排版时这一格占多宽，跟路径的外接框无关 |
 | `height` | 字身高度，从字体上沿到下沿。同一字体、同一字号的每个字都一样 |
 | `baseline` | 基线距盒子顶的距离。同一字体、同一字号的每个字都一样 |
 | `ink` | 真实着墨，相对盒子左上角。空格是 `null`。可以稍微探出盒子 |
 | `missing` | 字体里没有这个字时为 `true`。`d` 仍是缺字方框，不同的缺字会得到同一条路径 |
 
-`font` 用 `Song`、`Kai`、`Brush`，或默认的 `ChillDuanSans`。`楷体` 这类别名也可以。没写 `size` 时是 40。宋体、楷体的 `weight` 取最近的 400 或 700。`ChillDuanSans` 是可变字体，轮廓只有默认字重 300，请求其它字重会抛错。没注册的字体名也会抛错。
+`font` 用 [docs/RESOURCES.md](docs/RESOURCES.md) 里的名字，或默认的 `ChillDuanSans`。`楷体` 这类别名也可以。没写 `size` 时是 40。多档字体的 `weight` 取最近的一档。`ChillDuanSans` 是可变字体，轮廓只有默认字重 300，请求其它字重会抛错。没注册的字体名也会抛错。
 
 空格有字宽，`d` 是空字符串，`missing` 是 `false`。字体里没有的字（例如 `😀`、`𠀀`）`missing` 是 `true`，`d` 是同一个缺字方框。
 
@@ -549,6 +555,7 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 
 - `box`：布局盒子（含 padding 和 border），只累加平移，不受 `rotate`、`scale` 和透视影响。
 - `ink`：实际着墨经过旋转、缩放之后的外接矩形；落在带 `perspective` 的平面上时，改成投影后的外接矩形。并和祖先里 `overflow="hidden"` 的 layer、以及 `<mask>` 的外接范围求过交集。文字是字形的真实边界，形状是布局盒子变换后的范围。`overflow-canvas` 看的是这个投影后的 `ink`，不是 `box`。线条的中心线落在画布边上时，描边半径探出去不算超出；中心线本身越出画布仍然算。
+- `effect`：阴影、光晕、图层模糊或玻璃可能占用的范围，字段同 `box`。没有这些外扩效果时不写。已经被 `overflow="hidden"` 或 `<mask>` 裁掉的部分不算在里面。这个范围画出画布时报 `effect-clipped`。
 - `quad`：有透视投影时才有。投影后的四个角，画布坐标，顺序为左上、右上、右下、左下。用来看斜着的平面实际落在哪儿。
 - `opacity`：从根到该元素逐层相乘后的透明度。
 
@@ -600,7 +607,7 @@ flexlayer render scene.tsx --frames out/                         # Composition �
 
 `.tsx`、`.jsx`、`.ts`、`.js` 会先执行，并做类型检查，类型错误记为 `type-error`。标准库和 Node 的类型由渲染器自带，不依赖文件旁边的 `node_modules`。`import ... from 'node:fs'` 可以类型检查。不认识的属性名和 `.layer` 一样保留给 `draw`，不算 `type-error`。属性放错位置同样由检查报 `invalid-attr`，不记成类型错误。`import './x.tsx'` 这种带扩展名的引用可以通过。有类型错误时仍然出图，退出码为 1。文件里写 `/** @jsxImportSource @dc/flexlayer */`，标签和属性与 `.layer` 相同。默认导出一个 `<layer>` 节点，或返回该节点的函数。命名导出 `composition`（或默认导出）可以是第 13 章的 `Composition`。执行结果是同一棵节点树，后面的布局、问题码和绘制都不变。推荐用 `canvas.create(<layer>…</layer>)` 量好再摆。`create` 是同步的，准备在进程里记住，多帧不会重新开始。见第 15 章。`check` 在没有 `--frame` 时抽查第 0 帧、中间一帧和最后一帧。`--emit` 把树写回 `.layer`；`draw` 函数若用了外部变量，记 `emit-draw`，函数体仍会写出来。帧数超过 300 且没有 `--frame` 或 `--frames` 时不渲染联系表。
 
-默认字体寒蝉端黑体首次使用时自动下载到 `~/.cache/flexlayer/fonts`。
+默认字体寒蝉端黑体，以及 [docs/RESOURCES.md](docs/RESOURCES.md) 里的其它字体，首次使用时自动下载到 `~/.cache/flexlayer/fonts`。
 
 ## 12. 自定义绘制 draw
 

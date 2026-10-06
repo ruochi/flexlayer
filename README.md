@@ -2,7 +2,7 @@
 
 Flex Layer 用标签描述一帧画面：图形用 SVG 的写法，文字用 HTML 的写法，布局用 CSS flexbox。渲染器读入 `.layer`，输出 PNG 和一份布局报告。
 
-规范见 [SPEC.md](SPEC.md)。给模型的入口见 [AGENTS.md](AGENTS.md)，一页写法见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)。当前版本是单帧 v0.2.0。
+规范见 [SPEC.md](SPEC.md)。给模型的入口见 [AGENTS.md](AGENTS.md)，一页写法见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，字体、图片和配色见 [docs/RESOURCES.md](docs/RESOURCES.md)。当前版本是 0.2.2。
 
 `layer` 上的 `perspective` 让直接子元素共用一个视距。`rotateX`、`rotateY`、`z` 写在要转动或推近的那一层上。`sphere`、`box`、`extrude`、`model` 和这些平面共用同一台视距。例子：`npx tsx src/cli.ts render examples/perspective.layer -o perspective.png`，`npx tsx src/cli.ts render examples/meshes.layer -o meshes.png`。
 
@@ -15,7 +15,7 @@ npm install
 npm run build
 ```
 
-默认字体是寒蝉端黑体。`Song`（宋体）、`Kai`（楷体）、`Brush`（书法）也是内置的，第一次用到时下载到 `~/.cache/flexlayer/fonts`。
+默认字体是寒蝉端黑体。`Song`、`Kai`、`Brush` 和一批 Google 字体也可以直接写名字，第一次用到时下载到 `~/.cache/flexlayer/fonts`。名单见 [docs/RESOURCES.md](docs/RESOURCES.md)。
 
 ## 命令
 

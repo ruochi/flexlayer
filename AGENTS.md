@@ -76,14 +76,30 @@ export default canvas.create(
 
 只写宽或只写高、且没有会换行的文字时，另一边按比例放缩。宽高都写了就是盒子。返回的节点带 `left`、`top`、`right`、`bottom`。底色用铺满的 `<rect fill>`。形状用 SVG 的 `x y width height` 或 `cx cy rx ry`。`<g transform>` 把几笔收成一组。`<arrow>` 是内置组件。量到的盒子和最终排版不一致时报 `measure-mismatch`。例子：`examples/poster.tsx`、`examples/hello.tsx`。规范见 SPEC 第 15 章。
 
+字体、图片、配色和效果名用 [docs/RESOURCES.md](docs/RESOURCES.md)。`font-family="Song"` 这种目录里的名字会自己下载，不要编造字体文件地址，也不要把 `fonts.googleapis.com` 的 CSS 地址写进 `<font src>`。
+
 - 直接写 `.layer`：渲染器和 `--emit` 用的文本。静态单帧可以手写。速查见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，例子在 [examples/](examples/)。
 - 动画导出 `composition`（见 SPEC 第 13 章）。文件头写 `/** @jsxImportSource @dc/flexlayer */`，标签不用 import。`flexlayer check` / `render` 会执行它。`--emit out.layer` 把展开结果写回 `.layer`。`draw={(ctx, el) => ...}` 里只用 `ctx` 和 `el`，否则 `--emit` 报 `emit-draw`。不要用 `Math.random` 或 `Date.now`。例子：`examples/slide.tsx`。
-- 要从字体取出某个字的轮廓，`import { glyph } from '@dc/flexlayer'`。`await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })` 按码位返回数组，每项有 `d`、字宽 `width`、字身高度 `height`、`baseline` 和 `missing`。`d` 的原点在字身左上角，y 向下，单位是像素。字宽和字身高度来自字体，不来自路径外接框。缺字（`😀`、`𠀀`）`missing` 为 `true`，`d` 是同一个缺字方框。可变字体只出默认字重。见 SPEC 5.4。
+- 要从字体取出某个字的轮廓，`import { glyph } from '@dc/flexlayer'`。`await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })` 按码位返回数组，每项有 `text`、`d`、`font`、`size`、`weight`、字宽 `width`、字身高度 `height`、`baseline`、`ink` 和 `missing`。`d` 的原点在字身左上角，y 向下，单位是像素。字宽和字身高度来自字体，不来自路径外接框。缺字（`😀`、`𠀀`）`missing` 为 `true`，`d` 是同一个缺字方框。可变字体只出默认字重。见 SPEC 5.4。
 
 ```ts
 import { renderLayer } from '@dc/flexlayer'
 const { png, report } = await renderLayer(source, { baseDir: process.cwd() })
 ```
+
+从 `@dc/flexlayer` 拿出的就是这些。`renderFvg`、`checkFvg` 分别是 `renderLayer`、`checkLayer` 的别名。
+
+| 导出 | 做什么 |
+| --- | --- |
+| `canvas.create` / `create` | 同步量一个 `<layer>`，返回带 `left` `top` `right` `bottom` 的节点 |
+| `canvas.component` / `registerComponent` | 按标签名注册组件。内置 `arrow` 也从这里来，`arrowComponent` 是它的函数 |
+| `renderLayer` / `checkLayer` | 渲染 PNG，或只排版并出报告 |
+| `glyph` | 按码位取轮廓 |
+| `h` | 不用 JSX 时建节点 |
+| `renderComposition` / `interpolate` / `spring` / `sequence` | 帧序列和三个时间函数 |
+| `parseFvg` / `emitLayer` | 解析 `.layer` 文本，或把节点写回文本 |
+| `buildReport` / `formatIssueLine` / `formatSourceLoc` | 报告、终端里的一行问题、源码位置 |
+| `resources` | 字体、图片、配色、`grade` / `glass` / `blend` 的可用名字 |
 
 ## 4. 验证：由轻到重
 
@@ -113,7 +129,7 @@ npx tsx src/cli.ts render scene.layer -o scene.png --report scene.json
 - **`box`**：布局盒（含 padding）；flex 的 `gap` 体现在相邻元素 box 之间的空隙。
 - **`ink`**：字形或图形真实着墨。有透视时是投影后的外接矩形，`overflow-canvas` 看它，不看没投影的 `box`。
 - **`quad`**：透视平面投影后的四个角（左上、右上、右下、左下）。斜着的平面落在哪儿看这里。
-- **`effect`**：阴影 / 光晕可能占用的范围；`effect-clipped` 表示被画布裁切。`overflow="hidden"` 和 `<mask>` 已经裁掉的部分不算。
+- **`effect`**：阴影、光晕、图层模糊或玻璃可能占用的范围。没有这些外扩效果时不写这个字段。`effect-clipped` 表示它画出了画布。`overflow="hidden"` 和 `<mask>` 已经裁掉的部分不算。
 - **`issues`**：见 [SPEC.md 的问题码表](SPEC.md)。**error 必须修**，warn 视需求修。`grade` 回显的是预设展开后的参数。
 
 ## 5. 工作流
@@ -134,7 +150,7 @@ flowchart TD
 2. 用 `path` 定位，不要猜第几个 child。从 `.tsx` 来的报告还有 `source`（`hello.tsx:18:5`），直接改那一行。
 3. 改 `gap` / `padding` 时看相邻元素的 box / ink。
 4. 动态海报在 `.tsx` 里改数据，再跑 check。要看展开后的画面，加 `--emit out.layer`。
-5. 字体用根上的 `<font family src>`，或内置名 `Song`、`Kai`、`Brush`。
+5. 字体、图片和配色用 [docs/RESOURCES.md](docs/RESOURCES.md)。目录里的字体名直接写 `font-family`。自己的文件才用根上的 `<font family src>`。
 6. 合并进 `main` 时，把根 `package.json` 和 `package-lock.json` 的 `version` 补丁号加一（`0.2.0` → `0.2.1`）。每次合并都加。
 
 ## 6. 现象怎么查
@@ -156,6 +172,7 @@ flowchart TD
 | --- | --- |
 | [SPEC.md](SPEC.md) | 唯一规范：标签、属性、效果、问题码 |
 | [docs/CHEATSHEET.md](docs/CHEATSHEET.md) | 一页写法 |
+| [docs/RESOURCES.md](docs/RESOURCES.md) | 能直接用的字体、Google 字体、图片、配色、效果名 |
 | [docs/GALLERY.md](docs/GALLERY.md) | 效果对应哪张图的哪一格 |
 | [docs/EFFECTS.md](docs/EFFECTS.md) | 算法与实现备注 |
 | [docs/proposals/3D.md](docs/proposals/3D.md) | 3D 讨论。平面透视和 `sphere` / `box` / `extrude` / `model` 已接上，网格用自带三角形光栅；作者灯光还没有 |

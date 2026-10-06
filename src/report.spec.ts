@@ -146,6 +146,11 @@ describe('buildReport', () => {
       `<layer width="140" height="140" background="#fff"><layer x="20" y="20" width="100" height="100"><rect x="15" y="15" width="70" height="70" fill="#000" glow="48 #fff" /></layer></layer>`,
     )
     expect(open.issues.some((issue) => issue.code === 'effect-clipped')).toBe(true)
+    const glow = open.elements.find((el) => el.tag === 'rect')
+    expect(glow?.effect).toBeDefined()
+    expect(glow!.effect!.width).toBeGreaterThan(glow!.ink.width)
+    const plain = await checkFvg(`<layer width="80" height="80"><rect x="10" y="10" width="40" height="20" fill="#000" /></layer>`)
+    expect(plain.elements.find((el) => el.tag === 'rect')?.effect).toBeUndefined()
   })
 
   it('倾斜平面的光晕还在画布里时不报 effect-clipped', async () => {

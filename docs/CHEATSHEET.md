@@ -44,7 +44,7 @@
 
 网格和透视共用这一层：`<layer perspective="700"><sphere cx="220" cy="340" r="90" z="50" fill="#4CC3D9" /><box x="355" y="350" width="150" height="100" depth="60" fill="#EF2D5E" /></layer>`。`extrude` 用 `d` 和 `depth`，`d` 里并排的形状各自挤出，套在里面的才是洞。`model` 放在有宽高的 layer 里，`src` 指向 `.glb`。网格的 `fill` 是纯色，渐变、`shadow`、`glow` 会警告。没有 `perspective` 时不绘制。例子见 [examples/meshes.layer](../examples/meshes.layer)。
 
-竖排：`style="writing-mode:vertical-rl"`。字体名 `Song`、`Kai`、`Brush` 不用自带字体文件。
+竖排：`style="writing-mode:vertical-rl"`。字体名见 [docs/RESOURCES.md](RESOURCES.md)，直接写 `font-family`，不用自带字体文件。
 
 ## 例子
 

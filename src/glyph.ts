@@ -26,7 +26,7 @@ export type Glyph = {
 }
 
 export type GlyphOptions = {
-  /** 字体名。内置 `Song`、`Kai`、`Brush`，默认 `ChillDuanSans`。别名如「楷体」也可以。 */
+  /** 字体名。见 `resources.fonts`，默认 `ChillDuanSans`。别名如「楷体」也可以。 */
   font?: string
   /** 字号，像素。默认 40。 */
   size?: number

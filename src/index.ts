@@ -27,3 +27,5 @@ export type {
   DrawComputedStyle,
 } from './types.js'
 export type { FvgNode, FvgChild } from './parse.js'
+export { resources, palettes, images, grades, glass, blends } from './resources.js'
+export type { FontResource, ImageResource } from './resources.js'

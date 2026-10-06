@@ -5,11 +5,11 @@ import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { GlobalFonts } from '@napi-rs/canvas'
+import { DEFAULT_FONT, REGISTERED_FONTS } from './font-catalog.js'
 
-export const DEFAULT_FONT_FAMILY = 'ChillDuanSans'
-const DEFAULT_FONT_URL =
-  'https://banling1.oss-cn-beijing.aliyuncs.com/weixin/dc/fonts/ChillDuanSansVF.ttf'
-const DEFAULT_FONT_FILE = 'ChillDuanSansVF.ttf'
+export const DEFAULT_FONT_FAMILY = DEFAULT_FONT.family
+const DEFAULT_FONT_URL = DEFAULT_FONT.faces[0]!.url
+const DEFAULT_FONT_FILE = DEFAULT_FONT.faces[0]!.file
 
 const registered = new Set<string>()
 let freshFontLoads = 0
@@ -106,63 +106,17 @@ type FontFace = { file: string; weight: number; url: string; registeredAs: strin
 
 type BuiltinFont = { cssFamily: string; faces: FontFace[] }
 
-const SONG: BuiltinFont = {
-  cssFamily: 'Song',
-  faces: [
-    {
-      file: 'NotoSerifSC-400.woff',
-      weight: 400,
-      registeredAs: 'Song',
-      url: 'https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.2.8/files/noto-serif-sc-chinese-simplified-400-normal.woff',
-    },
-    {
-      file: 'NotoSerifSC-700.woff',
-      weight: 700,
-      registeredAs: 'SongBold',
-      url: 'https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.2.8/files/noto-serif-sc-chinese-simplified-700-normal.woff',
-    },
-  ],
-}
-
-const KAI: BuiltinFont = {
-  cssFamily: 'Kai',
-  faces: [
-    {
-      file: 'LXGWWenKai-Regular.ttf',
-      weight: 400,
-      registeredAs: 'Kai',
-      url: 'https://github.com/lxgw/LxgwWenKai/releases/download/v1.330/LXGWWenKai-Regular.ttf',
-    },
-    {
-      file: 'LXGWWenKai-Bold.ttf',
-      weight: 700,
-      registeredAs: 'KaiBold',
-      url: 'https://github.com/lxgw/LxgwWenKai/releases/download/v1.330/LXGWWenKai-Bold.ttf',
-    },
-  ],
-}
-
-const BRUSH: BuiltinFont = {
-  cssFamily: 'Brush',
-  faces: [
-    {
-      file: 'MaShanZheng-Regular.woff',
-      weight: 400,
-      registeredAs: 'Brush',
-      url: 'https://cdn.jsdelivr.net/npm/@fontsource/ma-shan-zheng@5.2.8/files/ma-shan-zheng-chinese-simplified-400-normal.woff',
-    },
-  ],
-}
-
-const BUILTIN_FONTS = [SONG, KAI, BRUSH]
+const BUILTIN_FONTS: BuiltinFont[] = REGISTERED_FONTS.map((font) => ({
+  cssFamily: font.family,
+  faces: font.faces,
+}))
 
 const FONT_ALIASES: Record<string, BuiltinFont> = {}
-for (const font of BUILTIN_FONTS) {
-  FONT_ALIASES[font.cssFamily.toLowerCase()] = font
+for (const font of REGISTERED_FONTS) {
+  const builtin = BUILTIN_FONTS.find((item) => item.cssFamily === font.family)!
+  FONT_ALIASES[font.family.toLowerCase()] = builtin
+  for (const alias of font.aliases) FONT_ALIASES[alias.trim().toLowerCase()] = builtin
 }
-for (const name of ['sourcehanserif', 'notoserifsc', 'noto serif sc', '宋体', '思源宋体']) FONT_ALIASES[name] = SONG
-for (const name of ['lxgwwenkai', 'wenkai', '楷体', '霞鹜文楷']) FONT_ALIASES[name] = KAI
-for (const name of ['mashanzheng', '书法', '毛笔']) FONT_ALIASES[name] = BRUSH
 
 export function builtinFont(family: string): BuiltinFont | undefined {
   return FONT_ALIASES[family.trim().toLowerCase()]
@@ -253,7 +207,7 @@ function ensureFaceSync(face: FontFace): void {
   registerFontPath(face.registeredAs, dest)
 }
 
-/** 按字体名准备内置宋体、楷体、书法。已经记住的名字直接跳过。 */
+/** 按字体名准备目录里的字体。已经记住的名字直接跳过。 */
 export function ensureBuiltinFontsSync(families: Iterable<string>): void {
   const seen = new Set<string>()
   for (const family of families) {
@@ -303,7 +257,7 @@ export async function resolveOutlineFont(family: string | undefined, weight: num
   }
   const name = requested.toLowerCase().includes('chillduan') ? DEFAULT_FONT_FAMILY : requested
   if (!GlobalFonts.has(name)) {
-    throw new Error(`字体未注册: ${requested}。内置 Song、Kai、Brush，默认字体是 ${DEFAULT_FONT_FAMILY}`)
+    throw new Error(`字体未注册: ${requested}。可用字体见 resources.fonts，默认字体是 ${DEFAULT_FONT_FAMILY}`)
   }
   const axis = variationWeight(name)
   if (axis) {

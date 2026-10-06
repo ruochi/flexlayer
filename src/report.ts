@@ -512,6 +512,7 @@ export function buildReport(doc: FvgDocument): FvgReport {
     let effectBox: Box | null = null
     if (recorded?.plane) effectBox = recorded.box
     else if (effectPad > 0) effectBox = clipInk(expandBox(el.ink, effectPad), recorded?.clip)
+    if (!MESH_TAGS.has(el.tag) && effectBox && hasArea(effectBox)) el.effect = boxToRect(effectBox)
     if (!MESH_TAGS.has(el.tag) && !inkOutside && effectBox && hasArea(effectBox) && effectOutside(effectBox, doc)) {
       issues.push({
         level: 'warn',

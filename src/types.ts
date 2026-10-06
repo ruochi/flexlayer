@@ -155,6 +155,8 @@ export type ElementReport = {
   ink: Rect
   /** 投影后的四个角，画布坐标，顺序为左上、右上、右下、左下。没有透视投影时不写。 */
   quad?: [{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }, { x: number; y: number }]
+  /** 阴影、光晕、图层模糊或玻璃可能占用的范围。没有外扩效果时不写。 */
+  effect?: Rect
   /** 逐层相乘后的有效透明度。 */
   opacity: number
   fontSize?: number
