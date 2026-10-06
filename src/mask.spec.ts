@@ -138,7 +138,7 @@ describe('mask', () => {
     const { png } = await renderFvg(`
       <layer width="90" height="60" background="#000000">
         <mask><circle cx="30" cy="30" r="16" /></mask>
-        <rect cx="30" cy="30" width="20" height="20" fill="#ffffff" shadow="24 0 0 #ff0000" />
+        <rect x="20" y="20" width="20" height="20" fill="#ffffff" shadow="24 0 0 #ff0000" />
       </layer>
     `)
     const body = await pixelAt(png, 30, 30)
@@ -150,7 +150,7 @@ describe('mask', () => {
   it('overflow=hidden 先裁子元素，mask 不会把盒子外的像素找回来', async () => {
     const { png } = await renderFvg(`
       <layer width="100" height="80" background="#000000">
-        <layer cx="0" cy="0" anchor="top-left" width="40" height="40" overflow="hidden">
+        <layer x="0" y="0" width="40" height="40" overflow="hidden">
           <mask><rect x1="-10" y1="0" x2="80" y2="40" /></mask>
           <rect x1="20" y1="0" x2="70" y2="40" fill="#ffffff" />
         </layer>
@@ -256,7 +256,7 @@ describe('mask', () => {
     const onShape = await checkFvg(`<layer width="40" height="40"><rect width="20" height="20"><mask><circle cx="10" cy="10" r="4" /></mask></rect></layer>`)
     expect(onShape.issues.some((issue) => issue.code === 'invalid-child' && issue.message.includes('直接子元素'))).toBe(true)
 
-    const styled = await checkFvg(`<layer width="40" height="40"><rect cx="20" cy="20" width="10" height="10" style="mask: url(#a)" /></layer>`)
+    const styled = await checkFvg(`<layer width="40" height="40"><rect x="15" y="15" width="10" height="10" style="mask: url(#a)" /></layer>`)
     expect(styled.issues.some((issue) => issue.message.includes('style'))).toBe(true)
   })
 
@@ -267,7 +267,7 @@ describe('mask', () => {
           <mask><circle cx="20" cy="20" r="10" /></mask>
           <rect x1="0" y1="0" x2="40" y2="40" fill="#ff0000" />
         </symbol>
-        <use href="#card" cx="20" cy="20" />
+        <use href="#card" x="0" y="0" />
       </layer>
     `)
     const center = await pixelAt(png, 20, 20)

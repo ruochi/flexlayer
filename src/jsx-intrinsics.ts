@@ -27,9 +27,15 @@ type FvgHtml = FvgNodeBase & {
 type FvgGraphic = FvgNodeBase
 
 type FvgPositioned = FvgGraphic & {
+  x?: number | string
+  y?: number | string
+  anchor?: string
+}
+
+/** circle、ellipse、sphere 的圆心。 */
+type FvgCenter = {
   cx?: number | string
   cy?: number | string
-  anchor?: string
 }
 
 /** 线条类。stroke-width 默认 4，fill 默认 none。 */
@@ -120,7 +126,7 @@ export namespace JSX {
   export interface IntrinsicElements {
     font: { family?: string; src?: string }
     /**
-     * 根画布与定位容器。
+     * 根画布与定位容器。`x`、`y` 是左上角，没写是 0。
      * `background` 只在根上当画布底色；嵌套 layer 不填背景，色块用 rect / HTML / draw。
      */
     layer: FvgPositioned &
@@ -164,8 +170,8 @@ export namespace JSX {
       background?: string
     }
     rect: FvgShape & { x1?: number | string; y1?: number | string; x2?: number | string; y2?: number | string }
-    circle: FvgShape
-    ellipse: FvgShape & { x1?: number | string; y1?: number | string; x2?: number | string; y2?: number | string }
+    circle: FvgShape & FvgCenter
+    ellipse: FvgShape & FvgCenter & { x1?: number | string; y1?: number | string; x2?: number | string; y2?: number | string }
     line: FvgGraphic &
       FvgLinePaint & {
         x1?: number | string
@@ -185,6 +191,7 @@ export namespace JSX {
     polygon: FvgGraphic & FvgLinePaint & { points?: string }
     path: FvgGraphic & FvgLinePaint & { d?: string }
     sphere: FvgPositioned &
+      FvgCenter &
       FvgEffects & {
         r?: number | string
         fill?: string

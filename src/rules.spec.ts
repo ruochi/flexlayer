@@ -62,7 +62,7 @@ describe('属性归属', () => {
 
   it('非 layer 写 overlay 报 warn', async () => {
     const report = await issues(
-      `<layer width="200" height="100"><rect cx="40" cy="40" width="40" height="40" fill="#fff" overlay="#00000066" /></layer>`,
+      `<layer width="200" height="100"><rect x="20" y="20" width="40" height="40" fill="#fff" overlay="#00000066" /></layer>`,
     )
     const hit = report.issues.find((issue) => issue.message.includes('overlay'))
     expect(hit?.level).toBe('warn')
@@ -71,7 +71,7 @@ describe('属性归属', () => {
 
   it('grade 只写在 layer 上：Rect 属性和 img 的 style 都报 warn', async () => {
     const report = await issues(
-      `<layer width="200" height="100"><rect cx="40" cy="40" width="40" height="40" fill="#fff" grade="mono" /><img src="x.png" style="width:20px; height:20px; grade:lomo" /></layer>`,
+      `<layer width="200" height="100"><rect x="20" y="20" width="40" height="40" fill="#fff" grade="mono" /><img src="x.png" style="width:20px; height:20px; grade:lomo" /></layer>`,
     )
     const hits = report.issues.filter((issue) => issue.code === 'invalid-attr' && issue.message.includes('grade'))
     expect(hits).toHaveLength(2)
@@ -86,29 +86,31 @@ describe('属性归属', () => {
 
   it('HTML style 写 overlay 报 warn', async () => {
     const report = await issues(
-      `<layer width="200" height="100"><layer cx="20" cy="20" anchor="top-left"><p style="overlay:#00000066; font-size:24px">x</p></layer></layer>`,
+      `<layer width="200" height="100"><layer x="20" y="20"><p style="overlay:#00000066; font-size:24px">x</p></layer></layer>`,
     )
     expect(report.issues.some((issue) => issue.message.includes('overlay') && issue.hint?.includes('layer'))).toBe(true)
   })
 
-  it('形状写 anchor 报 non-canonical，仍然按 anchor 绘制', async () => {
+  it('rect 上的 cx、cy 报 warn 并忽略', async () => {
     const report = await issues(`<layer width="400" height="200"><rect cx="10" cy="20" anchor="top-left" width="30" height="40" /></layer>`)
-    expect(report.issues.some((issue) => issue.code === 'non-canonical')).toBe(true)
+    const hit = report.issues.find((issue) => issue.code === 'invalid-attr' && issue.message.includes('cx、cy'))
+    expect(hit?.hint).toContain('x="10"')
+    expect(hit?.hint).toContain('y="20"')
     const rect = report.elements.find((element) => element.tag === 'rect')
-    expect(rect?.box.left).toBeCloseTo(10, 3)
-    expect(rect?.box.top).toBeCloseTo(20, 3)
+    expect(rect?.box.left).toBeCloseTo(0, 3)
+    expect(rect?.box.top).toBeCloseTo(0, 3)
   })
 
-  it('Rect 的 x、y 按左上角渲染并报 non-canonical', async () => {
+  it('rect 的 x、y 是左上角', async () => {
     const report = await issues(`<layer width="400" height="200"><rect x="15" y="25" width="30" height="40" /></layer>`)
     const rect = report.elements.find((element) => element.tag === 'rect')
     expect(rect?.box.left).toBeCloseTo(15, 3)
     expect(rect?.box.top).toBeCloseTo(25, 3)
-    expect(report.issues.some((issue) => issue.code === 'non-canonical' && issue.hint)).toBe(true)
+    expect(report.issues.filter((issue) => issue.code === 'non-canonical')).toEqual([])
   })
 
   it('不认识的属性不报错', async () => {
-    const report = await issues(`<layer width="200" height="200"><rect cx="20" cy="20" width="10" height="10" data-total="33" /></layer>`)
+    const report = await issues(`<layer width="200" height="200"><rect x="20" y="20" width="10" height="10" data-total="33" /></layer>`)
     expect(report.issues).toEqual([])
   })
 

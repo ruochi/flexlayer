@@ -23,7 +23,7 @@ describe('网格布局', () => {
     const report = await checkFvg(`
       <layer width="200" height="120" perspective="400">
         <sphere cx="40" cy="50" r="10">
-        <box cx="120" cy="50" width="30" height="20" depth="80" />
+        <box x="105" y="40" width="30" height="20" depth="80" />
       </layer>
     `)
     const sphere = report.elements.find((el) => el.tag === 'sphere')
@@ -35,7 +35,7 @@ describe('网格布局', () => {
 
   it('extrude 按路径包围盒居中', async () => {
     const report = await checkFvg(
-      `<layer width="640" height="800" perspective="700"><extrude d="M0 0 H140 V36 H90 V80 H0 Z" depth="18" cx="320" cy="640" /></layer>`,
+      `<layer width="640" height="800" perspective="700"><extrude x="250" y="600" d="M0 0 H140 V36 H90 V80 H0 Z" depth="18" /></layer>`,
     )
     const extrude = report.elements.find((el) => el.tag === 'extrude')
     expect(extrude).toMatchObject({ box: { x: 250, y: 600, width: 140, height: 80 } })
@@ -54,7 +54,7 @@ describe('网格布局', () => {
 
   it('不是 glb、以及没写 depth，会警告', async () => {
     const report = await checkFvg(
-      `<layer width="100" height="80" perspective="300"><model src="hero.png" /><box cx="40" cy="40" width="20" height="10" /></layer>`,
+      `<layer width="100" height="80" perspective="300"><model src="hero.png" /><box x="30" y="35" width="20" height="10" /></layer>`,
       { baseDir: dir },
     )
     expect(report.issues.some((issue) => issue.code === 'missing-model')).toBe(true)
@@ -102,8 +102,8 @@ describe('网格绘制', () => {
   it('更近的球体挡住长方体和平面', async () => {
     const { png } = await renderFvg(`
       <layer width="200" height="200" background="#000000" perspective="600">
-        <box cx="100" cy="100" width="120" height="80" depth="40" fill="#2244ff" />
-        <rect cx="100" cy="100" width="160" height="120" fill="#22cc44" z="-30" />
+        <box x="40" y="60" width="120" height="80" depth="40" fill="#2244ff" />
+        <rect x="20" y="40" width="160" height="120" fill="#22cc44" z="-30" />
         <sphere cx="100" cy="100" r="26" z="50" fill="#ff2244" />
       </layer>
     `)
@@ -115,7 +115,7 @@ describe('网格绘制', () => {
 
   it('extrude 的剪影跟着路径走', async () => {
     const { png } = await renderFvg(
-      `<layer width="220" height="160" background="#101010" perspective="800"><extrude d="M0 0 H140 V36 H90 V80 H0 Z" depth="16" cx="110" cy="80" fill="#f4f1ea" /></layer>`,
+      `<layer width="220" height="160" background="#101010" perspective="800"><extrude x="40" y="40" d="M0 0 H140 V36 H90 V80 H0 Z" depth="16" fill="#f4f1ea" /></layer>`,
     )
     const inside = await pixelAt(png, 60, 60)
     const notch = await pixelAt(png, 160, 100)
@@ -126,7 +126,7 @@ describe('网格绘制', () => {
 
   it('glb 按外包 layer 居中，并使用文件里的颜色', async () => {
     const { png } = await renderFvg(
-      `<layer width="180" height="180" background="#000000" perspective="700"><layer cx="90" cy="90" width="70" height="70"><model src="box.glb" /></layer></layer>`,
+      `<layer width="180" height="180" background="#000000" perspective="700"><layer x="55" y="55" width="70" height="70"><model src="box.glb" /></layer></layer>`,
       { baseDir: dir },
     )
     const center = await pixelAt(png, 90, 90)
@@ -140,8 +140,8 @@ describe('网格绘制', () => {
   it('平面上的深色在有网格时不变浅，正对镜头的白方块达到 fill', async () => {
     const { png } = await renderFvg(`
       <layer width="220" height="140" background="#ffffff" perspective="500">
-        <rect cx="50" cy="70" width="70" height="40" fill="#222222" />
-        <box cx="150" cy="70" width="48" height="48" depth="48" fill="#ffffff" />
+        <rect x="15" y="50" width="70" height="40" fill="#222222" />
+        <box x="126" y="46" width="48" height="48" depth="48" fill="#ffffff" />
       </layer>
     `)
     const ink = await pixelAt(png, 50, 70)
@@ -156,8 +156,8 @@ describe('网格绘制', () => {
   it('偏离光轴的浅色正面仍是写下的 fill', async () => {
     const { png } = await renderFvg(`
       <layer width="220" height="80" background="#ffffff" perspective="500">
-        <box cx="36" cy="40" width="48" height="48" depth="12" fill="#d9ccff" />
-        <box cx="184" cy="40" width="48" height="48" depth="12" fill="#a9dcff" />
+        <box x="12" y="16" width="48" height="48" depth="12" fill="#d9ccff" />
+        <box x="160" y="16" width="48" height="48" depth="12" fill="#a9dcff" />
       </layer>
     `)
     const left = await pixelAt(png, 36, 40)
@@ -169,7 +169,7 @@ describe('网格绘制', () => {
   it('三维场景里的平面颜色保持原色阶', async () => {
     const { png } = await renderFvg(`
       <layer width="180" height="80" background="#ffffff" perspective="500">
-        <rect cx="50" cy="40" width="60" height="40" fill="#2b6b5e" />
+        <rect x="20" y="20" width="60" height="40" fill="#2b6b5e" />
         <sphere cx="130" cy="40" r="18" fill="#888888" />
       </layer>
     `)
@@ -180,8 +180,8 @@ describe('网格绘制', () => {
   it('extrude 的并排形状都留下，洞仍然是洞', async () => {
     const { png } = await renderFvg(`
       <layer width="220" height="120" background="#101010" perspective="800">
-        <extrude d="M0 0 H28 V28 H0 Z M52 0 H80 V28 H52 Z" depth="12" cx="50" cy="60" fill="#f2f2f2" />
-        <extrude d="M0 0 H64 V64 H0 Z M18 18 H46 V46 H18 Z" depth="12" cx="160" cy="60" fill="#f2f2f2" />
+        <extrude x="10" y="46" d="M0 0 H28 V28 H0 Z M52 0 H80 V28 H52 Z" depth="12" fill="#f2f2f2" />
+        <extrude x="128" y="28" d="M0 0 H64 V64 H0 Z M18 18 H46 V46 H18 Z" depth="12" fill="#f2f2f2" />
       </layer>
     `)
     const left = await pixelAt(png, 28, 60)
@@ -199,7 +199,7 @@ describe('网格绘制', () => {
   it('网格超出所在 layer 时仍画在父画布上，并在超出根画布时警告', async () => {
     const spilled = await renderFvg(`
       <layer width="200" height="120" background="#000000">
-        <layer cx="130" cy="60" width="80" height="70" perspective="180">
+        <layer x="90" y="25" width="80" height="70" perspective="180">
           <sphere cx="16" cy="35" r="14" z="50" fill="#ff2244" />
         </layer>
       </layer>
@@ -217,7 +217,7 @@ describe('网格绘制', () => {
 
   it('网格上的渐变、shadow、glow 会警告', async () => {
     const report = await checkFvg(
-      `<layer width="160" height="120" perspective="400"><box cx="80" cy="60" width="40" height="30" depth="20" fill="linear-gradient(#fff, #000)" shadow="0 8 12 #000" glow="10 #fff" /></layer>`,
+      `<layer width="160" height="120" perspective="400"><box x="60" y="45" width="40" height="30" depth="20" fill="linear-gradient(#fff, #000)" shadow="0 8 12 #000" glow="10 #fff" /></layer>`,
     )
     const messages = report.issues.filter((issue) => issue.code === 'invalid-attr').map((issue) => issue.message)
     expect(messages.some((message) => message.includes('渐变'))).toBe(true)
@@ -227,7 +227,7 @@ describe('网格绘制', () => {
 
   it('网格斜边有抗锯齿过渡', async () => {
     const { png } = await renderFvg(
-      `<layer width="200" height="200" background="#000000" perspective="800"><box cx="100" cy="100" width="160" height="14" depth="2" rotate="24" fill="#ffffff" /></layer>`,
+      `<layer width="200" height="200" background="#000000" perspective="800"><box x="20" y="93" width="160" height="14" depth="2" rotate="24" fill="#ffffff" /></layer>`,
     )
     const img = await loadImage(png)
     const canvas = createCanvas(img.width, img.height)

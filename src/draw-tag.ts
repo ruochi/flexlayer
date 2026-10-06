@@ -1,4 +1,5 @@
 import type { FvgChild, FvgNode } from './parse.js'
+import { readDrawFunction } from './syntax.js'
 import type { DrawFn, Issue } from './types.js'
 
 export const DRAW_TAG = 'draw'
@@ -67,6 +68,19 @@ export function attachDrawTags(node: FvgNode, issues: Issue[], path: string): vo
       path: last.path,
       message: '<draw> 内容为空',
       hint: '写入 canvas 绘制代码，例如 ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, el.w, el.h)',
+    })
+    return
+  }
+
+  const free = readDrawFunction(`(ctx, el) => {\n${last.body}\n}`)?.free ?? []
+  if (free.length > 0) {
+    const listed = free.slice(0, 4).join('、')
+    issues.push({
+      level: 'error',
+      code: 'invalid-draw',
+      path: last.path,
+      message: `<draw> 用了外部变量 ${listed}`,
+      hint: '可用变量只有 ctx 和 el。颜色和尺寸从 el.attr 读',
     })
     return
   }

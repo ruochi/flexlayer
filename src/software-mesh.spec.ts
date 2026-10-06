@@ -40,8 +40,8 @@ describe('软件光栅', () => {
   it('更近的球体挡住长方体和平面', async () => {
     const { png } = await render(`
       <layer width="200" height="200" background="#000000" perspective="600">
-        <box cx="100" cy="100" width="120" height="80" depth="40" fill="#2244ff" />
-        <rect cx="100" cy="100" width="160" height="120" fill="#22cc44" z="-30" />
+        <box x="40" y="60" width="120" height="80" depth="40" fill="#2244ff" />
+        <rect x="20" y="40" width="160" height="120" fill="#22cc44" z="-30" />
         <sphere cx="100" cy="100" r="26" z="50" fill="#ff2244" />
       </layer>
     `)
@@ -53,7 +53,7 @@ describe('软件光栅', () => {
 
   it('extrude 的剪影跟着路径走', async () => {
     const { png } = await render(
-      `<layer width="220" height="160" background="#101010" perspective="800"><extrude d="M0 0 H140 V36 H90 V80 H0 Z" depth="16" cx="110" cy="80" fill="#f4f1ea" /></layer>`,
+      `<layer width="220" height="160" background="#101010" perspective="800"><extrude x="40" y="40" d="M0 0 H140 V36 H90 V80 H0 Z" depth="16" fill="#f4f1ea" /></layer>`,
     )
     const inside = await pixelAt(png, 60, 60)
     const notch = await pixelAt(png, 160, 100)
@@ -64,7 +64,7 @@ describe('软件光栅', () => {
 
   it('glb 按外包 layer 居中，并使用文件里的颜色', async () => {
     const { png } = await render(
-      `<layer width="180" height="180" background="#000000" perspective="700"><layer cx="90" cy="90" width="70" height="70"><model src="box.glb" /></layer></layer>`,
+      `<layer width="180" height="180" background="#000000" perspective="700"><layer x="55" y="55" width="70" height="70"><model src="box.glb" /></layer></layer>`,
       { baseDir: dir },
     )
     const center = await pixelAt(png, 90, 90)
@@ -78,8 +78,8 @@ describe('软件光栅', () => {
   it('平面上的深色在有网格时不变浅，正对镜头的白方块达到 fill', async () => {
     const { png } = await render(`
       <layer width="220" height="140" background="#ffffff" perspective="500">
-        <rect cx="50" cy="70" width="70" height="40" fill="#222222" />
-        <box cx="150" cy="70" width="48" height="48" depth="48" fill="#ffffff" />
+        <rect x="15" y="50" width="70" height="40" fill="#222222" />
+        <box x="126" y="46" width="48" height="48" depth="48" fill="#ffffff" />
       </layer>
     `)
     const ink = await pixelAt(png, 50, 70)
@@ -94,8 +94,8 @@ describe('软件光栅', () => {
   it('偏离光轴的浅色正面仍是写下的 fill', async () => {
     const { png } = await render(`
       <layer width="220" height="80" background="#ffffff" perspective="500">
-        <box cx="36" cy="40" width="48" height="48" depth="12" fill="#d9ccff" />
-        <box cx="184" cy="40" width="48" height="48" depth="12" fill="#a9dcff" />
+        <box x="12" y="16" width="48" height="48" depth="12" fill="#d9ccff" />
+        <box x="160" y="16" width="48" height="48" depth="12" fill="#a9dcff" />
       </layer>
     `)
     const left = await pixelAt(png, 36, 40)
@@ -107,7 +107,7 @@ describe('软件光栅', () => {
   it('球体沿主光在平面上投下影子，没挡住的地方仍是 fill', async () => {
     const { png } = await render(`
       <layer width="240" height="240" background="#ffffff" perspective="800">
-        <rect cx="120" cy="160" width="220" height="120" fill="#ffffff" />
+        <rect x="10" y="100" width="220" height="120" fill="#ffffff" />
         <sphere cx="70" cy="70" r="24" z="70" fill="#ff2244" />
       </layer>
     `)
@@ -127,7 +127,7 @@ describe('软件光栅', () => {
   it('球体的影子落在长方体正面，没挡住的正面仍是 fill', async () => {
     const { png } = await render(`
       <layer width="420" height="360" background="#d9d3c7" perspective="800">
-        <box cx="230" cy="190" width="160" height="150" depth="20" fill="#f4f1ea" />
+        <box x="150" y="115" width="160" height="150" depth="20" fill="#f4f1ea" />
         <sphere cx="130" cy="110" r="28" z="48" fill="#e23d3d" />
       </layer>
     `)
@@ -141,8 +141,8 @@ describe('软件光栅', () => {
   it('更靠近主光的长方体挡住后面的平面', async () => {
     const { png } = await render(`
       <layer width="240" height="240" background="#ffffff" perspective="800">
-        <rect cx="140" cy="150" width="180" height="140" fill="#ffffff" />
-        <box cx="70" cy="80" width="36" height="70" depth="36" z="48" fill="#3355aa" />
+        <rect x="50" y="80" width="180" height="140" fill="#ffffff" />
+        <box x="52" y="45" width="36" height="70" depth="36" z="48" fill="#3355aa" />
       </layer>
     `)
     const shade = await pixelAt(png, 102, 128)
@@ -157,7 +157,7 @@ describe('软件光栅', () => {
   it('三维场景里的平面颜色保持原色阶', async () => {
     const { png } = await render(`
       <layer width="180" height="80" background="#ffffff" perspective="500">
-        <rect cx="50" cy="40" width="60" height="40" fill="#2b6b5e" />
+        <rect x="20" y="20" width="60" height="40" fill="#2b6b5e" />
         <sphere cx="130" cy="40" r="18" fill="#888888" />
       </layer>
     `)
@@ -168,8 +168,8 @@ describe('软件光栅', () => {
   it('extrude 的并排形状都留下，洞仍然是洞', async () => {
     const { png } = await render(`
       <layer width="220" height="120" background="#101010" perspective="800">
-        <extrude d="M0 0 H28 V28 H0 Z M52 0 H80 V28 H52 Z" depth="12" cx="50" cy="60" fill="#f2f2f2" />
-        <extrude d="M0 0 H64 V64 H0 Z M18 18 H46 V46 H18 Z" depth="12" cx="160" cy="60" fill="#f2f2f2" />
+        <extrude x="10" y="46" d="M0 0 H28 V28 H0 Z M52 0 H80 V28 H52 Z" depth="12" fill="#f2f2f2" />
+        <extrude x="128" y="28" d="M0 0 H64 V64 H0 Z M18 18 H46 V46 H18 Z" depth="12" fill="#f2f2f2" />
       </layer>
     `)
     const left = await pixelAt(png, 28, 60)
@@ -187,7 +187,7 @@ describe('软件光栅', () => {
   it('网格超出所在 layer 时仍画在父画布上', async () => {
     const spilled = await render(`
       <layer width="200" height="120" background="#000000">
-        <layer cx="130" cy="60" width="80" height="70" perspective="180">
+        <layer x="90" y="25" width="80" height="70" perspective="180">
           <sphere cx="16" cy="35" r="14" z="50" fill="#ff2244" />
         </layer>
       </layer>
@@ -204,7 +204,7 @@ describe('软件光栅', () => {
 
   it('网格斜边有抗锯齿过渡', async () => {
     const { png } = await render(
-      `<layer width="200" height="200" background="#000000" perspective="800"><box cx="100" cy="100" width="160" height="14" depth="2" rotate="24" fill="#ffffff" /></layer>`,
+      `<layer width="200" height="200" background="#000000" perspective="800"><box x="20" y="93" width="160" height="14" depth="2" rotate="24" fill="#ffffff" /></layer>`,
     )
     const img = await loadImage(png)
     const canvas = createCanvas(img.width, img.height)

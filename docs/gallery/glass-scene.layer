@@ -1,47 +1,161 @@
-<layer width="780" height="1400" background="#0b0f1a" color="#ffffff" font-family="Kai">
-  <!-- 壁纸：大色块 + 大字 + 细条，给折射一些细节 -->
+<layer width="780" height="1400" background="#0b0f1a" color="#ffffff" font-family="Kai" x="0" y="0">
+  
+  
+  
   <rect x1="0" y1="0" x2="780" y2="1400" fill="linear-gradient(160deg, #1d2b64, #5b2a86 45%, #f0765a 80%, #ffcf7a)" />
+  
+  
   <circle cx="580" cy="280" r="170" fill="#ff5aa5" opacity="0.85" />
+  
+  
   <circle cx="200" cy="720" r="160" fill="#2ec4ff" opacity="0.85" />
+  
+  
   <circle cx="560" cy="1080" r="180" fill="#3ecf8e" opacity="0.8" />
+  
+  
   <rect x1="0" y1="560" x2="780" y2="572" fill="#ffffff" opacity="0.8" />
+  
+  
   <rect x1="0" y1="600" x2="780" y2="612" fill="#ffd23f" />
+  
+  
   <rect x1="0" y1="640" x2="780" y2="652" fill="#ffffff" opacity="0.8" />
+  
+  
   <rect x1="0" y1="1230" x2="780" y2="1242" fill="#ffffff" opacity="0.8" />
+  
+  
   <rect x1="0" y1="1270" x2="780" y2="1282" fill="#ffd23f" />
+  
+  
   <rect x1="0" y1="1310" x2="780" y2="1322" fill="#ffffff" opacity="0.8" />
+  
 
-  <layer cx="390" cy="200" anchor="center">
-    <h1 style="font-size:180px; color:#ffffff">9:41</h1>
+  
+  <layer x="196.5" y="92">
+    
+    
+    <h1 style="font-size:180px; color:#ffffff">
+      9:41
+    </h1>
+    
+  
   </layer>
-  <layer cx="390" cy="330" anchor="center">
-    <p style="font-size:40px; color:#ffffffcc">九月三十日 星期三</p>
+  
+  
+  <layer x="223" y="306">
+    
+    
+    <p style="font-size:40px; color:#ffffffcc">
+      九月三十日 星期三
+    </p>
+    
+  
   </layer>
+  
 
-  <!-- 小组件 -->
-  <rect cx="390" cy="600" width="640" height="220" rx="44" fill="#ffffff00" glass="clear" />
-  <layer cx="130" cy="530" anchor="top-left">
-    <p style="font-size:34px; color:#ffffff">天气 · 上海</p>
+  
+  
+  <rect width="640" height="220" rx="44" fill="#ffffff00" glass="clear" x="70" y="490" />
+  
+  
+  <layer x="130" y="530">
+    
+    
+    <p style="font-size:34px; color:#ffffff">
+      天气 · 上海
+    </p>
+    
+  
   </layer>
-  <layer cx="130" cy="580" anchor="top-left">
-    <h1 style="font-size:88px; color:#ffffff">24°</h1>
+  
+  
+  <layer x="130" y="580">
+    
+    
+    <h1 style="font-size:88px; color:#ffffff">
+      24°
+    </h1>
+    
+  
   </layer>
-  <layer cx="650" cy="640" anchor="right">
-    <p style="font-size:30px; color:#ffffffdd">晴 · 最高 27°</p>
+  
+  
+  <layer x="472.4" y="622">
+    
+    
+    <p style="font-size:30px; color:#ffffffdd">
+      晴 · 最高 27°
+    </p>
+    
+  
   </layer>
+  
 
-  <!-- 圆形按钮 -->
+  
+  
   <circle cx="170" cy="880" r="70" fill="#ffffff00" glass="clear" />
+  
+  
   <circle cx="390" cy="880" r="70" fill="#ffffff00" glass="clear" />
+  
+  
   <circle cx="610" cy="880" r="70" fill="#ffffff00" glass="clear" />
-  <layer cx="170" cy="880" anchor="center"><p style="font-size:44px; color:#ffffff">光</p></layer>
-  <layer cx="390" cy="880" anchor="center"><p style="font-size:44px; color:#ffffff">音</p></layer>
-  <layer cx="610" cy="880" anchor="center"><p style="font-size:44px; color:#ffffff">锁</p></layer>
+  
+  
+  <layer x="148" y="853.6">
+    <p style="font-size:44px; color:#ffffff">
+      光
+    </p>
+  </layer>
+  
+  
+  <layer x="368" y="853.6">
+    <p style="font-size:44px; color:#ffffff">
+      音
+    </p>
+  </layer>
+  
+  
+  <layer x="588" y="853.6">
+    <p style="font-size:44px; color:#ffffff">
+      锁
+    </p>
+  </layer>
+  
 
-  <!-- 底部 Tab Bar 胶囊 -->
-  <rect cx="390" cy="1276" width="620" height="120" rx="60" fill="#ffffff00" glass="clear" />
-  <layer cx="160" cy="1276" anchor="center"><p style="font-size:32px; color:#ffffff">首页</p></layer>
-  <layer cx="313" cy="1276" anchor="center"><p style="font-size:32px; color:#ffffffbb">发现</p></layer>
-  <layer cx="467" cy="1276" anchor="center"><p style="font-size:32px; color:#ffffffbb">消息</p></layer>
-  <layer cx="620" cy="1276" anchor="center"><p style="font-size:32px; color:#ffffffbb">我的</p></layer>
+  
+  
+  <rect width="620" height="120" rx="60" fill="#ffffff00" glass="clear" x="80" y="1216" />
+  
+  
+  <layer x="128" y="1256.8">
+    <p style="font-size:32px; color:#ffffff">
+      首页
+    </p>
+  </layer>
+  
+  
+  <layer x="281" y="1256.8">
+    <p style="font-size:32px; color:#ffffffbb">
+      发现
+    </p>
+  </layer>
+  
+  
+  <layer x="435" y="1256.8">
+    <p style="font-size:32px; color:#ffffffbb">
+      消息
+    </p>
+  </layer>
+  
+  
+  <layer x="588" y="1256.8">
+    <p style="font-size:32px; color:#ffffffbb">
+      我的
+    </p>
+  </layer>
+  
+
 </layer>

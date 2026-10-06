@@ -1,38 +1,124 @@
-<layer width="1080" height="1180" background="#0a0e14" color="#f4f1ea" font-family="Kai">
+<layer width="1080" height="1180" background="#0a0e14" color="#f4f1ea" font-family="Kai" x="0" y="0">
+  
+  
   <rect x1="0" y1="0" x2="1080" y2="1180" fill="linear-gradient(to bottom, #121826, #1a3348 45%, #243c38)" />
-  <!-- 条纹只画一遍，三档玻璃看的是同一张背景 -->
+  
+  
+  
   <rect x1="0" y1="200" x2="1080" y2="216" fill="#ffffff" opacity="0.9" />
+  
+  
   <rect x1="0" y1="260" x2="1080" y2="276" fill="#f5c16c" />
+  
+  
   <rect x1="0" y1="320" x2="1080" y2="336" fill="#7b6cff" />
+  
+  
   <rect x1="160" y1="160" x2="176" y2="360" fill="#ffffff" opacity="0.75" />
+  
+  
   <rect x1="520" y1="160" x2="536" y2="360" fill="#ff9f1c" opacity="0.9" />
+  
+  
   <rect x1="880" y1="160" x2="896" y2="360" fill="#3ecfc4" />
+  
 
+  
   <rect x1="0" y1="620" x2="1080" y2="636" fill="#ffffff" opacity="0.9" />
+  
+  
   <rect x1="0" y1="700" x2="1080" y2="716" fill="#ff9f1c" />
+  
+  
   <rect x1="0" y1="780" x2="1080" y2="796" fill="#3ecfc4" />
+  
+  
   <rect x1="0" y1="860" x2="1080" y2="876" fill="#ffffff" opacity="0.85" />
+  
+  
   <rect x1="180" y1="560" x2="196" y2="900" fill="#ffffff" opacity="0.7" />
+  
+  
   <rect x1="520" y1="560" x2="536" y2="900" fill="#ff5aa5" opacity="0.85" />
+  
+  
   <rect x1="860" y1="560" x2="876" y2="900" fill="#f5c16c" />
+  
 
-  <layer cx="64" cy="36" anchor="top-left">
-    <h1 style="font-size:48px; color:#f7f2e8">模糊与玻璃</h1>
+  
+  <layer x="64" y="36">
+    
+    
+    <h1 style="font-size:48px; color:#f7f2e8">
+      模糊与玻璃
+    </h1>
+    
+  
   </layer>
+  
 
-  <rect cx="200" cy="300" width="240" height="140" rx="20" fill="#f7931a" blur="6" />
-  <layer cx="200" cy="400" anchor="top"><p style="font-size:26px; color:#9aa7b5">blur</p></layer>
+  
+  <rect width="240" height="140" rx="20" fill="#f7931a" blur="6" x="80" y="230" />
+  
+  
+  <layer x="175.87" y="400">
+    <p style="font-size:26px; color:#9aa7b5">
+      blur
+    </p>
+  </layer>
+  
 
-  <rect cx="540" cy="300" width="240" height="140" rx="20" fill="#ffffff22" backdrop-blur="16" />
-  <layer cx="540" cy="400" anchor="top"><p style="font-size:26px; color:#9aa7b5">backdrop-blur</p></layer>
+  
+  <rect width="240" height="140" rx="20" fill="#ffffff22" backdrop-blur="16" x="420" y="230" />
+  
+  
+  <layer x="455.07" y="400">
+    <p style="font-size:26px; color:#9aa7b5">
+      backdrop-blur
+    </p>
+  </layer>
+  
 
-  <rect cx="860" cy="300" width="240" height="140" rx="24" fill="#ffffff14" glass="clear, blur 8, tint #a8c8ff55" />
-  <layer cx="860" cy="400" anchor="top"><p style="font-size:26px; color:#9aa7b5">glass 逗号写法</p></layer>
+  
+  <rect width="240" height="140" rx="24" fill="#ffffff14" glass="clear, blur 8, tint #a8c8ff55" x="740" y="230" />
+  
+  
+  <layer x="771.755" y="400">
+    <p style="font-size:26px; color:#9aa7b5">
+      glass 逗号写法
+    </p>
+  </layer>
+  
 
-  <rect cx="200" cy="760" width="280" height="300" rx="28" fill="#ffffff18" glass="clear" />
-  <rect cx="540" cy="760" width="280" height="300" rx="28" fill="#ffffff18" glass="regular" />
-  <rect cx="860" cy="760" width="280" height="300" rx="28" fill="#ffffff20" glass="thick" />
-  <layer cx="200" cy="940" anchor="top"><p style="font-size:26px; color:#f4f1ea">glass clear</p></layer>
-  <layer cx="540" cy="940" anchor="top"><p style="font-size:26px; color:#f4f1ea">glass regular</p></layer>
-  <layer cx="860" cy="940" anchor="top"><p style="font-size:26px; color:#f4f1ea">glass thick</p></layer>
+  
+  <rect width="280" height="300" rx="28" fill="#ffffff18" glass="clear" x="60" y="610" />
+  
+  
+  <rect width="280" height="300" rx="28" fill="#ffffff18" glass="regular" x="400" y="610" />
+  
+  
+  <rect width="280" height="300" rx="28" fill="#ffffff20" glass="thick" x="720" y="610" />
+  
+  
+  <layer x="133.32" y="940">
+    <p style="font-size:26px; color:#f4f1ea">
+      glass clear
+    </p>
+  </layer>
+  
+  
+  <layer x="459.41" y="940">
+    <p style="font-size:26px; color:#f4f1ea">
+      glass regular
+    </p>
+  </layer>
+  
+  
+  <layer x="794.49" y="940">
+    <p style="font-size:26px; color:#f4f1ea">
+      glass thick
+    </p>
+  </layer>
+  
+
 </layer>

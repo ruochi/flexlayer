@@ -101,8 +101,7 @@ function lit(x: number, y: number, z: number, blocked = false) {
   return 0.5 + key + 0.3 * Math.max(x * FILL_LIGHT.x + y * FILL_LIGHT.y + z * FILL_LIGHT.z, 0)
 }
 
-/** 作者空间的法线。背面把法线翻向镜头，和着色器里的 gl_FrontFacing 一样。 */
-function facing(nx: number, ny: number, nz: number, back: boolean) {
+function shadeOf(nx: number, ny: number, nz: number, back: boolean, blocked = false) {
   let x = nx
   let y = -ny
   let z = nz
@@ -115,19 +114,25 @@ function facing(nx: number, ny: number, nz: number, back: boolean) {
     y = -y
     z = -z
   }
-  return { x, y, z }
-}
-
-function shadeOf(nx: number, ny: number, nz: number, back: boolean, blocked = false) {
-  const n = facing(nx, ny, nz, back)
-  return Math.min(1, lit(n.x, n.y, n.z, blocked) / Math.max(LIT_FRONT, 1e-3))
+  return Math.min(1, lit(x, y, z, blocked) / Math.max(LIT_FRONT, 1e-3))
 }
 
 /** 被主光挡住时，贴图按「去掉主光 / 完整光照」变暗。没挡住的像素不乘这个系数。 */
 function shadowScale(nx: number, ny: number, nz: number, back: boolean) {
-  const n = facing(nx, ny, nz, back)
-  const open = lit(n.x, n.y, n.z, false)
-  const shut = lit(n.x, n.y, n.z, true)
+  let x = nx
+  let y = -ny
+  let z = nz
+  const len = Math.hypot(x, y, z) || 1
+  x /= len
+  y /= len
+  z /= len
+  if (back) {
+    x = -x
+    y = -y
+    z = -z
+  }
+  const open = lit(x, y, z, false)
+  const shut = lit(x, y, z, true)
   return open > 1e-4 ? shut / open : 1
 }
 
@@ -630,8 +635,18 @@ function geometryOf(node: MeshLayoutNode) {
   return null
 }
 
-function sampleTexture(data: Uint8ClampedArray, tw: number, th: number, u: number, v: number) {
-  if (tw < 1 || th < 1) return [0, 0, 0, 0] as const
+type Texel = { r: number; g: number; b: number; a: number }
+
+const TEXEL: Texel = { r: 0, g: 0, b: 0, a: 0 }
+
+function sampleTexture(data: Uint8ClampedArray, tw: number, th: number, u: number, v: number): Texel {
+  if (tw < 1 || th < 1) {
+    TEXEL.r = 0
+    TEXEL.g = 0
+    TEXEL.b = 0
+    TEXEL.a = 0
+    return TEXEL
+  }
   const x = Math.min(Math.max(u, 0), 1) * Math.max(tw - 1, 0)
   const y = (1 - Math.min(Math.max(v, 0), 1)) * (th - 1)
   const x0 = Math.floor(x)
@@ -640,13 +655,22 @@ function sampleTexture(data: Uint8ClampedArray, tw: number, th: number, u: numbe
   const y1 = Math.min(y0 + 1, th - 1)
   const tx = x - x0
   const ty = y - y0
-  const at = (ix: number, iy: number, channel: number) => data[(iy * tw + ix) * 4 + channel] ?? 0
+  const row0 = y0 * tw
+  const row1 = y1 * tw
+  const i00 = (row0 + x0) * 4
+  const i10 = (row0 + x1) * 4
+  const i01 = (row1 + x0) * 4
+  const i11 = (row1 + x1) * 4
   const mix = (channel: number) => {
-    const top = at(x0, y0, channel) * (1 - tx) + at(x1, y0, channel) * tx
-    const bot = at(x0, y1, channel) * (1 - tx) + at(x1, y1, channel) * tx
+    const top = data[i00 + channel]! * (1 - tx) + data[i10 + channel]! * tx
+    const bot = data[i01 + channel]! * (1 - tx) + data[i11 + channel]! * tx
     return top * (1 - ty) + bot * ty
   }
-  return [mix(0), mix(1), mix(2), mix(3)] as const
+  TEXEL.r = mix(0)
+  TEXEL.g = mix(1)
+  TEXEL.b = mix(2)
+  TEXEL.a = mix(3)
+  return TEXEL
 }
 
 function lerpVert(a: Vert, b: Vert, z: number): Vert {
@@ -802,7 +826,7 @@ function drawShadowTriangle(
       if (batch.texture) {
         const u = w0 * a.u + w1 * b.u + w2 * c.u
         const v = w0 * a.v + w1 * b.v + w2 * c.v
-        if (sampleTexture(batch.texture, batch.tw, batch.th, u, v)[3] < 128) continue
+        if (sampleTexture(batch.texture, batch.tw, batch.th, u, v).a < 128) continue
       }
       const d = w0 * a.z + w1 * b.z + w2 * c.z
       const di = iy * width + ix
@@ -811,19 +835,22 @@ function drawShadowTriangle(
   }
 }
 
-function occluded(map: ShadowMap, x: number, y: number, z: number, nx: number, ny: number, nz: number) {
-  const p = { x, y, z }
-  const sx = (dot(p, map.right) - map.minU) * map.scaleU
-  const sy = (dot(p, map.up) - map.minV) * map.scaleV
+function shadowBias(map: ShadowMap, nx: number, ny: number, nz: number) {
+  const nlen = Math.hypot(nx, ny, nz) || 1
+  const nd = Math.abs((nx * map.toward.x + ny * map.toward.y + nz * map.toward.z) / nlen)
+  return map.bias / Math.max(nd, 0.25)
+}
+
+function occluded(map: ShadowMap, x: number, y: number, z: number, nx: number, ny: number, nz: number, bias = shadowBias(map, nx, ny, nz)) {
+  const sx = (x * map.right.x + y * map.right.y + z * map.right.z - map.minU) * map.scaleU
+  const sy = (x * map.up.x + y * map.up.y + z * map.up.z - map.minV) * map.scaleV
   const ix = Math.floor(sx)
   const iy = Math.floor(sy)
   if (ix < 0 || iy < 0 || ix >= map.width || iy >= map.height) return false
   const stored = map.depth[iy * map.width + ix]!
   if (stored < -1e20) return false
-  const nlen = Math.hypot(nx, ny, nz) || 1
-  const nd = Math.abs((nx * map.toward.x + ny * map.toward.y + nz * map.toward.z) / nlen)
-  const bias = map.bias / Math.max(nd, 0.25)
-  return stored > dot(p, map.toward) + bias
+  const toward = x * map.toward.x + y * map.toward.y + z * map.toward.z
+  return stored > toward + bias
 }
 
 function drawTriangle(
@@ -851,40 +878,66 @@ function drawTriangle(
   if (minY < 0) minY = 0
   if (maxX >= width) maxX = width - 1
   if (maxY >= height) maxY = height - 1
+  const e0x = (b.sy - c.sy) / area
+  const e0y = (c.sx - b.sx) / area
+  const e1x = (c.sy - a.sy) / area
+  const e1y = (a.sx - c.sx) / area
+  const flat =
+    a.nx === b.nx &&
+    a.ny === b.ny &&
+    a.nz === b.nz &&
+    a.nx === c.nx &&
+    a.ny === c.ny &&
+    a.nz === c.nz
+  const openShade = flat && batch.shaded ? shadeOf(a.nx, a.ny, a.nz, back, false) : 0
+  const shutShade = flat && batch.shaded ? shadeOf(a.nx, a.ny, a.nz, back, true) : 0
+  const flatBias = flat && shadow ? shadowBias(shadow, a.nx, a.ny, a.nz) : 0
+  const texture = batch.texture
   for (let iy = minY; iy <= maxY; iy++) {
     const py = iy + 0.5
+    let w0 = e0x * (minX + 0.5 - c.sx) + e0y * (py - c.sy)
+    let w1 = e1x * (minX + 0.5 - c.sx) + e1y * (py - c.sy)
     for (let ix = minX; ix <= maxX; ix++) {
-      const px = ix + 0.5
-      const w0 = ((b.sy - c.sy) * (px - c.sx) + (c.sx - b.sx) * (py - c.sy)) / area
-      const w1 = ((c.sy - a.sy) * (px - c.sx) + (a.sx - c.sx) * (py - c.sy)) / area
       const w2 = 1 - w0 - w1
-      if (w0 < -1e-4 || w1 < -1e-4 || w2 < -1e-4) continue
+      if (w0 < -1e-4 || w1 < -1e-4 || w2 < -1e-4) {
+        w0 += e0x
+        w1 += e1x
+        continue
+      }
       const iw = w0 * a.invW + w1 * b.invW + w2 * c.invW
-      if (iw <= 1e-8) continue
+      if (iw <= 1e-8) {
+        w0 += e0x
+        w1 += e1x
+        continue
+      }
       const x = (w0 * a.x * a.invW + w1 * b.x * b.invW + w2 * c.x * c.invW) / iw
       const y = (w0 * a.y * a.invW + w1 * b.y * b.invW + w2 * c.y * c.invW) / iw
       const z = (w0 * a.z * a.invW + w1 * b.z * b.invW + w2 * c.z * c.invW) / iw
       const di = iy * width + ix
-      if (z < depth[di]! - 1e-4) continue
-      const nx = (w0 * a.nx * a.invW + w1 * b.nx * b.invW + w2 * c.nx * c.invW) / iw
-      const ny = (w0 * a.ny * a.invW + w1 * b.ny * b.invW + w2 * c.ny * c.invW) / iw
-      const nz = (w0 * a.nz * a.invW + w1 * b.nz * b.invW + w2 * c.nz * c.invW) / iw
-      const blocked = shadow !== null && occluded(shadow, x, y, z, nx, ny, nz)
+      if (z < depth[di]! - 1e-4) {
+        w0 += e0x
+        w1 += e1x
+        continue
+      }
+      const nx = flat ? a.nx : (w0 * a.nx * a.invW + w1 * b.nx * b.invW + w2 * c.nx * c.invW) / iw
+      const ny = flat ? a.ny : (w0 * a.ny * a.invW + w1 * b.ny * b.invW + w2 * c.ny * c.invW) / iw
+      const nz = flat ? a.nz : (w0 * a.nz * a.invW + w1 * b.nz * b.invW + w2 * c.nz * c.invW) / iw
+      const blocked = shadow !== null && occluded(shadow, x, y, z, nx, ny, nz, flat ? flatBias : undefined)
       let sr = batch.r
       let sg = batch.g
       let sb = batch.b
       let sa = batch.a
-      if (batch.texture) {
+      if (texture) {
         const u = (w0 * a.u * a.invW + w1 * b.u * b.invW + w2 * c.u * c.invW) / iw
         const v = (w0 * a.v * a.invW + w1 * b.v * b.invW + w2 * c.v * c.invW) / iw
-        const tex = sampleTexture(batch.texture, batch.tw, batch.th, u, v)
+        const tex = sampleTexture(texture, batch.tw, batch.th, u, v)
         const dim = blocked ? shadowScale(nx, ny, nz, back) : 1
-        sr = byte(tex[0] * dim)
-        sg = byte(tex[1] * dim)
-        sb = byte(tex[2] * dim)
-        sa = tex[3]
+        sr = byte(tex.r * dim)
+        sg = byte(tex.g * dim)
+        sb = byte(tex.b * dim)
+        sa = tex.a
       } else if (batch.shaded) {
-        const shade = shadeOf(nx, ny, nz, back, blocked)
+        const shade = flat ? (blocked ? shutShade : openShade) : shadeOf(nx, ny, nz, back, blocked)
         sr = byte(batch.r * shade)
         sg = byte(batch.g * shade)
         sb = byte(batch.b * shade)
@@ -896,21 +949,24 @@ function drawTriangle(
       }
       if (batch.depthWrite) depth[di] = z
       const pi = di * 4
-      if (sa <= 0) continue
-      if (sa >= 255 || color[pi + 3] === 0) {
-        color[pi] = sr
-        color[pi + 1] = sg
-        color[pi + 2] = sb
-        color[pi + 3] = sa
-        continue
+      if (sa > 0) {
+        if (sa >= 255 || color[pi + 3] === 0) {
+          color[pi] = sr
+          color[pi + 1] = sg
+          color[pi + 2] = sb
+          color[pi + 3] = sa
+        } else {
+          const inv = 255 - sa
+          const dA = color[pi + 3]!
+          const outA = sa + (dA * inv) / 255
+          color[pi] = byte((sr * sa + (color[pi]! * dA * inv) / 255) / outA)
+          color[pi + 1] = byte((sg * sa + (color[pi + 1]! * dA * inv) / 255) / outA)
+          color[pi + 2] = byte((sb * sa + (color[pi + 2]! * dA * inv) / 255) / outA)
+          color[pi + 3] = byte(outA)
+        }
       }
-      const inv = 255 - sa
-      const dA = color[pi + 3]!
-      const outA = sa + (dA * inv) / 255
-      color[pi] = byte((sr * sa + color[pi]! * dA * inv / 255) / outA)
-      color[pi + 1] = byte((sg * sa + color[pi + 1]! * dA * inv / 255) / outA)
-      color[pi + 2] = byte((sb * sa + color[pi + 2]! * dA * inv / 255) / outA)
-      color[pi + 3] = byte(outA)
+      w0 += e0x
+      w1 += e1x
     }
   }
 }
@@ -1017,10 +1073,24 @@ function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: number
   return { canvas: out, x: -padL, y: -padT, width: viewW, height: viewH }
 }
 
+function uniformBytes(data: Uint8ClampedArray): { r: number; g: number; b: number; a: number } | null {
+  const count = data.length
+  if (count < 4) return null
+  const r = data[0]!
+  const g = data[1]!
+  const b = data[2]!
+  const a = data[3]!
+  for (let i = 4; i < count; i += 4) {
+    if (data[i] !== r || data[i + 1] !== g || data[i + 2] !== b || data[i + 3] !== a) return null
+  }
+  return { r, g, b, a }
+}
+
 function planeBatch(plane: SoftwareMeshInput['planes'][number], raster: SoftwareMeshInput['raster']): Batch | null {
   const painted = raster(plane.peeled)
   if (painted.logicalWidth <= 0 || painted.logicalHeight <= 0) return null
   const pixels = painted.canvas.getContext('2d').getImageData(0, 0, painted.canvas.width, painted.canvas.height)
+  const solid = uniformBytes(pixels.data)
   const o = originOffset(plane.node.origin, plane.node.width, plane.node.height)
   const { localX, localY } = painted
   const corners: Array<[number, number]> = [
@@ -1048,16 +1118,16 @@ function planeBatch(plane: SoftwareMeshInput['planes'][number], raster: Software
     normals,
     uvs,
     indices: Uint32Array.from(order.map((_, i) => i)),
-    r: 255,
-    g: 255,
-    b: 255,
-    a: 255,
+    r: solid?.r ?? 255,
+    g: solid?.g ?? 255,
+    b: solid?.b ?? 255,
+    a: solid?.a ?? 255,
     doubleSided: true,
     shaded: false,
     depthWrite: true,
-    texture: pixels.data,
-    tw: painted.canvas.width,
-    th: painted.canvas.height,
+    texture: solid ? null : pixels.data,
+    tw: solid ? 0 : painted.canvas.width,
+    th: solid ? 0 : painted.canvas.height,
     toLayer: plane.toLayer,
     originX: o.x,
     originY: o.y,

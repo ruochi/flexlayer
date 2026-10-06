@@ -1,16 +1,16 @@
 # Flex Layer 速查
 
-写法规则见 [AGENTS.md](../AGENTS.md) 的硬性约定。数字都是像素，y 轴向下。根元素 `<layer width height>` 就是一个 layer。有循环或组件时把同一套标签写进 `.tsx`（`/** @jsxImportSource @dc/flexlayer */`），`flexlayer render file.tsx` 会先执行再渲染。
+写法规则见 [AGENTS.md](../AGENTS.md) 的硬性约定。数字都是像素，y 轴向下。根元素 `<layer width height>` 就是一个 layer。推荐用 `.tsx` 的 `canvas()` 和 `graphic.layer()` 先量再摆，见 [examples/poster.tsx](../examples/poster.tsx)。`canvas()` 是同步的，准备好的字体和图片会留在进程里，多帧接着用。同一套标签也可以手写进 `.layer`。`flexlayer render file.tsx` 会先执行再渲染。
 
 ## 结构
 
 | 标签 | 做什么 |
 | --- | --- |
-| `layer` | 根画布兼定位容器。根上写 `width` `height` `background`（画布底色）`color` `safe`；定位用 `cx` `cy` `anchor`，还有 `opacity` `rotate` `rotateX` `rotateY` `z` `scale` `origin`。`perspective` 只写在这一层，是直接子元素共用的视距。可嵌套 |
+| `layer` | 根画布兼定位容器。根上写 `width` `height` `background`（画布底色）`color` `safe`；定位用 `x` `y` `anchor`（默认左上角，没写是 0），还有 `opacity` `rotate` `rotateX` `rotateY` `z` `scale` `origin`。`perspective` 只写在这一层，是直接子元素共用的视距。可嵌套 |
 | `draw` | 子标签。正文是 JS（`ctx`、`el`），画在父元素内容之后 |
-| `div` 写 `display:flex` | 排布。默认横向；竖排加 `flex-direction:column`。`gap` `align-items` `justify-content` `padding` 都在 `style` 里 |
+| `div` 写 `display:flex` | 排布。默认横向；竖排加 `flex-direction:column`。`gap` `align-items` `justify-content` `padding` 都在 `style` 里。**`align-items` 默认 `center`（CSS 里是 `stretch`）：column 忘写 `align-items` 会全部居中**。左对齐写 `align-items:flex-start`。`justify-content` 只管主轴，改不了这一层在父级交叉轴上的位置 |
 
-要定位一组 HTML，包一层 `layer`，把 `cx` `cy` `anchor` 写在 `layer` 上。
+要定位一组 HTML，包一层 `layer`，把 `x` `y` `anchor` 写在 `layer` 上。没写坐标时落在 `(0, 0)`。
 
 ## 叶子怎么定位
 
@@ -18,15 +18,15 @@
 | --- | --- | --- |
 | 文字 `h1` `h2` `h3` `p` `div` `span` | 外包 `layer` 来定位。文字本身只写 `style` | 直接放 |
 | 图片 `img`（`image` 相同） | 外包 `layer`。`src` 是属性，宽高和 `object-fit` 写 `style` | 直接放，默认不缩小 |
-| `rect` | `cx cy width height`，或 `x1 y1 x2 y2`。`rx` 是圆角，两种都能加 | 包一层有宽高的 layer，或改用 div |
-| `ellipse` | `cx cy rx ry`，或两点写法 | 同上 |
-| `circle` | `cx cy r` | 同上 |
-| `sphere` | `cx cy r`，再加上 `z`。布局盒子是边长 `2r` 的正方形 | 放进有 `perspective` 的 layer |
-| `box` | `cx cy width height depth`。布局不计厚度 | 放进有 `perspective` 的 layer |
-| `extrude` | `d` 与 `path` 相同，`depth` 是沿 z 的厚度，以平面为中心 | 放进有 `perspective` 的 layer |
-| `model` | 只写 `src`（一个 `.glb`）。宽高和 `cx cy z` 写在外包的 layer 上，contain 居中 | 放进有 `perspective` 的 layer |
+| `rect` | `x y width height`，左上角。或 `x1 y1 x2 y2`。`rx` 是圆角，两种都能加 | 包一层有宽高的 layer，或改用 div |
+| `ellipse` | `cx cy rx ry`，圆心。或两点写法 | 同上 |
+| `circle` | `cx cy r`，圆心 | 同上 |
+| `sphere` | `cx cy r`，圆心，再加上 `z`。布局盒子是边长 `2r` 的正方形 | 放进有 `perspective` 的 layer |
+| `box` | `x y width height depth`。`x y` 是左上角，布局不计厚度 | 放进有 `perspective` 的 layer |
+| `extrude` | `d` 与 `path` 相同，`depth` 是沿 z 的厚度，以平面为中心。位置用 `x y` | 放进有 `perspective` 的 layer |
+| `model` | 只写 `src`（一个 `.glb`）。宽高和 `x y z` 写在外包的 layer 上，contain 居中 | 放进有 `perspective` 的 layer |
 | `line` `arrow` `polyline` `polygon` `path` `curve` | `x1 y1 x2 y2` / `points` / `d`。`curve` 闭合加 `closed` | 包一层 `<layer>` |
-| `symbol` / `use` | `symbol` 不画。`use href="#id"` 用 `cx cy` 摆放 | `use` 按它的宽高排进去 |
+| `symbol` / `use` | `symbol` 不画。`use href="#id"` 用 `x y` 摆放 | `use` 按它的宽高排进去 |
 | `mask` | 只作为 `layer` 的直接子元素。里面写 `rect` `circle` `ellipse` `polygon` `path` 或 `img`。省略 `fill` 为 `#fff`，只看 alpha | 不排进去，会 `warn` |
 
 色块、圆点、分隔线用 div：`<div style="width:28px; height:28px; border-radius:14px; background:#3ecfc4">`，分隔线用 `flex:1; height:4px`。
@@ -41,7 +41,7 @@
 
 透视：`<layer perspective="700"><rect rotateY="28" z="40" /></layer>`。`z` 越大越靠近观众。没有 `perspective` 的祖先时，`rotateX`、`rotateY`、`z` 仍按二维画，并报 `flatten-3d`。例子见 [examples/perspective.layer](../examples/perspective.layer)。
 
-网格和透视共用这一层：`<layer perspective="700"><sphere cx="220" cy="340" r="90" z="50" fill="#4CC3D9" /><box cx="430" cy="400" width="150" height="100" depth="60" fill="#EF2D5E" /></layer>`。`extrude` 用 `d` 和 `depth`，`d` 里并排的形状各自挤出，套在里面的才是洞。`model` 放在有宽高的 layer 里，`src` 指向 `.glb`。网格的 `fill` 是纯色，渐变、`shadow`、`glow` 会警告。没有 `perspective` 时不绘制。例子见 [examples/meshes.layer](../examples/meshes.layer)。
+网格和透视共用这一层：`<layer perspective="700"><sphere cx="220" cy="340" r="90" z="50" fill="#4CC3D9" /><box x="355" y="350" width="150" height="100" depth="60" fill="#EF2D5E" /></layer>`。`extrude` 用 `d` 和 `depth`，`d` 里并排的形状各自挤出，套在里面的才是洞。`model` 放在有宽高的 layer 里，`src` 指向 `.glb`。网格的 `fill` 是纯色，渐变、`shadow`、`glow` 会警告。没有 `perspective` 时不绘制。例子见 [examples/meshes.layer](../examples/meshes.layer)。
 
 竖排：`style="writing-mode:vertical-rl"`。字体名 `Song`、`Kai`、`Brush` 不用自带字体文件。
 
@@ -49,18 +49,18 @@
 
 ```html
 <layer width="800" height="400" background="#0e1219" color="#f4f1ea">
-  <layer cx="40" cy="40" anchor="top-left">
+  <layer x="40" y="40">
     <div style="display:flex; gap:16px; align-items:center">
       <div style="width:28px; height:28px; border-radius:14px; background:#3ecfc4"></div>
       <p style="font-size:40px">a² = 9</p>
     </div>
   </layer>
-  <layer cx="400" cy="220" width="360" height="200">
+  <layer x="220" y="120" width="360" height="200">
     <rect x1="0" y1="0" x2="160" y2="120" fill="#3ecfc4" />
     <circle cx="200" cy="60" r="16" fill="#f4f1ea" />
     <line x1="160" y1="60" x2="184" y2="60" stroke="#f4f1ea" stroke-width="4" />
   </layer>
-  <layer width="120" height="80" cx="640" cy="300">
+  <layer width="120" height="80" x="580" y="260">
     <draw>
       ctx.fillStyle = '#f5c16c'
       ctx.fillRect(0, 0, el.w, el.h)
@@ -71,7 +71,7 @@
 
 ```html
 <layer width="800" height="200" background="#0e1219" color="#f4f1ea">
-  <layer cx="40" cy="80" anchor="top-left">
+  <layer x="40" y="80">
     <div style="display:flex; width:720px; gap:16px; align-items:center">
       <p style="font-size:40px">左</p>
       <div style="flex:1; height:4px; background:#f5c16c"></div>

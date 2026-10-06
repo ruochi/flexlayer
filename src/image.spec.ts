@@ -115,7 +115,7 @@ describe('img', () => {
 
   it('绘制 contain、cover 和圆角', async () => {
     const fitted = await renderFvg(
-      `<layer width="80" height="80" background="#000000"><img src="${SPLIT}" style="width:40px; height:40px; object-fit:contain" /></layer>`,
+      `<layer width="80" height="80" background="#000000"><layer x="20" y="20"><img src="${SPLIT}" style="width:40px; height:40px; object-fit:contain" /></layer></layer>`,
     )
     const red = await pixelAt(fitted.png, 30, 40)
     const blue = await pixelAt(fitted.png, 50, 40)
@@ -128,13 +128,13 @@ describe('img', () => {
     expect(letterbox[2]).toBeLessThan(20)
 
     const covered = await renderFvg(
-      `<layer width="80" height="80" background="#000000"><img src="${SPLIT}" style="width:40px; height:40px; object-fit:cover" /></layer>`,
+      `<layer width="80" height="80" background="#000000"><layer x="20" y="20"><img src="${SPLIT}" style="width:40px; height:40px; object-fit:cover" /></layer></layer>`,
     )
     const coverTop = await pixelAt(covered.png, 30, 22)
     expect(coverTop[0]).toBeGreaterThan(200)
 
     const rounded = await renderFvg(
-      `<layer width="100" height="100" background="#000000"><img src="${RED}" style="width:40px; height:40px; border-radius:20px" /></layer>`,
+      `<layer width="100" height="100" background="#000000"><layer x="30" y="30"><img src="${RED}" style="width:40px; height:40px; border-radius:20px" /></layer></layer>`,
     )
     const center = await pixelAt(rounded.png, 50, 50)
     const corner = await pixelAt(rounded.png, 31, 31)

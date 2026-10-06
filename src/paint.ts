@@ -352,7 +352,12 @@ function runElementDraw(ctx: CanvasRenderingContext2D, node: LayoutNode, t: numb
   if (!node.draw) return
   ctx.save()
   ctx.translate(node.x, node.y)
-  node.draw(ctx, buildDrawEl(node, t))
+  try {
+    node.draw(ctx, buildDrawEl(node, t))
+  } catch (err) {
+    // 布局已经把缺名字报成 invalid-draw。这里再抛出会让整张图以 "X is not defined" 退出。
+    if (!(err instanceof ReferenceError)) throw err
+  }
   ctx.restore()
 }
 

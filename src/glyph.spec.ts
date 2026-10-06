@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Path2D } from '@napi-rs/canvas'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { applyCanvasFont, ensureBuiltinFonts, ensureDefaultFont } from './fonts.js'
+import { applyCanvasFont, ensureBuiltinFonts, ensureDefaultFont, getFontsCacheDir } from './fonts.js'
 import { glyph } from './glyph.js'
 import { loadLayerFile } from './load-source.js'
 import { getMeasureCtx } from './measureCtx.js'
@@ -37,6 +37,7 @@ describe('glyph', () => {
     expect(chun.height).toBeGreaterThan(chun.size)
     expect(chun.baseline).toBeGreaterThan(0)
     expect(chun.baseline).toBeLessThan(chun.height)
+    expect(chun.missing).toBe(false)
     expect(chun.d).toMatch(/^M /)
     expect(chun.d).not.toMatch(/[mlhvcsqtaz]/)
     expect(chun.ink).not.toBeNull()
@@ -71,6 +72,7 @@ describe('glyph', () => {
     if (!ready) return
     const [space] = await glyph(' ', { font: 'Kai', size: 200 })
     expect(space!.d).toBe('')
+    expect(space!.missing).toBe(false)
     expect(space!.ink).toBeNull()
     expect(space!.width).toBeGreaterThan(0)
     expect(space!.height).toBeGreaterThan(0)
@@ -120,11 +122,21 @@ describe('glyph', () => {
     await expect(glyph('春', { font: 'Kai', size: 0 })).rejects.toThrow(/size 要是正数/)
   })
 
-  it('一个 emoji 算一个字', async () => {
+  it('一个 emoji 算一个字，缺字可以看出来', async () => {
     if (!ready) return
-    const chars = await glyph('😀', { font: 'Kai', size: 100 })
-    expect(chars).toHaveLength(1)
-    expect(chars[0]!.text).toBe('😀')
+    const emoji = await glyph('😀', { font: 'Kai', size: 100 })
+    const rare = await glyph('𠀀', { font: 'Kai', size: 100 })
+    const [chun] = await glyph('春', { font: 'Kai', size: 100 })
+    expect(emoji).toHaveLength(1)
+    expect(emoji[0]!.text).toBe('😀')
+    expect(emoji[0]!.missing).toBe(true)
+    expect(rare[0]!.missing).toBe(true)
+    expect(emoji[0]!.d).toBe(rare[0]!.d)
+    expect(emoji[0]!.d).not.toBe(chun!.d)
+    expect(chun!.missing).toBe(false)
+    const [bad] = await glyph('\uFFFE', { font: 'Kai', size: 100 })
+    expect(bad!.missing).toBe(true)
+    expect(bad!.d).toBe(emoji[0]!.d)
   })
 
   it('取出来的路径可以画进 layer', async () => {
@@ -160,5 +172,30 @@ describe('glyph', () => {
     if (loaded.kind !== 'node') return
     const path = loaded.node.children.find((child) => typeof child !== 'string' && child.tag === 'path')
     expect(typeof path !== 'string' && path && path.attrs.d.startsWith('M ')).toBe(true)
+  })
+
+  it('tsx 里只靠 <font> 加载的字体，glyph() 也能用', async () => {
+    if (!ready) return
+    const dir = await mkdtemp(join(tmpdir(), 'flexlayer-font-'))
+    const src = join(getFontsCacheDir(), 'LXGWWenKai-Regular.ttf')
+    const file = join(dir, 'poster.tsx')
+    await writeFile(
+      file,
+      `import { glyph } from '@dc/flexlayer'
+      const [chun] = await glyph('春', { font: 'PosterKai', size: 48 })
+      export default (
+        <layer width="80" height="80" background="#111111">
+          <font family="PosterKai" src="${src}" />
+          <path d={chun.d} fill="#f4ecdf" />
+        </layer>
+      )
+      `,
+    )
+    const loaded = await loadLayerFile(file)
+    expect(loaded.kind).toBe('node')
+    if (loaded.kind !== 'node') return
+    const path = loaded.node.children.find((child) => typeof child !== 'string' && child.tag === 'path')
+    expect(typeof path !== 'string' && path && path.attrs.d.startsWith('M ')).toBe(true)
+    expect(path && typeof path !== 'string' && path.attrs.d.length).toBeGreaterThan(20)
   })
 })

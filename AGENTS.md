@@ -14,11 +14,11 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 
 | 层 | 做什么 | 不做什么 |
 | --- | --- | --- |
-| **生成** | 写 `.layer`，或写 `.tsx` 执行成节点树 | 不算最终像素、不画 canvas |
+| **生成** | 写 `.tsx`（推荐 `graphic.layer()`）或手写 `.layer` | 不算最终像素、不画 canvas |
 | **验证** | 布局、问题码、元素表、调试图 | 不改源码 |
 | **渲染** | 读节点树或 `.layer` → PNG + `report.json` | 不接 Vue 或 React |
 
-`.layer` 仍是渲染器读的格式。`.tsx` 只是多出来的源文件：执行后得到同一棵树，语义、问题码和绘制都不变。静态海报继续手写 `.layer`。
+`.layer` 仍是渲染器读的格式。`.tsx` 执行后得到同一棵树，语义、问题码和绘制都不变。推荐用 `graphic.layer()` 先量再摆，见第 3 节。
 
 ## 2. 硬性约定
 
@@ -31,7 +31,8 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 | 嵌套 `layer` / `use` 不写 `background` | `<layer background="#fff">` | `<rect fill="#fff">`、HTML `background`，或 `<draw>` | `invalid-attr` |
 | 排布用 `div` 的 `display:flex` | `<Column>` | `<div style="display:flex; flex-direction:column">` | `unknown-tag` |
 | 线条放在 `layer` 里，用 `x1`…`d` | 线条直接放进 flex | `<layer><line x1 y1 x2 y2 /></layer>` | `invalid-child` |
-| 文字的位置写在外包的 `layer` 上 | `<h1 cx="120">` | `<layer cx="120" cy="64" anchor="top-left"><h1>…</h1></layer>` | `invalid-attr` |
+| 文字的位置写在外包的 `layer` 上 | `<h1 x="120">` | `<layer x="120" y="64"><h1>…</h1></layer>` | `invalid-attr` |
+| `layer`、`use`、`rect`、`box` 用 `x`、`y` | `<layer cx="120" cy="64">` | `<layer x="120" y="64">`。圆、椭圆、球仍写 `cx` `cy` | `invalid-attr` |
 | 图片是 HTML | `<Image width="320">` | `<img src="cover.png" style="width:320px; height:180px">`。`image` 同样可用 | `invalid-attr` |
 | 作用于整棵子树的效果只写在 `layer` 上 | `<rect grade="lomo">`、`<p style="overlay:#000">` | `<layer grade="lomo" overlay="#00000066">` | `invalid-attr` |
 | 调色先选预设再改一两项 | `grade="contrast 5"` | `<layer grade="lomo 0.8, fade 0.1">` | `invalid-attr` |
@@ -42,11 +43,35 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 
 根节点 `<layer width height background>` 上的 `background` 是画布底色，只有这一处可以写。
 
+flex 的 `align-items` 默认 `center`（CSS 里是 `stretch`）。**column 忘写 `align-items` 会全部居中**：较窄的子项在交叉轴居中，和容器同宽的子项看起来仍贴着起点。左对齐写 `align-items:flex-start`。`justify-content` 只管本层主轴，写在子项上改不了它在父级交叉轴上的位置。
+
 ## 3. 生成
 
-- 直接写 `.layer`：海报、单帧。速查见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，例子在 [examples/](examples/)。
-- 直接写 `.tsx`：有数据、循环、组件或动画时用。文件头写 `/** @jsxImportSource @dc/flexlayer */`，标签和属性与 `.layer` 相同，不用 import 这些标签。大写开头的函数是组件，展开后只剩 Flex Layer 标签。默认导出 `<layer>` 或返回它的函数；动画则导出 `composition`（见 SPEC 第 13 章）。`flexlayer check` / `render` 会执行它。`--emit out.layer` 把展开结果写回 `.layer`。`draw={(ctx, el) => ...}` 里只用 `ctx` 和 `el`，否则 `--emit` 报 `emit-draw`。不要用 `Math.random` 或 `Date.now`。例子：`examples/hello.tsx`、`examples/slide.tsx`。
-- 要从字体取出某个字的轮廓，`import { glyph } from '@dc/flexlayer'`。`await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })` 按码位返回数组，每项有 `d`、字宽 `width`、字身高度 `height` 和 `baseline`。`d` 的原点在字身左上角，y 向下，单位是像素。字宽和字身高度来自字体，不来自路径外接框。可变字体只出默认字重。见 SPEC 5.4。
+推荐用 `.tsx` 先量再摆。`canvas()` 是同步的，字体、图片和 Yoga 在这一次调用里备好，并在进程里记住。多帧渲染接着用，不会每帧重新准备。`graphic.layer()` 也是同步的，动画的 `component` 里可以调用。
+
+```tsx
+/** @jsxImportSource @dc/flexlayer */
+import { canvas } from '@dc/flexlayer'
+
+const graphic = canvas({
+  width: 720,
+  height: 540,
+  background: '#0c1424',
+  color: '#f4ecdf',
+  fontFamily: 'Kai',
+})
+const title = graphic.layer(<h1 style="font-size:160px; white-space:nowrap">春眠不觉晓</h1>)
+const ball = graphic.layer(<sphere cx="90" cy="90" r="90" fill="#e8b04a" />, { perspective: 700, glow: '40 #e8b04a88' })
+const t = title.fit({ width: graphic.width - 96 }).at({ x: 48, y: 48 })
+const b = ball.at({ x: t.left + 40, y: t.bottom + 32 })
+export default graphic.root(t, b)
+```
+
+`fit`、`scaled` 只缩小、不重新量。`at()` 返回摆好的 `<layer>`，并带上 `left`、`top`、`right`、`bottom`。元素自己的样式优先，否则用 `canvas()` 的颜色和字体。量到的盒子和最终排版不一致时报 `measure-mismatch`。例子：`examples/poster.tsx`、`examples/hello.tsx`。规范见 SPEC 第 15 章。
+
+- 直接写 `.layer`：渲染器和 `--emit` 用的文本。静态单帧可以手写。速查见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，例子在 [examples/](examples/)。
+- 动画导出 `composition`（见 SPEC 第 13 章）。文件头写 `/** @jsxImportSource @dc/flexlayer */`，标签不用 import。`flexlayer check` / `render` 会执行它。`--emit out.layer` 把展开结果写回 `.layer`。`draw={(ctx, el) => ...}` 里只用 `ctx` 和 `el`，否则 `--emit` 报 `emit-draw`。不要用 `Math.random` 或 `Date.now`。例子：`examples/slide.tsx`。
+- 要从字体取出某个字的轮廓，`import { glyph } from '@dc/flexlayer'`。`await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })` 按码位返回数组，每项有 `d`、字宽 `width`、字身高度 `height`、`baseline` 和 `missing`。`d` 的原点在字身左上角，y 向下，单位是像素。字宽和字身高度来自字体，不来自路径外接框。缺字（`😀`、`𠀀`）`missing` 为 `true`，`d` 是同一个缺字方框。可变字体只出默认字重。见 SPEC 5.4。
 
 ```ts
 import { renderLayer } from '@dc/flexlayer'
@@ -115,6 +140,7 @@ flowchart TD
 | flex 子项被挤爆 | 加宽 flex 容器或缩小子项 |
 | 阴影或光晕看不见 | 查颜色与背景对比；看 `effect` 矩形 |
 | 嵌套 layer 写了 background 没颜色 | 改成 `rect`、HTML `background` 或 `<draw>` |
+| 短行居中、长行看起来左对齐 | column 没写 `align-items`，默认是 `center`。左对齐写 `align-items:flex-start`。`justify-content` 只管主轴 |
 | 不知道改哪个节点 | 报告里的 `path`、`source` 和 `hint` |
 
 ## 7. 文档索引
