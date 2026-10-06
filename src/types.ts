@@ -365,6 +365,9 @@ export type FvgDocument = {
   sources?: Map<string, string>
 }
 
+/** 网格画法。`webgl` 是 headless-three，`software` 是自带的三角形光栅。默认 `webgl`。 */
+export type MeshEngine = 'webgl' | 'software'
+
 export type RenderOptions = {
   scale?: number
   debug?: boolean
@@ -372,4 +375,6 @@ export type RenderOptions = {
   fontsCacheDir?: string
   /** 当前帧的时间，单位秒。缺省为 0。 */
   t?: number
+  /** 缺省 `webgl`。软件路径稳定之前不撤掉 headless-three。 */
+  meshEngine?: MeshEngine
 }

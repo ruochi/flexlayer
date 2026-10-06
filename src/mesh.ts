@@ -5,7 +5,8 @@ import { parseGlb, type GlbPrimitive } from './glb.js'
 import { originOffset } from './matrix.js'
 import { applyPoseMatrix, PERSPECTIVE_AA, planeDepth, poseMatrix, project, resolveSamples } from './perspective.js'
 import { tessellateSvgPath } from './path.js'
-import type { LayerLayoutNode, LayoutNode, MeshLayoutNode } from './types.js'
+import { renderMeshSoftware } from './software-mesh.js'
+import type { LayerLayoutNode, LayoutNode, MeshEngine, MeshLayoutNode } from './types.js'
 
 /** 网格和透视平面用同一套超采样：高分辨率绘制，再平均缩回。二维绘制不经过这里。 */
 const MESH_AA = PERSPECTIVE_AA
@@ -421,6 +422,7 @@ export async function renderMeshLayer(
   layer: LayerLayoutNode,
   scale: number,
   raster: (node: LayoutNode) => MeshRaster,
+  engine: MeshEngine = 'webgl',
 ): Promise<MeshFrame | null> {
   const perspective = layer.perspective
   if (perspective == null || perspective <= 0 || layer.width <= 0 || layer.height <= 0) return null
@@ -435,6 +437,7 @@ export async function renderMeshLayer(
   }
   if (meshes.length === 0 && planes.length === 0) return null
 
+  if (engine === 'software') return renderMeshSoftware({ layer, perspective, meshes, planes, scale, raster })
   return renderMeshWebgl({ layer, perspective, meshes, planes, scale, raster })
 }
 

@@ -19,6 +19,7 @@ export type {
   FvgReport,
   RenderOptions,
   Issue,
+  MeshEngine,
   ElementReport,
   DrawFn,
   DrawElSnapshot,

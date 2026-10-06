@@ -10,18 +10,19 @@ import { formatIssueLine } from './report.js'
 import { checkFvg, renderFvg } from './render.js'
 import { typecheckLayerFile } from './typecheck.js'
 import type { FvgNode } from './parse.js'
-import type { FvgReport, Issue } from './types.js'
+import type { FvgReport, Issue, MeshEngine } from './types.js'
 
 const CONTACT_LIMIT = 300
 
 function usage(): never {
   console.error(`用法:
-  flexlayer render <file.layer|file.tsx> [-o out.png] [--report out.json] [--scale 0.5] [--debug] [--emit out.layer] [--frame N] [--frames dir]
+  flexlayer render <file.layer|file.tsx> [-o out.png] [--report out.json] [--scale 0.5] [--debug] [--mesh software] [--emit out.layer] [--frame N] [--frames dir]
   flexlayer check <file.layer|file.tsx> [--report out.json] [--emit out.layer] [--frame N]
 
 .tsx / .jsx / .ts / .js 会先执行，得到和 .layer 相同的节点树。
 Composition 用 --frame N 渲染一帧；不写时，帧数不超过 ${CONTACT_LIMIT} 就输出联系表。
---frames <目录> 写出每一帧 PNG。--emit 把展开后的节点写回 .layer。`)
+--frames <目录> 写出每一帧 PNG。--emit 把展开后的节点写回 .layer。
+--mesh software 用自带的三角形光栅画网格；缺省仍是 headless-three。`)
   process.exit(2)
 }
 
@@ -36,12 +37,18 @@ function parseArgs(argv: string[]) {
   let frame: number | undefined
   let scale = 1
   let debug = false
+  let meshEngine: MeshEngine | undefined
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i]!
     if (a === '-o') out = argv[++i]
     else if (a === '--report') report = argv[++i]
     else if (a === '--scale') scale = Number(argv[++i])
     else if (a === '--debug') debug = true
+    else if (a === '--mesh') {
+      const value = argv[++i]
+      if (value !== 'webgl' && value !== 'software') usage()
+      meshEngine = value
+    }
     else if (a === '--emit') emit = argv[++i]
     else if (a === '--frames') framesDir = argv[++i]
     else if (a === '--frame') frame = Number(argv[++i])
@@ -49,7 +56,7 @@ function parseArgs(argv: string[]) {
   }
   if (frame != null && (!Number.isInteger(frame) || frame < 0)) usage()
   if ((emit != null && !emit) || (framesDir != null && !framesDir) || (out != null && !out) || (report != null && !report)) usage()
-  return { cmd, file, out, report, emit, framesDir, frame, scale, debug }
+  return { cmd, file, out, report, emit, framesDir, frame, scale, debug, meshEngine }
 }
 
 function frameInput(frame: number, fps: number): FrameInput {
@@ -141,7 +148,7 @@ async function main() {
     if (one != null) {
       const input = frameInput(one, comp.fps)
       const node = comp.component(input)
-      const { png, report } = await renderFvg(node, { baseDir, scale: args.scale, debug: args.debug, t: input.t })
+      const { png, report } = await renderFvg(node, { baseDir, scale: args.scale, debug: args.debug, t: input.t, meshEngine: args.meshEngine })
       attachFileIssues(report)
       await emitNode(node, args.emit, report)
       await writeFile(outPath, png)
@@ -151,7 +158,7 @@ async function main() {
       failIfErrors(report)
     }
     if (args.framesDir || one == null) {
-      const { frames, reports, contactSheet } = await renderComposition(comp, { baseDir, scale: args.scale })
+      const { frames, reports, contactSheet } = await renderComposition(comp, { baseDir, scale: args.scale, meshEngine: args.meshEngine })
       if (args.framesDir) {
         await mkdir(args.framesDir, { recursive: true })
         for (let i = 0; i < frames.length; i++) {
@@ -176,7 +183,7 @@ async function main() {
   }
 
   const source = loaded.kind === 'markup' ? loaded.source : loaded.node
-  const { png, report } = await renderFvg(source, { baseDir, scale: args.scale, debug: args.debug })
+  const { png, report } = await renderFvg(source, { baseDir, scale: args.scale, debug: args.debug, meshEngine: args.meshEngine })
   if (loaded.kind === 'node') await emitNode(loaded.node, args.emit, report)
   attachFileIssues(report)
   const outPath = args.out ?? abs.replace(/\.(tsx|jsx|ts|js|layer|fvg)$/i, '.png')
