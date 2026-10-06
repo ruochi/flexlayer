@@ -10,6 +10,7 @@ const KNOWN_TAGS = new Set([
   'polygon',
   'path',
   'curve',
+  'g',
   'font',
   'draw',
   'symbol',
@@ -35,7 +36,7 @@ const KNOWN_TAGS = new Set([
 
 export const ROOT_TAGS = new Set(['layer'])
 export const SHAPE_TAGS = new Set(['rect', 'circle', 'ellipse'])
-export const LINE_TAGS = new Set(['line', 'arrow', 'polyline', 'polygon', 'path', 'curve'])
+export const LINE_TAGS = new Set(['line', 'polyline', 'polygon', 'path', 'curve'])
 export const MESH_TAGS = new Set(['sphere', 'box', 'extrude', 'model'])
 export const FONT_TAG = 'font'
 

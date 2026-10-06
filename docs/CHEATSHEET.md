@@ -1,6 +1,6 @@
 # Flex Layer 速查
 
-写法规则见 [AGENTS.md](../AGENTS.md) 的硬性约定。数字都是像素，y 轴向下。根元素 `<layer width height>` 就是一个 layer。推荐用 `.tsx` 的 `canvas()` 和 `graphic.layer()` 先量再摆，见 [examples/poster.tsx](../examples/poster.tsx)。`canvas()` 是同步的，准备好的字体和图片会留在进程里，多帧接着用。同一套标签也可以手写进 `.layer`。`flexlayer render file.tsx` 会先执行再渲染。
+写法规则见 [AGENTS.md](../AGENTS.md) 的硬性约定。数字都是像素，y 轴向下。根元素 `<layer width height>` 就是一个 layer。推荐用 `.tsx` 的 `canvas.create(<layer>…</layer>)` 先量再摆，见 [examples/poster.tsx](../examples/poster.tsx)。`create` 是同步的，准备好的字体和图片会留在进程里，多帧接着用。同一套标签也可以手写进 `.layer`。`flexlayer render file.tsx` 会先执行再渲染。
 
 ## 结构
 
@@ -18,14 +18,15 @@
 | --- | --- | --- |
 | 文字 `h1` `h2` `h3` `p` `div` `span` | 外包 `layer` 来定位。文字本身只写 `style` | 直接放 |
 | 图片 `img`（`image` 相同） | 外包 `layer`。`src` 是属性，宽高和 `object-fit` 写 `style` | 直接放，默认不缩小 |
-| `rect` | `x y width height`，左上角。或 `x1 y1 x2 y2`。`rx` 是圆角，两种都能加 | 包一层有宽高的 layer，或改用 div |
-| `ellipse` | `cx cy rx ry`，圆心。或两点写法 | 同上 |
+| `rect` | `x y width height`，左上角。`rx` 是圆角，`ry` 没写时跟 `rx` | 包一层有宽高的 layer，或改用 div |
+| `ellipse` | `cx cy rx ry`，圆心 | 同上 |
+| `g` | 放在 `layer` 里。`transform` 写 `translate` / `rotate` / `scale` / `matrix`。`fill`、`stroke` 传给子形状 | 不排进去，会 `warn` |
 | `circle` | `cx cy r`，圆心 | 同上 |
 | `sphere` | `cx cy r`，圆心，再加上 `z`。布局盒子是边长 `2r` 的正方形 | 放进有 `perspective` 的 layer |
 | `box` | `x y width height depth`。`x y` 是左上角，布局不计厚度 | 放进有 `perspective` 的 layer |
 | `extrude` | `d` 与 `path` 相同，`depth` 是沿 z 的厚度，以平面为中心。位置用 `x y` | 放进有 `perspective` 的 layer |
 | `model` | 只写 `src`（一个 `.glb`）。宽高和 `x y z` 写在外包的 layer 上，contain 居中 | 放进有 `perspective` 的 layer |
-| `line` `arrow` `polyline` `polygon` `path` `curve` | `x1 y1 x2 y2` / `points` / `d`。`curve` 闭合加 `closed` | 包一层 `<layer>` |
+| `line` `arrow` `polyline` `polygon` `path` `curve` | `x1 y1 x2 y2` / `points` / `d`。`curve` 闭合加 `closed`。`arrow` 是组件，展开成线和三角，`head` 默认 `max(12, stroke-width × 4)` | 包一层 `<layer>` |
 | `symbol` / `use` | `symbol` 不画。`use href="#id"` 用 `x y` 摆放 | `use` 按它的宽高排进去 |
 | `mask` | 只作为 `layer` 的直接子元素。里面写 `rect` `circle` `ellipse` `polygon` `path` 或 `img`。省略 `fill` 为 `#fff`，只看 alpha | 不排进去，会 `warn` |
 
@@ -56,7 +57,7 @@
     </div>
   </layer>
   <layer x="220" y="120" width="360" height="200">
-    <rect x1="0" y1="0" x2="160" y2="120" fill="#3ecfc4" />
+    <rect x="0" y="0" width="160" height="120" fill="#3ecfc4" />
     <circle cx="200" cy="60" r="16" fill="#f4f1ea" />
     <line x1="160" y1="60" x2="184" y2="60" stroke="#f4f1ea" stroke-width="4" />
   </layer>

@@ -113,7 +113,7 @@ describe('perspective', () => {
 
   it('平面里的子元素也按投影报告 quad', async () => {
     const report = await checkFvg(
-      `<layer width="300" height="200" perspective="400"><layer x="-30" y="60" width="360" height="80" z="-200" rotateX="25"><rect x1="20" y1="10" x2="80" y2="40" fill="#fff" /></layer></layer>`,
+      `<layer width="300" height="200" perspective="400"><layer x="-30" y="60" width="360" height="80" z="-200" rotateX="25"><rect x="20" y="10" width="60" height="30" fill="#fff"  /></layer></layer>`,
     )
     const layer = report.elements.find((el) => el.tag === 'layer' && el.quad)
     const rect = report.elements.find((el) => el.tag === 'rect')

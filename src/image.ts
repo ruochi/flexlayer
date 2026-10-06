@@ -265,7 +265,7 @@ export function peekLayerImage(src: string, baseDir: string): CachedImage {
   return { status: 'missing' }
 }
 
-/** 渲染前或 canvas() 里把图片放进缓存。失败记下来，排版时再报 missing-image。 */
+/** 渲染前把图片放进缓存。失败记下来，排版时再报 missing-image。 */
 export async function preloadLayerImages(srcs: string[], baseDir: string): Promise<void> {
   preloadLayerImagesSync(srcs, baseDir)
 }

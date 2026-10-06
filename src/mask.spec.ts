@@ -32,7 +32,7 @@ describe('mask', () => {
     const { png, report } = await renderFvg(`
       <layer width="80" height="80" background="#0000ff">
         <mask><circle cx="40" cy="40" r="18" /></mask>
-        <rect x1="0" y1="0" x2="80" y2="80" fill="#ff0000" />
+        <rect x="0" y="0" width="80" height="80" fill="#ff0000"  />
       </layer>
     `)
     const center = await pixelAt(png, 40, 40)
@@ -50,7 +50,7 @@ describe('mask', () => {
     const { png } = await renderFvg(`
       <layer width="40" height="40" background="#00ff00">
         <mask><polygon points="0,0 40,0 40,40 0,40" /></mask>
-        <rect x1="0" y1="0" x2="40" y2="40" fill="#ff0000" />
+        <rect x="0" y="0" width="40" height="40" fill="#ff0000"  />
       </layer>
     `)
     const center = await pixelAt(png, 20, 20)
@@ -62,9 +62,9 @@ describe('mask', () => {
     const { png } = await renderFvg(`
       <layer width="40" height="40" background="#0000ff">
         <mask>
-          <rect x1="0" y1="0" x2="40" y2="40" fill="linear-gradient(to bottom, #fff, #fff0)" />
+          <rect x="0" y="0" width="40" height="40" fill="linear-gradient(to bottom, #fff, #fff0)"  />
         </mask>
-        <rect x1="0" y1="0" x2="40" y2="40" fill="#ff0000" />
+        <rect x="0" y="0" width="40" height="40" fill="#ff0000"  />
       </layer>
     `)
     const top = await pixelAt(png, 20, 2)
@@ -77,10 +77,10 @@ describe('mask', () => {
     const { png } = await renderFvg(`
       <layer width="40" height="40" background="#00ff00">
         <mask>
-          <rect x1="0" y1="0" x2="40" y2="40" fill="#fff" />
+          <rect x="0" y="0" width="40" height="40" fill="#fff"  />
           <circle cx="20" cy="20" r="10" fill="#fff0" />
         </mask>
-        <rect x1="0" y1="0" x2="40" y2="40" fill="#ff0000" />
+        <rect x="0" y="0" width="40" height="40" fill="#ff0000"  />
       </layer>
     `)
     const center = await pixelAt(png, 20, 20)
@@ -94,7 +94,7 @@ describe('mask', () => {
         <mask>
           <path d="M0 0 H40 V40 H0 Z M10 10 V30 H30 V10 H10 Z" fill="#fff" />
         </mask>
-        <rect x1="0" y1="0" x2="40" y2="40" fill="#ff0000" />
+        <rect x="0" y="0" width="40" height="40" fill="#ff0000"  />
       </layer>
     `)
     const ring = await pixelAt(png, 5, 20)
@@ -108,9 +108,9 @@ describe('mask', () => {
     const { png } = await renderFvg(`
       <layer width="80" height="80" background="#000000">
         <mask>
-          <rect x1="0" y1="30" x2="80" y2="50" fill="#fff" rotate="90" />
+          <rect x="0" y="30" width="80" height="20" fill="#fff" rotate="90"  />
         </mask>
-        <rect x1="0" y1="0" x2="80" y2="80" fill="#ffffff" />
+        <rect x="0" y="0" width="80" height="80" fill="#ffffff"  />
       </layer>
     `)
     const vertical = await pixelAt(png, 40, 8)
@@ -122,8 +122,8 @@ describe('mask', () => {
   it('模糊之后再裁，mask 边外保持底色', async () => {
     const { png } = await renderFvg(`
       <layer width="100" height="100" background="#000000" blur="8">
-        <mask><rect x1="40" y1="0" x2="60" y2="100" /></mask>
-        <rect x1="0" y1="0" x2="100" y2="100" fill="#ffffff" />
+        <mask><rect x="40" y="0" width="20" height="100"  /></mask>
+        <rect x="0" y="0" width="100" height="100" fill="#ffffff"  />
       </layer>
     `)
     const kept = await pixelAt(png, 50, 50)
@@ -151,8 +151,8 @@ describe('mask', () => {
     const { png } = await renderFvg(`
       <layer width="100" height="80" background="#000000">
         <layer x="0" y="0" width="40" height="40" overflow="hidden">
-          <mask><rect x1="-10" y1="0" x2="80" y2="40" /></mask>
-          <rect x1="20" y1="0" x2="70" y2="40" fill="#ffffff" />
+          <mask><rect x="-10" y="0" width="90" height="40"  /></mask>
+          <rect x="20" y="0" width="50" height="40" fill="#ffffff"  />
         </layer>
       </layer>
     `)
@@ -170,7 +170,7 @@ describe('mask', () => {
     const { png } = await renderFvg(`
       <layer width="40" height="40" background="#00ff00">
         <mask><img src="${src}" style="width:40px; height:40px" /></mask>
-        <rect x1="0" y1="0" x2="40" y2="40" fill="#ff0000" />
+        <rect x="0" y="0" width="40" height="40" fill="#ff0000"  />
       </layer>
     `)
     const left = await pixelAt(png, 6, 20)
@@ -193,7 +193,7 @@ describe('mask', () => {
     expect(card.mask).toHaveLength(1)
     expect(card.children).toHaveLength(1)
     const report = await checkFvg(
-      `<layer width="40" height="40"><mask><circle cx="0" cy="0" r="200" /></mask><rect x1="0" y1="0" x2="10" y2="10" fill="#fff" /></layer>`,
+      `<layer width="40" height="40"><mask><circle cx="0" cy="0" r="200" /></mask><rect x="0" y="0" width="10" height="10" fill="#fff"  /></layer>`,
     )
     expect(report.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
     expect(report.elements.some((el) => el.tag === 'circle' || el.tag === 'mask')).toBe(false)
@@ -201,45 +201,45 @@ describe('mask', () => {
 
   it('被 mask 挡住、落到画布外的内容不报 overflow-canvas', async () => {
     const hidden = await checkFvg(
-      `<layer width="80" height="80" background="#000"><mask><circle cx="40" cy="40" r="24" /></mask><rect x1="-30" y1="-30" x2="110" y2="110" fill="#fff" /></layer>`,
+      `<layer width="80" height="80" background="#000"><mask><circle cx="40" cy="40" r="24" /></mask><rect x="-30" y="-30" width="140" height="140" fill="#fff"  /></layer>`,
     )
     expect(hidden.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
     const shown = await checkFvg(
-      `<layer width="80" height="80" background="#000"><mask><rect x1="-8" y1="0" x2="88" y2="80" /></mask><rect x1="-8" y1="0" x2="88" y2="80" fill="#fff" /></layer>`,
+      `<layer width="80" height="80" background="#000"><mask><rect x="-8" y="0" width="96" height="80"  /></mask><rect x="-8" y="0" width="96" height="80" fill="#fff"  /></layer>`,
     )
     expect(shown.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(true)
   })
 
   it('mask 挡住的光晕不报 effect-clipped', async () => {
     const masked = await checkFvg(
-      `<layer width="80" height="80" background="#000"><mask><circle cx="40" cy="40" r="18" /></mask><rect x1="0" y1="0" x2="80" y2="80" fill="#fff" glow="36 #fff" /></layer>`,
+      `<layer width="80" height="80" background="#000"><mask><circle cx="40" cy="40" r="18" /></mask><rect x="0" y="0" width="80" height="80" fill="#fff" glow="36 #fff"  /></layer>`,
     )
     expect(masked.issues.some((issue) => issue.code === 'effect-clipped')).toBe(false)
     const open = await checkFvg(
-      `<layer width="80" height="80" background="#000"><rect x1="0" y1="0" x2="80" y2="80" fill="#fff" glow="36 #fff" /></layer>`,
+      `<layer width="80" height="80" background="#000"><rect x="0" y="0" width="80" height="80" fill="#fff" glow="36 #fff"  /></layer>`,
     )
     expect(open.issues.some((issue) => issue.code === 'effect-clipped')).toBe(true)
   })
 
   it('空 mask、第二个 mask、放错位置都会 warn', async () => {
-    const empty = await checkFvg(`<layer width="40" height="40" background="#00ff00"><mask></mask><rect x1="0" y1="0" x2="40" y2="40" fill="#ff0000" /></layer>`)
+    const empty = await checkFvg(`<layer width="40" height="40" background="#00ff00"><mask></mask><rect x="0" y="0" width="40" height="40" fill="#ff0000"  /></layer>`)
     expect(empty.issues.some((issue) => issue.code === 'empty-mask')).toBe(true)
-    const { png } = await renderFvg(`<layer width="40" height="40" background="#00ff00"><mask></mask><rect x1="0" y1="0" x2="40" y2="40" fill="#ff0000" /></layer>`)
+    const { png } = await renderFvg(`<layer width="40" height="40" background="#00ff00"><mask></mask><rect x="0" y="0" width="40" height="40" fill="#ff0000"  /></layer>`)
     expect((await pixelAt(png, 20, 20))[0]).toBeGreaterThan(200)
 
     const extra = await checkFvg(`
       <layer width="40" height="40" background="#00ff00">
         <mask><circle cx="20" cy="20" r="8" /></mask>
-        <mask><rect x1="0" y1="0" x2="40" y2="40" /></mask>
-        <rect x1="0" y1="0" x2="40" y2="40" fill="#ff0000" />
+        <mask><rect x="0" y="0" width="40" height="40"  /></mask>
+        <rect x="0" y="0" width="40" height="40" fill="#ff0000"  />
       </layer>
     `)
     expect(extra.issues.some((issue) => issue.message.includes('一个 mask'))).toBe(true)
     const extraPng = await renderFvg(`
       <layer width="40" height="40" background="#00ff00">
         <mask><circle cx="20" cy="20" r="8" /></mask>
-        <mask><rect x1="0" y1="0" x2="40" y2="40" /></mask>
-        <rect x1="0" y1="0" x2="40" y2="40" fill="#ff0000" />
+        <mask><rect x="0" y="0" width="40" height="40"  /></mask>
+        <rect x="0" y="0" width="40" height="40" fill="#ff0000"  />
       </layer>
     `)
     const corner = await pixelAt(extraPng.png, 2, 2)
@@ -265,7 +265,7 @@ describe('mask', () => {
       <layer width="40" height="40" background="#00ff00">
         <symbol id="card" width="40" height="40">
           <mask><circle cx="20" cy="20" r="10" /></mask>
-          <rect x1="0" y1="0" x2="40" y2="40" fill="#ff0000" />
+          <rect x="0" y="0" width="40" height="40" fill="#ff0000"  />
         </symbol>
         <use href="#card" x="0" y="0" />
       </layer>

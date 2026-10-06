@@ -180,7 +180,7 @@ describe('paint containers', () => {
       h(
         'layer',
         { x: '50', y: '50',  width: '100', height: '100', rotate: '90' },
-        h('rect', { x1: '0', y1: '10', x2: '100', y2: '30', fill: '#ffffff' }),
+        h('rect', { x: '0', y: '10', width: '100', height: '20', fill: '#ffffff' }),
       ),
     )
     const { png } = await renderFvg(root)
@@ -216,7 +216,7 @@ describe('paint containers', () => {
       h(
         'layer',
         { x: '100', y: '20',  width: '100', height: '100', rotate: '90', origin: 'top-left' },
-        h('rect', { x1: '0', y1: '40', x2: '10', y2: '80', fill: '#ffffff' }),
+        h('rect', { x: '0', y: '40', width: '10', height: '40', fill: '#ffffff' }),
       ),
     )
     const { png } = await renderFvg(root)

@@ -220,7 +220,7 @@ export type TextLayoutResult = {
 export type ShapeKind = 'rect' | 'circle' | 'ellipse'
 
 export type LineGeometry =
-  | { kind: 'line' | 'arrow'; x1: number; y1: number; x2: number; y2: number; head?: number }
+  | { kind: 'line'; x1: number; y1: number; x2: number; y2: number }
   | { kind: 'polyline' | 'polygon'; points: Array<{ x: number; y: number }> }
   | { kind: 'path'; d: string }
 
@@ -289,6 +289,13 @@ export type FlexLayoutNode = LayoutNodeBase & {
   children: LayoutNode[]
 }
 
+export type GroupLayoutNode = LayoutNodeBase & {
+  kind: 'group'
+  children: LayoutNode[]
+  /** SVG 变换，把子元素的局部坐标变到父级。 */
+  svg: { a: number; b: number; c: number; d: number; e: number; f: number }
+}
+
 export type TextLayoutNode = LayoutNodeBase & {
   kind: 'text'
   textLayout: TextLayoutResult
@@ -345,6 +352,7 @@ export type MeshLayoutNode = LayoutNodeBase & {
 export type LayoutNode =
   | LayerLayoutNode
   | FlexLayoutNode
+  | GroupLayoutNode
   | TextLayoutNode
   | ImageLayoutNode
   | ShapeLayoutNode

@@ -1,48 +1,48 @@
 <layer width="1080" height="1180" background="#0a0e14" color="#f4f1ea" font-family="Kai" x="0" y="0">
   
   
-  <rect x1="0" y1="0" x2="1080" y2="1180" fill="linear-gradient(to bottom, #121826, #1a3348 45%, #243c38)" />
+  <rect x="0" y="0" width="1080" height="1180" fill="linear-gradient(to bottom, #121826, #1a3348 45%, #243c38)" />
   
   
   
-  <rect x1="0" y1="200" x2="1080" y2="216" fill="#ffffff" opacity="0.9" />
+  <rect x="0" y="200" width="1080" height="16" fill="#ffffff" opacity="0.9" />
   
   
-  <rect x1="0" y1="260" x2="1080" y2="276" fill="#f5c16c" />
+  <rect x="0" y="260" width="1080" height="16" fill="#f5c16c" />
   
   
-  <rect x1="0" y1="320" x2="1080" y2="336" fill="#7b6cff" />
+  <rect x="0" y="320" width="1080" height="16" fill="#7b6cff" />
   
   
-  <rect x1="160" y1="160" x2="176" y2="360" fill="#ffffff" opacity="0.75" />
+  <rect x="160" y="160" width="16" height="200" fill="#ffffff" opacity="0.75" />
   
   
-  <rect x1="520" y1="160" x2="536" y2="360" fill="#ff9f1c" opacity="0.9" />
+  <rect x="520" y="160" width="16" height="200" fill="#ff9f1c" opacity="0.9" />
   
   
-  <rect x1="880" y1="160" x2="896" y2="360" fill="#3ecfc4" />
+  <rect x="880" y="160" width="16" height="200" fill="#3ecfc4" />
   
 
   
-  <rect x1="0" y1="620" x2="1080" y2="636" fill="#ffffff" opacity="0.9" />
+  <rect x="0" y="620" width="1080" height="16" fill="#ffffff" opacity="0.9" />
   
   
-  <rect x1="0" y1="700" x2="1080" y2="716" fill="#ff9f1c" />
+  <rect x="0" y="700" width="1080" height="16" fill="#ff9f1c" />
   
   
-  <rect x1="0" y1="780" x2="1080" y2="796" fill="#3ecfc4" />
+  <rect x="0" y="780" width="1080" height="16" fill="#3ecfc4" />
   
   
-  <rect x1="0" y1="860" x2="1080" y2="876" fill="#ffffff" opacity="0.85" />
+  <rect x="0" y="860" width="1080" height="16" fill="#ffffff" opacity="0.85" />
   
   
-  <rect x1="180" y1="560" x2="196" y2="900" fill="#ffffff" opacity="0.7" />
+  <rect x="180" y="560" width="16" height="340" fill="#ffffff" opacity="0.7" />
   
   
-  <rect x1="520" y1="560" x2="536" y2="900" fill="#ff5aa5" opacity="0.85" />
+  <rect x="520" y="560" width="16" height="340" fill="#ff5aa5" opacity="0.85" />
   
   
-  <rect x1="860" y1="560" x2="876" y2="900" fill="#f5c16c" />
+  <rect x="860" y="560" width="16" height="340" fill="#f5c16c" />
   
 
   

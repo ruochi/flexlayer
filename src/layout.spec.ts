@@ -54,15 +54,24 @@ describe('layoutSource', () => {
     expect(polygon?.y).toBe(100)
   })
 
-  it('rect 两点写法可以反着写，和尺寸写法同时出现时报错', async () => {
+  it('rect 没写 ry 时圆角跟 rx', async () => {
     const doc = await layoutSource(
-      `<layer width="400" height="400"><rect x1="80" y1="60" x2="20" y2="10" fill="#fff" /><rect x1="0" y1="0" x2="40" y2="20" width="10" height="10" /></layer>`,
+      `<layer width="80" height="80"><rect x="10" y="10" width="40" height="20" rx="6" fill="#fff" /></layer>`,
       process.cwd(),
     )
-    const [reversed, mixed] = doc.root.children as Array<{ x: number; y: number; width: number; height: number }>
-    expect(reversed).toMatchObject({ x: 20, y: 10, width: 60, height: 50 })
-    expect(mixed).toMatchObject({ x: 0, y: 0, width: 40, height: 20 })
-    expect(doc.issues.some((issue) => issue.code === 'invalid-attr' && issue.hint)).toBe(true)
+    const rect = doc.root.children[0] as { rx?: number; ry?: number }
+    expect(rect.rx).toBe(6)
+    expect(rect.ry).toBe(6)
+  })
+
+  it('rect 两点写法报 invalid-attr，并不再参与几何', async () => {
+    const doc = await layoutSource(
+      `<layer width="400" height="400"><rect x1="80" y1="60" x2="20" y2="10" fill="#fff" /></layer>`,
+      process.cwd(),
+    )
+    const rect = doc.root.children[0] as { x: number; y: number; width: number; height: number }
+    expect(rect).toMatchObject({ x: 0, y: 0, width: 0, height: 0 })
+    expect(doc.issues.some((issue) => issue.code === 'invalid-attr' && issue.hint?.includes('x、y、width、height'))).toBe(true)
   })
 
   it('竖排 flex 把文字排成一列', async () => {

@@ -1,21 +1,24 @@
 /** @jsxImportSource @dc/flexlayer */
 import { canvas } from '@dc/flexlayer'
 
-const graphic = canvas({
-  width: 720,
-  height: 540,
-  background: '#0c1424',
-  color: '#f4ecdf',
-  fontFamily: 'Kai',
-  safe: 0,
-})
+const page = { width: 720, height: 540 }
 
-const title = graphic.layer(<h1 style="font-size:160px; white-space:nowrap">春眠不觉晓</h1>)
-const ball = graphic.layer(<sphere cx="90" cy="90" r="90" fill="#e8b04a" />, {
-  perspective: 700,
-  glow: '40 #e8b04a88',
-})
-const t = title.fit({ width: graphic.width - 96 }).at({ x: 48, y: 48 })
-const b = ball.at({ x: t.left + 40, y: t.bottom + 32 })
+const title = canvas.create(
+  <layer x={48} y={48} width={page.width - 96} color="#f4ecdf" font-family="Kai">
+    <h1 style="font-size:160px; white-space:nowrap">春眠不觉晓</h1>
+  </layer>,
+)
 
-export default graphic.root(t, b)
+const ball = canvas.create(
+  <layer x={title.left + 40} y={title.bottom + 32} perspective="700" glow="40 #e8b04a88">
+    <sphere cx="90" cy="90" r="90" fill="#e8b04a" />
+  </layer>,
+)
+
+export default canvas.create(
+  <layer width={page.width} height={page.height} color="#f4ecdf" font-family="Kai" safe="0">
+    <rect x="0" y="0" width={page.width} height={page.height} fill="#0c1424" />
+    {title}
+    {ball}
+  </layer>,
+)

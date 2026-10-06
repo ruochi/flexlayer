@@ -1,7 +1,7 @@
 <layer width="1080" height="1100" background="#12161c" color="#e8e4dc" font-family="Kai" x="0" y="0">
   
   
-  <rect x1="0" y1="0" x2="1080" y2="1100" fill="linear-gradient(to bottom, #0e1218, #1a2430 55%, #2a3540)" />
+  <rect x="0" y="0" width="1080" height="1100" fill="linear-gradient(to bottom, #0e1218, #1a2430 55%, #2a3540)" />
   
   
   <layer x="80" y="48">

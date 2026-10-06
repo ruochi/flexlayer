@@ -325,7 +325,8 @@ describe('load .tsx', () => {
     const { composition } = loaded
     const a = composition.component({ frame: 0, fps: composition.fps, t: 0 })
     const b = composition.component({ frame: 1, fps: composition.fps, t: 0.25 })
-    const rect = (node: typeof a) => node.children.find((child) => typeof child !== 'string' && child.tag === 'rect')
+    const rect = (node: typeof a) =>
+      node.children.find((child) => typeof child !== 'string' && child.tag === 'rect' && child.attrs.fill === '#3ecfc4')
     const left = rect(a)
     const right = rect(b)
     expect(typeof left !== 'string' && left && 'attrs' in left && left.attrs.x).toBe('20')

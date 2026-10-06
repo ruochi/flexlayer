@@ -83,25 +83,37 @@ function linePad(node: LineLayoutNode): number {
   const stroked = node.stroke !== 'none' && node.strokeWidth > 0
   if (!stroked) return 1
   let pad = node.strokeWidth / 2 + 2
-  if (node.geometry.kind === 'arrow') {
-    const head = node.geometry.head ?? Math.max(12, node.strokeWidth * 4)
-    pad = Math.max(pad, head + 2)
-  }
   return pad
 }
 
-function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  const rad = Math.min(r, w / 2, h / 2)
+function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, rx: number, ry = rx) {
+  const rrx = Math.min(rx, w / 2)
+  const rry = Math.min(ry, h / 2)
+  if (rrx === rry) {
+    const rad = rrx
+    ctx.beginPath()
+    ctx.moveTo(x + rad, y)
+    ctx.lineTo(x + w - rad, y)
+    ctx.quadraticCurveTo(x + w, y, x + w, y + rad)
+    ctx.lineTo(x + w, y + h - rad)
+    ctx.quadraticCurveTo(x + w, y + h, x + w - rad, y + h)
+    ctx.lineTo(x + rad, y + h)
+    ctx.quadraticCurveTo(x, y + h, x, y + h - rad)
+    ctx.lineTo(x, y + rad)
+    ctx.quadraticCurveTo(x, y, x + rad, y)
+    ctx.closePath()
+    return
+  }
   ctx.beginPath()
-  ctx.moveTo(x + rad, y)
-  ctx.lineTo(x + w - rad, y)
-  ctx.quadraticCurveTo(x + w, y, x + w, y + rad)
-  ctx.lineTo(x + w, y + h - rad)
-  ctx.quadraticCurveTo(x + w, y + h, x + w - rad, y + h)
-  ctx.lineTo(x + rad, y + h)
-  ctx.quadraticCurveTo(x, y + h, x, y + h - rad)
-  ctx.lineTo(x, y + rad)
-  ctx.quadraticCurveTo(x, y, x + rad, y)
+  ctx.moveTo(x + rrx, y)
+  ctx.lineTo(x + w - rrx, y)
+  ctx.ellipse(x + w - rrx, y + rry, rrx, rry, 0, -Math.PI / 2, 0)
+  ctx.lineTo(x + w, y + h - rry)
+  ctx.ellipse(x + w - rrx, y + h - rry, rrx, rry, 0, 0, Math.PI / 2)
+  ctx.lineTo(x + rrx, y + h)
+  ctx.ellipse(x + rrx, y + h - rry, rrx, rry, 0, Math.PI / 2, Math.PI)
+  ctx.lineTo(x, y + rry)
+  ctx.ellipse(x + rrx, y + rry, rrx, rry, 0, Math.PI, Math.PI * 1.5)
   ctx.closePath()
 }
 
@@ -188,9 +200,10 @@ function drawShape(ctx: CanvasRenderingContext2D, node: ShapeLayoutNode) {
   const y = node.y
   const pad = shapePad(node)
   if (node.shape === 'rect') {
-    const r = node.rx ?? 0
-    if (r > 0) {
-      roundRectPath(ctx, x, y, node.width, node.height, r)
+    const rx = node.rx ?? 0
+    const ry = node.ry ?? rx
+    if (rx > 0 || ry > 0) {
+      roundRectPath(ctx, x, y, node.width, node.height, rx, ry)
       if (node.fill !== 'none') {
         ctx.fillStyle = paintOf(ctx, node.fill, node.x, node.y, node.width, node.height, pad)
         ctx.fill()
@@ -246,16 +259,6 @@ function drawShape(ctx: CanvasRenderingContext2D, node: ShapeLayoutNode) {
   }
 }
 
-function drawArrowHead(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, head: number) {
-  const ang = Math.atan2(y2 - y1, x2 - x1)
-  ctx.beginPath()
-  ctx.moveTo(x2, y2)
-  ctx.lineTo(x2 - head * Math.cos(ang - Math.PI / 6), y2 - head * Math.sin(ang - Math.PI / 6))
-  ctx.lineTo(x2 - head * Math.cos(ang + Math.PI / 6), y2 - head * Math.sin(ang + Math.PI / 6))
-  ctx.closePath()
-  ctx.fill()
-}
-
 function drawLine(ctx: CanvasRenderingContext2D, node: LineLayoutNode, silhouette = false, spread = 0) {
   ctx.save()
   ctx.translate(node.x, node.y)
@@ -275,7 +278,7 @@ function drawLine(ctx: CanvasRenderingContext2D, node: LineLayoutNode, silhouett
   ctx.lineJoin = node.strokeLinejoin ?? 'round'
   if (node.dash?.length) ctx.setLineDash(node.dash)
   const g = node.geometry
-  if (g.kind === 'line' || g.kind === 'arrow') {
+  if (g.kind === 'line') {
     if (!stroked) {
       ctx.restore()
       return
@@ -284,10 +287,6 @@ function drawLine(ctx: CanvasRenderingContext2D, node: LineLayoutNode, silhouett
     ctx.moveTo(g.x1, g.y1)
     ctx.lineTo(g.x2, g.y2)
     ctx.stroke()
-    if (g.kind === 'arrow') {
-      const head = g.head ?? Math.max(12, node.strokeWidth * 4)
-      drawArrowHead(ctx, g.x1, g.y1, g.x2, g.y2, head)
-    }
   } else if (g.kind === 'polyline') {
     if (g.points.length < 2 || !stroked) {
       ctx.restore()
@@ -507,7 +506,7 @@ function drawOuterInk(ctx: CanvasRenderingContext2D, state: PaintState, node: La
     drawMeshFrameInk(ctx, node, state)
     return
   }
-  if (node.kind === 'layer' || node.kind === 'flex') {
+  if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
     drawSubtreeInk(ctx, node, spread)
     return
   }
@@ -557,6 +556,13 @@ function drawNodeInk(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: nu
 
 /** layer overlay：自身 chrome + 子树着墨（子元素局部坐标）。 */
 function drawSubtreeInk(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: number, ink = SILHOUETTE) {
+  if (node.kind === 'group') {
+    ctx.save()
+    ctx.transform(node.svg.a, node.svg.b, node.svg.c, node.svg.d, node.svg.e, node.svg.f)
+    for (const ch of node.children) drawSubtreeInk(ctx, ch, spread, ink)
+    ctx.restore()
+    return
+  }
   drawNodeInk(ctx, node, spread, ink)
   if (node.kind !== 'layer' && node.kind !== 'flex') return
   const insetX = node.kind === 'flex' ? node.padding.left + (node.border?.width ?? 0) : 0
@@ -1059,7 +1065,7 @@ function outwardPad(node: LayoutNode): number {
 /** 平面位图要比盒子大一圈，否则发光和阴影会被裁在平面自己的框里。 */
 function planeBitmapPad(node: LayoutNode): number {
   let pad = outwardPad(node)
-  if (node.kind === 'layer' || node.kind === 'flex') {
+  if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
     for (const child of node.children) pad = Math.max(pad, planeBitmapPad(child))
   }
   return pad > 0 ? Math.ceil(pad + 2) : 0
@@ -1159,6 +1165,11 @@ function paintBody(ctx: PaintCtx, node: LayoutNode, debug: boolean, t: number, s
     drawLine(ctx, node)
   } else if (node.kind === 'custom') {
     drawBoxChrome(ctx, node)
+  } else if (node.kind === 'group') {
+    ctx.save()
+    ctx.transform(node.svg.a, node.svg.b, node.svg.c, node.svg.d, node.svg.e, node.svg.f)
+    for (const ch of node.children) paintNode(ctx, ch, debug, t, state)
+    ctx.restore()
   } else if (node.kind === 'flex' || node.kind === 'layer') {
     drawBoxChrome(ctx, node)
     ctx.save()
@@ -1380,7 +1391,7 @@ async function prepareMeshFrames(
   const frames = new Map<LayerLayoutNode, MeshFrame>()
   const state: PaintState = { canvasWidth: 0, canvasHeight: 0, meshFrames: frames }
   const visit = async (node: LayoutNode) => {
-    if (node.kind === 'layer' || node.kind === 'flex') {
+    if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
       for (const child of node.children) await visit(child)
     }
     if (node.kind !== 'layer' || !ownsMeshScene(node)) return

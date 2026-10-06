@@ -337,7 +337,7 @@ function walk(
   const slack =
     node.kind === 'line' && node.stroke !== 'none' && node.strokeWidth > 0
       ? node.strokeWidth / 2
-      : node.kind === 'layer' || node.kind === 'flex'
+      : node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group'
         ? Number.POSITIVE_INFINITY
         : 0
   inkSlack.push(slack)
@@ -348,6 +348,14 @@ function walk(
   let effectClip = clip
   if (!plane && ownMask) effectClip = tighten(effectClip, applyToBox(childMatrix, ownMask))
   effects.push(plane ? { plane: true, box: planeEffect } : { plane: false, clip: effectClip })
+
+  if (node.kind === 'group') {
+    const childMatrix = multiply(matrix, node.svg)
+    for (const ch of node.children) {
+      walk(ch, childMatrix, opacity, ox, oy, clip, elements, effects, undefined, false, meshView, inkSlack)
+    }
+    return
+  }
 
   if (node.kind === 'layer' || node.kind === 'flex') {
     let childClip = clip
