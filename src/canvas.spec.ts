@@ -52,6 +52,24 @@ describe('canvas.create', () => {
     expect(report.issues.filter((issue) => issue.code === 'measure-mismatch')).toEqual([])
   })
 
+  it('left 到 bottom 是布局盒，rotatedBox 是转完之后的外接矩形', () => {
+    const block = canvas.create(
+      h(
+        'layer',
+        { x: '100', y: '100', width: '200', height: '80', rotate: '45' },
+        h('rect', { x: '0', y: '0', width: '200', height: '80', fill: '#fff' }),
+      ),
+    )
+    expect(block.left).toBe(100)
+    expect(block.top).toBe(100)
+    expect(block.right).toBe(300)
+    expect(block.bottom).toBe(180)
+    expect(block.rotatedBox.top).toBeCloseTo(41, 0)
+    expect(block.rotatedBox.bottom).toBeCloseTo(239, 0)
+    expect(block.rotatedBox.width).toBeCloseTo(198, 0)
+    expect(block.rotatedBox.height).toBeCloseTo(198, 0)
+  })
+
   it('anchor 为 center 时 (x, y) 是盒子中心', () => {
     const block = canvas.create(
       h('layer', { x: '100', y: '80', anchor: 'center', width: '80', height: '40' }, h('rect', { width: '80', height: '40', fill: '#fff' })),

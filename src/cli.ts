@@ -79,6 +79,11 @@ function printIssues(report: FvgReport) {
   for (const issue of report.issues) console.log(formatIssueLine(issue))
 }
 
+function printCheckResult(report: FvgReport) {
+  printIssues(report)
+  if (report.issues.length === 0) console.log('✓ 0 issues')
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2))
   const abs = resolve(args.file)
@@ -103,7 +108,7 @@ async function main() {
       const report = await checkFvg(node, { baseDir })
       if (typeof node !== 'string') await emitNode(node, args.emit, report)
       attachFileIssues(report)
-      printIssues(report)
+      printCheckResult(report)
       if (args.report) await writeFile(args.report, JSON.stringify(report, null, 2))
       failIfErrors(report)
       return
@@ -122,7 +127,7 @@ async function main() {
     report!.issues = mergeFrameIssues(parts)
     if (emitAt) await emitNode(emitAt, args.emit, report!)
     attachFileIssues(report!)
-    printIssues(report!)
+    printCheckResult(report!)
     if (args.report) await writeFile(args.report, JSON.stringify(report, null, 2))
     failIfErrors(report!)
     return

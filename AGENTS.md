@@ -74,7 +74,7 @@ export default canvas.create(
 )
 ```
 
-只写宽或只写高、且没有会换行的文字时，另一边按比例放缩。宽高都写了就是盒子。返回的节点带 `left`、`top`、`right`、`bottom`。底色用铺满的 `<rect fill>`。形状用 SVG 的 `x y width height` 或 `cx cy rx ry`。`<g transform>` 把几笔收成一组。`<arrow>` 是内置组件。自定义标签用 `canvas.component` 注册，类型写在 `declare module '@dc/flexlayer/jsx-runtime'` 里。自定义字体先 `canvas.font(family, src)`，或把 `<font>` 写进正在量的那一层；相对路径按源文件目录解析。量到的盒子和最终排版不一致时报 `measure-mismatch`。例子：`examples/poster.tsx`、`examples/hello.tsx`。规范见 SPEC 第 15 章。
+只写宽或只写高、且没有会换行的文字时，另一边按比例放缩。宽高都写了就是盒子。返回的节点带 `left`、`top`、`right`、`bottom`，这是没转之前的布局盒。转完之后的外接矩形在 `rotatedBox`，接着摆下一块用 `rotatedBox.bottom`。底色用铺满的 `<rect fill>`。形状用 SVG 的 `x y width height` 或 `cx cy rx ry`。`<g transform>` 把几笔收成一组。`<arrow>` 是内置组件。自定义标签用 `canvas.component` 注册，类型写在 `declare module '@dc/flexlayer/jsx-runtime'` 里。自定义字体先 `canvas.font(family, src)`，或把 `<font>` 写进正在量的那一层；相对路径按源文件目录解析。量到的盒子和最终排版不一致时报 `measure-mismatch`。例子：`examples/poster.tsx`、`examples/hello.tsx`。规范见 SPEC 第 15 章。
 
 - 直接写 `.layer`：渲染器和 `--emit` 用的文本。静态单帧可以手写。速查见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，例子在 [examples/](examples/)。
 - 动画导出 `composition`（见 SPEC 第 13 章）。文件头写 `/** @jsxImportSource @dc/flexlayer */`，标签不用 import。`flexlayer check` / `render` 会执行它。`--emit out.layer` 把展开结果写回 `.layer`。`draw={(ctx, el) => ...}` 里只用 `ctx` 和 `el`，否则 `--emit` 报 `emit-draw`，并且不写出 `<draw>`。不要用 `Math.random` 或 `Date.now`。例子：`examples/slide.tsx`。
@@ -110,8 +110,8 @@ npx tsx src/cli.ts render scene.layer -o scene.png --report scene.json
 ### 4.4 报告里关键字段
 
 - **`path`**：如 `layer/layer[0]/div[0]/h1[0]`，与 `issues[].path` 一致。
-- **`box`**：布局盒（含 padding）；flex 的 `gap` 体现在相邻元素 box 之间的空隙。
-- **`ink`**：字形或图形真实着墨。有透视时是投影后的外接矩形，`overflow-canvas` 看它，不看没投影的 `box`。
+- **`box`**：布局盒（含 padding），不含 `rotate`、`scale` 和透视。flex 的 `gap` 体现在相邻元素 box 之间的空隙。
+- **`ink`**：旋转、缩放之后的着墨外接矩形。有透视时是投影后的外接矩形。像素对位和 `overflow-canvas` 看它，不看 `box`。
 - **`quad`**：透视平面投影后的四个角（左上、右上、右下、左下）。斜着的平面落在哪儿看这里。
 - **`effect`**：阴影 / 光晕可能占用的范围；`effect-clipped` 表示被画布裁切。`overflow="hidden"` 和 `<mask>` 已经裁掉的部分不算。
 - **`issues`**：见 [SPEC.md 的问题码表](SPEC.md)。**error 必须修**，warn 视需求修。`grade` 回显的是预设展开后的参数。

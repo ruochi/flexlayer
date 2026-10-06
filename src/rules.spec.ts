@@ -116,6 +116,15 @@ describe('属性归属', () => {
     expect(report.issues).toEqual([])
   })
 
+  it('拼写接近已知属性时报 warn，并指出正确名字', async () => {
+    const report = await issues(`<layer width="80" height="40"><rect x="0" y="0" widht="20" height="10" fil="#ff0000" /></layer>`)
+    const hits = report.issues.filter((issue) => issue.message.includes('不认识的属性'))
+    expect(hits.map((issue) => issue.hint)).toEqual(expect.arrayContaining(['是不是想写 width？', '是不是想写 fill？']))
+    expect(hits.every((issue) => issue.level === 'warn' && issue.code === 'invalid-attr')).toBe(true)
+    const root = await issues(`<layer widht="80" height="40" background="#000"></layer>`)
+    expect(root.issues.some((issue) => issue.path === 'layer' && issue.hint === '是不是想写 width？')).toBe(true)
+  })
+
   it('大写标签照常渲染，并提示改成小写', async () => {
     const report = await issues(`<Layer width="80" height="80"><Circle cx="40" cy="40" r="10" fill="#fff" /></Layer>`)
     expect(report.elements.some((element) => element.tag === 'circle')).toBe(true)

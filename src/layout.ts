@@ -45,7 +45,7 @@ import {
   isTextBoxTag,
   layoutText,
 } from './text.js'
-import { checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, legacyCenterIssues, rowColumnHint } from './rules.js'
+import { checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, legacyCenterIssues, rowColumnHint, typoAttrIssues } from './rules.js'
 import { canonicalTag, FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag } from './tags.js'
 import { boundsOf, parseSvgTransform } from './svg-transform.js'
 import type {
@@ -1866,6 +1866,17 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
   }
 }
 
+function noteAttrTypos(node: FvgNode, path: string, issues: Issue[]) {
+  const concrete = materialize(node)
+  issues.push(...typoAttrIssues(concrete, path))
+  let index = 0
+  for (const child of concrete.children) {
+    if (typeof child === 'string') continue
+    noteAttrTypos(child, `${path}/${child.tag}[${index}]`, issues)
+    index += 1
+  }
+}
+
 function collectSymbols(node: FvgNode, symbols: Map<string, FvgNode>, issues: Issue[], path: string) {
   if (node.tag === 'symbol') {
     const id = node.attrs.id?.trim()
@@ -1973,6 +1984,7 @@ export function measureLayer(node: FvgNode, env: MeasureEnv): { laid: LayerLayou
   const issues: Issue[] = []
   const symbols = new Map<string, FvgNode>()
   collectSymbols(node, symbols, issues, 'layer')
+  noteAttrTypos(node, 'layer', issues)
   attachDrawTags(node, issues, 'layer')
   const ctx: LayoutContext = {
     color: env.color,
@@ -2064,6 +2076,7 @@ export function layoutSync(rootNode: FvgNode, assets: LayoutAssets): FvgDocument
   const sources = new Map<string, string>()
   const symbols = new Map<string, FvgNode>()
   collectSymbols(rootNode, symbols, issues, 'layer')
+  noteAttrTypos(rootNode, 'layer', issues)
   if (attrs.style?.trim()) {
     issues.push({
       level: 'warn',

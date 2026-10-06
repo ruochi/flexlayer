@@ -1,3 +1,4 @@
+import { applyToBox, aroundPivot, originOffset } from './matrix.js'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { registerComponent, type ComponentFn } from './components.js'
@@ -57,19 +58,27 @@ const ANCHORS = new Set<Anchor>([
   'bottom-right',
 ])
 
-export type CreatedLayer = FvgNode & {
+export type LayerBox = {
   left: number
   top: number
   right: number
   bottom: number
   width: number
   height: number
-  issues: Issue[]
 }
 
-function parseAnchor(raw: string | undefined): Anchor {
-  const value = (raw ?? 'top-left').trim().toLowerCase() as Anchor
-  return ANCHORS.has(value) ? value : 'top-left'
+export type CreatedLayer = FvgNode & LayerBox & {
+  issues: Issue[]
+  /**
+   * `rotate`、`scale` 之后的外接矩形。`left` 到 `height` 仍是没转之前的布局盒。
+   * 下一块要避开转过的内容时，用 `rotatedBox.bottom`。
+   */
+  rotatedBox: LayerBox
+}
+
+function parseAnchor(raw: string | undefined, fallback: Anchor = 'top-left'): Anchor {
+  const value = (raw ?? fallback).trim().toLowerCase() as Anchor
+  return ANCHORS.has(value) ? value : fallback
 }
 
 /** (x, y) 是盒子上 anchor 那一点，返回盒子左上角。 */
@@ -169,15 +178,35 @@ export function create(node: FvgNode): CreatedLayer {
   noteMeasuredSize(node, laid.width, laid.height)
   const anchor = parseAnchor(node.attrs.anchor)
   const origin = topLeft(parseNumber(node.attrs.x) ?? 0, parseNumber(node.attrs.y) ?? 0, laid.width, laid.height, anchor)
-  return Object.assign(node, {
+  const box: LayerBox = {
     left: origin.x,
     top: origin.y,
     right: origin.x + laid.width,
     bottom: origin.y + laid.height,
     width: laid.width,
     height: laid.height,
+  }
+  return Object.assign(node, box, {
+    rotatedBox: rotatedBoxOf(node, box),
     issues,
   })
+}
+
+/** 绕 origin（默认中心）做 rotate、scale 之后的轴对齐外接矩形。 */
+function rotatedBoxOf(node: FvgNode, box: LayerBox): LayerBox {
+  const pivot = originOffset(parseAnchor(node.attrs.origin, 'center'), box.width, box.height)
+  const visual = applyToBox(
+    aroundPivot(box.left + pivot.x, box.top + pivot.y, parseNumber(node.attrs.rotate) ?? 0, parseNumber(node.attrs.scale) ?? 1),
+    { x: box.left, y: box.top, width: box.width, height: box.height },
+  )
+  return {
+    left: visual.x,
+    top: visual.y,
+    right: visual.x + visual.width,
+    bottom: visual.y + visual.height,
+    width: visual.width,
+    height: visual.height,
+  }
 }
 
 function retiredCanvas(..._args: unknown[]): never {
