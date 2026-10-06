@@ -11,7 +11,7 @@ const dir = mkdtempSync(join(tmpdir(), 'flexlayer-software-mesh-'))
 writeFileSync(join(dir, 'box.glb'), solidBoxGlb([0.15, 0.82, 0.35, 1]))
 
 function render(source: string, options: RenderOptions = {}) {
-  return renderFvg(source, { ...options, meshEngine: 'software' })
+  return renderFvg(source, options)
 }
 
 async function pixelAt(png: Buffer, x: number, y: number) {

@@ -10,11 +10,11 @@ import type { LayerLayoutNode, LayoutNode, MeshLayoutNode } from './types.js'
 type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: number }
 
 /**
- * 和 headless-three 并行的三角形光栅。
+ * 网格的三角形光栅。
  * 投影用 `project` 的同一套公式（这里直接算），深度大的像素盖住深度小的。
- * 正对镜头的面是 fill，侧面按和 WebGL 着色器相同的两盏光变暗。
+ * 正对镜头的面是 fill，侧面按内置主光和补光变暗。
  * 主光沿固定方向打一张正交深度图：不透明三角形互相挡住这盏光时，主光不计。
- * glb 只用文件里的底色乘这套明暗；金属和粗糙度仍留在 WebGL 路径。
+ * glb 用文件里的底色乘这套明暗。
  */
 
 const MAX_RASTER_SIDE = 8192

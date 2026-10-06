@@ -18,7 +18,7 @@ export type Composition = {
   component: (input: FrameInput) => FvgNode
 }
 
-export type RenderCompositionOptions = Pick<RenderOptions, 'scale' | 'baseDir' | 'fontsCacheDir' | 'meshEngine'>
+export type RenderCompositionOptions = Pick<RenderOptions, 'scale' | 'baseDir' | 'fontsCacheDir'>
 
 export type RenderCompositionResult = {
   frames: Buffer[]
@@ -154,7 +154,6 @@ export async function renderComposition(
       scale: options.scale,
       baseDir: options.baseDir,
       fontsCacheDir: options.fontsCacheDir,
-      meshEngine: options.meshEngine,
     })
     frames.push(png)
     reports.push(report)

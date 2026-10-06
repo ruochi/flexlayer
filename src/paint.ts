@@ -38,7 +38,6 @@ import type {
   LayerLayoutNode,
   LayoutNode,
   LineLayoutNode,
-  MeshEngine,
   NoiseSpec,
   OverlaySpec,
   ShadowSpec,
@@ -54,7 +53,6 @@ export type PaintOptions = {
   scale: number
   debug: boolean
   t: number
-  meshEngine?: MeshEngine
 }
 
 type PaintState = { canvasWidth: number; canvasHeight: number; meshFrames?: Map<LayerLayoutNode, MeshFrame> }
@@ -1373,7 +1371,6 @@ async function prepareMeshFrames(
   root: LayerLayoutNode,
   scale: number,
   t: number,
-  meshEngine: MeshEngine = 'webgl',
 ): Promise<Map<LayerLayoutNode, MeshFrame>> {
   const frames = new Map<LayerLayoutNode, MeshFrame>()
   const state: PaintState = { canvasWidth: 0, canvasHeight: 0, meshFrames: frames }
@@ -1382,11 +1379,10 @@ async function prepareMeshFrames(
       for (const child of node.children) await visit(child)
     }
     if (node.kind !== 'layer' || !ownsMeshScene(node)) return
-    const frame = await renderMeshLayer(
+    const frame = renderMeshLayer(
       node,
       scale,
       (peeled) => paintChildBitmap(peeled, Math.max(scale, 1e-3) * 2, t, state),
-      meshEngine,
     )
     if (frame) frames.set(node, frame)
   }
@@ -1405,7 +1401,7 @@ export async function paintDocument(
   const state: PaintState = {
     canvasWidth: w,
     canvasHeight: h,
-    meshFrames: await prepareMeshFrames(root, opts.scale, opts.t, opts.meshEngine ?? 'webgl'),
+    meshFrames: await prepareMeshFrames(root, opts.scale, opts.t),
   }
   const rootPaintsBackground =
     root.background != null &&
