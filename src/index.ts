@@ -1,4 +1,5 @@
 export { renderFvg, checkFvg, renderLayer, checkLayer, type RenderResult } from './render.js'
+export { canvas, layer, Graphic, type CanvasOptions, type LayerMeasureOptions, type MeasuredLayer, type PlacedLayer } from './canvas.js'
 export { glyph, type Glyph, type GlyphInk, type GlyphOptions } from './glyph.js'
 export { renderComposition, interpolate, spring, sequence } from './frame.js'
 export type {
