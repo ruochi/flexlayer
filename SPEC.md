@@ -173,7 +173,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | `width`、`height` | 包住内容 | 外框尺寸（含 padding 和 border） |
 | `gap` | `0` | 子元素间距 |
 | `padding` | `0` | 1 到 4 个值，同 CSS |
-| `align-items` | `center` | `start`、`center`、`end`、`stretch`（注意默认值和 CSS 不同） |
+| `align-items` | `center` | `start`、`center`、`end`、`stretch`。默认 `center`，CSS 里是 `stretch` |
 | `justify-content` | `start` | `start`、`center`、`end`、`space-between`、`space-around`、`space-evenly` |
 | `background`、`border`、`border-radius` | 无 | 同 CSS，border 只支持实线 |
 
@@ -181,6 +181,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 - 文字默认 `flex-shrink:1`，空间不够时会换行变窄，但不会窄过最长的一个不可断开的词。
 - 形状和图片默认 `flex-shrink:0`，不会被压扁。
+- `align-items` 默认 `center`，CSS 里是 `stretch`。竖排 column 没写时，较窄的子项在交叉轴居中；和容器同宽的子项看起来仍贴着起点。左对齐写 `align-items:flex-start` 或 `start`。交叉轴位置由这一层自己的 `align-items` 决定，在子项上写 `justify-content` 改不了。
 
 **可用宽度**：放在 layer 里、没写 `width` 的 flex 容器，最宽只能到 layer 的宽度（根 layer 要减去左右安全区）。
 

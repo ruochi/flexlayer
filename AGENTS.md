@@ -42,6 +42,8 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 
 根节点 `<layer width height background>` 上的 `background` 是画布底色，只有这一处可以写。
 
+flex 的 `align-items` 默认 `center`（CSS 里是 `stretch`）。**column 忘写 `align-items` 会全部居中**：较窄的子项在交叉轴居中，和容器同宽的子项看起来仍贴着起点。左对齐写 `align-items:flex-start`。`justify-content` 只管本层主轴，写在子项上改不了它在父级交叉轴上的位置。
+
 ## 3. 生成
 
 - 直接写 `.layer`：海报、单帧。速查见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，例子在 [examples/](examples/)。
@@ -115,6 +117,7 @@ flowchart TD
 | flex 子项被挤爆 | 加宽 flex 容器或缩小子项 |
 | 阴影或光晕看不见 | 查颜色与背景对比；看 `effect` 矩形 |
 | 嵌套 layer 写了 background 没颜色 | 改成 `rect`、HTML `background` 或 `<draw>` |
+| 短行居中、长行看起来左对齐 | column 没写 `align-items`，默认是 `center`。左对齐写 `align-items:flex-start`。`justify-content` 只管主轴 |
 | 不知道改哪个节点 | 报告里的 `path`、`source` 和 `hint` |
 
 ## 7. 文档索引

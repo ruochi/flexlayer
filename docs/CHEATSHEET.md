@@ -8,7 +8,7 @@
 | --- | --- |
 | `layer` | 根画布兼定位容器。根上写 `width` `height` `background`（画布底色）`color` `safe`；定位用 `cx` `cy` `anchor`，还有 `opacity` `rotate` `rotateX` `rotateY` `z` `scale` `origin`。`perspective` 只写在这一层，是直接子元素共用的视距。可嵌套 |
 | `draw` | 子标签。正文是 JS（`ctx`、`el`），画在父元素内容之后 |
-| `div` 写 `display:flex` | 排布。默认横向；竖排加 `flex-direction:column`。`gap` `align-items` `justify-content` `padding` 都在 `style` 里 |
+| `div` 写 `display:flex` | 排布。默认横向；竖排加 `flex-direction:column`。`gap` `align-items` `justify-content` `padding` 都在 `style` 里。**`align-items` 默认 `center`（CSS 里是 `stretch`）：column 忘写 `align-items` 会全部居中**。左对齐写 `align-items:flex-start`。`justify-content` 只管主轴，改不了这一层在父级交叉轴上的位置 |
 
 要定位一组 HTML，包一层 `layer`，把 `cx` `cy` `anchor` 写在 `layer` 上。
 
