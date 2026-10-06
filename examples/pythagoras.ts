@@ -59,7 +59,7 @@ function equation(parts: EquationPart[], size: number, gap: number, opacity = 1)
 function label(content: string, color: string, at: Pt, anchor: string, opacity: number, size = 48) {
   return h(
     'layer',
-    { cx: n(at[0]), cy: n(at[1]), anchor, opacity: n(opacity) },
+    { x: n(at[0]), y: n(at[1]), anchor, opacity: n(opacity) },
     h('p', { style: `font-size:${size}px; color:${color}` }, content),
   )
 }
@@ -102,7 +102,7 @@ function intro(frame: number) {
   const rise = pop(frame, 0)
   return h(
     'layer',
-    { cx: '960', cy: n(540 + (1 - rise) * 40), anchor: 'center', opacity: n(opacity) },
+    { x: '960', y: n(540 + (1 - rise) * 40), anchor: 'center', opacity: n(opacity) },
     h(
     'div',
     { style: 'display:flex; flex-direction:column; gap:36px; align-items:center' },
@@ -127,7 +127,7 @@ function header(frame: number) {
   const active = stepIndex(frame)
   return h(
     'layer',
-    { cx: '120', cy: '64', anchor: 'top-left', opacity: n(opacity) },
+    { x: '120', y: '64', anchor: 'top-left', opacity: n(opacity) },
     h(
     'div',
     { style: 'display:flex; gap:40px; align-items:center' },
@@ -171,7 +171,7 @@ function caption(frame: number) {
   const opacity = envelope(frame, c.from, c.to, 12)
   return h(
     'layer',
-    { cx: '120', cy: '260', anchor: 'top-left', opacity: n(opacity) },
+    { x: '120', y: '260', anchor: 'top-left', opacity: n(opacity) },
     h(
     'div',
     { style: 'display:flex; flex-direction:column; gap:28px; align-items:start' },
@@ -253,8 +253,8 @@ function areaTag(content: string, color: string, at: Pt, frame: number, from: nu
   return h(
     'layer',
     {
-      cx: n(at[0]),
-      cy: n(at[1] + (1 - opacity) * 18),
+      x: n(at[0]),
+      y: n(at[1] + (1 - opacity) * 18),
       anchor: 'center',
       opacity: n(opacity),
     },
@@ -274,7 +274,7 @@ function figure(frame: number) {
   const markerOpacity = ramp(frame, 170, 190)
   return h(
     'layer',
-    { cx: '500', cy: '400', width: '1000', height: '800', opacity: n(opacity) },
+    { x: '0', y: '0', width: '1000', height: '800', opacity: n(opacity) },
     h('polygon', {
       points: points([P0, P1, P2]),
       fill: 'rgba(122,162,255,0.10)',
@@ -343,8 +343,8 @@ function pieceLayer(piece: (typeof PIECES)[number], index: number, frame: number
   return h(
     'layer',
     {
-      cx: n(minX + offset[0]),
-      cy: n(minY + offset[1]),
+      x: n(minX + offset[0]),
+      y: n(minY + offset[1]),
       anchor: 'top-left',
       width: n(width),
       height: n(height),
@@ -383,20 +383,20 @@ function proof(frame: number) {
 
   return h(
     'layer',
-    { cx: '500', cy: '400', width: '1000', height: '800', opacity: n(opacity) },
+    { x: '0', y: '0', width: '1000', height: '800', opacity: n(opacity) },
     h(
       'layer',
       {
-        cx: n(PO[0]),
-        cy: n(PO[1]),
+        x: n(PO[0]),
+        y: n(PO[1]),
         anchor: 'top-left',
         width: String(PS),
         height: String(PS),
         scale: n(outlineScale),
       },
       h('rect', {
-        cx: n(PS / 2),
-        cy: n(PS / 2),
+        x: '0',
+        y: '0',
         width: String(PS),
         height: String(PS),
         fill: 'rgba(255,255,255,0.03)',
@@ -406,8 +406,8 @@ function proof(frame: number) {
       ...PIECES.map((piece, i) => pieceLayer(piece, i, frame)),
     ),
     h('rect', {
-      cx: n(PO[0] + PS / 2),
-      cy: n(PO[1] + PS / 2),
+      x: n(PO[0] + PS / 2 - (5 * PU) / 2),
+      y: n(PO[1] + PS / 2 - (5 * PU) / 2),
       width: String(5 * PU),
       height: String(5 * PU),
       rotate: n((Math.atan2(PA, PB) * 180) / Math.PI),
@@ -417,8 +417,8 @@ function proof(frame: number) {
       opacity: n(cOpacity),
     }),
     h('rect', {
-      cx: n(PO[0] + PA / 2),
-      cy: n(PO[1] + PA / 2),
+      x: n(PO[0]),
+      y: n(PO[1]),
       width: String(PA),
       height: String(PA),
       fill: 'rgba(62,207,196,0.22)',
@@ -427,8 +427,8 @@ function proof(frame: number) {
       opacity: n(abOpacity),
     }),
     h('rect', {
-      cx: n(PO[0] + PA + PB / 2),
-      cy: n(PO[1] + PA + PB / 2),
+      x: n(PO[0] + PA),
+      y: n(PO[1] + PA),
       width: String(PB),
       height: String(PB),
       fill: 'rgba(122,162,255,0.22)',
@@ -451,7 +451,7 @@ function outro(frame: number) {
   const opacity = ramp(frame, 880, 900)
   return h(
     'layer',
-    { cx: '960', cy: n(580 + (1 - opacity) * 30), anchor: 'center', opacity: n(opacity) },
+    { x: '960', y: n(580 + (1 - opacity) * 30), anchor: 'center', opacity: n(opacity) },
     h(
     'div',
     { style: 'display:flex; flex-direction:column; gap:44px; align-items:center' },
@@ -472,13 +472,13 @@ export const pythagoras: Composition = {
     h(
       'layer',
       { width: String(W), height: String(H), background: BG, color: INK },
-      h('Dots', { cx: String(W / 2), cy: String(H / 2), width: String(W), height: String(H), draw: drawDots }),
+      h('Dots', { x: '0', y: '0', width: String(W), height: String(H), draw: drawDots }),
       intro(frame),
       header(frame),
       caption(frame),
-      h('layer', { cx: '1360', cy: '600', width: '1000', height: '800' }, figure(frame), proof(frame)),
+      h('layer', { x: '860', y: '200', width: '1000', height: '800' }, figure(frame), proof(frame)),
       outro(frame),
-      h('Progress', { cx: String(W / 2), cy: '1036', width: '1680', height: '6', draw: drawProgress }),
+      h('Progress', { x: String(W / 2 - 840), y: '1033', width: '1680', height: '6', draw: drawProgress }),
     ),
 }
 
