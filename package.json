@@ -1,5 +1,5 @@
 {
-  "name": "@dc/flexlayer",
+  "name": "flexlayer",
   "version": "0.2.0",
   "description": "Flex Layer: AI-friendly 2D frame markup with flex layout, HTML text and SVG-style shapes, rendered to PNG",
   "type": "module",

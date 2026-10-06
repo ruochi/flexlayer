@@ -41,17 +41,17 @@ node dist/cli.js render examples/hello.layer -o hello.png
 推荐先量再摆。`canvas()` 同步准备字体和图片，并在进程里记住。`graphic.layer()` 同步量一块，`at()` 把它放到画面上：
 
 ```tsx
-import { canvas } from '@dc/flexlayer'
+import { canvas } from 'flexlayer'
 
 const graphic = canvas({ width: 720, height: 540, background: '#0c1424', color: '#f4ecdf', fontFamily: 'Kai' })
 const title = graphic.layer(<h1 style="font-size:160px; white-space:nowrap">春眠不觉晓</h1>)
 export default graphic.root(title.fit({ width: graphic.width - 96 }).at({ x: 48, y: 48 }))
 ```
 
-文件头写 `/** @jsxImportSource @dc/flexlayer */`。例子见 `examples/poster.tsx`。也可以直接把节点交给渲染器：
+文件头写 `/** @jsxImportSource flexlayer */`。例子见 `examples/poster.tsx`。也可以直接把节点交给渲染器：
 
 ```ts
-import { renderLayer } from '@dc/flexlayer'
+import { renderLayer } from 'flexlayer'
 
 const { png, report } = await renderLayer(source, { scale: 0.5 })
 ```
@@ -72,7 +72,7 @@ const { png, report } = await renderLayer(source, { scale: 0.5 })
 用 `h()` 或 JSX 时，任意元素可挂 `draw={(ctx, el) => { ... }}`，再交给 `renderLayer(root)`：
 
 ```ts
-import { h, renderLayer } from '@dc/flexlayer'
+import { h, renderLayer } from 'flexlayer'
 
 const root = h(
   'layer',
@@ -99,7 +99,7 @@ await renderLayer(root)
 从字体取出某个字的轮廓。`d` 的原点在字身左上角，字宽和字身高度来自字体：
 
 ```ts
-import { glyph, h, renderLayer } from '@dc/flexlayer'
+import { glyph, h, renderLayer } from 'flexlayer'
 
 const [chun] = await glyph('春', { font: 'Kai', size: 200, weight: 700 })
 const root = h(
@@ -117,7 +117,7 @@ await renderLayer(root)
 按帧生成一组 PNG 和一张联系表：
 
 ```ts
-import { h, renderComposition, type Composition } from '@dc/flexlayer'
+import { h, renderComposition, type Composition } from 'flexlayer'
 
 const scene: Composition = {
   id: 'slide',

@@ -332,12 +332,12 @@ describe('load .tsx', () => {
     expect(typeof right !== 'string' && right && 'attrs' in right && right.attrs.x).toBe('90')
   })
 
-  it('可以从 @dc/flexlayer 引用运行时函数', async () => {
+  it('可以从 flexlayer 引用运行时函数', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'flexlayer-tsx-'))
     const file = join(dir, 'use-lib.tsx')
     await writeFile(
       file,
-      `import { interpolate } from '@dc/flexlayer'
+      `import { interpolate } from 'flexlayer'
       export default function Box() {
         const x = interpolate(1, [0, 1], [4, 16])
         return (
@@ -456,7 +456,7 @@ describe('load .tsx', () => {
     const file = join(dir, 'spill.tsx')
     await writeFile(
       file,
-      `import type { Composition } from '@dc/flexlayer'
+      `import type { Composition } from 'flexlayer'
       export const composition: Composition = {
         id: 'spill',
         width: 40,

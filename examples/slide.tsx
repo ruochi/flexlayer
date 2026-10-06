@@ -1,6 +1,6 @@
-/** @jsxImportSource @dc/flexlayer */
+/** @jsxImportSource flexlayer */
 
-import type { Composition } from '@dc/flexlayer'
+import type { Composition } from 'flexlayer'
 
 export const composition: Composition = {
   id: 'slide',

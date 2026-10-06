@@ -230,7 +230,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 `.tsx` 里可以从字体取出每个字的轮廓。这是程序接口，不是标签。
 
 ```ts
-import { glyph } from '@dc/flexlayer'
+import { glyph } from 'flexlayer'
 
 const chars = await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })
 ```
@@ -583,7 +583,7 @@ flexlayer render scene.tsx --frame 12 -o frame.png               # Composition �
 flexlayer render scene.tsx --frames out/                         # Composition 的每一帧
 ```
 
-`.tsx`、`.jsx`、`.ts`、`.js` 会先执行，并做类型检查，类型错误记为 `type-error`。标准库和 Node 的类型由渲染器自带，不依赖文件旁边的 `node_modules`。`import ... from 'node:fs'` 可以类型检查。不认识的属性名和 `.layer` 一样保留给 `draw`，不算 `type-error`。属性放错位置同样由检查报 `invalid-attr`，不记成类型错误。`import './x.tsx'` 这种带扩展名的引用可以通过。有类型错误时仍然出图，退出码为 1。文件里写 `/** @jsxImportSource @dc/flexlayer */`，标签和属性与 `.layer` 相同。默认导出一个 `<layer>` 节点，或返回该节点的函数。命名导出 `composition`（或默认导出）可以是第 13 章的 `Composition`。执行结果是同一棵节点树，后面的布局、问题码和绘制都不变。推荐先 `canvas()`，再用 `graphic.layer()` 量好后 `at()` 摆上去。`canvas()` 是同步的，准备在进程里记住，多帧不会重新开始。见第 15 章。`check` 在没有 `--frame` 时抽查第 0 帧、中间一帧和最后一帧。`--emit` 把树写回 `.layer`；`draw` 函数若用了外部变量，记 `emit-draw`，函数体仍会写出来。帧数超过 300 且没有 `--frame` 或 `--frames` 时不渲染联系表。
+`.tsx`、`.jsx`、`.ts`、`.js` 会先执行，并做类型检查，类型错误记为 `type-error`。标准库和 Node 的类型由渲染器自带，不依赖文件旁边的 `node_modules`。`import ... from 'node:fs'` 可以类型检查。不认识的属性名和 `.layer` 一样保留给 `draw`，不算 `type-error`。属性放错位置同样由检查报 `invalid-attr`，不记成类型错误。`import './x.tsx'` 这种带扩展名的引用可以通过。有类型错误时仍然出图，退出码为 1。文件里写 `/** @jsxImportSource flexlayer */`，标签和属性与 `.layer` 相同。默认导出一个 `<layer>` 节点，或返回该节点的函数。命名导出 `composition`（或默认导出）可以是第 13 章的 `Composition`。执行结果是同一棵节点树，后面的布局、问题码和绘制都不变。推荐先 `canvas()`，再用 `graphic.layer()` 量好后 `at()` 摆上去。`canvas()` 是同步的，准备在进程里记住，多帧不会重新开始。见第 15 章。`check` 在没有 `--frame` 时抽查第 0 帧、中间一帧和最后一帧。`--emit` 把树写回 `.layer`；`draw` 函数若用了外部变量，记 `emit-draw`，函数体仍会写出来。帧数超过 300 且没有 `--frame` 或 `--frames` 时不渲染联系表。
 
 默认字体寒蝉端黑体首次使用时自动下载到 `~/.cache/flexlayer/fonts`。
 
@@ -620,7 +620,7 @@ flexlayer render scene.tsx --frames out/                         # Composition �
 未知标签若同时带有 `draw` 以及 `width` 与 `height`（属性或 `style`），会当作自定义盒子参与布局，不再报 `unknown-tag`；缺少尺寸时仍警告并跳过。
 
 ```ts
-import { h, renderLayer } from '@dc/flexlayer'
+import { h, renderLayer } from 'flexlayer'
 
 const root = h('layer', { width: '1080', height: '1920', background: '#0f1115', color: '#ffffff' },
   h('layer', { x: '540', y: '700', anchor: 'center' },
@@ -641,7 +641,7 @@ const root = h('layer', { width: '1080', height: '1920', background: '#0f1115', 
 await renderLayer(root)
 ```
 
-JSX 可将 `jsxImportSource` 设为 `@dc/flexlayer`，使用 `@dc/flexlayer/jsx-runtime`。
+JSX 可将 `jsxImportSource` 设为 `flexlayer`，使用 `flexlayer/jsx-runtime`。
 
 带 `draw` 且写了尺寸的自定义元素，定位和形状相同。根节点 `<layer>` 的 `draw` / `<draw>` 和其它元素一样，在画布底色和子元素画完之后执行。`el.w`、`el.h` 是画布尺寸，`el.t` 是当前秒数。`opacity`、`rotate`、`scale` 作用到整幅画面。
 
@@ -650,7 +650,7 @@ JSX 可将 `jsxImportSource` 设为 `@dc/flexlayer`，使用 `@dc/flexlayer/jsx-
 动画由程序按时间生成一棵 Flex Layer 节点，再交给渲染器。`t` 的单位是秒。单帧 `renderLayer` 不传 `t` 时，`el.t` 为 `0`。
 
 ```ts
-import { h, renderComposition, type Composition } from '@dc/flexlayer'
+import { h, renderComposition, type Composition } from 'flexlayer'
 
 const scene: Composition = {
   id: 'halving',
@@ -698,8 +698,8 @@ const { frames, contactSheet } = await renderComposition(scene)
 `canvas()` 是同步的。字体、图片和 Yoga 在这一次调用里备好，并在进程里记住。后面再写一帧，或渲染一段视频，已经备过的直接接着用，不会重新下载、重新解码。返回的对象叫 `graphic`。`graphic.layer()` 也是同步的，`composition` 的 `component` 里可以调用。`canvas()` 放在 `component` 外面调用一次。
 
 ```tsx
-/** @jsxImportSource @dc/flexlayer */
-import { canvas } from '@dc/flexlayer'
+/** @jsxImportSource flexlayer */
+import { canvas } from 'flexlayer'
 
 const graphic = canvas({
   width: 720,
