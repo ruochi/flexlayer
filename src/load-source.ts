@@ -2,13 +2,14 @@ import { existsSync } from 'node:fs'
 import { mkdtemp, rm, readFile } from 'node:fs/promises'
 import { builtinModules, createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { dirname, extname, join, relative, isAbsolute } from 'node:path'
+import { dirname, extname, join, relative, isAbsolute, resolve } from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import * as esbuild from 'esbuild'
 import type { Composition } from './frame.js'
 import type { FvgNode } from './parse.js'
 import { formatSourceLoc } from './source-loc.js'
-import { nondeterministicCalls } from './syntax.js'
+import { registerFontsFromDocument } from './fonts.js'
+import { nondeterministicCalls, staticLayerFonts } from './syntax.js'
 import type { Issue } from './types.js'
 
 const CODE_EXT = new Set(['.tsx', '.jsx', '.ts', '.js'])
@@ -51,6 +52,17 @@ function displayFile(file: string): string {
   if (!isAbsolute(file)) return file
   const rel = relative(process.cwd(), file)
   return rel && !rel.startsWith('..') ? rel : file
+}
+
+function locatedFile(file: string, baseDir: string): string {
+  return isAbsolute(file) ? file : resolve(baseDir, file)
+}
+
+function absolutizeLocs(node: FvgNode, baseDir: string): void {
+  if (node.loc && !isAbsolute(node.loc.file)) node.loc.file = resolve(baseDir, node.loc.file)
+  for (const child of node.children) {
+    if (typeof child !== 'string') absolutizeLocs(child, baseDir)
+  }
 }
 
 function nondeterministicIssues(source: string, file: string): Issue[] {
@@ -119,8 +131,9 @@ async function importCode(file: string): Promise<Record<string, unknown>> {
     const failure = err as { errors?: Array<{ text?: string; location?: { file?: string; line?: number; column?: number } }> }
     const first = failure.errors?.[0]
     if (first?.text) {
+      const raw = first.location?.file || file
       const at = first.location?.line ? `:${first.location.line}:${first.location.column ?? 0}` : ''
-      throw new Error(`${displayFile(first.location?.file || file)}${at} ${first.text}`)
+      throw new Error(`${displayFile(locatedFile(raw, dirname(file)))}${at} ${first.text}`)
     }
     throw err
   } finally {
@@ -128,11 +141,33 @@ async function importCode(file: string): Promise<Record<string, unknown>> {
   }
 }
 
+function withAbsoluteLocs(loaded: ExecutedLayer, file: string): ExecutedLayer {
+  const baseDir = dirname(file)
+  if (loaded.kind === 'node') {
+    absolutizeLocs(loaded.node, baseDir)
+    return loaded
+  }
+  const render = loaded.composition.component
+  return {
+    ...loaded,
+    composition: {
+      ...loaded.composition,
+      component: (input) => {
+        const node = render(input)
+        if (isNode(node)) absolutizeLocs(node, baseDir)
+        return node
+      },
+    },
+  }
+}
+
 /** `.layer` 原样读出。`.tsx` / `.jsx` / `.ts` / `.js` 执行后得到节点或 Composition。 */
 export async function loadLayerFile(file: string): Promise<LoadedLayer> {
   const source = await readFile(file, 'utf8')
   if (!CODE_EXT.has(extname(file).toLowerCase())) return { kind: 'markup', source }
-  const loaded = resolveExport(await importCode(file), file)
+  const fonts = staticLayerFonts(source, file)
+  if (fonts.length > 0) await registerFontsFromDocument(fonts, dirname(file))
+  const loaded = withAbsoluteLocs(resolveExport(await importCode(file), file), file)
   const issues = nondeterministicIssues(source, file)
   return { ...loaded, issues }
 }

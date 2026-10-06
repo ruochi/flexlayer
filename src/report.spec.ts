@@ -135,11 +135,15 @@ describe('buildReport', () => {
 
   it('overflow=hidden 裁掉的光晕不报 effect-clipped', async () => {
     const clipped = await checkFvg(
-      `<layer width="140" height="140" background="#fff"><layer x="20" y="20" width="100" height="100" overflow="hidden"><rect x="15" y="15" width="70" height="70" fill="#000" glow="28 #fff" /></layer></layer>`,
+      `<layer width="140" height="140" background="#fff"><layer x="20" y="20" width="100" height="100" overflow="hidden"><rect x="15" y="15" width="70" height="70" fill="#000" glow="48 #fff" /></layer></layer>`,
     )
     expect(clipped.issues.some((issue) => issue.code === 'effect-clipped')).toBe(false)
-    const open = await checkFvg(
+    const inside = await checkFvg(
       `<layer width="140" height="140" background="#fff"><layer x="20" y="20" width="100" height="100"><rect x="15" y="15" width="70" height="70" fill="#000" glow="28 #fff" /></layer></layer>`,
+    )
+    expect(inside.issues.some((issue) => issue.code === 'effect-clipped')).toBe(false)
+    const open = await checkFvg(
+      `<layer width="140" height="140" background="#fff"><layer x="20" y="20" width="100" height="100"><rect x="15" y="15" width="70" height="70" fill="#000" glow="48 #fff" /></layer></layer>`,
     )
     expect(open.issues.some((issue) => issue.code === 'effect-clipped')).toBe(true)
   })

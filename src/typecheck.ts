@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { dirname, extname, join } from 'node:path'
+import { dirname, extname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 import { formatSourceLoc } from './source-loc.js'
@@ -51,7 +51,10 @@ export function typecheckLayerFile(file: string): Issue[] {
   const program = ts.createProgram([file], options, host)
   const issues: Issue[] = []
   for (const diagnostic of ts.getPreEmitDiagnostics(program)) {
-    if (!diagnostic.file || diagnostic.file.fileName !== file) continue
+    if (!diagnostic.file) continue
+    const diagName = diagnostic.file.fileName
+    const diagFile = isAbsolute(diagName) ? diagName : resolve(dirname(file), diagName)
+    if (resolve(diagFile) !== resolve(file)) continue
     let source: string | undefined
     if (diagnostic.start != null) {
       const pos = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start)

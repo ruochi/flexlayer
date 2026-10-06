@@ -21,6 +21,8 @@ export type Glyph = {
   height: number
   baseline: number
   ink: GlyphInk | null
+  /** 字体里没有这个字。`d` 仍是缺字方框，和别的缺字相同。 */
+  missing: boolean
 }
 
 export type GlyphOptions = {
@@ -36,15 +38,25 @@ type FontBox = { baseline: number; height: number }
 
 const boxCache = new Map<string, FontBox>()
 const glyphCache = new Map<string, Glyph>()
+const notdefCache = new Map<string, string>()
+
+/** 三个几乎不会被真字体收录的码位。路径相同的那条就是 .notdef。不用 U+FFFE，那个码位会让 SVG 转换崩溃。 */
+const NOTDEF_PROBES = ['\uE000', '\uE001', '\u0378']
 
 function round3(n: number): number {
   const rounded = Math.round(n * 1000) / 1000
   return Object.is(rounded, -0) ? 0 : rounded
 }
 
+/** XML 1.0 不接受的码位。塞进 SVG 会让轮廓转换直接崩溃，连数字引用也不行。 */
+function unsafeXmlChar(ch: string): boolean {
+  const cp = ch.codePointAt(0) ?? 0
+  return (cp < 32 && cp !== 9 && cp !== 10 && cp !== 13) || (cp >= 0xd800 && cp <= 0xdfff) || cp === 0xfffe || cp === 0xffff
+}
+
 function xmlChar(ch: string): string {
   const cp = ch.codePointAt(0) ?? 0
-  if (cp < 32 || ch === '&' || ch === '<' || ch === '>') return `&#${cp};`
+  if (unsafeXmlChar(ch) || ch === '&' || ch === '<' || ch === '>') return `&#${cp};`
   return ch
 }
 
@@ -111,6 +123,22 @@ function fontBox(face: OutlineFont, size: number): FontBox {
   return box
 }
 
+function notdefOutline(face: OutlineFont, size: number): string {
+  const key = `${face.canvasFamily}|${face.weight}|${size}`
+  const hit = notdefCache.get(key)
+  if (hit != null) return hit
+  const paths = NOTDEF_PROBES.map((ch) => outlineOf(ch, face, size)).filter((d) => d.trim())
+  let found = ''
+  for (let i = 0; i < paths.length; i++) {
+    if (paths.slice(i + 1).includes(paths[i]!)) {
+      found = paths[i]!
+      break
+    }
+  }
+  notdefCache.set(key, found)
+  return found
+}
+
 function outlineOf(ch: string, face: OutlineFont, size: number): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size * 4}" height="${size * 4}"><text x="0" y="0" font-size="${size}" font-family="${face.canvasFamily}">${xmlChar(ch)}</text></svg>`
   const out = convertSVGTextToPath(svg).toString()
@@ -138,7 +166,10 @@ function oneGlyph(ch: string, face: OutlineFont, size: number, box: FontBox): Gl
   const ctx = getMeasureCtx()
   applyCanvasFont(ctx, face.family, face.weight, size)
   const width = round3(ctx.measureText(ch).width)
-  const placed = translateSvgPath(absoluteSvgPath(outlineOf(ch, face, size)), 0, box.baseline)
+  const unsafe = unsafeXmlChar(ch)
+  const raw = unsafe ? notdefOutline(face, size) : outlineOf(ch, face, size)
+  const missing = unsafe || (raw.trim() !== '' && raw === notdefOutline(face, size))
+  const placed = translateSvgPath(absoluteSvgPath(raw), 0, box.baseline)
   const glyph: Glyph = {
     text: ch,
     d: placed,
@@ -149,6 +180,7 @@ function oneGlyph(ch: string, face: OutlineFont, size: number, box: FontBox): Gl
     height: box.height,
     baseline: box.baseline,
     ink: inkOf(placed),
+    missing,
   }
   glyphCache.set(key, glyph)
   return expose(glyph)

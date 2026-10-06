@@ -31,10 +31,11 @@ function emitDraw(fn: DrawFn, path: string, indent: string, issues: Issue[]): st
     issues.push(
       drawIssue(
         path,
-        `draw 引用了外部变量 ${listed}，写回的 <draw> 读不到`,
+        `draw 引用了外部变量 ${listed}，没有写回 <draw>`,
         'draw 里只用 ctx 和 el。颜色和尺寸写进 el.attr，或继续用 .tsx 渲染',
       ),
     )
+    return ''
   }
   const body = extracted.body.replace(/<\//g, '<\\/').replace(/^\n/, '').replace(/\s+$/, '')
   if (!body.trim()) {
@@ -53,24 +54,30 @@ function emitNode(node: FvgNode, indent: string, path: string, issues: Issue[]):
   const childIndent = `${indent}  `
   const parts: string[] = []
   let elementIndex = 0
+  let textRun = ''
   const rawDraw = node.tag === 'draw'
+  const flushText = () => {
+    if (textRun.length === 0) return
+    const text = rawDraw ? textRun.replace(/<\//g, '<\\/') : escapeText(textRun)
+    parts.push(`${childIndent}${text}\n`)
+    textRun = ''
+  }
   for (const child of node.children) {
     if (typeof child === 'string') {
-      if (child.length > 0) {
-        const text = rawDraw ? child.replace(/<\//g, '<\\/') : escapeText(child)
-        parts.push(`${childIndent}${text}\n`)
-      }
+      textRun += child
       continue
     }
+    flushText()
     parts.push(emitNode(child, childIndent, `${path}/${child.tag}[${elementIndex}]`, issues))
     elementIndex++
   }
+  flushText()
   if (node.draw) parts.push(emitDraw(node.draw, path, childIndent, issues))
   if (parts.length === 0) return `${indent}<${node.tag}${attrs} />\n`
   return `${indent}<${node.tag}${attrs}>\n${parts.join('')}${indent}</${node.tag}>\n`
 }
 
-/** 把节点树写回 `.layer` 文本。闭包里的 draw 会留下 warn，仍然写出函数体。 */
+/** 把节点树写回 `.layer` 文本。闭包里的 draw 会留下 warn，不把读不到的函数体写回去。 */
 export function emitLayer(node: FvgNode): EmitResult {
   const issues: Issue[] = []
   const source = emitNode(node, '', 'layer', issues).replace(/\n$/, '')

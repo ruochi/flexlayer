@@ -71,7 +71,7 @@ export default graphic.root(t, b)
 
 - 直接写 `.layer`：渲染器和 `--emit` 用的文本。静态单帧可以手写。速查见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，例子在 [examples/](examples/)。
 - 动画导出 `composition`（见 SPEC 第 13 章）。文件头写 `/** @jsxImportSource @dc/flexlayer */`，标签不用 import。`flexlayer check` / `render` 会执行它。`--emit out.layer` 把展开结果写回 `.layer`。`draw={(ctx, el) => ...}` 里只用 `ctx` 和 `el`，否则 `--emit` 报 `emit-draw`。不要用 `Math.random` 或 `Date.now`。例子：`examples/slide.tsx`。
-- 要从字体取出某个字的轮廓，`import { glyph } from '@dc/flexlayer'`。`await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })` 按码位返回数组，每项有 `d`、字宽 `width`、字身高度 `height` 和 `baseline`。`d` 的原点在字身左上角，y 向下，单位是像素。字宽和字身高度来自字体，不来自路径外接框。可变字体只出默认字重。见 SPEC 5.4。
+- 要从字体取出某个字的轮廓，`import { glyph } from '@dc/flexlayer'`。`await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })` 按码位返回数组，每项有 `d`、字宽 `width`、字身高度 `height`、`baseline` 和 `missing`。`d` 的原点在字身左上角，y 向下，单位是像素。字宽和字身高度来自字体，不来自路径外接框。缺字（`😀`、`𠀀`）`missing` 为 `true`，`d` 是同一个缺字方框。可变字体只出默认字重。见 SPEC 5.4。
 
 ```ts
 import { renderLayer } from '@dc/flexlayer'

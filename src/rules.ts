@@ -8,6 +8,7 @@ import { isImageTag, isLineTag, isMeshTag, isShapeTag } from './tags.js'
 const BLOCK_IN_TEXT = new Set(['h1', 'h2', 'h3', 'p', 'div'])
 
 const LAYER_ONLY_ATTR_NAMES = ATTRS.filter((attr) => attr.layerOnlyAttr).map((attr) => attr.name)
+const GRAPHIC_ATTRS = ATTRS.filter((attr) => attr.docGroup === 'graphic').map((attr) => attr.name)
 const FORBID_IN_STYLE = new Set(ATTRS.filter((attr) => attr.forbidInStyle).map((attr) => attr.name))
 const FORBID_IN_HTML_STYLE = new Set(ATTRS.filter((attr) => attr.forbidInHtmlStyle).map((attr) => attr.name))
 
@@ -145,6 +146,18 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
           path,
           `${misplaced.join('、')} 应写在 style 里`,
           'HTML 只用 style，例如 <p style="opacity:0.5; font-size:40px">',
+        ),
+      )
+    }
+    const graphic = GRAPHIC_ATTRS.filter((key) => present(attrs, key))
+    if (graphic.length > 0) {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-attr',
+          path,
+          `${graphic.join('、')} 是图形属性，写在 HTML 上不会画出来`,
+          '文字颜色写在 style 里；形状用 circle、rect、path 的属性，例如 <circle fill="#fff">',
         ),
       )
     }
