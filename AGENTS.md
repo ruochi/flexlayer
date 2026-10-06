@@ -46,7 +46,7 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 
 - 直接写 `.layer`：海报、单帧。速查见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，例子在 [examples/](examples/)。
 - 直接写 `.tsx`：有数据、循环、组件或动画时用。文件头写 `/** @jsxImportSource @dc/flexlayer */`，标签和属性与 `.layer` 相同，不用 import 这些标签。默认导出 `<layer>` 或返回它的函数；动画则导出 `composition`（见 SPEC 第 13 章）。`flexlayer check` / `render` 会执行它。`--emit out.layer` 把展开结果写回 `.layer`。`draw={(ctx, el) => ...}` 里只用 `ctx` 和 `el`，否则 `--emit` 报 `emit-draw`。不要用 `Math.random` 或 `Date.now`。例子：`examples/hello.tsx`、`examples/slide.tsx`。
-- 要从字体取出某个字的轮廓，`import { glyph } from '@dc/flexlayer'`。`await glyph('春', { font: 'Kai', size: 200 })` 按码位返回数组，每项有 `d`、字宽 `width`、字身高度 `height` 和 `baseline`。`d` 的原点在字身左上角，y 向下，单位是像素。字宽和字身高度来自字体，不来自路径外接框。可变字体只出默认字重。见 SPEC 5.4。
+- 要从字体取出某个字的轮廓，`import { glyph } from '@dc/flexlayer'`。`await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })` 按码位返回数组，每项有 `d`、字宽 `width`、字身高度 `height` 和 `baseline`。`d` 的原点在字身左上角，y 向下，单位是像素。字宽和字身高度来自字体，不来自路径外接框。可变字体只出默认字重。见 SPEC 5.4。
 - Vue：循环和 `:cx` 用模板算。抄 [generate/vue/example.ts](generate/vue/example.ts)。模板会压空白，`<draw>` 里多句 JS 写在一行并用 `;` 分隔。
 - React：抄 [generate/react/example.tsx](generate/react/example.tsx)。`<layer>`、`<circle>` 直接写，不用 import。大写开头的才是要展开的函数组件。
 

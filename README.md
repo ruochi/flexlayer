@@ -87,7 +87,7 @@ await renderLayer(root)
 ```ts
 import { glyph, h, renderLayer } from '@dc/flexlayer'
 
-const [chun] = await glyph('春', { font: 'Kai', size: 200 })
+const [chun] = await glyph('春', { font: 'Kai', size: 200, weight: 700 })
 const root = h(
   'layer',
   { width: '640', height: '360', background: '#111111' },

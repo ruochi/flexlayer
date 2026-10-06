@@ -228,7 +228,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 ```ts
 import { glyph } from '@dc/flexlayer'
 
-const [chun] = await glyph('春', { font: 'Kai', size: 200 })
+const chars = await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })
 ```
 
 `glyph` 按码位拆开，返回数组。每个字有：

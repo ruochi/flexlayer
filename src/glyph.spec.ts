@@ -76,6 +76,16 @@ describe('glyph', () => {
     expect(space!.height).toBeGreaterThan(0)
   })
 
+  it('春眠可以指定字重', async () => {
+    if (!ready) return
+    const chars = await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })
+    const [regular] = await glyph('春', { font: 'Kai', size: 120 })
+    expect(chars.map((item) => item.text)).toEqual(['春', '眠'])
+    expect(chars.every((item) => item.font === 'Kai' && item.size === 120 && item.weight === 700)).toBe(true)
+    expect(chars[0]!.d).not.toBe(regular!.d)
+    expect(chars[0]!.height).toBe(chars[1]!.height)
+  })
+
   it('粗楷和常规楷的轮廓不同', async () => {
     if (!ready) return
     const [regular] = await glyph('春', { font: '楷体', size: 160 })
