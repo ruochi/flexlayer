@@ -169,9 +169,16 @@ export namespace JSX {
       /** 忽略；色块用 rect / HTML / draw */
       background?: string
     }
-    rect: FvgShape & { x1?: number | string; y1?: number | string; x2?: number | string; y2?: number | string }
+    rect: FvgShape
     circle: FvgShape & FvgCenter
-    ellipse: FvgShape & FvgCenter & { x1?: number | string; y1?: number | string; x2?: number | string; y2?: number | string }
+    ellipse: FvgShape & FvgCenter
+    g: FvgGraphic & {
+      transform?: string
+      fill?: string
+      stroke?: string
+      opacity?: number | string
+      'stroke-width'?: number | string
+    }
     line: FvgGraphic &
       FvgLinePaint & {
         x1?: number | string

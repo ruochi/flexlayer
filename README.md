@@ -38,14 +38,23 @@ node dist/cli.js render examples/hello.layer -o hello.png
 
 ## 代码调用
 
-推荐先量再摆。`canvas()` 同步准备字体和图片，并在进程里记住。`graphic.layer()` 同步量一块，`at()` 把它放到画面上：
+推荐先量再摆。`canvas.create` 同步准备字体和图片，并在进程里记住。参数是一棵 `<layer>`，返回量好的盒子：
 
 ```tsx
 import { canvas } from '@dc/flexlayer'
 
-const graphic = canvas({ width: 720, height: 540, background: '#0c1424', color: '#f4ecdf', fontFamily: 'Kai' })
-const title = graphic.layer(<h1 style="font-size:160px; white-space:nowrap">春眠不觉晓</h1>)
-export default graphic.root(title.fit({ width: graphic.width - 96 }).at({ x: 48, y: 48 }))
+const page = { width: 720, height: 540 }
+const title = canvas.create(
+  <layer x={48} y={48} width={page.width - 96} color="#f4ecdf" font-family="Kai">
+    <h1 style="font-size:160px; white-space:nowrap">春眠不觉晓</h1>
+  </layer>,
+)
+export default canvas.create(
+  <layer width={page.width} height={page.height} color="#f4ecdf" font-family="Kai" safe="0">
+    <rect x="0" y="0" width={page.width} height={page.height} fill="#0c1424" />
+    {title}
+  </layer>,
+)
 ```
 
 文件头写 `/** @jsxImportSource @dc/flexlayer */`。例子见 `examples/poster.tsx`。也可以直接把节点交给渲染器：

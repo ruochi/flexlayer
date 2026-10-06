@@ -77,6 +77,7 @@ export const ATTR_ORDER = [
   'perspective',
   'scale',
   'origin',
+  'transform',
   'shadow',
   'glow',
   'inner-shadow',
@@ -143,6 +144,7 @@ export const ATTRS: AttrDef[] = [
   { name: 'depth', docGroup: 'graphic' },
   { name: 'fill', docGroup: 'graphic' },
   { name: 'stroke', docGroup: 'graphic' },
+  { name: 'transform', docGroup: 'graphic' },
   { name: 'src', docGroup: 'image' },
   { name: 'alt', docGroup: 'image' },
   {

@@ -19,14 +19,16 @@ describe('属性归属', () => {
     expect(report.issues.some((issue) => issue.code === 'invalid-attr' && issue.level === 'warn' && issue.hint)).toBe(true)
   })
 
-  it('rect 两点写法加 rx 不算混用', async () => {
+  it('rect 的两点写法报 invalid-attr', async () => {
     const report = await issues(`<layer width="80" height="80"><rect x1="8" y1="8" x2="60" y2="40" rx="6" fill="#fff" /></layer>`)
-    expect(report.issues.some((issue) => issue.code === 'invalid-attr')).toBe(false)
+    const hit = report.issues.find((issue) => issue.code === 'invalid-attr' && issue.message.includes('width'))
+    expect(hit?.hint).toContain('x、y、width、height')
   })
 
-  it('ellipse 两点写法再写 rx 仍算混用', async () => {
+  it('ellipse 的两点写法报 invalid-attr', async () => {
     const report = await issues(`<layer width="80" height="80"><ellipse x1="8" y1="8" x2="60" y2="40" rx="6" fill="#fff" /></layer>`)
-    expect(report.issues.some((issue) => issue.code === 'invalid-attr' && issue.message.includes('两点'))).toBe(true)
+    const hit = report.issues.find((issue) => issue.code === 'invalid-attr')
+    expect(hit?.message).toContain('cx、cy、rx、ry')
   })
 
   it('线条写 cx 报 warn', async () => {

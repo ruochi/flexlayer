@@ -14,6 +14,7 @@ import { imageInk, peekLayerImage, preloadLayerImagesSync, parseObjectFit, parse
 import type { FvgNode } from './parse.js'
 import { parseFvg } from './parse.js'
 import { ensureBuiltinFontsSync, registerFontsFromDocumentSync } from './fonts.js'
+import { materialize } from './components.js'
 import { catmullRomPath } from './curve.js'
 import { isGradient, parseGradient, solidPaint } from './gradient.js'
 import { glbSpan, resolveModelFile } from './glb.js'
@@ -46,6 +47,7 @@ import {
 } from './text.js'
 import { checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, legacyCenterIssues, rowColumnHint } from './rules.js'
 import { canonicalTag, FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag } from './tags.js'
+import { boundsOf, parseSvgTransform } from './svg-transform.js'
 import type {
   Anchor,
   Box,
@@ -53,6 +55,7 @@ import type {
   DrawComputedStyle,
   FlexLayoutNode,
   FvgDocument,
+  GroupLayoutNode,
   ImageLayoutNode,
   Issue,
   LayerLayoutNode,
@@ -89,6 +92,9 @@ export type LayoutContext = {
   sources: Map<string, string>
   /** 设了之后，省略的 fill 用这个值，省略的 stroke 为 none。mask 里用 #ffffff。 */
   fillDefault?: string
+  /** `<g>` 上传下来的 fill / stroke。子元素自己写了的优先。 */
+  paintFill?: string
+  paintStroke?: string
 }
 
 function isClosedFlag(raw: string | undefined): boolean {
@@ -558,7 +564,7 @@ function parseFlexGrowShrink(style: Record<string, string>, isText: boolean): { 
 
 /** 纯几何范围，不含描边。水平或垂直线的高或宽可以是 0。 */
 function lineBounds(geom: LineGeometry): Box {
-  if (geom.kind === 'line' || geom.kind === 'arrow') {
+  if (geom.kind === 'line') {
     const x = Math.min(geom.x1, geom.x2)
     const y = Math.min(geom.y1, geom.y2)
     return { x, y, width: Math.abs(geom.x2 - geom.x1), height: Math.abs(geom.y2 - geom.y1) }
@@ -581,45 +587,28 @@ function lineBounds(geom: LineGeometry): Box {
   return { x: 0, y: 0, width: 0, height: 0 }
 }
 
-function arrowWing(x1: number, y1: number, x2: number, y2: number, head: number, turn: number) {
-  const ang = Math.atan2(y2 - y1, x2 - x1) + turn
-  return { x: x2 - head * Math.cos(ang), y: y2 - head * Math.sin(ang) }
-}
-
-/** 相对几何盒子的着墨：半个描边，箭头再算上两翼。 */
-function lineInk(geom: LineGeometry, box: Box, strokeWidth: number, head?: number): Box {
+/** 相对几何盒子的着墨：半个描边。 */
+function lineInk(box: Box, strokeWidth: number): Box {
   const pad = Math.max(0, strokeWidth) / 2
-  let minX = box.x
-  let minY = box.y
-  let maxX = box.x + box.width
-  let maxY = box.y + box.height
-  if (geom.kind === 'arrow') {
-    const headLen = head ?? Math.max(12, strokeWidth * 4)
-    for (const wing of [arrowWing(geom.x1, geom.y1, geom.x2, geom.y2, headLen, -Math.PI / 6), arrowWing(geom.x1, geom.y1, geom.x2, geom.y2, headLen, Math.PI / 6)]) {
-      minX = Math.min(minX, wing.x)
-      minY = Math.min(minY, wing.y)
-      maxX = Math.max(maxX, wing.x)
-      maxY = Math.max(maxY, wing.y)
-    }
+  return {
+    x: -pad,
+    y: -pad,
+    width: box.width + pad * 2,
+    height: box.height + pad * 2,
   }
-  minX -= pad
-  minY -= pad
-  maxX += pad
-  maxY += pad
-  return { x: minX - box.x, y: minY - box.y, width: maxX - minX, height: maxY - minY }
 }
 
 function usesOwnCoords(node: FvgNode, kind: LayoutNode['kind']): boolean {
-  if (kind === 'line') return true
+  if (kind === 'line' || kind === 'group') return true
   if (node.tag === 'circle' || node.tag === 'ellipse' || node.tag === 'sphere') return true
   if (node.tag === 'rect') return true
-  return (kind === 'shape' || kind === 'custom') && hasTwoPoint(node.attrs)
+  return kind === 'custom' && hasTwoPoint(node.attrs)
 }
 
 function normalizeLineGeometry(geom: LineGeometry, box: Box): LineGeometry {
   const ox = box.x
   const oy = box.y
-  if (geom.kind === 'line' || geom.kind === 'arrow') {
+  if (geom.kind === 'line') {
     return { ...geom, x1: geom.x1 - ox, y1: geom.y1 - oy, x2: geom.x2 - ox, y2: geom.y2 - oy }
   }
   if (geom.kind === 'polyline' || geom.kind === 'polygon') {
@@ -785,7 +774,7 @@ function layoutImage(node: FvgNode, ctx: LayoutContext): ImageLayoutNode {
         message: `图片无法加载: ${shown}`,
         hint:
           peeked.status === 'missing'
-            ? `把这张图加进 canvas({ images: ['${shown}'] })`
+            ? 'src 要能在排版前读到。写在 layer 里的图会自动准备'
             : 'src 相对 .layer 所在目录，也可以写 http(s) 或 data URL',
       })
     }
@@ -874,24 +863,14 @@ function warnNestedMasks(node: FvgNode, ctx: LayoutContext) {
   })
 }
 
-function layoutShape(node: FvgNode, ctx: LayoutContext, defaultStroke: string): ShapeLayoutNode {
+function layoutShape(node: FvgNode, ctx: LayoutContext, _defaultStroke: string): ShapeLayoutNode {
   warnNestedMasks(node, ctx)
   const appearance = readAttrAppearance(node.attrs)
   let x = 0
   let y = 0
   let w = parseNumber(node.attrs.width) ?? 0
   let h = parseNumber(node.attrs.height) ?? 0
-  const twoPoint = hasTwoPoint(node.attrs) && node.tag !== 'circle'
-  if (twoPoint) {
-    const x1 = parseNumber(node.attrs.x1) ?? 0
-    const y1 = parseNumber(node.attrs.y1) ?? 0
-    const x2 = parseNumber(node.attrs.x2) ?? 0
-    const y2 = parseNumber(node.attrs.y2) ?? 0
-    x = Math.min(x1, x2)
-    y = Math.min(y1, y2)
-    w = Math.abs(x2 - x1)
-    h = Math.abs(y2 - y1)
-  } else if (node.tag === 'circle') {
+  if (node.tag === 'circle') {
     const r = parseNumber(node.attrs.r) ?? 0
     const cx = parseNumber(node.attrs.cx) ?? 0
     const cy = parseNumber(node.attrs.cy) ?? 0
@@ -913,12 +892,15 @@ function layoutShape(node: FvgNode, ctx: LayoutContext, defaultStroke: string): 
     w = parseNumber(node.attrs.width) ?? w
     h = parseNumber(node.attrs.height) ?? h
   }
-  const fillFallback = ctx.fillDefault ?? '#000000'
+  const fillFallback = ctx.fillDefault ?? ctx.paintFill ?? '#000000'
   const fill = readPaint(node.attrs.fill ?? fillFallback, fillFallback, ctx, 'fill')
-  const stroke = readPaint(node.attrs.stroke ?? 'none', 'none', ctx, 'stroke')
+  const strokeFallback = ctx.fillDefault != null ? 'none' : (node.attrs.stroke ?? ctx.paintStroke ?? 'none')
+  const stroke = readPaint(node.attrs.stroke ?? strokeFallback, strokeFallback, ctx, 'stroke')
   const strokeWidth = parseNumber(node.attrs['stroke-width']) ?? 1
   const dash = readDash(node.attrs['stroke-dasharray'], ctx)
   const ink = { x: 0, y: 0, width: w, height: h }
+  const rx = parseNumber(node.attrs.rx)
+  const ry = parseNumber(node.attrs.ry)
   return {
     kind: 'shape',
     path: ctx.pathPrefix,
@@ -935,10 +917,10 @@ function layoutShape(node: FvgNode, ctx: LayoutContext, defaultStroke: string): 
     stroke,
     strokeWidth,
     ...(dash ? { dash } : {}),
-    rx: parseNumber(node.attrs.rx),
+    rx,
     r: parseNumber(node.attrs.r),
-    rxEllipse: twoPoint ? undefined : parseNumber(node.attrs.rx),
-    ry: twoPoint ? undefined : parseNumber(node.attrs.ry),
+    rxEllipse: parseNumber(node.attrs.rx),
+    ry: ry ?? rx,
     ...readEffects(node.attrs, ctx, solidPaint(fill !== 'none' ? fill : stroke, ctx.color)),
     ...layoutDrawMeta(node, ctx),
   }
@@ -1101,14 +1083,13 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
 function layoutLineNode(node: FvgNode, ctx: LayoutContext, defaultStroke: string): LineLayoutNode {
   warnNestedMasks(node, ctx)
   let geom: LineGeometry
-  if (node.tag === 'line' || node.tag === 'arrow') {
+  if (node.tag === 'line') {
     geom = {
-      kind: node.tag === 'arrow' ? 'arrow' : 'line',
+      kind: 'line',
       x1: parseNumber(node.attrs.x1) ?? 0,
       y1: parseNumber(node.attrs.y1) ?? 0,
       x2: parseNumber(node.attrs.x2) ?? 0,
       y2: parseNumber(node.attrs.y2) ?? 0,
-      head: parseNumber(node.attrs.head),
     }
   } else if (node.tag === 'polyline' || node.tag === 'polygon' || node.tag === 'curve') {
     const pts = (node.attrs.points ?? '')
@@ -1130,10 +1111,11 @@ function layoutLineNode(node: FvgNode, ctx: LayoutContext, defaultStroke: string
   }
   const strokeWidth = parseNumber(node.attrs['stroke-width']) ?? 4
   const dash = readDash(node.attrs['stroke-dasharray'], ctx)
-  const strokeFallback = ctx.fillDefault != null ? 'none' : defaultStroke
+  const strokeFallback = ctx.fillDefault != null ? 'none' : (ctx.paintStroke ?? defaultStroke)
   const stroke = readPaint(node.attrs.stroke ?? strokeFallback, strokeFallback, ctx, 'stroke')
-  const fillFallback = ctx.fillDefault ?? 'none'
-  let fill = readPaint(node.attrs.fill ?? fillFallback, fillFallback, ctx, 'fill')
+  const fillFallback = ctx.fillDefault ?? ctx.paintFill ?? 'none'
+  const fillRaw = node.attrs.fill === 'inherit' ? (node.attrs.stroke ?? strokeFallback) : (node.attrs.fill ?? fillFallback)
+  let fill = readPaint(fillRaw, fillFallback, ctx, 'fill')
   const curveClosed = node.tag === 'curve' && isClosedFlag(node.attrs.closed)
   if (node.tag === 'curve' && !curveClosed && fill !== 'none') {
     ctx.issues.push({
@@ -1146,7 +1128,7 @@ function layoutLineNode(node: FvgNode, ctx: LayoutContext, defaultStroke: string
     fill = 'none'
   }
   const box = lineBounds(geom)
-  const ink = lineInk(geom, box, strokeWidth, geom.kind === 'arrow' ? geom.head : undefined)
+  const ink = lineInk(box, strokeWidth)
   const localGeom = normalizeLineGeometry(geom, box)
   return {
     kind: 'line',
@@ -1197,8 +1179,19 @@ function warnMisplacedFont(ctx: LayoutContext, path: string) {
   })
 }
 
-function measureFlexChild(node: FvgNode, ctx: LayoutContext, direction: 'row' | 'column'): FlexMeasure | null {
+function measureFlexChild(raw: FvgNode, ctx: LayoutContext, direction: 'row' | 'column'): FlexMeasure | null {
+  const node = materialize(raw)
   if (node.tag === 'symbol' || node.tag === 'draw') return null
+  if (node.tag === 'g') {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-child',
+      path: ctx.pathPrefix,
+      message: 'g 不能放在 flex 里',
+      hint: '包一层 layer，例如 <layer><g>…</g></layer>',
+    })
+    return null
+  }
   if (node.tag === 'mask') {
     ctx.issues.push({
       level: 'warn',
@@ -1596,6 +1589,98 @@ function layoutMask(maskNode: FvgNode, ctx: LayoutContext): LayoutNode[] | undef
   return laid
 }
 
+const measuredBoxes = new WeakMap<FvgNode, { width: number; height: number }>()
+
+/** 量过的层用自己的宽度换行，和 canvas.create 同一次计算。没量过的层继续用父级的可用宽度。 */
+function contentWidthFor(node: FvgNode, fixedW: number | undefined, parentMax: number): number {
+  if (fixedW == null || !measuredBoxes.has(node)) return parentMax
+  const heightSet = node.attrs.height != null && node.attrs.height !== ''
+  if (!heightSet) return fixedW
+  const height = parseNumber(node.attrs.height) ?? fixedW
+  const safe = parseSafe(node.attrs.safe, fixedW, height)
+  return Math.max(0, fixedW - safe.left - safe.right)
+}
+
+function layoutGroup(node: FvgNode, ctx: LayoutContext): GroupLayoutNode {
+  warnNestedMasks(node, ctx)
+  const appearance = readAttrAppearance(node.attrs)
+  const parsed = parseSvgTransform(node.attrs.transform)
+  if (parsed.error) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 transform: ${parsed.error}`,
+      hint: '写成 translate、rotate、scale 或 matrix，例如 transform="translate(12,8)"',
+    })
+  }
+  const inherited: LayoutContext = {
+    ...ctx,
+    paintFill: node.attrs.fill ?? ctx.paintFill,
+    paintStroke: node.attrs.stroke ?? ctx.paintStroke,
+  }
+  const children: LayoutNode[] = []
+  const childFvg = node.children.filter((c) => typeof c !== 'string') as FvgNode[]
+  for (let i = 0; i < childFvg.length; i++) {
+    const raw = childFvg[i]!
+    const concrete = materialize(raw)
+    const path = nodePath(ctx.pathPrefix, concrete.tag, i)
+    track(ctx, path, raw)
+    const sub: LayoutContext = { ...inherited, pathPrefix: path }
+    const allowed =
+      concrete.tag === 'g' || isLineTag(concrete.tag) || isShapeTag(concrete.tag)
+    if (!allowed) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-child',
+        path,
+        message: `${concrete.tag} 不能放在 g 里`,
+        hint: 'g 里写 rect、circle、ellipse、line、polyline、polygon、path、curve 或 g',
+      })
+      continue
+    }
+    ctx.issues.push(...checkChildAttrs(concrete, 'layer', path))
+    const laid =
+      concrete.tag === 'g'
+        ? layoutGroup(concrete, sub)
+        : isLineTag(concrete.tag)
+          ? layoutLineNode(concrete, sub, ctx.color)
+          : layoutShape(concrete, sub, ctx.color)
+    children.push(laid)
+  }
+  let box = { x: 0, y: 0, width: 0, height: 0 }
+  let any = false
+  for (const child of children) {
+    const next = boundsOf(parsed.matrix, { x: child.x, y: child.y, width: child.width, height: child.height })
+    if (!any) {
+      box = next
+      any = true
+    } else {
+      const x = Math.min(box.x, next.x)
+      const y = Math.min(box.y, next.y)
+      const right = Math.max(box.x + box.width, next.x + next.width)
+      const bottom = Math.max(box.y + box.height, next.y + next.height)
+      box = { x, y, width: right - x, height: bottom - y }
+    }
+  }
+  return {
+    kind: 'group',
+    path: ctx.pathPrefix,
+    id: node.attrs.id,
+    tag: 'g',
+    x: box.x,
+    y: box.y,
+    width: box.width,
+    height: box.height,
+    ink: { x: 0, y: 0, width: box.width, height: box.height },
+    ...appearance,
+    children,
+    svg: parsed.matrix,
+    ...readEffects(node.attrs, ctx, solidPaint(node.attrs.fill ?? ctx.paintFill ?? ctx.color, ctx.color)),
+    ...layoutDrawMeta(node, ctx),
+  }
+}
+
 function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
   const appearance = readAttrAppearance(node.attrs)
   // 根节点的 background 是画布底色，由 paintDocument 绘制。layer 自身不填色。
@@ -1644,24 +1729,27 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
       if (ctx.pathPrefix !== 'layer') warnMisplacedFont(ctx, path)
       continue
     }
-    const path = nodePath(ctx.pathPrefix, ch.tag, i)
+    const concrete = materialize(ch)
+    const path = nodePath(ctx.pathPrefix, concrete.tag, i)
     track(ctx, path, ch)
-    ctx.issues.push(...checkChildAttrs(ch, 'layer', path))
-    const subCtx = { ...ctx, pathPrefix: path }
+    ctx.issues.push(...checkChildAttrs(concrete, 'layer', path))
+    const textMax = contentWidthFor(node, fixedW, ctx.maxContentWidth)
+    const subCtx = { ...ctx, pathPrefix: path, maxContentWidth: textMax }
     let laid: LayoutNode | null = null
-    if (ch.tag === 'use') laid = layoutUse(ch, subCtx)
-    else if (isLineTag(ch.tag)) laid = layoutLineNode(ch, subCtx, ctx.color)
-    else if (isDisplayFlex(ch.attrs.style) && isTextBoxTag(ch.tag)) laid = layoutFlex(ch, subCtx)
-    else if (isImageTag(ch.tag)) laid = layoutImage(ch, subCtx)
-    else if (isTextBoxTag(ch.tag)) laid = layoutTextBox(ch, subCtx, ctx.maxContentWidth)
-    else if (isShapeTag(ch.tag)) laid = layoutShape(ch, subCtx, ctx.color)
-    else if (isMeshTag(ch.tag)) laid = layoutMesh(ch, subCtx)
-    else if (ch.tag === 'layer') laid = layoutLayer(ch, subCtx)
+    if (concrete.tag === 'use') laid = layoutUse(concrete, subCtx)
+    else if (concrete.tag === 'g') laid = layoutGroup(concrete, subCtx)
+    else if (isLineTag(concrete.tag)) laid = layoutLineNode(concrete, subCtx, ctx.color)
+    else if (isDisplayFlex(concrete.attrs.style) && isTextBoxTag(concrete.tag)) laid = layoutFlex(concrete, subCtx)
+    else if (isImageTag(concrete.tag)) laid = layoutImage(concrete, subCtx)
+    else if (isTextBoxTag(concrete.tag)) laid = layoutTextBox(concrete, subCtx, textMax)
+    else if (isShapeTag(concrete.tag)) laid = layoutShape(concrete, subCtx, ctx.color)
+    else if (isMeshTag(concrete.tag)) laid = layoutMesh(concrete, subCtx)
+    else if (concrete.tag === 'layer') laid = layoutLayer(concrete, subCtx)
     else {
-      laid = layoutUnknownOrCustom(ch, subCtx)
+      laid = layoutUnknownOrCustom(concrete, subCtx)
     }
     if (!laid) continue
-    const html = isHtmlTag(ch.tag)
+    const html = isHtmlTag(concrete.tag)
     placed.push({
       child: laid,
       x: html ? 0 : (parseNumber(ch.attrs.x) ?? 0),
@@ -1805,24 +1893,24 @@ function collectSymbols(node: FvgNode, symbols: Map<string, FvgNode>, issues: Is
 }
 
 function collectFontFamilies(node: FvgNode, out: Set<string>) {
-  const style = parseStyle(node.attrs.style)
+  const concrete = materialize(node)
+  const style = parseStyle(concrete.attrs.style)
   if (style['font-family']) out.add(style['font-family'])
-  if (node.attrs['font-family']) out.add(node.attrs['font-family'])
-  for (const child of node.children) {
+  if (concrete.attrs['font-family']) out.add(concrete.attrs['font-family'])
+  for (const child of concrete.children) {
     if (typeof child !== 'string') collectFontFamilies(child, out)
   }
 }
 
 function collectImageSrcs(node: FvgNode, out: string[]) {
-  if ((node.tag === 'img' || node.tag === 'image') && node.attrs.src?.trim()) out.push(node.attrs.src)
-  for (const child of node.children) {
+  const concrete = materialize(node)
+  if ((concrete.tag === 'img' || concrete.tag === 'image') && concrete.attrs.src?.trim()) out.push(concrete.attrs.src)
+  for (const child of concrete.children) {
     if (typeof child !== 'string') collectImageSrcs(child, out)
   }
 }
 
-const measuredBoxes = new WeakMap<FvgNode, { width: number; height: number }>()
-
-/** graphic.layer() 量到的布局尺寸。最终排版不一致时报 measure-mismatch。 */
+/** canvas.create 量到的布局尺寸。最终排版不一致时报 measure-mismatch。 */
 export function noteMeasuredSize(node: FvgNode, width: number, height: number) {
   measuredBoxes.set(node, { width, height })
 }
@@ -1841,7 +1929,7 @@ function noteMeasureMismatch(node: FvgNode, width: number, height: number, ctx: 
     code: 'measure-mismatch',
     path: ctx.pathPrefix,
     message: `排版尺寸 ${formatSize(width)}×${formatSize(height)} 和量到的 ${formatSize(expected.width)}×${formatSize(expected.height)} 不一致`,
-    hint: '量的时候和最终画布的可用宽度要一致。检查 maxWidth、safe 和字号',
+    hint: '量的时候和最终画布的可用宽度要一致。检查 width、safe 和字号',
   })
 }
 
@@ -1878,9 +1966,9 @@ export type LayoutAssets = {
 }
 
 export type PrepareOptions = {
-  /** 写在根外面的 <font>，或 canvas({ fonts }) */
+  /** 写在根外面的 <font> */
   fonts?: Array<{ family: string; src: string }>
-  /** canvas({ images }) 里预先加载的图 */
+  /** 预先加载的图。写在 layer 里的图会在 create 时自动准备 */
   images?: string[]
   fontFamily?: string
 }

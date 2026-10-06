@@ -49,7 +49,8 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | 文字 | `h1`、`h2`、`h3`、`p`、`div`、`span`；行内：`span`、`strong`、`b`、`em`、`br` |
 | 图片 | `img`（`image` 是同一个标签） |
 | 形状 | `rect`、`circle`、`ellipse` |
-| 线条 | `line`、`arrow`、`polyline`、`polygon`、`path`、`curve` |
+| 分组 | `g`（放在 `layer` 里，用 `transform` 平移、旋转、缩放） |
+| 线条 | `line`、`arrow`、`polyline`、`polygon`、`path`、`curve`。`arrow` 是内置组件，排版时展开成 `g` |
 | 复用 | `symbol`、`use` |
 | 蒙版 | `mask`（只作为 `layer` 的直接子元素） |
 
@@ -83,7 +84,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | `width`、`height`、`x`、`y`、`anchor` | `width`、`height` 以及 `x`、`y`、`anchor`。`x`、`y` 是左上角，默认 0；`anchor` 默认 `top-left`。HTML 上写了报 `warn` |
 | `opacity`、`rotate`、`rotateX`、`rotateY`、`z`、`scale`、`origin` | 图形、线条和 `layer` 写属性；文字写在 `style`。HTML 上写成属性报 `warn` |
 | `background`、`padding`、`font-size`、`color`、`flex`、`flex-grow`、`flex-shrink`、`gap`、`border`、`border-radius`、`max-width`、`align-items`、`justify-content`、`writing-mode`、`object-fit`、`object-position` | HTML 的 `style`。`layer` 或图形写了 `style` 报 `warn` |
-| `cx`、`cy`、`x1`、`y1`、`x2`、`y2`、`points`、`d`、`depth`、`fill`、`stroke` | 图形属性，坐标是所在 `layer` 的局部坐标 |
+| `cx`、`cy`、`x1`、`y1`、`x2`、`y2`、`points`、`d`、`depth`、`fill`、`stroke`、`transform` | 图形属性，坐标是所在 `layer` 的局部坐标 |
 | `src`、`alt` | 只写在 `img` 或 `model` 上。图片宽高仍放进 `style` |
 | `shadow`、`glow`、`inner-shadow`、`inner-glow`、`blur`、`backdrop-blur`、`glass`、`noise`、`filter`、`blend` | 图形和 `layer` 写属性；文字写在 `style`。见第 9 章 |
 | `perspective`、`overlay`、`grade`、`grade-mask` | 只写在 `layer` 上。写在别处或写进 `style` 报 `warn` |
@@ -95,9 +96,10 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | --- | --- |
 | 文字，以及没写宽高的一组 HTML | 外包一层 `layer`，把 `x`、`y`、`anchor` 写在 `layer` 上。HTML 上写 `x`、`y` 会忽略并报 `warn` |
 | 图片 `img` | 和文字一样，外包一层 `layer` 来定位 |
-| `rect` | `x` `y` `width` `height`，左上角。也可以用两点 `x1 y1 x2 y2`。不用 `anchor`，写了报 `info` |
+| `rect` | `x` `y` `width` `height`，左上角。`rx`、`ry` 是圆角。不用 `anchor`，写了报 `info` |
 | `box`、`extrude`、带尺寸的自定义元素 | `x` `y` 加上 `anchor`，默认左上角 |
-| `circle`、`ellipse`、`sphere` | 圆心 `cx` `cy`。`ellipse` 也可以用外接矩形的两点写法 |
+| `circle`、`ellipse`、`sphere` | 圆心 `cx` `cy`。椭圆再写 `rx` `ry` |
+| `g` | 放在 `layer` 里。`transform` 作用到子元素，盒子是变换后的并集 |
 | 线条 | 端点、`points`、`d` 本身就是坐标，不写 `x`、`y` |
 
 没写 `x`、`y` 时是 `0, 0`，不再放到父级中心。`layer`、`use`、`rect`、`box`、`extrude` 上的 `cx`、`cy` 已忽略，报 `invalid-attr`，`hint` 给出等价的 `x`、`y`。
@@ -134,7 +136,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 ```html
 <mask>
-  <rect x1="0" y1="0" x2="320" y2="180" fill="linear-gradient(to bottom, #fff, #fff0)" />
+  <rect x="0" y="0" width="320" height="180" fill="linear-gradient(to bottom, #fff, #fff0)" />
 </mask>
 ```
 
@@ -266,19 +268,19 @@ const chars = await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })
 | `object-position` | 默认 `center`。可写 `top`、`left`、`top-left`、`left top`，或相对图片盒子的 `0%`–`100%`（例如 `50% 0%`） |
 | `border-radius`、`opacity`、`padding`、`background`、`border` | 同其它 HTML。圆角会裁切图片 |
 
-图片可以放进 `display:flex`，默认不缩小。在 layer 里默认落在 `(0, 0)`；要指定位置就外包一层 `layer`，把 `x`、`y`、`anchor` 写在那一层上。图片没有预先放进缓存时报 `missing-image`，`hint` 指向 `canvas({ images })`。文件读不到也是这个码，`hint` 说明路径。写了宽高的盒子仍然占位。缺 `src` 报 `invalid-attr`。
+图片可以放进 `display:flex`，默认不缩小。在 layer 里默认落在 `(0, 0)`；要指定位置就外包一层 `layer`，把 `x`、`y`、`anchor` 写在那一层上。`canvas.create` 会按 `src` 准备图片。读不到文件时报 `missing-image`，`hint` 说明路径。写了宽高的盒子仍然占位。缺 `src` 报 `invalid-attr`。
 
 ## 7. 形状与线条
 
 ### 7.1 形状
 
-`rect` 用 SVG 的左上角写法。`circle`、`ellipse` 保留圆心。两点可以反着写，取最小最大。同一形状不要把左上角和两点混在一起。`rect` 的 `rx` 是圆角，两种写法都可以加，不算混用。
+几何只用 SVG 自己的属性。`rect`、`ellipse` 上的 `x1` `y1` `x2` `y2` 报 `invalid-attr` 并忽略。
 
-| 标签 | 写法 | 两点写法 |
-| --- | --- | --- |
-| `rect` | `x` `y` `width` `height`，另有 `rx`（圆角）。`x` `y` 是左上角 | `x1` `y1` `x2` `y2`，对角两个角，`rx` 仍是圆角 |
-| `ellipse` | `cx` `cy` `rx` `ry`，圆心 | `x1` `y1` `x2` `y2`，外接矩形的对角 |
-| `circle` | `cx` `cy` `r`，圆心 | 不支持 |
+| 标签 | 写法 |
+| --- | --- |
+| `rect` | `x` `y` `width` `height`。`x` `y` 是左上角。`rx` 是圆角；`ry` 没写时跟 `rx` |
+| `ellipse` | `cx` `cy` `rx` `ry`，圆心 |
+| `circle` | `cx` `cy` `r`，圆心 |
 
 `rect`、`circle`、`ellipse` 上的 `anchor` 忽略并报 `info`。`rect`、`box`、`extrude` 上的 `cx`、`cy` 忽略并报 `warn`。
 
@@ -289,17 +291,30 @@ const chars = await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })
 | 标签 | 属性 |
 | --- | --- |
 | `line` | `x1`、`y1`、`x2`、`y2` |
-| `arrow` | `x1`、`y1`、`x2`、`y2`、`head`（箭头长度，默认 `stroke-width` 的 4 倍，最小 12） |
+| `arrow` | `x1`、`y1`、`x2`、`y2`、`head`（箭头长度，默认 `max(12, stroke-width × 4)`） |
 | `polyline`、`polygon` | `points="x,y x,y …"` |
 | `path` | `d`（SVG 路径语法） |
 | `curve` | `points="x,y x,y …"`，可选 `closed` |
 
 - 线条只能放在 layer 里，坐标是 **layer 的局部坐标**（和 SVG 一样，不用 `x`、`y`）。写了 `x`、`y` 会忽略并报 `warn`。
-- 布局盒子是纯几何范围，水平线的高度可以是 0。描边和箭头只算进报告的 `ink`。
+- 布局盒子是纯几何范围，水平线的高度可以是 0。描边只算进报告的 `ink`。
 - `stroke` 默认是全局 `color`，`stroke-width` 默认 4（注意和 SVG 不同：SVG 默认不描边，线条会看不见）。
 - `polygon`、`path`、`curve` 的 `fill` 默认 `none`。开口的 `curve` 写了 `fill` 也不填，并给出警告；要色块就加 `closed`。
 - `curve` 穿过 `points` 里的每个点，绘制时转成贝塞尔。两个点退化为直线。
 - 还支持 `stroke-linecap`、`stroke-linejoin`、`stroke-dasharray`。
+- `arrow` 是载入时注册的组件，不是单独的绘制种类。排版前展开成 `<g>`：一根 `<line>`，加一个张角 30° 的 `<polygon>`。`--emit` 仍写 `<arrow>`。同名再注册会换掉这一支。见第 15 章。
+
+### 7.3 分组 `g`
+
+`<g>` 放在 `layer` 里面，把几笔收成一组。它没有宽高，不建立新坐标系，子元素仍用 SVG 坐标。允许嵌套的形状、线条、`path`、`curve` 和 `<g>`。放进文字盒子或 flex 报 `invalid-child`。
+
+平移、旋转、缩放写 SVG 的 `transform`（`translate`、`rotate`、`scale`、`matrix`），只写在 `<g>` 上。`layer` 继续用 `x`、`y`、`rotate`、`scale`，不收成一条 `transform`。`fill`、`stroke` 从 `<g>` 传到子形状，子元素自己写了的优先。`opacity` 乘在这一组上。布局盒子是变换后的并集；父 `layer` 没写宽高时把这个范围算进去。
+
+```html
+<g transform="translate(12,8)" fill="#e8b04a">
+  <circle cx="0" cy="0" r="20" />
+</g>
+```
 
 ## 8. 填充 paint
 
@@ -552,7 +567,7 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 | `non-canonical` | info | 含义明确，但不是规范写法。照常渲染，`hint` 里是规范写法 |
 | `unknown-tag` | warn | 不认识的标签 |
 | `invalid-attr` | warn | 属性放错了位置，或两种写法混用。不认识的属性名不报，留给 `draw` |
-| `invalid-child` | warn | 非法子元素：线条放进 flex 容器，文字盒子里放了 `h1`–`h3`、`p`、`div` 或图片，`mask` 放错位置或一层写了多个 |
+| `invalid-child` | warn | 非法子元素：线条或 `g` 放进 flex 容器，文字盒子里放了 `h1`–`h3`、`p`、`div`、`g` 或图片，`mask` 放错位置或一层写了多个 |
 | `empty-mask` | warn | `mask` 里没有可用的形状或图片，不生效 |
 | `invalid-draw` | error / warn | `<draw>` 语法错误（error）或内容为空（warn） |
 | `missing-image` | warn | `img` 的 `src` 读不到 |
@@ -566,7 +581,7 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 | `emit-draw` | warn | `--emit` 时 `draw` 函数用了外部变量，或读不出函数体。按语法判断：字符串、注释，以及同一条声明里的多个名字，都不算外部变量。写出的 `<draw>` 可能跑不起来 |
 | `nondeterministic` | warn | `.tsx` 里调用了 `Math.random()`、`Date.now()`、`crypto.randomUUID()` 或 `crypto.getRandomValues()`。字符串、注释和类型里的同名文字不算。同一帧可能得到不同的图 |
 | `type-error` | error | `.tsx` 等源文件的 TypeScript 诊断。`.layer` 不跑类型检查 |
-| `measure-mismatch` | warn | `graphic.layer()` 量到的宽高和最终排版不一致。消息里带上两个尺寸。常见原因是 `maxWidth`、`safe` 或字号和最终画布不一样 |
+| `measure-mismatch` | warn | `canvas.create` 量到的宽高和最终排版不一致。消息里带上两个尺寸。常见原因是 `width`、`safe` 或字号和最终画布不一样 |
 
 每条问题都可以带 `hint`，是可以直接照做的改法。从 `.tsx` 来的节点，问题和元素还可以带 `source`，形如 `examples/hello.tsx:18:5`。`.layer` 解析出来的节点没有这个字段。Composition 抽查出来的问题带 `frame`，是这条问题第一次出现的帧号。同一条问题出现在多帧时合并，其余帧号写在消息末尾。
 
@@ -582,7 +597,7 @@ flexlayer render scene.tsx --frame 12 -o frame.png               # Composition �
 flexlayer render scene.tsx --frames out/                         # Composition 的每一帧
 ```
 
-`.tsx`、`.jsx`、`.ts`、`.js` 会先执行，并做类型检查，类型错误记为 `type-error`。标准库和 Node 的类型由渲染器自带，不依赖文件旁边的 `node_modules`。`import ... from 'node:fs'` 可以类型检查。不认识的属性名和 `.layer` 一样保留给 `draw`，不算 `type-error`。属性放错位置同样由检查报 `invalid-attr`，不记成类型错误。`import './x.tsx'` 这种带扩展名的引用可以通过。有类型错误时仍然出图，退出码为 1。文件里写 `/** @jsxImportSource @dc/flexlayer */`，标签和属性与 `.layer` 相同。默认导出一个 `<layer>` 节点，或返回该节点的函数。命名导出 `composition`（或默认导出）可以是第 13 章的 `Composition`。执行结果是同一棵节点树，后面的布局、问题码和绘制都不变。推荐先 `canvas()`，再用 `graphic.layer()` 量好后 `at()` 摆上去。`canvas()` 是同步的，准备在进程里记住，多帧不会重新开始。见第 15 章。`check` 在没有 `--frame` 时抽查第 0 帧、中间一帧和最后一帧。`--emit` 把树写回 `.layer`；`draw` 函数若用了外部变量，记 `emit-draw`，函数体仍会写出来。帧数超过 300 且没有 `--frame` 或 `--frames` 时不渲染联系表。
+`.tsx`、`.jsx`、`.ts`、`.js` 会先执行，并做类型检查，类型错误记为 `type-error`。标准库和 Node 的类型由渲染器自带，不依赖文件旁边的 `node_modules`。`import ... from 'node:fs'` 可以类型检查。不认识的属性名和 `.layer` 一样保留给 `draw`，不算 `type-error`。属性放错位置同样由检查报 `invalid-attr`，不记成类型错误。`import './x.tsx'` 这种带扩展名的引用可以通过。有类型错误时仍然出图，退出码为 1。文件里写 `/** @jsxImportSource @dc/flexlayer */`，标签和属性与 `.layer` 相同。默认导出一个 `<layer>` 节点，或返回该节点的函数。命名导出 `composition`（或默认导出）可以是第 13 章的 `Composition`。执行结果是同一棵节点树，后面的布局、问题码和绘制都不变。推荐用 `canvas.create(<layer>…</layer>)` 量好再摆。`create` 是同步的，准备在进程里记住，多帧不会重新开始。见第 15 章。`check` 在没有 `--frame` 时抽查第 0 帧、中间一帧和最后一帧。`--emit` 把树写回 `.layer`；`draw` 函数若用了外部变量，记 `emit-draw`，函数体仍会写出来。帧数超过 300 且没有 `--frame` 或 `--frames` 时不渲染联系表。
 
 默认字体寒蝉端黑体首次使用时自动下载到 `~/.cache/flexlayer/fonts`。
 
@@ -692,39 +707,46 @@ const { frames, contactSheet } = await renderComposition(scene)
 
 ## 15. 用 tsx 写 layer
 
-推荐用 `.tsx` 先量出每一块的盒子，再摆到画面上。`.layer` 仍是渲染器读的格式，`--emit` 把展开结果写回去。
+每一块都是 `canvas.create(<layer>…</layer>)`。参数必须已经是 `<layer>`，传入 `<h1>` 或 `<rect>` 会抛错。返回值就是这棵 `<layer>`，并带上量完之后的 `left`、`top`、`right`、`bottom`、`width`、`height`，供下一块的 `x`、`y` 使用。位置写在 `<layer>` 的 `x`、`y`、`anchor` 上。`.layer` 仍是渲染器读的格式，`--emit` 把展开结果写回去。
 
-`canvas()` 是同步的。字体、图片和 Yoga 在这一次调用里备好，并在进程里记住。后面再写一帧，或渲染一段视频，已经备过的直接接着用，不会重新下载、重新解码。返回的对象叫 `graphic`。`graphic.layer()` 也是同步的，`composition` 的 `component` 里可以调用。`canvas()` 放在 `component` 外面调用一次。
+`create` 是同步的。字体、图片和 Yoga 在这一次调用里备好，并在进程里记住。后面再写一帧，或渲染一段视频，已经备过的直接接着用，不会重新下载、重新解码。`composition` 的 `component` 里可以调用。
 
 ```tsx
 /** @jsxImportSource @dc/flexlayer */
 import { canvas } from '@dc/flexlayer'
 
-const graphic = canvas({
-  width: 720,
-  height: 540,
-  background: '#0c1424',
-  color: '#f4ecdf',
-  fontFamily: 'Kai',
-})
-const title = graphic.layer(<h1 style="font-size:160px; white-space:nowrap">春眠不觉晓</h1>)
-const ball = graphic.layer(<sphere cx="90" cy="90" r="90" fill="#e8b04a" />, {
-  perspective: 700,
-  glow: '40 #e8b04a88',
-})
-const t = title.fit({ width: graphic.width - 96 }).at({ x: 48, y: 48 })
-const b = ball.at({ x: t.left + 40, y: t.bottom + 32 })
-export default graphic.root(t, b)
+const page = { width: 720, height: 540 }
+
+const title = canvas.create(
+  <layer x={48} y={48} width={page.width - 96} color="#f4ecdf" font-family="Kai">
+    <h1 style="font-size:160px; white-space:nowrap">春眠不觉晓</h1>
+  </layer>,
+)
+const ball = canvas.create(
+  <layer x={title.left + 40} y={title.bottom + 32} perspective="700" glow="40 #e8b04a88">
+    <sphere cx="90" cy="90" r="90" fill="#e8b04a" />
+  </layer>,
+)
+
+export default canvas.create(
+  <layer width={page.width} height={page.height} color="#f4ecdf" font-family="Kai" safe="0">
+    <rect x="0" y="0" width={page.width} height={page.height} fill="#0c1424" />
+    {title}
+    {ball}
+  </layer>,
+)
 ```
 
 完整例子见 [examples/poster.tsx](examples/poster.tsx)、[examples/hello.tsx](examples/hello.tsx)。
 
-- `canvas({ width, height, background, color, fontFamily, safe, fonts, images, baseDir })` 同步返回。没写 `color` 是 `#111111`，没写 `fontFamily` 是 `ChillDuanSans`。没写 `safe` 时按画布短边的 4% 计算，和排版一致。`fonts` 写成 `{ 字体名: 文件路径 }`，出现在根上的 `<font>`。缺文件会直接抛出。`images` 里的路径会在这次调用里解码。这些准备留在进程里，下一次 `canvas()` 和后面的每一帧都接着用。
-- `graphic.layer(content, opts)` 同步量一块内容，返回 `width`、`height`（已经乘过 `scale`）、`scale`（开始是 1）、`ink`、`effect`、`issues`、`fit`、`scaled`、`at`。`opts` 写在外包的 `layer` 上，例如 `perspective`、`glow`、`shadow`、`grade`、`overlay`、`opacity`、`rotate`、`width`、`height`，以及量的时候用的 `maxWidth`。没写 `maxWidth` 时，用画布去掉 `safe` 之后的宽度。
-- 元素自己的 `style` 优先，其次用 `canvas()` 的颜色和字体，最后用规范默认值。
-- `fit({ width?, height?, by? })` 和 `scaled(k)` 返回新对象，不重新量，也不改原来的那一块。只缩小，不放大。`by: 'effect'` 按阴影和光晕的范围来缩，避免光晕被裁切。
-- `at({ x, y, anchor? })` 返回一个 `<layer>` 节点，并带上 `left`、`top`、`right`、`bottom`、`cx`、`cy`、`width`、`height`，都按缩放后的尺寸算。`scale` 不是 1 时，缩放支点 `origin` 跟着这次的 `anchor`。`anchor` 默认 `top-left`。
-- `graphic.root(...children)` 拼成根 `<layer>`，字体声明写在最前面。
-- 不经过 `canvas()` 的 `layer()` 用规范默认值，并且不按画布宽度换行。字体、图片和 Yoga 仍要先准备好，一般先 `canvas()`。同一进程里准备过的会接着用。
-- 最终排版和量到的盒子不一致时，报 `measure-mismatch`（warn），消息里带上两个尺寸。常见原因是量的时候的 `maxWidth`、`safe` 或字号和最终画布不一样。
+- 底色用铺满的 `<rect fill>`。`color`、`font-family` 写在 `<layer>` 上。没写 `color` 是 `#111111`，没写 `font-family` 是 `ChillDuanSans`。自定义字体写 `<font family src>`，放在页面那一层里。
+- 根上没写 `safe` 时，渲染按短边的 4%。页面不想要这条边距就写 `safe="0"`。`create` 和最终渲染用同一条可用宽度，避免 `measure-mismatch`。
+- 只写 `width` 或只写 `height`，且里面没有会换行的文字：另一边按比例放缩，放大缩小都做。`scale` 写回节点，`origin` 为 `top-left`。返回的宽高是缩放后的。
+- 会换行的文字：`width` 是行宽，高度是排出来的，不缩放。
+- 宽高都写了：就是盒子。子元素按自己的 `x`、`y` 摆，不整层缩放。页面用这个。
+- 都没写：保持量出来的大小。
+- 手写的 `.layer` 不走这套比例放缩。写了 `width` 仍是盒子。
+- `canvas.component(name, render)` 按标签名注册组件。`render` 收到属性，返回 `<g>`、形状或它们的数组。排版前展开，`.layer` 和 JSX 走同一条路。`--emit` 仍写原来的标签。未注册的标签报 `unknown-tag`。同名再注册会替换。JSX 里大写函数组件在 `jsx()` 里展开，和这个注册表互不替代。内置 `arrow` 用这个注册。
+
+最终排版和量到的盒子不一致时，报 `measure-mismatch`（warn），消息里带上两个尺寸。常见原因是 `width`、`safe` 或字号和最终画布不一样。
 

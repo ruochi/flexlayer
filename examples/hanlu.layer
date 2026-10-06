@@ -1,7 +1,7 @@
 <layer width="720" height="960" background="#0c1424" color="#f3ecdf" x="0" y="0">
   
   
-  <rect x1="0" y1="0" x2="720" y2="960" fill="linear-gradient(to bottom, #070d18, #16304c 58%, #8d907c)" />
+  <rect x="0" y="0" width="720" height="960" fill="linear-gradient(to bottom, #070d18, #16304c 58%, #8d907c)" />
   
   
   <circle cx="470" cy="230" r="74" fill="#f6f1e6" glow="64 #f4ecd8" />

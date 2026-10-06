@@ -47,6 +47,7 @@ function usesAttributes(node: FvgNode): boolean {
     node.tag === 'layer' ||
     node.tag === 'symbol' ||
     node.tag === 'use' ||
+    node.tag === 'g' ||
     isShapeTag(node.tag) ||
     isLineTag(node.tag) ||
     isMeshTag(node.tag) ||
@@ -245,27 +246,16 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
         ),
       )
     }
-    if ((node.tag === 'rect' || node.tag === 'ellipse') && hasTwoPoint(attrs)) {
-      // rect 的 rx 是圆角，可以和两点写法一起用。ellipse 的 rx、ry 才是半径。
-      const mixed =
-        present(attrs, 'width') ||
-        present(attrs, 'height') ||
-        present(attrs, 'x') ||
-        present(attrs, 'y') ||
-        present(attrs, 'cx') ||
-        present(attrs, 'cy') ||
-        (node.tag === 'ellipse' && (present(attrs, 'rx') || present(attrs, 'ry')))
-      if (mixed) {
-        out.push(
-          flagged(
-            'warn',
-            'invalid-attr',
-            path,
-            '两点写法和尺寸写法只能选一种，已按两点绘制',
-            '只保留 x1、y1、x2、y2。rect 用 x、y、width、height；ellipse 用 cx、cy、rx、ry',
-          ),
-        )
-      }
+    if ((node.tag === 'rect' || node.tag === 'ellipse') && (present(attrs, 'x1') || present(attrs, 'y1') || present(attrs, 'x2') || present(attrs, 'y2'))) {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-attr',
+          path,
+          node.tag === 'rect' ? 'rect 用 x、y、width、height' : 'ellipse 用 cx、cy、rx、ry',
+          node.tag === 'rect' ? '删掉 x1、y1、x2、y2，写成 x、y、width、height' : '删掉 x1、y1、x2、y2，写成 cx、cy、rx、ry',
+        ),
+      )
     }
     if (node.tag === 'circle' && (present(attrs, 'x1') || present(attrs, 'y1') || present(attrs, 'x2') || present(attrs, 'y2'))) {
       out.push(
@@ -278,6 +268,18 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
         ),
       )
     }
+  }
+
+  if (present(attrs, 'transform') && node.tag !== 'g') {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        'transform 只写在 g 上',
+        '分组用 <g transform="translate(12,8)">',
+      ),
+    )
   }
 
   if ((node.tag === 'layer' || node.tag === 'use') && present(attrs, 'background')) {
@@ -380,6 +382,18 @@ export function checkTextBoxChildren(node: FvgNode, path: string): Issue[] {
   for (const child of node.children) {
     if (typeof child === 'string') continue
     const tag = child.tag.toLowerCase()
+    if (tag === 'g') {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-child',
+          path,
+          'g 不能放在文字盒子里',
+          '包一层 layer，例如 <layer><g>…</g></layer>',
+        ),
+      )
+      continue
+    }
     if (isImageTag(tag)) {
       out.push(
         flagged(

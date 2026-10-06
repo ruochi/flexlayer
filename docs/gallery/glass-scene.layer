@@ -2,7 +2,7 @@
   
   
   
-  <rect x1="0" y1="0" x2="780" y2="1400" fill="linear-gradient(160deg, #1d2b64, #5b2a86 45%, #f0765a 80%, #ffcf7a)" />
+  <rect x="0" y="0" width="780" height="1400" fill="linear-gradient(160deg, #1d2b64, #5b2a86 45%, #f0765a 80%, #ffcf7a)" />
   
   
   <circle cx="580" cy="280" r="170" fill="#ff5aa5" opacity="0.85" />
@@ -14,22 +14,22 @@
   <circle cx="560" cy="1080" r="180" fill="#3ecf8e" opacity="0.8" />
   
   
-  <rect x1="0" y1="560" x2="780" y2="572" fill="#ffffff" opacity="0.8" />
+  <rect x="0" y="560" width="780" height="12" fill="#ffffff" opacity="0.8" />
   
   
-  <rect x1="0" y1="600" x2="780" y2="612" fill="#ffd23f" />
+  <rect x="0" y="600" width="780" height="12" fill="#ffd23f" />
   
   
-  <rect x1="0" y1="640" x2="780" y2="652" fill="#ffffff" opacity="0.8" />
+  <rect x="0" y="640" width="780" height="12" fill="#ffffff" opacity="0.8" />
   
   
-  <rect x1="0" y1="1230" x2="780" y2="1242" fill="#ffffff" opacity="0.8" />
+  <rect x="0" y="1230" width="780" height="12" fill="#ffffff" opacity="0.8" />
   
   
-  <rect x1="0" y1="1270" x2="780" y2="1282" fill="#ffd23f" />
+  <rect x="0" y="1270" width="780" height="12" fill="#ffd23f" />
   
   
-  <rect x1="0" y1="1310" x2="780" y2="1322" fill="#ffffff" opacity="0.8" />
+  <rect x="0" y="1310" width="780" height="12" fill="#ffffff" opacity="0.8" />
   
 
   
