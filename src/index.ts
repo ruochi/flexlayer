@@ -1,4 +1,5 @@
 export { renderFvg, checkFvg, renderLayer, checkLayer, type RenderResult } from './render.js'
+export { glyph, type Glyph, type GlyphInk, type GlyphOptions } from './glyph.js'
 export { renderComposition, interpolate, spring, sequence } from './frame.js'
 export type {
   Composition,

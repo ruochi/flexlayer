@@ -243,6 +243,52 @@ export async function ensureBuiltinFonts(families: Iterable<string>): Promise<vo
   }
 }
 
+export type OutlineFont = {
+  /** 调用方认识的名字，如 Kai */
+  family: string
+  /** 写进 SVG 的字体名。粗楷是 KaiBold 这种已经注册的文件名 */
+  canvasFamily: string
+  /** 轮廓实际对应的字重 */
+  weight: number
+}
+
+function variationWeight(family: string): { def: number } | null {
+  try {
+    if (!GlobalFonts.hasVariations(family, 400, 5, 0)) return null
+    const found = GlobalFonts.getVariationAxes(family, 400, 5, 0).find((item) => item.tag === WGHT_TAG)
+    return found ? { def: found.def } : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 轮廓用哪一个字体文件。
+ * 内置宋体、楷体按最近的字重文件选。可变字体的轮廓只在默认字重上，请求其它字重会抛错。
+ */
+export async function resolveOutlineFont(family: string | undefined, weight: number | undefined): Promise<OutlineFont> {
+  await ensureDefaultFont()
+  const requested = family?.trim() || DEFAULT_FONT_FAMILY
+  const builtin = builtinFont(requested)
+  if (builtin) {
+    await ensureBuiltinFonts([requested])
+    const face = nearestFace(builtin, weight ?? 400)
+    return { family: builtin.cssFamily, canvasFamily: face.registeredAs, weight: face.weight }
+  }
+  const name = requested.toLowerCase().includes('chillduan') ? DEFAULT_FONT_FAMILY : requested
+  if (!GlobalFonts.has(name)) {
+    throw new Error(`字体未注册: ${requested}。内置 Song、Kai、Brush，默认字体是 ${DEFAULT_FONT_FAMILY}`)
+  }
+  const axis = variationWeight(name)
+  if (axis) {
+    if (weight != null && weight !== axis.def) {
+      throw new Error(`可变字体 ${name} 的轮廓只能取默认字重 ${axis.def}，请求的是 ${weight}`)
+    }
+    return { family: name, canvasFamily: name, weight: axis.def }
+  }
+  return { family: name, canvasFamily: name, weight: effectiveFontWeight(name, weight ?? 400) }
+}
+
 /** 测量用：若默认字体未注册则尝试读缓存路径（测试可预先放入字体） */
 export async function initFontsForMeasure(options?: { fontsCacheDir?: string }): Promise<boolean> {
   if (options?.fontsCacheDir) setFontsCacheDir(options.fontsCacheDir)

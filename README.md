@@ -82,6 +82,24 @@ const root = h(
 await renderLayer(root)
 ```
 
+从字体取出某个字的轮廓。`d` 的原点在字身左上角，字宽和字身高度来自字体：
+
+```ts
+import { glyph, h, renderLayer } from '@dc/flexlayer'
+
+const [chun] = await glyph('春', { font: 'Kai', size: 200 })
+const root = h(
+  'layer',
+  { width: '640', height: '360', background: '#111111' },
+  h(
+    'layer',
+    { cx: '320', cy: '180', anchor: 'center', width: String(chun.width), height: String(chun.height) },
+    h('path', { d: chun.d, fill: '#f4ecdf' }),
+  ),
+)
+await renderLayer(root)
+```
+
 按帧生成一组 PNG 和一张联系表：
 
 ```ts
