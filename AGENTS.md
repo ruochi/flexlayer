@@ -87,7 +87,7 @@ import { renderLayer } from 'flexlayer'
 const { png, report } = await renderLayer(source, { baseDir: process.cwd() })
 ```
 
-从 `flexlayer` 拿出的就是这些。`renderFvg`、`checkFvg` 分别是 `renderLayer`、`checkLayer` 的别名。
+从 `flexlayer` 拿出的就是这些。`renderFvg`、`checkFvg` 分别是 `renderLayer`、`checkLayer` 的别名。包名没有作用域。合并旧分支时，导入、`jsxImportSource` 和 `package.json` 的 `name` 以 `flexlayer` 为准，不要把旧的作用域名字合回来。合完在仓库根目录再跑一次 `npm install`，本地 `node_modules/.package-lock.json` 才会换成新名字。
 
 | 导出 | 做什么 |
 | --- | --- |
