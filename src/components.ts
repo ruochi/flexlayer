@@ -1,4 +1,5 @@
 import { h } from './h.js'
+import type { JSX } from './jsx-runtime.js'
 import type { FvgChild, FvgNode } from './parse.js'
 
 export type ComponentProps = {
@@ -6,7 +7,14 @@ export type ComponentProps = {
   [key: string]: string | FvgChild[] | undefined
 }
 
-export type ComponentFn = (props: ComponentProps) => FvgNode | FvgChild[] | null | undefined
+export type ComponentResult = FvgNode | FvgChild[] | null | undefined
+
+export type ComponentFn = (props: ComponentProps) => ComponentResult
+
+/** 在 declare module 里声明过的标签，回调参数用那份属性；没声明的仍是宽松的 ComponentProps。 */
+type PropsOf<Name extends string> = Name extends keyof JSX.IntrinsicElements
+  ? JSX.IntrinsicElements[Name] & { children?: FvgChild[] }
+  : ComponentProps
 
 const REGISTRY_KEY = '__flexlayerComponents'
 
@@ -19,23 +27,28 @@ function registry(): Map<string, ComponentFn> {
   return g[REGISTRY_KEY]
 }
 
-export function registerComponent(name: string, render: ComponentFn) {
+export function registerComponent<Name extends string>(
+  name: Name,
+  render: (props: PropsOf<Name>) => ComponentResult,
+) {
   const key = name.trim().toLowerCase()
   if (!key) throw new Error('组件名不能为空')
-  registry().set(key, render)
+  registry().set(key, render as ComponentFn)
 }
 
 export function componentOf(name: string): ComponentFn | undefined {
   return registry().get(name.trim().toLowerCase())
 }
 
-function attr(props: ComponentProps, name: string): string | undefined {
-  const value = props[name]
-  return typeof value === 'string' ? value : undefined
+function attr(props: object, name: string): string | undefined {
+  const value = (props as Record<string, unknown>)[name]
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  return undefined
 }
 
 /** 内置箭头。展开成线加一个张角 30° 的三角。head 缺省是 max(12, stroke-width * 4)。 */
-export function arrowComponent(props: ComponentProps): FvgNode {
+export function arrowComponent(props: PropsOf<'arrow'>): FvgNode {
   const x1 = Number(attr(props, 'x1') ?? 0)
   const y1 = Number(attr(props, 'y1') ?? 0)
   const x2 = Number(attr(props, 'x2') ?? 0)

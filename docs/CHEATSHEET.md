@@ -1,12 +1,12 @@
 # Flex Layer 速查
 
-写法规则见 [AGENTS.md](../AGENTS.md) 的硬性约定。数字都是像素，y 轴向下。根元素 `<layer width height>` 就是一个 layer。推荐用 `.tsx` 的 `canvas.create(<layer>…</layer>)` 先量再摆，见 [examples/poster.tsx](../examples/poster.tsx)。`create` 是同步的，准备好的字体和图片会留在进程里，多帧接着用。自定义字体先 `canvas.font(family, src)`，或写进正在量的那一层。自定义标签用 `canvas.component` 注册，类型用 `declare module '@dc/flexlayer/jsx-runtime'`。同一套标签也可以手写进 `.layer`。`flexlayer render file.tsx` 会先执行再渲染。
+写法规则见 [AGENTS.md](../AGENTS.md) 的硬性约定。数字都是像素，y 轴向下。根元素 `<layer width height>` 就是一个 layer。推荐用 `.tsx` 的 `canvas.create(<layer>…</layer>)` 先量再摆，见 [examples/poster.tsx](../examples/poster.tsx)。`create` 是同步的，准备好的字体和图片会留在进程里，多帧接着用。自定义字体先 `canvas.font(family, src)`，或写进正在量的那一层。自定义标签用 `canvas.component` 注册。`declare module '@dc/flexlayer/jsx-runtime'` 里的属性就是回调参数的类型，返回值可以是一个元素或数组。同一套标签也可以手写进 `.layer`。`flexlayer render file.tsx` 会先执行再渲染。
 
 ## 结构
 
 | 标签 | 做什么 |
 | --- | --- |
-| `layer` | 根画布兼定位容器。根上写 `width` `height` `background`（画布底色）`color` `safe`；定位用 `x` `y` `anchor`（默认左上角，没写是 0），还有 `opacity` `rotate` `rotateX` `rotateY` `z` `scale` `origin`。`perspective` 只写在这一层，是直接子元素共用的视距。可嵌套 |
+| `layer` | 根画布兼定位容器。根上写 `width` `height` `background`（画布底色）`color` `safe`；满版出血写 `bleed`，着墨超出画布不再报 `overflow-canvas`。定位用 `x` `y` `anchor`（默认左上角，没写是 0），还有 `opacity` `rotate` `rotateX` `rotateY` `z` `scale` `origin`。`perspective` 只写在这一层，是直接子元素共用的视距。可嵌套 |
 | `draw` | 子标签。正文是 JS（`ctx`、`el`），画在父元素内容之后 |
 | `div` 写 `display:flex` | 排布。默认横向；竖排加 `flex-direction:column`。`gap` `align-items` `justify-content` `padding` 都在 `style` 里。**`align-items` 默认 `center`（CSS 里是 `stretch`）：column 忘写 `align-items` 会全部居中**。左对齐写 `align-items:flex-start`。`justify-content` 只管主轴，改不了这一层在父级交叉轴上的位置 |
 

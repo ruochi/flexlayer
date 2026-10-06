@@ -8,10 +8,13 @@ import type { FvgChild, FvgNode, SourceLoc } from './parse.js'
  * declare module '@dc/flexlayer/jsx-runtime' {
  *   namespace JSX {
  *     interface IntrinsicElements {
- *       badge: { fill?: string }
+ *       badge: { r: number; fill?: string }
  *     }
  *   }
  * }
+ *
+ * canvas.component('badge', (a) => ...) 的参数就是这份类型。a.r 是 number。
+ * render 可以返回一个元素，或元素数组。
  */
 export namespace JSX {
   export type Element = JsxTypes.Element
@@ -73,14 +76,25 @@ function createElement(type: JsxType, props: FvgProps | null, source?: JsxSource
   return node
 }
 
+type RenderFn<P> = (props: P) => FvgNode | FvgChild[] | null | undefined
+
+export function jsx(type: string, props: FvgProps | null, key?: string): FvgNode
+export function jsx(type: typeof Fragment, props: FvgProps | null, key?: string): FvgChild[]
+export function jsx<P>(type: RenderFn<P>, props: P | null, key?: string): FvgNode | FvgChild[] | null
 export function jsx(type: JsxType, props: FvgProps | null, _key?: string): FvgNode | FvgChild[] | null {
   return createElement(type, props)
 }
 
-export function jsxs(type: JsxType, props: FvgProps | null, key?: string): FvgNode | FvgChild[] | null {
-  return jsx(type, props, key)
+export function jsxs(type: string, props: FvgProps | null, key?: string): FvgNode
+export function jsxs(type: typeof Fragment, props: FvgProps | null, key?: string): FvgChild[]
+export function jsxs<P>(type: RenderFn<P>, props: P | null, key?: string): FvgNode | FvgChild[] | null
+export function jsxs(type: JsxType, props: FvgProps | null, _key?: string): FvgNode | FvgChild[] | null {
+  return createElement(type, props)
 }
 
+export function jsxDEV(type: string, props: FvgProps | null, key: string | undefined, isStatic: boolean, source?: JsxSource, self?: unknown): FvgNode
+export function jsxDEV(type: typeof Fragment, props: FvgProps | null, key: string | undefined, isStatic: boolean, source?: JsxSource, self?: unknown): FvgChild[]
+export function jsxDEV<P>(type: RenderFn<P>, props: P | null, key: string | undefined, isStatic: boolean, source?: JsxSource, self?: unknown): FvgNode | FvgChild[] | null
 export function jsxDEV(
   type: JsxType,
   props: FvgProps | null,

@@ -367,6 +367,8 @@ export type FvgDocument = {
   color: string
   fontFamily: string
   safe: { top: number; right: number; bottom: number; left: number }
+  /** 根 layer 写了 bleed。着墨超出画布不报 overflow-canvas。 */
+  bleed?: boolean
   root: LayerLayoutNode
   issues: Issue[]
   /** path → `file:line:column`。只有从 JSX 进来的树才有。 */

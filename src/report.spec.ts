@@ -79,7 +79,28 @@ describe('buildReport', () => {
 
   it('overflow-canvas', () => {
     const rep = buildReport(minimalDoc())
-    expect(rep.issues.some((i) => i.code === 'overflow-canvas')).toBe(true)
+    const hit = rep.issues.find((i) => i.code === 'overflow-canvas')
+    expect(hit?.level).toBe('error')
+  })
+
+  it('根上写 bleed 后，着墨超出画布不再报 overflow-canvas', async () => {
+    const source = `<layer width="100" height="100"><circle cx="0" cy="50" r="40" fill="#fff" /></layer>`
+    const blocked = await checkFvg(source)
+    const hit = blocked.issues.find((issue) => issue.code === 'overflow-canvas')
+    expect(hit?.level).toBe('error')
+    expect(hit?.hint).toContain('bleed')
+
+    const bled = await checkFvg(`<layer width="100" height="100" bleed><circle cx="0" cy="50" r="40" fill="#fff" /></layer>`)
+    expect(bled.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
+
+    const off = await checkFvg(`<layer width="100" height="100" bleed="0"><circle cx="0" cy="50" r="40" fill="#fff" /></layer>`)
+    expect(off.issues.some((issue) => issue.code === 'overflow-canvas' && issue.level === 'error')).toBe(true)
+
+    const nested = await checkFvg(
+      `<layer width="100" height="100"><layer bleed><circle cx="0" cy="50" r="40" fill="#fff" /></layer></layer>`,
+    )
+    expect(nested.issues.some((issue) => issue.code === 'overflow-canvas' && issue.level === 'error')).toBe(true)
+    expect(nested.issues.some((issue) => issue.message.includes('bleed 只写在根'))).toBe(true)
   })
 
   it('outside-safe', () => {

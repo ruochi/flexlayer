@@ -1,7 +1,7 @@
 import { applyToBox, aroundPivot, originOffset } from './matrix.js'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { registerComponent, type ComponentFn } from './components.js'
+import { registerComponent } from './components.js'
 import { ensureBuiltinFontsSync, fontReady, registerFontPath, resolveFontSrcSync } from './fonts.js'
 import { fontFamiliesOf, measureLayer, noteMeasuredSize, parseSafe, prepareAssetsSync, type MeasureEnv } from './layout.js'
 import type { FvgNode } from './parse.js'
@@ -217,7 +217,7 @@ function retiredCanvas(..._args: unknown[]): never {
 
 export const canvas = Object.assign(retiredCanvas, {
   create,
-  component: registerComponent as (name: string, render: ComponentFn) => void,
+  component: registerComponent,
   font(family: string, src: string) {
     registerFontPath(family, resolveFontSrcSync(src, layerBaseDir()))
   },
