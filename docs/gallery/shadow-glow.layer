@@ -1,27 +1,107 @@
-<layer width="1080" height="1100" background="#12161c" color="#e8e4dc" font-family="Kai">
+<layer width="1080" height="1100" background="#12161c" color="#e8e4dc" font-family="Kai" x="0" y="0">
+  
+  
   <rect x1="0" y1="0" x2="1080" y2="1100" fill="linear-gradient(to bottom, #0e1218, #1a2430 55%, #2a3540)" />
-  <layer cx="80" cy="48" anchor="top-left">
-    <h1 style="font-size:48px; color:#f2ebe0">投影与发光</h1>
+  
+  
+  <layer x="80" y="48">
+    
+    
+    <h1 style="font-size:48px; color:#f2ebe0">
+      投影与发光
+    </h1>
+    
+  
   </layer>
+  
 
-  <rect cx="220" cy="280" width="260" height="160" rx="20" fill="#3ecfc4" shadow="0 12 20 #00000088" />
+  
+  <rect width="260" height="160" rx="20" fill="#3ecfc4" shadow="0 12 20 #00000088" x="90" y="200" />
+  
+  
   <circle cx="540" cy="280" r="64" fill="#f4efe4" glow="36 #f4efe4" />
-  <rect cx="860" cy="280" width="260" height="160" rx="20" fill="#1e3a5f" shadow="0 10 16 #00000066" glow="22 #5b8fd4" />
-  <layer cx="220" cy="390" anchor="top"><p style="font-size:26px; color:#9aa7b5">shadow</p></layer>
-  <layer cx="540" cy="390" anchor="top"><p style="font-size:26px; color:#9aa7b5">glow</p></layer>
-  <layer cx="860" cy="390" anchor="top"><p style="font-size:26px; color:#9aa7b5">shadow + glow</p></layer>
+  
+  
+  <rect width="260" height="160" rx="20" fill="#1e3a5f" shadow="0 10 16 #00000066" glow="22 #5b8fd4" x="730" y="200" />
+  
+  
+  <layer x="173.98" y="390">
+    <p style="font-size:26px; color:#9aa7b5">
+      shadow
+    </p>
+  </layer>
+  
+  
+  <layer x="512.245" y="390">
+    <p style="font-size:26px; color:#9aa7b5">
+      glow
+    </p>
+  </layer>
+  
+  
+  <layer x="769.325" y="390">
+    <p style="font-size:26px; color:#9aa7b5">
+      shadow + glow
+    </p>
+  </layer>
+  
 
-  <rect cx="220" cy="580" width="260" height="160" rx="20" fill="#6aa1ff" inner-shadow="0 10 16 #00000099" />
-  <rect cx="540" cy="580" width="260" height="160" rx="20" fill="#142033" inner-glow="28 #7ec8ff" />
-  <rect cx="860" cy="580" width="260" height="160" rx="20" fill="#3ecfc4" noise="0.35 #ffffff" />
-  <layer cx="220" cy="690" anchor="top"><p style="font-size:26px; color:#9aa7b5">inner-shadow</p></layer>
-  <layer cx="540" cy="690" anchor="top"><p style="font-size:26px; color:#9aa7b5">inner-glow</p></layer>
-  <layer cx="860" cy="690" anchor="top"><p style="font-size:26px; color:#9aa7b5">noise</p></layer>
+  
+  <rect width="260" height="160" rx="20" fill="#6aa1ff" inner-shadow="0 10 16 #00000099" x="90" y="500" />
+  
+  
+  <rect width="260" height="160" rx="20" fill="#142033" inner-glow="28 #7ec8ff" x="410" y="500" />
+  
+  
+  <rect width="260" height="160" rx="20" fill="#3ecfc4" noise="0.35 #ffffff" x="730" y="500" />
+  
+  
+  <layer x="138.075" y="690">
+    <p style="font-size:26px; color:#9aa7b5">
+      inner-shadow
+    </p>
+  </layer>
+  
+  
+  <layer x="476.34" y="690">
+    <p style="font-size:26px; color:#9aa7b5">
+      inner-glow
+    </p>
+  </layer>
+  
+  
+  <layer x="827.94" y="690">
+    <p style="font-size:26px; color:#9aa7b5">
+      noise
+    </p>
+  </layer>
+  
 
+  
   <circle cx="400" cy="900" r="56" fill="#ff6b6b" />
+  
+  
   <circle cx="460" cy="900" r="56" fill="#4ecdc4" blend="multiply" />
+  
+  
   <circle cx="700" cy="900" r="56" fill="#ffe66d" />
+  
+  
   <circle cx="760" cy="900" r="56" fill="#ff6b6b" blend="screen" />
-  <layer cx="430" cy="990" anchor="top"><p style="font-size:26px; color:#9aa7b5">blend multiply</p></layer>
-  <layer cx="730" cy="990" anchor="top"><p style="font-size:26px; color:#9aa7b5">blend screen</p></layer>
+  
+  
+  <layer x="345.255" y="990">
+    <p style="font-size:26px; color:#9aa7b5">
+      blend multiply
+    </p>
+  </layer>
+  
+  
+  <layer x="651.535" y="990">
+    <p style="font-size:26px; color:#9aa7b5">
+      blend screen
+    </p>
+  </layer>
+  
+
 </layer>

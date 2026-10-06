@@ -24,6 +24,8 @@ const NAMED_POSITION: Record<string, ObjectPosition> = {
 }
 
 const cache = new Map<string, Promise<Image>>()
+const loaded = new Map<string, Image>()
+const failed = new Set<string>()
 
 function percentOf(token: string): number | null {
   if (!token.endsWith('%')) return null
@@ -131,13 +133,47 @@ function resolveImageKey(src: string, baseDir: string): string {
 /** 按路径、网址或 data URL 解码。同一 src 在一次进程里只加载一次。 */
 export async function loadLayerImage(src: string, baseDir: string): Promise<Image> {
   const key = resolveImageKey(src, baseDir)
+  const hit = loaded.get(key)
+  if (hit) return hit
   let pending = cache.get(key)
   if (!pending) {
-    pending = loadImage(key).catch((err: unknown) => {
-      cache.delete(key)
-      throw err
-    })
+    pending = loadImage(key)
+      .then((image) => {
+        loaded.set(key, image)
+        failed.delete(key)
+        return image
+      })
+      .catch((err: unknown) => {
+        cache.delete(key)
+        failed.add(key)
+        throw err
+      })
     cache.set(key, pending)
   }
   return pending
+}
+
+export type CachedImage = { status: 'ok'; image: Image } | { status: 'failed' } | { status: 'missing' }
+
+/** 同步取已经准备好的图片。没预先加载是 missing，加载失败是 failed。 */
+export function peekLayerImage(src: string, baseDir: string): CachedImage {
+  const key = resolveImageKey(src, baseDir)
+  const image = loaded.get(key)
+  if (image) return { status: 'ok', image }
+  if (failed.has(key)) return { status: 'failed' }
+  return { status: 'missing' }
+}
+
+/** 渲染前或 canvas() 里把图片放进缓存。失败记下来，排版时再报 missing-image。 */
+export async function preloadLayerImages(srcs: string[], baseDir: string): Promise<void> {
+  await Promise.all(
+    srcs.map(async (src) => {
+      if (!src.trim()) return
+      try {
+        await loadLayerImage(src, baseDir)
+      } catch {
+        failed.add(resolveImageKey(src, baseDir))
+      }
+    }),
+  )
 }

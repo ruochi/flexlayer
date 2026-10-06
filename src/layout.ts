@@ -10,7 +10,7 @@ import {
 import { attachDrawTags } from './draw-tag.js'
 import { parseGrade } from './grade.js'
 import { parseColor } from './gradientField.js'
-import { imageInk, loadLayerImage, parseObjectFit, parseObjectPosition } from './image.js'
+import { imageInk, peekLayerImage, preloadLayerImages, parseObjectFit, parseObjectPosition } from './image.js'
 import type { FvgNode } from './parse.js'
 import { parseFvg } from './parse.js'
 import { ensureBuiltinFonts, registerFontsFromDocument } from './fonts.js'
@@ -44,7 +44,7 @@ import {
   isTextBoxTag,
   layoutText,
 } from './text.js'
-import { checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, rowColumnHint } from './rules.js'
+import { checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, legacyCenterIssues, rowColumnHint } from './rules.js'
 import { canonicalTag, FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag } from './tags.js'
 import type {
   Anchor,
@@ -73,7 +73,7 @@ import type {
 } from './types.js'
 import { emptyBox, translateBox, unionBoxes } from './types.js'
 import { formatSourceLoc } from './source-loc.js'
-import { ensureYoga } from './yoga.js'
+import { ensureYoga, getYoga } from './yoga.js'
 
 export type LayoutContext = {
   color: string
@@ -97,8 +97,8 @@ function isClosedFlag(raw: string | undefined): boolean {
   return text !== 'false' && text !== '0' && text !== 'no'
 }
 
-function parseAnchor(raw: string | undefined): Anchor {
-  const v = (raw ?? 'center').trim().toLowerCase() as Anchor
+function parseAnchor(raw: string | undefined, fallback: Anchor = 'center'): Anchor {
+  const v = (raw ?? fallback).trim().toLowerCase() as Anchor
   const allowed: Anchor[] = [
     'center',
     'top',
@@ -136,7 +136,7 @@ function anchorTopLeft(cx: number, cy: number, w: number, h: number, anchor: Anc
   }
 }
 
-function parseSafe(raw: string | undefined, w: number, h: number): Edges {
+export function parseSafe(raw: string | undefined, w: number, h: number): Edges {
   const def = Math.round(Math.min(w, h) * 0.04)
   if (!raw?.trim()) return { top: def, right: def, bottom: def, left: def }
   const parts = raw.trim().split(/\s+/).map((p) => parsePx(p) ?? def)
@@ -611,10 +611,9 @@ function lineInk(geom: LineGeometry, box: Box, strokeWidth: number, head?: numbe
 
 function usesOwnCoords(node: FvgNode, kind: LayoutNode['kind']): boolean {
   if (kind === 'line') return true
-  if (kind !== 'shape' && kind !== 'custom') return false
-  if (node.tag === 'circle') return false
-  if (hasTwoPoint(node.attrs)) return true
-  return node.attrs.x != null || node.attrs.y != null
+  if (node.tag === 'circle' || node.tag === 'ellipse' || node.tag === 'sphere') return true
+  if (node.tag === 'rect') return true
+  return (kind === 'shape' || kind === 'custom') && hasTwoPoint(node.attrs)
 }
 
 function normalizeLineGeometry(geom: LineGeometry, box: Box): LineGeometry {
@@ -750,7 +749,7 @@ function displaySrc(src: string): string {
   return src.length > 160 ? `${src.slice(0, 157)}…` : src
 }
 
-async function layoutImage(node: FvgNode, ctx: LayoutContext): Promise<ImageLayoutNode> {
+function layoutImage(node: FvgNode, ctx: LayoutContext): ImageLayoutNode {
   warnNestedMasks(node, ctx)
   const style = parseStyle(node.attrs.style)
   const appearance = readHtmlAppearance(style)
@@ -775,15 +774,19 @@ async function layoutImage(node: FvgNode, ctx: LayoutContext): Promise<ImageLayo
   }
   let bitmap: ImageLayoutNode['bitmap'] = null
   if (node.attrs.src?.trim()) {
-    try {
-      bitmap = await loadLayerImage(node.attrs.src, ctx.baseDir)
-    } catch {
+    const peeked = peekLayerImage(node.attrs.src, ctx.baseDir)
+    if (peeked.status === 'ok') bitmap = peeked.image
+    else {
+      const shown = displaySrc(node.attrs.src.trim())
       ctx.issues.push({
         level: 'warn',
         code: 'missing-image',
         path: ctx.pathPrefix,
-        message: `图片无法加载: ${displaySrc(node.attrs.src.trim())}`,
-        hint: 'src 相对 .layer 所在目录，也可以写 http(s) 或 data URL',
+        message: `图片无法加载: ${shown}`,
+        hint:
+          peeked.status === 'missing'
+            ? `把这张图加进 canvas({ images: ['${shown}'] })`
+            : 'src 相对 .layer 所在目录，也可以写 http(s) 或 data URL',
       })
     }
   }
@@ -888,24 +891,27 @@ function layoutShape(node: FvgNode, ctx: LayoutContext, defaultStroke: string): 
     y = Math.min(y1, y2)
     w = Math.abs(x2 - x1)
     h = Math.abs(y2 - y1)
-  } else if (node.tag === 'rect' && (node.attrs.x != null || node.attrs.y != null)) {
+  } else if (node.tag === 'circle') {
+    const r = parseNumber(node.attrs.r) ?? 0
+    const cx = parseNumber(node.attrs.cx) ?? 0
+    const cy = parseNumber(node.attrs.cy) ?? 0
+    w = h = r * 2
+    x = cx - r
+    y = cy - r
+  } else if (node.tag === 'ellipse') {
+    const rx = parseNumber(node.attrs.rx) ?? 0
+    const ry = parseNumber(node.attrs.ry) ?? 0
+    const cx = parseNumber(node.attrs.cx) ?? 0
+    const cy = parseNumber(node.attrs.cy) ?? 0
+    w = rx * 2
+    h = ry * 2
+    x = cx - rx
+    y = cy - ry
+  } else if (node.tag === 'rect') {
     x = parseNumber(node.attrs.x) ?? 0
     y = parseNumber(node.attrs.y) ?? 0
     w = parseNumber(node.attrs.width) ?? w
     h = parseNumber(node.attrs.height) ?? h
-  } else {
-    if (node.tag === 'circle') {
-      const r = parseNumber(node.attrs.r) ?? 0
-      w = h = r * 2
-    }
-    if (node.tag === 'ellipse') {
-      w = (parseNumber(node.attrs.rx) ?? 0) * 2
-      h = (parseNumber(node.attrs.ry) ?? 0) * 2
-    }
-    if (node.tag === 'rect') {
-      w = parseNumber(node.attrs.width) ?? w
-      h = parseNumber(node.attrs.height) ?? h
-    }
   }
   const fillFallback = ctx.fillDefault ?? '#000000'
   const fill = readPaint(node.attrs.fill ?? fillFallback, fillFallback, ctx, 'fill')
@@ -976,6 +982,8 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
   warnNestedMasks(node, ctx)
   const appearance = readAttrAppearance(node.attrs)
   const fill = readPaint(node.attrs.fill ?? '#000000', '#000000', ctx, 'fill')
+  let x = 0
+  let y = 0
   let width = 0
   let height = 0
   let mesh: MeshLayoutNode['mesh']
@@ -990,8 +998,13 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
         hint: '例如 <sphere cx="220" cy="340" r="90" />',
       })
     }
-    width = height = Math.max(0, r) * 2
-    mesh = { type: 'sphere', r: Math.max(0, r) }
+    const radius = Math.max(0, r)
+    const cx = parseNumber(node.attrs.cx) ?? 0
+    const cy = parseNumber(node.attrs.cy) ?? 0
+    width = height = radius * 2
+    x = cx - radius
+    y = cy - radius
+    mesh = { type: 'sphere', r: radius }
   } else if (node.tag === 'box') {
     width = parseNumber(node.attrs.width) ?? 0
     height = parseNumber(node.attrs.height) ?? 0
@@ -1001,7 +1014,7 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
         code: 'invalid-attr',
         path: ctx.pathPrefix,
         message: 'box 需要正的 width 和 height',
-        hint: '例如 <box cx="430" cy="400" width="150" height="100" depth="60" />',
+        hint: '例如 <box x="355" y="350" width="150" height="100" depth="60" />',
       })
     }
     const depth = readDepth(node.attrs.depth, Math.min(width, height), ctx, 'box')
@@ -1072,8 +1085,8 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
     path: ctx.pathPrefix,
     id: node.attrs.id,
     tag: node.tag,
-    x: 0,
-    y: 0,
+    x,
+    y,
     width,
     height,
     ink: { x: 0, y: 0, width, height },
@@ -1184,7 +1197,7 @@ function warnMisplacedFont(ctx: LayoutContext, path: string) {
   })
 }
 
-async function measureFlexChild(node: FvgNode, ctx: LayoutContext, direction: 'row' | 'column'): Promise<FlexMeasure | null> {
+function measureFlexChild(node: FvgNode, ctx: LayoutContext, direction: 'row' | 'column'): FlexMeasure | null {
   if (node.tag === 'symbol' || node.tag === 'draw') return null
   if (node.tag === 'mask') {
     ctx.issues.push({
@@ -1202,7 +1215,7 @@ async function measureFlexChild(node: FvgNode, ctx: LayoutContext, direction: 'r
   }
   ctx.issues.push(...checkChildAttrs(node, 'flex', ctx.pathPrefix))
   if (node.tag === 'use') {
-    const used = await layoutUse(node, ctx)
+    const used = layoutUse(node, ctx)
     if (!used) return null
     return {
       node: used,
@@ -1227,7 +1240,7 @@ async function measureFlexChild(node: FvgNode, ctx: LayoutContext, direction: 'r
     return null
   }
   if (isDisplayFlex(node.attrs.style) && isTextBoxTag(node.tag)) {
-    const nested = await layoutFlex(node, ctx)
+    const nested = layoutFlex(node, ctx)
     return {
       node: nested,
       minMain: direction === 'row' ? nested.width : nested.height,
@@ -1238,7 +1251,7 @@ async function measureFlexChild(node: FvgNode, ctx: LayoutContext, direction: 'r
     }
   }
   if (isImageTag(node.tag)) {
-    const laid = await layoutImage(node, ctx)
+    const laid = layoutImage(node, ctx)
     return {
       node: laid,
       minMain: direction === 'row' ? laid.width : laid.height,
@@ -1267,7 +1280,7 @@ async function measureFlexChild(node: FvgNode, ctx: LayoutContext, direction: 'r
         code: 'missing-model',
         path: ctx.pathPrefix,
         message: 'model 没有可放入的宽高',
-        hint: '外包一层有宽高的 layer，例如 <layer width="200" height="200"><model src="hero.glb" /></layer>',
+        hint: '外包一层有宽高的 layer，例如 <layer x="220" y="80" width="200" height="200"><model src="hero.glb" /></layer>',
       })
     }
     return {
@@ -1291,7 +1304,7 @@ async function measureFlexChild(node: FvgNode, ctx: LayoutContext, direction: 'r
     }
   }
   if (node.tag === 'layer') {
-    const nested = await layoutLayer(node, ctx)
+    const nested = layoutLayer(node, ctx)
     return {
       node: nested,
       minMain: direction === 'row' ? nested.width : nested.height,
@@ -1316,7 +1329,7 @@ async function measureFlexChild(node: FvgNode, ctx: LayoutContext, direction: 'r
   return null
 }
 
-async function layoutFlex(node: FvgNode, ctx: LayoutContext): Promise<FlexLayoutNode> {
+function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
   const style = parseStyle(node.attrs.style)
   const direction = flexDirectionOf(style)
   const appearance = readHtmlAppearance(style)
@@ -1333,7 +1346,7 @@ async function layoutFlex(node: FvgNode, ctx: LayoutContext): Promise<FlexLayout
     const ch = childNodes[i]!
     const path = nodePath(ctx.pathPrefix, ch.tag, i)
     track(ctx, path, ch)
-    const m = await measureFlexChild(ch, { ...ctx, pathPrefix: path }, direction)
+    const m = measureFlexChild(ch, { ...ctx, pathPrefix: path }, direction)
     if (m) measures.push(m)
   }
 
@@ -1349,7 +1362,7 @@ async function layoutFlex(node: FvgNode, ctx: LayoutContext): Promise<FlexLayout
             Math.max(0, ...measures.map((m) => (Number.isFinite(m.preferredCross) ? m.preferredCross : 0))),
           )
 
-  const Yoga = await ensureYoga()
+  const Yoga = getYoga()
   const config = Yoga.Config.create()
   config.setUseWebDefaults(true)
   // Text children are re-laid out at their Yoga width; pixel rounding could shave off a fraction and force a wrap.
@@ -1464,7 +1477,7 @@ async function layoutFlex(node: FvgNode, ctx: LayoutContext): Promise<FlexLayout
   }
 }
 
-async function layoutUse(node: FvgNode, ctx: LayoutContext): Promise<LayerLayoutNode | null> {
+function layoutUse(node: FvgNode, ctx: LayoutContext): LayerLayoutNode | null {
   warnNestedMasks(node, ctx)
   const href = (node.attrs.href || node.attrs['xlink:href'] || '').trim()
   const id = href.startsWith('#') ? href.slice(1) : href
@@ -1474,7 +1487,7 @@ async function layoutUse(node: FvgNode, ctx: LayoutContext): Promise<LayerLayout
       code: 'invalid-attr',
       path: ctx.pathPrefix,
       message: 'use 缺少 href',
-      hint: '写成 <use href="#petal" cx="120" cy="80" />',
+      hint: '写成 <use href="#petal" x="120" y="80" />',
     })
     return null
   }
@@ -1504,7 +1517,7 @@ async function layoutUse(node: FvgNode, ctx: LayoutContext): Promise<LayerLayout
   const attrs: Record<string, string> = {}
   if (width != null) attrs.width = String(width)
   if (height != null) attrs.height = String(height)
-  const laid = await layoutLayer(
+  const laid = layoutLayer(
     { tag: 'layer', attrs, children: symbol.children },
     { ...ctx, useStack: [...ctx.useStack, id] },
   )
@@ -1522,26 +1535,26 @@ async function layoutUse(node: FvgNode, ctx: LayoutContext): Promise<LayerLayout
   }
 }
 
-function placeInLayer(node: FvgNode, laid: LayoutNode, layerW: number, layerH: number) {
+function placeInLayer(node: FvgNode, laid: LayoutNode) {
   if (usesOwnCoords(node, laid.kind)) return
   const html = isHtmlTag(node.tag)
-  const cx = html ? undefined : parseNumber(node.attrs.cx)
-  const cy = html ? undefined : parseNumber(node.attrs.cy)
-  const anchor = html ? 'center' : parseAnchor(node.attrs.anchor)
-  const tl = anchorTopLeft(cx ?? layerW / 2, cy ?? layerH / 2, laid.width, laid.height, anchor)
+  const x = html ? 0 : (parseNumber(node.attrs.x) ?? 0)
+  const y = html ? 0 : (parseNumber(node.attrs.y) ?? 0)
+  const anchor = html ? 'top-left' : parseAnchor(node.attrs.anchor, 'top-left')
+  const tl = anchorTopLeft(x, y, laid.width, laid.height, anchor)
   laid.x = tl.x
   laid.y = tl.y
 }
 
 /** 把 mask 里的形状和图片排进 layer 的局部坐标。空的或全被忽略时不生效。 */
-async function layoutMask(maskNode: FvgNode, ctx: LayoutContext, layerW: number, layerH: number): Promise<LayoutNode[] | undefined> {
+function layoutMask(maskNode: FvgNode, ctx: LayoutContext): LayoutNode[] | undefined {
   if (maskNode.attrs.style != null && maskNode.attrs.style.trim() !== '') {
     ctx.issues.push({
       level: 'warn',
       code: 'invalid-attr',
       path: ctx.pathPrefix,
       message: 'mask 不使用 style',
-      hint: '形状用属性写 fill、cx、cy；图片的宽高写在 img 的 style 上',
+      hint: '形状用属性写 fill、x、y 或 cx、cy；图片的宽高写在 img 的 style 上',
     })
   }
   const children = maskNode.children.filter((c) => typeof c !== 'string') as FvgNode[]
@@ -1563,11 +1576,11 @@ async function layoutMask(maskNode: FvgNode, ctx: LayoutContext, layerW: number,
     }
     ctx.issues.push(...checkChildAttrs(ch, 'layer', path))
     const node = isImageTag(ch.tag)
-      ? await layoutImage(ch, sub)
+      ? layoutImage(ch, sub)
       : isShapeTag(ch.tag)
         ? layoutShape(ch, sub, ctx.color)
         : layoutLineNode(ch, sub, ctx.color)
-    placeInLayer(ch, node, layerW, layerH)
+    placeInLayer(ch, node)
     laid.push(node)
   }
   if (laid.length === 0) {
@@ -1583,7 +1596,7 @@ async function layoutMask(maskNode: FvgNode, ctx: LayoutContext, layerW: number,
   return laid
 }
 
-async function layoutLayer(node: FvgNode, ctx: LayoutContext): Promise<LayerLayoutNode> {
+function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
   const appearance = readAttrAppearance(node.attrs)
   // 根节点的 background 是画布底色，由 paintDocument 绘制。layer 自身不填色。
   appearance.background = undefined
@@ -1613,10 +1626,9 @@ async function layoutLayer(node: FvgNode, ctx: LayoutContext): Promise<LayerLayo
   }
   const placed: Array<{
     child: LayoutNode
-    cx?: number
-    cy?: number
+    x: number
+    y: number
     anchor: Anchor
-    useDefaultCenter: boolean
     coords: boolean
   }> = []
 
@@ -1637,73 +1649,46 @@ async function layoutLayer(node: FvgNode, ctx: LayoutContext): Promise<LayerLayo
     ctx.issues.push(...checkChildAttrs(ch, 'layer', path))
     const subCtx = { ...ctx, pathPrefix: path }
     let laid: LayoutNode | null = null
-    if (ch.tag === 'use') laid = await layoutUse(ch, subCtx)
+    if (ch.tag === 'use') laid = layoutUse(ch, subCtx)
     else if (isLineTag(ch.tag)) laid = layoutLineNode(ch, subCtx, ctx.color)
-    else if (isDisplayFlex(ch.attrs.style) && isTextBoxTag(ch.tag)) laid = await layoutFlex(ch, subCtx)
-    else if (isImageTag(ch.tag)) laid = await layoutImage(ch, subCtx)
+    else if (isDisplayFlex(ch.attrs.style) && isTextBoxTag(ch.tag)) laid = layoutFlex(ch, subCtx)
+    else if (isImageTag(ch.tag)) laid = layoutImage(ch, subCtx)
     else if (isTextBoxTag(ch.tag)) laid = layoutTextBox(ch, subCtx, ctx.maxContentWidth)
     else if (isShapeTag(ch.tag)) laid = layoutShape(ch, subCtx, ctx.color)
     else if (isMeshTag(ch.tag)) laid = layoutMesh(ch, subCtx)
-    else if (ch.tag === 'layer') laid = await layoutLayer(ch, subCtx)
+    else if (ch.tag === 'layer') laid = layoutLayer(ch, subCtx)
     else {
       laid = layoutUnknownOrCustom(ch, subCtx)
     }
     if (!laid) continue
     const html = isHtmlTag(ch.tag)
-    const cx = html ? undefined : parseNumber(ch.attrs.cx)
-    const cy = html ? undefined : parseNumber(ch.attrs.cy)
     placed.push({
       child: laid,
-      cx: cx ?? undefined,
-      cy: cy ?? undefined,
-      anchor: html ? 'center' : parseAnchor(ch.attrs.anchor),
-      useDefaultCenter: cx == null || cy == null,
+      x: html ? 0 : (parseNumber(ch.attrs.x) ?? 0),
+      y: html ? 0 : (parseNumber(ch.attrs.y) ?? 0),
+      anchor: html ? 'top-left' : parseAnchor(ch.attrs.anchor, 'top-left'),
       coords: usesOwnCoords(ch, laid.kind),
     })
   }
 
-  let layerW = fixedW ?? 0
-  let layerH = fixedH ?? 0
-
-  const positionOne = (p: (typeof placed)[0], lw: number, lh: number) => {
+  const positionOne = (p: (typeof placed)[0]) => {
     if (p.coords) return
-    const cx = p.cx ?? lw / 2
-    const cy = p.cy ?? lh / 2
-    const tl = anchorTopLeft(cx, cy, p.child.width, p.child.height, p.anchor)
+    const tl = anchorTopLeft(p.x, p.y, p.child.width, p.child.height, p.anchor)
     p.child.x = tl.x
     p.child.y = tl.y
   }
+  for (const p of placed) positionOne(p)
 
-  // 原点固定在左上角。负坐标的内容可以画出盒子，但不会把其他子元素一起平移。
-  const bothFixed = (fixedW ?? 0) > 0 && (fixedH ?? 0) > 0
-  if (bothFixed) {
-    layerW = fixedW!
-    layerH = fixedH!
-    for (const p of placed) positionOne(p, layerW, layerH)
-  } else {
-    for (const p of placed) {
-      if (!p.useDefaultCenter) positionOne(p, 0, 0)
-    }
-    let maxRight = 0
-    let maxBottom = 0
-    let maxDefaultW = 0
-    let maxDefaultH = 0
-    for (const p of placed) {
-      const explicit = p.coords || !p.useDefaultCenter
-      if (explicit) {
-        maxRight = Math.max(maxRight, p.child.x + p.child.width)
-        maxBottom = Math.max(maxBottom, p.child.y + p.child.height)
-      } else {
-        maxDefaultW = Math.max(maxDefaultW, p.child.width)
-        maxDefaultH = Math.max(maxDefaultH, p.child.height)
-      }
-    }
-    layerW = fixedW != null && fixedW > 0 ? fixedW : Math.max(0, maxRight, maxDefaultW)
-    layerH = fixedH != null && fixedH > 0 ? fixedH : Math.max(0, maxBottom, maxDefaultH)
-    for (const p of placed) {
-      if (p.useDefaultCenter && !p.coords) positionOne(p, layerW, layerH)
-    }
+  // 原点固定在左上角。没写宽高时，大小等于从原点到子元素右下角。负坐标可以画出盒子，但不会把其他子元素一起平移。
+  let maxRight = 0
+  let maxBottom = 0
+  for (const p of placed) {
+    maxRight = Math.max(maxRight, p.child.x + p.child.width)
+    maxBottom = Math.max(maxBottom, p.child.y + p.child.height)
   }
+  const layerW = fixedW != null && fixedW > 0 ? fixedW : Math.max(0, maxRight)
+  const layerH = fixedH != null && fixedH > 0 ? fixedH : Math.max(0, maxBottom)
+  noteMeasureMismatch(node, layerW, layerH, ctx)
 
   for (const p of placed) {
     const child = p.child
@@ -1720,7 +1705,7 @@ async function layoutLayer(node: FvgNode, ctx: LayoutContext): Promise<LayerLayo
         code: 'missing-model',
         path: child.path,
         message: 'model 没有可放入的宽高',
-        hint: '外包一层有宽高的 layer，例如 <layer width="200" height="200"><model src="hero.glb" /></layer>',
+        hint: '外包一层有宽高的 layer，例如 <layer x="220" y="80" width="200" height="200"><model src="hero.glb" /></layer>',
       })
     }
   }
@@ -1750,7 +1735,7 @@ async function layoutLayer(node: FvgNode, ctx: LayoutContext): Promise<LayerLayo
     }
   }
   const mask = chosenMask
-    ? await layoutMask(chosenMask, { ...ctx, pathPrefix: chosenMaskPath }, layerW, layerH)
+    ? layoutMask(chosenMask, { ...ctx, pathPrefix: chosenMaskPath })
     : undefined
   if (node.attrs.mask != null && node.attrs.mask.trim() !== '') {
     ctx.issues.push({
@@ -1828,6 +1813,169 @@ function collectFontFamilies(node: FvgNode, out: Set<string>) {
   }
 }
 
+function collectImageSrcs(node: FvgNode, out: string[]) {
+  if ((node.tag === 'img' || node.tag === 'image') && node.attrs.src?.trim()) out.push(node.attrs.src)
+  for (const child of node.children) {
+    if (typeof child !== 'string') collectImageSrcs(child, out)
+  }
+}
+
+const measuredBoxes = new WeakMap<FvgNode, { width: number; height: number }>()
+
+/** graphic.layer() 量到的布局尺寸。最终排版不一致时报 measure-mismatch。 */
+export function noteMeasuredSize(node: FvgNode, width: number, height: number) {
+  measuredBoxes.set(node, { width, height })
+}
+
+function formatSize(n: number): string {
+  const rounded = Math.round(n * 10) / 10
+  return String(Object.is(rounded, -0) ? 0 : rounded)
+}
+
+function noteMeasureMismatch(node: FvgNode, width: number, height: number, ctx: LayoutContext) {
+  const expected = measuredBoxes.get(node)
+  if (!expected) return
+  if (Math.abs(expected.width - width) <= 0.5 && Math.abs(expected.height - height) <= 0.5) return
+  ctx.issues.push({
+    level: 'warn',
+    code: 'measure-mismatch',
+    path: ctx.pathPrefix,
+    message: `排版尺寸 ${formatSize(width)}×${formatSize(height)} 和量到的 ${formatSize(expected.width)}×${formatSize(expected.height)} 不一致`,
+    hint: '量的时候和最终画布的可用宽度要一致。检查 maxWidth、safe 和字号',
+  })
+}
+
+export type MeasureEnv = {
+  baseDir: string
+  color: string
+  fontFamily: string
+  maxContentWidth: number
+}
+
+/** 同步量一个 layer。字体、图片和 Yoga 需要先准备好。 */
+export function measureLayer(node: FvgNode, env: MeasureEnv): { laid: LayerLayoutNode; issues: Issue[] } {
+  const issues: Issue[] = []
+  const symbols = new Map<string, FvgNode>()
+  collectSymbols(node, symbols, issues, 'layer')
+  attachDrawTags(node, issues, 'layer')
+  const ctx: LayoutContext = {
+    color: env.color,
+    fontFamily: env.fontFamily,
+    maxContentWidth: env.maxContentWidth,
+    issues,
+    pathPrefix: 'layer',
+    symbols,
+    useStack: [],
+    baseDir: env.baseDir,
+    sources: new Map(),
+  }
+  track(ctx, 'layer', node)
+  return { laid: layoutLayer(node, ctx), issues }
+}
+
+export type LayoutAssets = {
+  baseDir: string
+}
+
+export type PrepareOptions = {
+  /** 写在根外面的 <font>，或 canvas({ fonts }) */
+  fonts?: Array<{ family: string; src: string }>
+  /** canvas({ images }) 里预先加载的图 */
+  images?: string[]
+  fontFamily?: string
+}
+
+/** 异步准备：字体、图片、Yoga。排版本身不再等待。 */
+export async function prepareAssets(root: FvgNode | null, baseDir: string, options: PrepareOptions = {}): Promise<LayoutAssets> {
+  await ensureYoga()
+  const fontNodes = [...(options.fonts ?? [])]
+  if (root) {
+    for (const child of root.children) {
+      if (typeof child === 'string') continue
+      const font = fontDecl(child)
+      if (font) fontNodes.push(font)
+    }
+  }
+  await registerFontsFromDocument(
+    fontNodes.filter((font) => font.family && font.src),
+    baseDir,
+  )
+  const families = new Set<string>([options.fontFamily ?? root?.attrs['font-family'] ?? 'ChillDuanSans'])
+  if (root) collectFontFamilies(root, families)
+  await ensureBuiltinFonts(families)
+  const srcs = [...(options.images ?? [])]
+  if (root) collectImageSrcs(root, srcs)
+  await preloadLayerImages(srcs, baseDir)
+  return { baseDir }
+}
+
+export function readLayerRoot(source: string | FvgNode): { root: FvgNode; fonts: Array<{ family: string; src: string }> } {
+  const nodes = typeof source === 'string' ? parseFvg(source) : [source]
+  for (const node of nodes) canonicalizeTree(node)
+  const fonts: Array<{ family: string; src: string }> = []
+  let root: FvgNode | null = null
+  for (const node of nodes) {
+    const font = fontDecl(node)
+    if (font) fonts.push(font)
+    else if (!root) root = node
+  }
+  if (!root) throw new Error('Flex Layer 缺少根元素 <layer>')
+  return { root, fonts }
+}
+
+/** 同步排版。调用前要先 prepareAssets，否则 Yoga 没加载，图片也读不到。 */
+export function layoutSync(rootNode: FvgNode, assets: LayoutAssets): FvgDocument {
+  const baseDir = assets.baseDir
+  const attrs = rootNode.attrs
+  const width = parseNumber(attrs.width) ?? 1080
+  const height = parseNumber(attrs.height) ?? 1920
+  const color = attrs.color ?? '#111111'
+  const fontFamily = attrs['font-family'] ?? 'ChillDuanSans'
+  const safe = parseSafe(attrs.safe, width, height)
+  const maxContentWidth = width - safe.left - safe.right
+
+  const issues: Issue[] = []
+  const sources = new Map<string, string>()
+  const symbols = new Map<string, FvgNode>()
+  collectSymbols(rootNode, symbols, issues, 'layer')
+  if (attrs.style?.trim()) {
+    issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: 'layer',
+      message: 'layer 和图形不使用 style',
+      hint: '把 width、opacity 写成属性。色块用 rect / HTML / <draw>',
+    })
+  }
+  if (rootNode.tag !== 'layer') {
+    throw new Error(`Flex Layer 根元素必须是 <layer>，收到 <${rootNode.tag}>`)
+  }
+  noteTagSpellings(rootNode, 'layer', issues)
+  issues.push(...legacyCenterIssues(rootNode, 'layer'))
+  attachDrawTags(rootNode, issues, 'layer')
+  const paintCtx: LayoutContext = {
+    color,
+    fontFamily,
+    maxContentWidth,
+    issues,
+    pathPrefix: 'layer',
+    symbols,
+    useStack: [],
+    baseDir,
+    sources,
+  }
+  track(paintCtx, 'layer', rootNode)
+  const hadBackground = attrs.background != null && attrs.background.trim() !== ''
+  const background = hadBackground ? readPaint(attrs.background, '#ffffff', paintCtx, 'background') : '#ffffff'
+  const root = layoutLayer(rootNode, paintCtx)
+
+  root.width = width
+  root.height = height
+  issues.push(...perspectiveIssues(root))
+
+  return { width, height, background, color, fontFamily, safe, root, issues, sources }
+}
+
 function canonicalizeTree(node: FvgNode): void {
   const next = canonicalTag(node.tag)
   if (next !== node.tag) {
@@ -1859,76 +2007,9 @@ function noteTagSpellings(node: FvgNode, path: string, issues: Issue[]): void {
 }
 
 export async function layoutSource(source: string | FvgNode, baseDir: string): Promise<FvgDocument> {
-  const nodes = typeof source === 'string' ? parseFvg(source) : [source]
-  for (const node of nodes) canonicalizeTree(node)
-  const fontNodes: Array<{ family: string; src: string }> = []
-  let rootNode: FvgNode | null = null
-  for (const n of nodes) {
-    const font = fontDecl(n)
-    if (font) fontNodes.push(font)
-    else if (!rootNode) rootNode = n
-  }
-  if (rootNode) {
-    for (const child of rootNode.children) {
-      if (typeof child === 'string') continue
-      const font = fontDecl(child)
-      if (font) fontNodes.push(font)
-    }
-  }
-  if (!rootNode) throw new Error('Flex Layer 缺少根元素 <layer>')
-  await registerFontsFromDocument(fontNodes.filter((f) => f.family && f.src), baseDir)
-
-  const attrs = rootNode.attrs
-  const width = parseNumber(attrs.width) ?? 1080
-  const height = parseNumber(attrs.height) ?? 1920
-  const color = attrs.color ?? '#111111'
-  const fontFamily = attrs['font-family'] ?? 'ChillDuanSans'
-  const safe = parseSafe(attrs.safe, width, height)
-  const maxContentWidth = width - safe.left - safe.right
-
-  const issues: Issue[] = []
-  const sources = new Map<string, string>()
-  const symbols = new Map<string, FvgNode>()
-  collectSymbols(rootNode, symbols, issues, 'layer')
-  const families = new Set<string>([fontFamily])
-  collectFontFamilies(rootNode, families)
-  await ensureBuiltinFonts(families)
-  if (attrs.style?.trim()) {
-    issues.push({
-      level: 'warn',
-      code: 'invalid-attr',
-      path: 'layer',
-      message: 'layer 和图形不使用 style',
-      hint: '把 width、opacity 写成属性。色块用 rect / HTML / <draw>',
-    })
-  }
-  // 根必须是 layer；旧写法 <fvg> / <layer> 已在解析时归一成 layer
-  if (rootNode.tag !== 'layer') {
-    throw new Error(`Flex Layer 根元素必须是 <layer>，收到 <${rootNode.tag}>`)
-  }
-  noteTagSpellings(rootNode, 'layer', issues)
-  attachDrawTags(rootNode, issues, 'layer')
-  const paintCtx: LayoutContext = {
-    color,
-    fontFamily,
-    maxContentWidth,
-    issues,
-    pathPrefix: 'layer',
-    symbols,
-    useStack: [],
-    baseDir,
-    sources,
-  }
-  track(paintCtx, 'layer', rootNode)
-  const hadBackground = attrs.background != null && attrs.background.trim() !== ''
-  const background = hadBackground ? readPaint(attrs.background, '#ffffff', paintCtx, 'background') : '#ffffff'
-  const root = await layoutLayer(rootNode, paintCtx)
-
-  root.width = width
-  root.height = height
-  issues.push(...perspectiveIssues(root))
-
-  return { width, height, background, color, fontFamily, safe, root, issues, sources }
+  const opened = readLayerRoot(source)
+  const assets = await prepareAssets(opened.root, baseDir, { fonts: opened.fonts })
+  return layoutSync(opened.root, assets)
 }
 
 export type { FvgDocument }

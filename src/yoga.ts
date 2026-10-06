@@ -13,3 +13,9 @@ export async function ensureYoga(): Promise<YogaApi> {
   if (!yogaApi) throw new Error('Yoga 未加载')
   return yogaApi
 }
+
+/** 同步取已加载的 Yoga。先调用 ensureYoga。 */
+export function getYoga(): YogaApi {
+  if (!yogaApi) throw new Error('Yoga 未加载，先调用 prepareAssets')
+  return yogaApi
+}

@@ -49,7 +49,7 @@ describe('绘制', () => {
 
   it('同一 symbol 可以摆两次', async () => {
     const { png } = await renderFvg(
-      `<layer width="80" height="40" background="#ffffff"><symbol id="dot"><circle cx="8" cy="8" r="6" fill="#ff0000" /></symbol><use href="#dot" cx="16" cy="20" /><use href="#dot" cx="56" cy="20" /></layer>`,
+      `<layer width="80" height="40" background="#ffffff"><symbol id="dot"><circle cx="8" cy="8" r="6" fill="#ff0000" /></symbol><use href="#dot" x="8" y="12" /><use href="#dot" x="48" y="12" /></layer>`,
     )
     const { at } = await pixels(png)
     expect(at(16, 20)[0]).toBeGreaterThan(200)
@@ -59,10 +59,10 @@ describe('绘制', () => {
 
   it('内阴影压暗圆角矩形内侧', async () => {
     const { png, report } = await renderFvg(
-      `<layer width="120" height="80" background="#ffffff"><rect cx="60" cy="40" width="80" height="50" rx="8" fill="#6aa1ff" inner-shadow="0 6 8 #000000aa" /></layer>`,
+      `<layer width="120" height="80" background="#ffffff"><rect x="20" y="15" width="80" height="50" rx="8" fill="#6aa1ff" inner-shadow="0 6 8 #000000aa" /></layer>`,
     )
     const plain = await renderFvg(
-      `<layer width="120" height="80" background="#ffffff"><rect cx="60" cy="40" width="80" height="50" rx="8" fill="#6aa1ff" /></layer>`,
+      `<layer width="120" height="80" background="#ffffff"><rect x="20" y="15" width="80" height="50" rx="8" fill="#6aa1ff" /></layer>`,
     )
     const { at } = await pixels(png)
     const base = await pixels(plain.png)
@@ -76,10 +76,10 @@ describe('绘制', () => {
 
   it('图层模糊把硬边染开', async () => {
     const sharp = await renderFvg(
-      `<layer width="80" height="80" background="#000000"><rect cx="40" cy="40" width="20" height="20" fill="#ffffff" /></layer>`,
+      `<layer width="80" height="80" background="#000000"><rect x="30" y="30" width="20" height="20" fill="#ffffff" /></layer>`,
     )
     const soft = await renderFvg(
-      `<layer width="80" height="80" background="#000000"><rect cx="40" cy="40" width="20" height="20" fill="#ffffff" blur="6" /></layer>`,
+      `<layer width="80" height="80" background="#000000"><rect x="30" y="30" width="20" height="20" fill="#ffffff" blur="6" /></layer>`,
     )
     const a = await pixels(sharp.png)
     const b = await pixels(soft.png)
@@ -93,7 +93,7 @@ describe('绘制', () => {
       `<layer width="120" height="80" background="#102038">
         <rect x="0" y="0" width="120" height="80" fill="#204060" />
         <rect x="0" y="30" width="120" height="8" fill="#f4efe4" />
-        <rect cx="60" cy="40" width="70" height="40" rx="8" fill="#ffffff55" ${backdrop} />
+        <rect x="25" y="20" width="70" height="40" rx="8" fill="#ffffff55" ${backdrop} />
       </layer>`
     const withBlur = await renderFvg(scene('backdrop-blur="8"'))
     const without = await renderFvg(scene(''))
@@ -105,10 +105,10 @@ describe('绘制', () => {
   })
   it('filter grayscale 去掉饱和色', async () => {
     const color = await renderFvg(
-      `<layer width="40" height="40" background="#000000"><rect cx="20" cy="20" width="30" height="30" fill="#ff0000" /></layer>`,
+      `<layer width="40" height="40" background="#000000"><rect x="5" y="5" width="30" height="30" fill="#ff0000" /></layer>`,
     )
     const gray = await renderFvg(
-      `<layer width="40" height="40" background="#000000"><rect cx="20" cy="20" width="30" height="30" fill="#ff0000" filter="grayscale(1)" /></layer>`,
+      `<layer width="40" height="40" background="#000000"><rect x="5" y="5" width="30" height="30" fill="#ff0000" filter="grayscale(1)" /></layer>`,
     )
     const c = await pixels(color.png)
     const g = await pixels(gray.png)
@@ -118,7 +118,7 @@ describe('绘制', () => {
 
   it('noise 与 blend 进入报告', async () => {
     const { report } = await renderFvg(
-      `<layer width="60" height="60" background="#112233"><rect cx="30" cy="30" width="40" height="40" fill="#3ecfc4" noise="0.2" blend="multiply" inner-glow="10 #ffffff" /></layer>`,
+      `<layer width="60" height="60" background="#112233"><rect x="10" y="10" width="40" height="40" fill="#3ecfc4" noise="0.2" blend="multiply" inner-glow="10 #ffffff" /></layer>`,
     )
     const el = report.elements.find((e) => e.tag === 'rect')
     expect(el?.noise).toEqual({ amount: 0.2 })
@@ -129,15 +129,15 @@ describe('绘制', () => {
   it('layer overlay 纯色叠加变暗，并进入报告', async () => {
     const plain = await renderFvg(
       `<layer width="80" height="80" background="#000000">
-        <layer width="60" height="60" cx="40" cy="40">
-          <rect cx="30" cy="30" width="60" height="60" fill="#ffffff" />
+        <layer x="10" y="10" width="60" height="60">
+          <rect x="0" y="0" width="60" height="60" fill="#ffffff" />
         </layer>
       </layer>`,
     )
     const over = await renderFvg(
       `<layer width="80" height="80" background="#000000">
-        <layer width="60" height="60" cx="40" cy="40" overlay="#00000088">
-          <rect cx="30" cy="30" width="60" height="60" fill="#ffffff" />
+        <layer x="10" y="10" width="60" height="60" overlay="#00000088">
+          <rect x="0" y="0" width="60" height="60" fill="#ffffff" />
         </layer>
       </layer>`,
     )
@@ -154,7 +154,7 @@ describe('绘制', () => {
     const { png, report } = await renderFvg(
       `<layer width="100" height="40" background="#ffffff">
         <layer width="100" height="40" overlay="linear-gradient(to right, #ff0000, #0000ff) multiply">
-          <rect cx="50" cy="20" width="100" height="40" fill="#ffffff" />
+          <rect x="0" y="0" width="100" height="40" fill="#ffffff" />
         </layer>
       </layer>`,
     )
@@ -171,8 +171,8 @@ describe('绘制', () => {
   it('layer grade 调整子树颜色，报告里有展开后的参数', async () => {
     const { png, report } = await renderFvg(
       `<layer width="80" height="80" background="#000000">
-        <layer width="60" height="60" cx="40" cy="40" grade="mono, contrast 1">
-          <rect cx="30" cy="30" width="60" height="60" fill="#e04020" />
+        <layer x="10" y="10" width="60" height="60" grade="mono, contrast 1">
+          <rect x="0" y="0" width="60" height="60" fill="#e04020" />
         </layer>
       </layer>`,
     )
@@ -186,8 +186,8 @@ describe('绘制', () => {
   it('grade-mask 透明处保持原图', async () => {
     const { png } = await renderFvg(
       `<layer width="100" height="40" background="#000000">
-        <layer width="100" height="40" cx="50" cy="20" grade="mono" grade-mask="linear-gradient(to right, #fff0 50%, #fff 50%)">
-          <rect cx="50" cy="20" width="100" height="40" fill="#e04020" />
+        <layer x="0" y="0" width="100" height="40" grade="mono" grade-mask="linear-gradient(to right, #fff0 50%, #fff 50%)">
+          <rect x="0" y="0" width="100" height="40" fill="#e04020" />
         </layer>
       </layer>`,
     )
@@ -207,8 +207,8 @@ describe('绘制', () => {
   it('grade 之后再叠 noise，颗粒不被染色', async () => {
     const scene = (grade: string) =>
       `<layer width="60" height="60" background="#808080">
-        <layer width="40" height="40" cx="30" cy="30" border="40px solid #808080" noise="0.6 #ff0000" ${grade}>
-          <rect cx="20" cy="20" width="40" height="40" fill="#808080" />
+        <layer x="10" y="10" width="40" height="40" border="40px solid #808080" noise="0.6 #ff0000" ${grade}>
+          <rect x="0" y="0" width="40" height="40" fill="#808080" />
         </layer>
       </layer>`
     const graded = await pixels((await renderFvg(scene('grade="mono"'))).png)
@@ -225,7 +225,7 @@ describe('绘制', () => {
   it('Rect 上的 overlay 不生效', async () => {
     const { png, report } = await renderFvg(
       `<layer width="60" height="60" background="#000000">
-        <rect cx="30" cy="30" width="40" height="40" fill="#ffffff" overlay="#ff0000" />
+        <rect x="10" y="10" width="40" height="40" fill="#ffffff" overlay="#ff0000" />
       </layer>`,
     )
     const { at } = await pixels(png)
@@ -264,7 +264,7 @@ describe('绘制', () => {
     // 「一」只有中间横笔；红影右移 20px。盒子上沿内侧若出现红斑，说明仍按 box 投影。
     const { png, report } = await renderFvg(
       `<layer width="200" height="100" background="#ffffff" color="#0000ff">
-        <layer cx="100" cy="50">
+        <layer x="100" y="50" anchor="center">
           <h1 style="font-size:64px; color:#0000ff; shadow:20 0 0 #ff0000">一</h1>
         </layer>
       </layer>`,
@@ -293,7 +293,7 @@ describe('绘制', () => {
     const { png } = await renderFvg(`
       <layer width="160" height="90" background="#000000">
         <line x1="10" y1="20" x2="150" y2="20" stroke="#ffffff" stroke-width="4" stroke-dasharray="12 12" />
-        <rect cx="80" cy="60" width="120" height="28" fill="none" stroke="#ffffff" stroke-width="4" stroke-dasharray="12,12" />
+        <rect x="20" y="46" width="120" height="28" fill="none" stroke="#ffffff" stroke-width="4" stroke-dasharray="12,12" />
       </layer>
     `)
     const { at } = await pixels(png)
@@ -314,8 +314,8 @@ describe('绘制', () => {
   it('layer 上的 shadow 跟着子树，透视和网格也能投下', async () => {
     const flat = await renderFvg(`
       <layer width="200" height="160" background="#ffffff">
-        <layer cx="100" cy="60" width="80" height="40" shadow="0 28 0 #ff0000">
-          <rect cx="40" cy="20" width="80" height="40" fill="#0000ff" />
+        <layer x="60" y="40" width="80" height="40" shadow="0 28 0 #ff0000">
+          <rect x="0" y="0" width="80" height="40" fill="#0000ff" />
         </layer>
       </layer>
     `)
@@ -328,8 +328,8 @@ describe('绘制', () => {
 
     const inside = await checkFvg(`
       <layer width="200" height="160" background="#ffffff">
-        <layer cx="100" cy="60" width="80" height="40" shadow="0 28 0 #ff0000">
-          <rect cx="40" cy="20" width="80" height="40" fill="#0000ff" />
+        <layer x="60" y="40" width="80" height="40" shadow="0 28 0 #ff0000">
+          <rect x="0" y="0" width="80" height="40" fill="#0000ff" />
         </layer>
       </layer>
     `)
@@ -337,8 +337,8 @@ describe('绘制', () => {
 
     const tilted = await renderFvg(`
       <layer width="240" height="220" background="#ffffff" perspective="800">
-        <layer cx="120" cy="80" width="100" height="50" rotateY="18" shadow="0 36 0 #ff0000">
-          <rect cx="50" cy="25" width="100" height="50" fill="#0000ff" />
+        <layer x="70" y="55" width="100" height="50" rotateY="18" shadow="0 36 0 #ff0000">
+          <rect x="0" y="0" width="100" height="50" fill="#0000ff" />
         </layer>
       </layer>
     `)
@@ -354,7 +354,7 @@ describe('绘制', () => {
 
     const mesh = await renderFvg(`
       <layer width="180" height="150" background="#ffffff" perspective="500" shadow="0 48 0 #ff0000">
-        <box cx="90" cy="50" width="40" height="36" depth="16" fill="#0000ff" />
+        <box x="70" y="32" width="40" height="36" depth="16" fill="#0000ff" />
       </layer>
     `)
     const scene = await pixels(mesh.png)
@@ -382,7 +382,7 @@ describe('绘制', () => {
 
     const layer = await renderFvg(`
       <layer width="160" height="160" background="#101014">
-        <layer cx="80" cy="80" width="120" height="120" glow="0 #ff88aa" shadow="0 0 0 #000000">
+        <layer x="20" y="20" width="120" height="120" glow="0 #ff88aa" shadow="0 0 0 #000000">
           <circle cx="60" cy="60" r="40" fill="none" stroke="#2244aa" stroke-width="8" />
         </layer>
       </layer>

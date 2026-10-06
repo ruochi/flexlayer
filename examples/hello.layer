@@ -1,12 +1,40 @@
-<layer width="1080" height="1920" background="#0f1115" color="#ffffff">
-  <layer cx="540" cy="700">
+<layer width="1080" height="1920" background="#0f1115" color="#ffffff" x="0" y="0">
+  
+  
+  <layer x="300" y="584.4">
+    
+    
     <div style="display:flex; flex-direction:column; gap:32px; align-items:center">
-      <h1 style="font-size:96px; color:#fff">比特币减半</h1>
+      
+      
+      <h1 style="font-size:96px; color:#fff">
+        比特币减半
+      </h1>
+      
+      
       <div style="display:flex; gap:24px">
-        <div style="padding:16px 28px; background:#f7931a; border-radius:999px; font-size:40px; color:#111">2024</div>
-        <div style="padding:16px 28px; border:2px solid #f7931a; border-radius:999px; font-size:40px; color:#fff">3.125 BTC</div>
+        
+        
+        <div style="padding:16px 28px; background:#f7931a; border-radius:999px; font-size:40px; color:#111">
+          2024
+        </div>
+        
+        
+        <div style="padding:16px 28px; border:2px solid #f7931a; border-radius:999px; font-size:40px; color:#fff">
+          3.125 BTC
+        </div>
+        
+      
       </div>
+      
+    
     </div>
+    
+  
   </layer>
+  
+  
   <circle cx="540" cy="1300" r="180" fill="none" stroke="#f7931a" stroke-width="12" />
+  
+
 </layer>

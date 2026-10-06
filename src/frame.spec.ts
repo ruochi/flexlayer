@@ -32,7 +32,7 @@ const slide: Composition = {
     h(
       'layer',
       { width: '32', height: '32', background: '#000000' },
-      h('rect', { width: '8', height: '32', cx: String(4 + frame * 8), cy: '16', fill: '#ffffff' }),
+      h('rect', { width: '8', height: '32', x: String(frame * 8), y: '0', fill: '#ffffff' }),
     ),
 }
 
@@ -45,8 +45,8 @@ describe('el.t', () => {
       h('rect', {
         width: '10',
         height: '10',
-        cx: '20',
-        cy: '20',
+        x: '15',
+        y: '15',
         fill: '#000000',
         draw: (_ctx, el) => {
           seen.push(el.t)
