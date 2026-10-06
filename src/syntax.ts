@@ -300,28 +300,210 @@ export function readDrawFunction(source: string): DrawSource | null {
   return { body, free }
 }
 
-function propertyCallName(expression: ts.Expression): string | undefined {
-  const callee = unwrap(expression)
-  if (!ts.isPropertyAccessExpression(callee) || !ts.isIdentifier(callee.expression) || !ts.isIdentifier(callee.name)) return
-  return `${callee.expression.text}.${callee.name.text}`
+const NONDET_PROPS: Record<string, ReadonlySet<string>> = {
+  Math: new Set(['random']),
+  Date: new Set(['now']),
+  crypto: new Set(['randomUUID', 'getRandomValues']),
 }
 
-/** 源码里真正调用了 `Math.random()` 这一类函数的位置。字符串、注释和类型位置不算。 */
+type AliasScope = { aliases: Map<string, string | false>; parent: AliasScope | null }
+
+function aliasScope(parent: AliasScope | null): AliasScope {
+  return { aliases: new Map(), parent }
+}
+
+function lookupAlias(scope: AliasScope | null, name: string): string | undefined {
+  let current = scope
+  while (current) {
+    const aliases = current.aliases
+    if (aliases.has(name)) {
+      const bound = aliases.get(name)
+      return bound || undefined
+    }
+    current = current.parent
+  }
+  return undefined
+}
+
+function memberOf(expression: ts.Expression): { object: string; prop: string } | undefined {
+  const callee = unwrap(expression)
+  if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression) && ts.isIdentifier(callee.name)) {
+    return { object: callee.expression.text, prop: callee.name.text }
+  }
+  if (
+    ts.isElementAccessExpression(callee) &&
+    ts.isIdentifier(callee.expression) &&
+    callee.argumentExpression &&
+    ts.isStringLiteral(callee.argumentExpression)
+  ) {
+    return { object: callee.expression.text, prop: callee.argumentExpression.text }
+  }
+  return undefined
+}
+
+function canonicalMember(object: string, prop: string): string | undefined {
+  if (!NONDET_PROPS[object]?.has(prop)) return undefined
+  const name = `${object}.${prop}`
+  return NONDET_CALLS.has(name) ? name : undefined
+}
+
+/** 这个表达式本身是不是 `Math.random` 那一类函数，或指向它的局部名字。调用不算。 */
+function aliasValue(expression: ts.Expression, scope: AliasScope | null): string | undefined {
+  const expr = unwrap(expression)
+  if (ts.isCallExpression(expr)) return undefined
+  const member = memberOf(expr)
+  if (member) {
+    const direct = canonicalMember(member.object, member.prop)
+    if (direct) return direct
+  }
+  if (ts.isIdentifier(expr)) return lookupAlias(scope, expr.text)
+  return undefined
+}
+
+function calledName(expression: ts.Expression, scope: AliasScope | null): string | undefined {
+  const expr = unwrap(expression)
+  const member = memberOf(expr)
+  if (member) {
+    const direct = canonicalMember(member.object, member.prop)
+    if (direct) return direct
+  }
+  if (ts.isIdentifier(expr)) return lookupAlias(scope, expr.text)
+  return undefined
+}
+
+function shadowBindingName(name: ts.BindingName, scope: AliasScope): void {
+  if (ts.isIdentifier(name)) {
+    scope.aliases.set(name.text, false)
+    return
+  }
+  for (const element of name.elements) {
+    if (ts.isBindingElement(element)) shadowBindingName(element.name, scope)
+  }
+}
+
+function bindAliasDecl(decl: ts.VariableDeclaration, scope: AliasScope | null): void {
+  if (!scope) return
+  if (!decl.initializer || !ts.isIdentifier(decl.name)) {
+    if (ts.isObjectBindingPattern(decl.name) && decl.initializer) bindObjectPattern(decl.name, decl.initializer, scope)
+    return
+  }
+  const canonical = aliasValue(decl.initializer, scope)
+  if (canonical) scope.aliases.set(decl.name.text, canonical)
+}
+
+function bindObjectPattern(pattern: ts.ObjectBindingPattern, initializer: ts.Expression, scope: AliasScope): void {
+  const object = unwrap(initializer)
+  if (!ts.isIdentifier(object)) return
+  const props = NONDET_PROPS[object.text]
+  if (!props) return
+  for (const element of pattern.elements) {
+    if (!ts.isBindingElement(element) || !ts.isIdentifier(element.name)) continue
+    const prop = element.propertyName && ts.isIdentifier(element.propertyName) ? element.propertyName.text : element.name.text
+    const canonical = canonicalMember(object.text, prop)
+    if (canonical) scope.aliases.set(element.name.text, canonical)
+  }
+}
+
+function prebindLexical(statement: ts.Statement, scope: AliasScope): void {
+  if (!ts.isVariableStatement(statement) || isVarList(statement.declarationList)) return
+  for (const decl of statement.declarationList.declarations) shadowBindingName(decl.name, scope)
+}
+
+/** 源码里真正调用了 `Math.random()` 这一类函数的位置。字符串、注释和类型位置不算。别名和 `Math['random']()` 也算。 */
 export function nondeterministicCalls(source: string, fileName: string): CallSite[] {
   const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.ES2022, true, scriptKind(fileName))
   const found: CallSite[] = []
-  const walk = (node: ts.Node): void => {
+  const visitNode = (node: ts.Node, scope: AliasScope | null): void => {
+    if (ts.isTypeNode(node) || ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node)) return
+    if (isValueFunction(node)) {
+      const inner = aliasScope(scope)
+      for (const param of node.parameters) shadowBindingName(param.name, inner)
+      if (node.body) visitNode(node.body, inner)
+      return
+    }
+    if (ts.isBlock(node)) {
+      const inner = aliasScope(scope)
+      for (const statement of node.statements) prebindLexical(statement, inner)
+      for (const statement of node.statements) visitNode(statement, inner)
+      return
+    }
+    if (ts.isVariableStatement(node) && !isVarList(node.declarationList)) {
+      for (const decl of node.declarationList.declarations) {
+        if (decl.initializer) visitNode(decl.initializer, scope)
+        bindAliasDecl(decl, scope)
+      }
+      return
+    }
     if (ts.isCallExpression(node)) {
-      const name = propertyCallName(node.expression)
-      if (name && NONDET_CALLS.has(name)) {
+      const name = calledName(node.expression, scope)
+      if (name) {
         const start = node.expression.getStart(sf)
         const pos = sf.getLineAndCharacterOfPosition(start)
         found.push({ name, line: pos.line + 1, column: pos.character + 1 })
       }
     }
-    if (ts.isTypeNode(node) || ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node)) return
-    ts.forEachChild(node, walk)
+    ts.forEachChild(node, (child) => visitNode(child, scope))
   }
-  walk(sf)
+  visitNode(sf, aliasScope(null))
   return found
+}
+
+function jsxTagText(name: ts.JsxTagNameExpression): string | undefined {
+  return ts.isIdentifier(name) ? name.text.toLowerCase() : undefined
+}
+
+function jsxAttrText(attr: ts.JsxAttribute): string | undefined {
+  const init = attr.initializer
+  if (!init) return undefined
+  if (ts.isStringLiteral(init)) return init.text
+  if (ts.isJsxExpression(init) && init.expression && ts.isStringLiteral(init.expression)) return init.expression.text
+  return undefined
+}
+
+function fontFaceOf(el: ts.JsxOpeningElement | ts.JsxSelfClosingElement): { family: string; src: string } | null {
+  if (jsxTagText(el.tagName) !== 'font') return null
+  let family = ''
+  let src = ''
+  for (const prop of el.attributes.properties) {
+    if (!ts.isJsxAttribute(prop) || !ts.isIdentifier(prop.name)) continue
+    const value = jsxAttrText(prop)
+    if (value == null) continue
+    if (prop.name.text === 'family') family = value
+    if (prop.name.text === 'src') src = value
+  }
+  if (!family || !src) return null
+  return { family, src }
+}
+
+/**
+ * 根 `<layer>` 直接子元素里的 `<font family src>`。
+ * 只认字符串字面量。嵌套 layer 里的 font 布局时不会注册，这里也不算。
+ */
+export function staticLayerFonts(source: string, fileName: string): Array<{ family: string; src: string }> {
+  const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.ES2022, true, scriptKind(fileName))
+  const out: Array<{ family: string; src: string }> = []
+  const visit = (node: ts.Node, insideLayer: boolean): void => {
+    if (ts.isJsxElement(node)) {
+      const tag = jsxTagText(node.openingElement.tagName)
+      const root = tag === 'layer' && !insideLayer
+      if (root) {
+        for (const child of node.children) {
+          const el = ts.isJsxElement(child)
+            ? child.openingElement
+            : ts.isJsxSelfClosingElement(child)
+              ? child
+              : null
+          if (!el) continue
+          const font = fontFaceOf(el)
+          if (font) out.push(font)
+        }
+      }
+      const nested = insideLayer || tag === 'layer'
+      for (const child of node.children) visit(child, nested)
+      return
+    }
+    ts.forEachChild(node, (child) => visit(child, insideLayer))
+  }
+  visit(sf, false)
+  return out
 }

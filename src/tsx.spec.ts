@@ -1,4 +1,5 @@
 import { mkdtemp, writeFile } from 'node:fs/promises'
+import { chdir } from 'node:process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -131,6 +132,32 @@ describe('JSX 类型', () => {
     expect(typeMessages(file)).toEqual([])
   })
 
+  it('HTML 上的 fill、stroke、points、d 报 invalid-attr', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'flexlayer-html-attr-'))
+    const file = join(dir, 'ink.tsx')
+    await writeFile(
+      file,
+      `export default (
+        <layer width="80" height="40" background="#000">
+          <p fill="#fff" stroke="#000" points="0,0 1,1" d="M0 0" style="font-size:16px">字</p>
+          <circle cx="20" cy="20" r="8" fill="#fff" />
+        </layer>
+      )
+      `,
+    )
+    expect(typecheckLayerFile(file)).toEqual([])
+    const loaded = await loadLayerFile(file)
+    expect(loaded.kind).toBe('node')
+    if (loaded.kind !== 'node') return
+    const report = await checkFvg(loaded.node, { baseDir: dir })
+    const html = report.issues.filter((issue) => issue.code === 'invalid-attr' && issue.path.includes('p['))
+    expect(html.map((issue) => issue.message).join(' ')).toMatch(/fill/)
+    expect(html.map((issue) => issue.message).join(' ')).toMatch(/stroke/)
+    expect(html.map((issue) => issue.message).join(' ')).toMatch(/points/)
+    expect(html.map((issue) => issue.message).join(' ')).toMatch(/d/)
+    expect(report.issues.some((issue) => issue.code === 'invalid-attr' && issue.path.includes('circle['))).toBe(false)
+  })
+
   it('写错位置的属性由检查报 invalid-attr，类型检查不报', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'flexlayer-types-'))
     const cases = [
@@ -192,7 +219,8 @@ describe('emitLayer', () => {
     )
     const emitted = emitLayer(node)
     expect(emitted.issues.map((issue) => issue.code)).toContain('emit-draw')
-    expect(emitted.source).toContain('color')
+    expect(emitted.source).not.toContain('<draw>')
+    expect(emitted.source).not.toContain('color')
   })
 
   it('同一行声明的多个变量不算外部引用', () => {
@@ -220,6 +248,15 @@ describe('emitLayer', () => {
     expect(read?.free).toEqual([])
     expect(nondeterministicCalls(`const label = 'Math.random()'\n// Date.now()\ntype Now = typeof Date.now\n`, 'quiet.tsx')).toEqual([])
     expect(nondeterministicCalls(`const n = Date.now()\n`, 'clock.ts').map((call) => call.name)).toEqual(['Date.now'])
+    expect(
+      nondeterministicCalls(
+        `const rnd = Math.random\nrnd()\nMath['random']()\nMath["random"]()\nconst { random } = Math\nrandom()\nconst { now: clock } = Date\nclock()\nconst again = rnd\nagain()\n`,
+        'alias.tsx',
+      ).map((call) => call.name),
+    ).toEqual(['Math.random', 'Math.random', 'Math.random', 'Math.random', 'Date.now', 'Math.random'])
+    expect(
+      nondeterministicCalls(`const rnd = Math.random\nfunction f(rnd: () => number) { rnd() }\n`, 'shadow.tsx'),
+    ).toEqual([])
   })
 
   it('换行声明、解构和内层函数都不算外部变量', () => {
@@ -240,6 +277,25 @@ describe('emitLayer', () => {
       },
     })
     expect(emitLayer(node).issues).toEqual([])
+  })
+
+  it('文字和表达式挨在一起时，写回的 .layer 不插入空格', async () => {
+    const node = h('layer', { width: '240', height: '80' }, h('p', { style: 'font-size:24px' }, "'{}'", ' ×', '3', '个'))
+    const emitted = emitLayer(node)
+    expect(emitted.issues).toEqual([])
+    const report = await checkFvg(emitted.source)
+    const text = report.elements.find((el) => el.tag === 'p')?.lines?.map((line) => line.text).join('\n')
+    expect(text).toBe("'{}' ×3个")
+  })
+
+  it('<draw> 引用外部变量时不让整张图退出', async () => {
+    const source = `<layer width="40" height="40" background="#000"><rect width="10" height="10" fill="#fff"><draw>\nctx.fillStyle = OUT\n</draw></rect></layer>`
+    const report = await checkFvg(source)
+    const issue = report.issues.find((item) => item.code === 'invalid-draw')
+    expect(issue?.level).toBe('error')
+    expect(issue?.message).toContain('OUT')
+    const { renderFvg } = await import('./render.js')
+    await expect(renderFvg(source)).resolves.toMatchObject({ png: expect.any(Buffer) })
   })
 })
 
@@ -370,6 +426,27 @@ describe('load .tsx', () => {
     expect(issues.every((issue) => issue.level === 'error')).toBe(true)
     expect(issues.some((issue) => /bad\.tsx:\d+:\d+/.test(issue.source ?? ''))).toBe(true)
     expect(typecheckLayerFile(join(pkgDir, 'examples', 'hello.layer'))).toEqual([])
+    const elsewhere = await mkdtemp(join(tmpdir(), 'flexlayer-cwd-'))
+    const scene = join(dir, 'scene.tsx')
+    await writeFile(
+      scene,
+      `const title: number = 'hi'\nexport default <layer width="40" height="40"><p fill="#fff" style="font-size:12px">{title}</p></layer>\n`,
+    )
+    const cwd = process.cwd()
+    try {
+      chdir(elsewhere)
+      const typeSource = typecheckLayerFile(scene).find((issue) => issue.code === 'type-error')?.source ?? ''
+      const loaded = await loadLayerFile(scene)
+      expect(loaded.kind).toBe('node')
+      if (loaded.kind !== 'node') return
+      const report = await checkFvg(loaded.node, { baseDir: dir })
+      const attrSource = report.issues.find((issue) => issue.code === 'invalid-attr')?.source ?? ''
+      const fileOf = (source: string) => source.replace(/:\d+:\d+$/, '')
+      expect(fileOf(typeSource)).toBe(scene)
+      expect(fileOf(attrSource)).toBe(scene)
+    } finally {
+      chdir(cwd)
+    }
     expect(typecheckLayerFile(join(pkgDir, 'examples', 'hello.tsx'))).toEqual([])
     expect(typecheckLayerFile(join(pkgDir, 'examples', 'slide.tsx'))).toEqual([])
   })
