@@ -1,6 +1,6 @@
 # Flex Layer：生成、验证与 AI 协作
 
-本文是给模型的入口。标签与属性的正文只在 [SPEC.md](SPEC.md)；下面这张表是必须遵守的写法，和报告里的问题码一一对应。Vue / React 见 [GENERATE.md](GENERATE.md)；组件见 [generate/COMPONENTS.md](generate/COMPONENTS.md)；效果图见 [docs/GALLERY.md](docs/GALLERY.md)。
+本文是给模型的入口。标签与属性的正文只在 [SPEC.md](SPEC.md)；下面这张表是必须遵守的写法，和报告里的问题码一一对应。有数据、循环或动画时写 `.tsx`。效果图见 [docs/GALLERY.md](docs/GALLERY.md)。
 
 ## 1. 三层分工
 
@@ -14,9 +14,9 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 
 | 层 | 做什么 | 不做什么 |
 | --- | --- | --- |
-| **生成** | 产出合法 `.layer` 字符串 | 不算最终像素、不画 canvas |
+| **生成** | 写 `.layer`，或写 `.tsx` 执行成节点树 | 不算最终像素、不画 canvas |
 | **验证** | 布局、问题码、元素表、调试图 | 不改源码 |
-| **渲染** | 读节点树或 `.layer` → PNG + `report.json` | 不跑 Vue / React |
+| **渲染** | 读节点树或 `.layer` → PNG + `report.json` | 不接 Vue 或 React |
 
 `.layer` 仍是渲染器读的格式。`.tsx` 只是多出来的源文件：执行后得到同一棵树，语义、问题码和绘制都不变。静态海报继续手写 `.layer`。
 
@@ -45,10 +45,8 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 ## 3. 生成
 
 - 直接写 `.layer`：海报、单帧。速查见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，例子在 [examples/](examples/)。
-- 直接写 `.tsx`：有数据、循环、组件或动画时用。文件头写 `/** @jsxImportSource @dc/flexlayer */`，标签和属性与 `.layer` 相同，不用 import 这些标签。默认导出 `<layer>` 或返回它的函数；动画则导出 `composition`（见 SPEC 第 13 章）。`flexlayer check` / `render` 会执行它。`--emit out.layer` 把展开结果写回 `.layer`。`draw={(ctx, el) => ...}` 里只用 `ctx` 和 `el`，否则 `--emit` 报 `emit-draw`。不要用 `Math.random` 或 `Date.now`。例子：`examples/hello.tsx`、`examples/slide.tsx`。
+- 直接写 `.tsx`：有数据、循环、组件或动画时用。文件头写 `/** @jsxImportSource @dc/flexlayer */`，标签和属性与 `.layer` 相同，不用 import 这些标签。大写开头的函数是组件，展开后只剩 Flex Layer 标签。默认导出 `<layer>` 或返回它的函数；动画则导出 `composition`（见 SPEC 第 13 章）。`flexlayer check` / `render` 会执行它。`--emit out.layer` 把展开结果写回 `.layer`。`draw={(ctx, el) => ...}` 里只用 `ctx` 和 `el`，否则 `--emit` 报 `emit-draw`。不要用 `Math.random` 或 `Date.now`。例子：`examples/hello.tsx`、`examples/slide.tsx`。
 - 要从字体取出某个字的轮廓，`import { glyph } from '@dc/flexlayer'`。`await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })` 按码位返回数组，每项有 `d`、字宽 `width`、字身高度 `height` 和 `baseline`。`d` 的原点在字身左上角，y 向下，单位是像素。字宽和字身高度来自字体，不来自路径外接框。可变字体只出默认字重。见 SPEC 5.4。
-- Vue：循环和 `:cx` 用模板算。抄 [generate/vue/example.ts](generate/vue/example.ts)。模板会压空白，`<draw>` 里多句 JS 写在一行并用 `;` 分隔。
-- React：抄 [generate/react/example.tsx](generate/react/example.tsx)。`<layer>`、`<circle>` 直接写，不用 import。大写开头的才是要展开的函数组件。
 
 ```ts
 import { renderLayer } from '@dc/flexlayer'
@@ -90,7 +88,7 @@ npx tsx src/cli.ts render scene.layer -o scene.png --report scene.json
 
 ```mermaid
 flowchart TD
-  readSpec[读硬性约定与速查] --> write[写 .layer 或 Vue/React 生成]
+  readSpec[读硬性约定与速查] --> write[写 .layer 或 .tsx]
   write --> check[flexlayer check]
   check -->|有 error| fix[按 path 和 hint 改 markup]
   fix --> check
@@ -103,7 +101,7 @@ flowchart TD
 1. 先对照第 2 节写，再看像素。
 2. 用 `path` 定位，不要猜第几个 child。从 `.tsx` 来的报告还有 `source`（`hello.tsx:18:5`），直接改那一行。
 3. 改 `gap` / `padding` 时看相邻元素的 box / ink。
-4. 动态海报在 Vue / React 里改数据，重新生成 `.layer`，再跑 check。
+4. 动态海报在 `.tsx` 里改数据，再跑 check。要看展开后的画面，加 `--emit out.layer`。
 5. 字体用根上的 `<font family src>`，或内置名 `Song`、`Kai`、`Brush`。
 6. 合并进 `main` 时，把根 `package.json` 和 `package-lock.json` 的 `version` 补丁号加一（`0.1.1` → `0.1.2`）。每次合并都加。
 
@@ -128,8 +126,7 @@ flowchart TD
 | [docs/GALLERY.md](docs/GALLERY.md) | 效果对应哪张图的哪一格 |
 | [docs/EFFECTS.md](docs/EFFECTS.md) | 算法与实现备注 |
 | [docs/proposals/3D.md](docs/proposals/3D.md) | 3D 讨论。平面透视和 `sphere` / `box` / `extrude` / `model` 已接上；作者灯光还没有 |
-| [GENERATE.md](GENERATE.md) | Vue / React 怎么生成 `.layer` |
 | [README.md](README.md) | 安装与命令 |
 | **本文** | 硬性约定和验证闭环 |
 
-自动化测试：`npm test`（渲染器，含效果图与示例的检测）；`npm run test:generate`（生成层）。`npm run gallery` 检测 gallery 与 examples，有 error 则失败，并重渲染说明里的图。
+自动化测试：`npm test`（渲染器，含效果图与示例的检测）。`npm run gallery` 检测 gallery 与 examples，有 error 则失败，并重渲染说明里的图。

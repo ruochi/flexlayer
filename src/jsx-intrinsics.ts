@@ -8,7 +8,7 @@ type JsxChild = string | number | boolean | null | undefined | FvgNode | JsxChil
 
 /**
  * 不认识的属性名留给 draw，和 .layer 一样保留。
- * 放错位置的已知属性另外标成 never，否则索引签名会把它们也放行。
+ * 属性该写在哪由检查报 invalid-attr，不在这里再用类型禁一遍。
  */
 type JsxAttr = string | number | boolean | undefined | FvgStyle | DrawFn | JsxChild
 
@@ -19,78 +19,12 @@ type FvgNodeBase = {
   [name: string]: JsxAttr
 }
 
-type NoStyle = { style?: never }
-
-/**
- * TypeScript 不检查 JSX 里的连字符属性。这些名字属于 style，写成 never 才会报错。
- */
-type HtmlHyphenBan = {
-  'font-size'?: never
-  'font-family'?: never
-  'font-weight'?: never
-  'line-height'?: never
-  'letter-spacing'?: never
-  'flex-direction'?: never
-  'flex-grow'?: never
-  'flex-shrink'?: never
-  'align-items'?: never
-  'justify-content'?: never
-  'writing-mode'?: never
-  'object-fit'?: never
-  'object-position'?: never
-  'max-width'?: never
-  'max-height'?: never
-  'min-width'?: never
-  'min-height'?: never
-  'border-radius'?: never
-  'white-space'?: never
-  'text-align'?: never
+/** 文字和图片。视觉属性写 style。 */
+type FvgHtml = FvgNodeBase & {
+  style?: FvgStyle
 }
 
-/** 写在 HTML 属性上会进 style 或只属于图形。标成 never，索引签名才拦得住。 */
-type HtmlMisplacedBan = {
-  cx?: never
-  cy?: never
-  anchor?: never
-  r?: never
-  rx?: never
-  ry?: never
-  fill?: never
-  stroke?: never
-  strokeWidth?: never
-  'stroke-width'?: never
-  width?: never
-  height?: never
-  opacity?: never
-  rotate?: never
-  rotateX?: never
-  rotateY?: never
-  z?: never
-  scale?: never
-  origin?: never
-  perspective?: never
-  background?: never
-  padding?: never
-  gap?: never
-  border?: never
-  color?: never
-  flex?: never
-  x1?: never
-  y1?: never
-  x2?: never
-  y2?: never
-  points?: never
-  d?: never
-}
-
-/** 文字和图片。视觉属性写 style，不写 cx、fill。 */
-type FvgHtml = FvgNodeBase &
-  HtmlHyphenBan &
-  HtmlMisplacedBan & {
-    style?: FvgStyle
-  }
-
-type FvgGraphic = FvgNodeBase & NoStyle
+type FvgGraphic = FvgNodeBase
 
 type FvgPositioned = FvgGraphic & {
   cx?: number | string
@@ -108,6 +42,9 @@ type FvgLinePaint = {
   'stroke-linecap'?: string
   'stroke-linejoin'?: string
   opacity?: number | string
+  rotate?: number | string
+  scale?: number | string
+  origin?: string
 }
 
 type FvgEffects = {
@@ -165,6 +102,11 @@ type FvgShape = FvgPositioned &
     strokeWidth?: number | string
     'stroke-width'?: number | string
     opacity?: number | string
+    rotate?: number | string
+    rotateX?: number | string
+    rotateY?: number | string
+    scale?: number | string
+    origin?: string
   }
 
 export namespace JSX {

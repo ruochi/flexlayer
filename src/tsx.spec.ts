@@ -9,6 +9,7 @@ import { h } from './h.js'
 import { Fragment, jsx, jsxDEV, type JsxSource } from './jsx-runtime.js'
 import { loadLayerFile } from './load-source.js'
 import { checkFvg } from './render.js'
+import { nondeterministicCalls, readDrawFunction } from './syntax.js'
 import { typecheckLayerFile } from './typecheck.js'
 
 const pkgDir = join(fileURLToPath(import.meta.url), '..', '..')
@@ -107,18 +108,49 @@ describe('JSX 类型', () => {
     expect(typeMessages(file)).toEqual([])
   })
 
-  it('写错位置的属性是类型错误', async () => {
+  it('可以引用 node:fs', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'flexlayer-node-'))
+    const file = join(dir, 'read.tsx')
+    await writeFile(
+      file,
+      `import { readFileSync } from 'node:fs'
+      const title = readFileSync('title.txt', 'utf8')
+      export default <layer width="32" height="32"><p style="font-size:12px">{title}</p></layer>
+      `,
+    )
+    expect(typeMessages(file)).toEqual([])
+  })
+
+  it('rect 可以写 rotate', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'flexlayer-rotate-'))
+    const file = join(dir, 'spin.tsx')
+    await writeFile(
+      file,
+      `export default <layer width="40" height="40"><rect cx="20" cy="20" width="10" height="4" rotate="15" fill="#fff" /></layer>\n`,
+    )
+    expect(typeMessages(file)).toEqual([])
+  })
+
+  it('写错位置的属性由检查报 invalid-attr，类型检查不报', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'flexlayer-types-'))
     const cases = [
-      [`export default <layer width="10" height="10"><p cx="3">hi</p></layer>\n`, 'cx：'],
-      [`export default <layer width="10" height="10"><circle cx="4" cy="4" r="2" style="fill:#fff" /></layer>\n`, 'style：'],
-      [`export default <layer width="10" height="10"><p font-size="40">hi</p></layer>\n`, 'font-size'],
+      [`export default <layer width="10" height="10"><p cx="3">hi</p></layer>\n`, '外包一层 layer'],
+      [`export default <layer width="10" height="10"><circle cx="4" cy="4" r="2" style="fill:#fff" /></layer>\n`, '不使用 style'],
+      [`export default <layer width="10" height="10"><p font-size="40">hi</p></layer>\n`, '应写在 style'],
     ] as const
-    for (const [source, token] of cases) {
-      const file = join(dir, `${token.replace(/'/g, '')}.tsx`)
+    for (let i = 0; i < cases.length; i++) {
+      const [source, token] = cases[i]!
+      const file = join(dir, `bad-${i}.tsx`)
       await writeFile(file, source)
-      const errors = typeMessages(file)
-      expect(errors.some((message) => message.includes(token)), token).toBe(true)
+      expect(typeMessages(file), token).toEqual([])
+      const loaded = await loadLayerFile(file)
+      expect(loaded.kind).toBe('node')
+      if (loaded.kind !== 'node') continue
+      const report = await checkFvg(loaded.node, { baseDir: dir })
+      const text = report.issues
+        .filter((issue) => issue.code === 'invalid-attr')
+        .map((issue) => `${issue.message} ${issue.hint ?? ''}`)
+      expect(text.some((message) => message.includes(token)), token).toBe(true)
     }
   })
 })
@@ -161,6 +193,53 @@ describe('emitLayer', () => {
     const emitted = emitLayer(node)
     expect(emitted.issues.map((issue) => issue.code)).toContain('emit-draw')
     expect(emitted.source).toContain('color')
+  })
+
+  it('同一行声明的多个变量不算外部引用', () => {
+    const node = h('rect', {
+      width: '10',
+      height: '10',
+      draw: (ctx, el) => {
+        const r = 58, c = 75
+        ctx.fillRect(c, r, el.w, el.h)
+      },
+    })
+    expect(emitLayer(node).issues).toEqual([])
+  })
+
+  it('注释、字符串和换行后的第二个声明不是外部变量', () => {
+    const read = readDrawFunction(`(ctx, el) => {
+      // color
+      const label = 'palette'
+      const a =
+        1, b = 2
+      const { w: width } = el
+      ctx.fillRect(b, a, width, el.h)
+      void label
+    }`)
+    expect(read?.free).toEqual([])
+    expect(nondeterministicCalls(`const label = 'Math.random()'\n// Date.now()\ntype Now = typeof Date.now\n`, 'quiet.tsx')).toEqual([])
+    expect(nondeterministicCalls(`const n = Date.now()\n`, 'clock.ts').map((call) => call.name)).toEqual(['Date.now'])
+  })
+
+  it('换行声明、解构和内层函数都不算外部变量', () => {
+    const node = h('rect', {
+      width: '10',
+      height: '10',
+      draw: (ctx, el) => {
+        const a =
+          1, b = 2
+        const { w: width } = el
+        const label = 'color'
+        // palette
+        function paint() {
+          ctx.fillStyle = label
+          ctx.fillRect(b, a, width, el.h)
+        }
+        paint()
+      },
+    })
+    expect(emitLayer(node).issues).toEqual([])
   })
 })
 
@@ -236,7 +315,25 @@ describe('load .tsx', () => {
     expect(loaded.kind).toBe('node')
     if (loaded.kind !== 'node') return
     expect(loaded.issues.map((issue) => issue.code)).toContain('nondeterministic')
+    expect(loaded.issues[0]?.message).toContain('Math.random')
     expect(loaded.issues[0]?.source).toMatch(/rand\.tsx:\d+:\d+/)
+  })
+
+  it('字符串、注释和类型里的 Math.random 不报 nondeterministic', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'flexlayer-tsx-'))
+    const file = join(dir, 'text.tsx')
+    await writeFile(
+      file,
+      `// Date.now()
+      const label = 'Math.random()'
+      type Now = typeof Date.now
+      export default <layer width="32" height="32"><p style="font-size:12px">{label}</p></layer>
+      `,
+    )
+    const loaded = await loadLayerFile(file)
+    expect(loaded.kind).toBe('node')
+    if (loaded.kind !== 'node') return
+    expect(loaded.issues).toEqual([])
   })
 
   it('放错位置的属性带着源码行', async () => {
@@ -262,7 +359,12 @@ describe('load .tsx', () => {
   it('类型错误写进 type-error，并带上源码位置', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'flexlayer-tsx-'))
     const file = join(dir, 'bad.tsx')
-    await writeFile(file, `export default <layer width="10" height="10"><p cx="3">hi</p></layer>\n`)
+    await writeFile(
+      file,
+      `const title: number = 'hi'
+      export default <layer width="10" height="10"><p style="font-size:12px">{title}</p></layer>
+      `,
+    )
     const issues = typecheckLayerFile(file)
     expect(issues.map((issue) => issue.code)).toContain('type-error')
     expect(issues.every((issue) => issue.level === 'error')).toBe(true)

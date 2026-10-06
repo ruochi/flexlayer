@@ -3,7 +3,7 @@
  * 不认识的属性不在表里，留给 draw，不报错。
  */
 
-export type DocGroup = 'layer' | 'html' | 'graphic' | 'image' | 'effect' | 'layer-only'
+export type DocGroup = 'layer' | 'transform' | 'html' | 'graphic' | 'image' | 'effect' | 'layer-only'
 
 export type AttrDef = {
   name: string
@@ -96,11 +96,11 @@ export const ATTR_ORDER = [
 export const ATTRS: AttrDef[] = [
   { name: 'width', warnOnHtmlAttr: true, docGroup: 'layer' },
   { name: 'height', warnOnHtmlAttr: true, docGroup: 'layer' },
-  { name: 'opacity', warnOnHtmlAttr: true, docGroup: 'layer' },
-  { name: 'rotate', warnOnHtmlAttr: true, docGroup: 'layer' },
-  { name: 'rotateX', warnOnHtmlAttr: true, docGroup: 'layer' },
-  { name: 'rotateY', warnOnHtmlAttr: true, docGroup: 'layer' },
-  { name: 'z', warnOnHtmlAttr: true, docGroup: 'layer' },
+  { name: 'opacity', warnOnHtmlAttr: true, docGroup: 'transform' },
+  { name: 'rotate', warnOnHtmlAttr: true, docGroup: 'transform' },
+  { name: 'rotateX', warnOnHtmlAttr: true, docGroup: 'transform' },
+  { name: 'rotateY', warnOnHtmlAttr: true, docGroup: 'transform' },
+  { name: 'z', warnOnHtmlAttr: true, docGroup: 'transform' },
   {
     name: 'perspective',
     layerOnlyAttr: true,
@@ -109,8 +109,8 @@ export const ATTRS: AttrDef[] = [
     misplacedHint: '写在父 layer 上，例如 <layer perspective="900">',
     styleHint: '不要写进 style；写在 layer 的属性上，例如 <layer perspective="900">',
   },
-  { name: 'scale', warnOnHtmlAttr: true, docGroup: 'layer' },
-  { name: 'origin', warnOnHtmlAttr: true, docGroup: 'layer' },
+  { name: 'scale', warnOnHtmlAttr: true, docGroup: 'transform' },
+  { name: 'origin', warnOnHtmlAttr: true, docGroup: 'transform' },
   { name: 'background', warnOnHtmlAttr: true, docGroup: 'html' },
   { name: 'padding', warnOnHtmlAttr: true, docGroup: 'html' },
   { name: 'font-size', warnOnHtmlAttr: true, docGroup: 'html' },
@@ -296,10 +296,11 @@ export const LAYER_ONLY_ATTRS: string[] = ATTRS.filter((attr) => attr.layerOnlyA
 
 export const EFFECT_ATTRS: string[] = ATTRS.filter((attr) => attr.effect).map((attr) => attr.name)
 
-const DOC_GROUP_ORDER: DocGroup[] = ['layer', 'html', 'graphic', 'image', 'effect', 'layer-only']
+const DOC_GROUP_ORDER: DocGroup[] = ['layer', 'transform', 'html', 'graphic', 'image', 'effect', 'layer-only']
 
 const DOC_GROUP_LABEL: Record<DocGroup, string> = {
-  layer: '`layer` 的属性。HTML 上写了报 `warn`',
+  layer: '`layer` 的属性。形状用自己的宽高或 `cx` `cy`。HTML 上写了报 `warn`',
+  transform: '图形、线条和 `layer` 写属性；文字写在 `style`。HTML 上写成属性报 `warn`',
   html: 'HTML 的 `style`。`layer` 或图形写了 `style` 报 `warn`',
   graphic: '图形属性，坐标是所在 `layer` 的局部坐标',
   image: '只写在 `img` 或 `model` 上。图片宽高仍放进 `style`',

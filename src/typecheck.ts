@@ -7,13 +7,15 @@ import type { Issue } from './types.js'
 
 const CODE_EXT = new Set(['.tsx', '.jsx', '.ts', '.js'])
 
-function runtimePaths(): { baseUrl: string; paths: Record<string, string[]> } {
+function runtimePaths(): { baseUrl: string; paths: Record<string, string[]>; typeRoots: string[] } {
   const here = dirname(fileURLToPath(import.meta.url))
   const fromSource = existsSync(join(here, 'index.ts'))
   const dir = fromSource ? 'src' : 'dist'
   const ext = fromSource ? 'ts' : 'd.ts'
+  const pkgRoot = dirname(here)
   return {
-    baseUrl: dirname(here),
+    baseUrl: pkgRoot,
+    typeRoots: [join(pkgRoot, 'node_modules/@types')],
     paths: {
       '@dc/flexlayer': [`${dir}/index.${ext}`],
       '@dc/flexlayer/jsx-runtime': [`${dir}/jsx-runtime.${ext}`],
@@ -25,9 +27,9 @@ function runtimePaths(): { baseUrl: string; paths: Record<string, string[]> } {
 /** 对 `.tsx` 等源文件跑一次类型检查。`.layer` 返回空数组。 */
 export function typecheckLayerFile(file: string): Issue[] {
   if (!CODE_EXT.has(extname(file).toLowerCase())) return []
-  const { baseUrl, paths } = runtimePaths()
+  const { baseUrl, paths, typeRoots } = runtimePaths()
   // 直接传给 createProgram 的 lib 是文件名，不是 tsconfig 里的 "ES2022"。
-  // 标准库从 typescript 安装目录加载，不依赖文件旁边有没有 node_modules/@types。
+  // 标准库和 @types/node 都从本包的安装目录加载，不看 .tsx 旁边有没有 node_modules。
   const options: ts.CompilerOptions = {
     strict: true,
     noEmit: true,
@@ -38,7 +40,8 @@ export function typecheckLayerFile(file: string): Issue[] {
     moduleResolution: ts.ModuleResolutionKind.Bundler,
     target: ts.ScriptTarget.ES2022,
     lib: ['lib.es2022.d.ts'],
-    types: [],
+    types: ['node'],
+    typeRoots,
     allowImportingTsExtensions: true,
     baseUrl,
     paths,
@@ -54,11 +57,7 @@ export function typecheckLayerFile(file: string): Issue[] {
       const pos = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start)
       source = formatSourceLoc({ file, line: pos.line + 1, column: pos.character + 1 })
     }
-    let message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')
-    if (diagnostic.file && diagnostic.start != null && diagnostic.length) {
-      const span = diagnostic.file.text.slice(diagnostic.start, diagnostic.start + diagnostic.length)
-      if (span && !message.includes(span)) message = `${span}：${message}`
-    }
+    const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')
     issues.push({
       level: 'error',
       code: 'type-error',

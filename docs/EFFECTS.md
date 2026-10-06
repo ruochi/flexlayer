@@ -91,5 +91,5 @@
 - `src/style.ts` — 解析
 - `src/types.ts` / `src/layout.ts` — 字段与 `readEffects`
 - `src/paint.ts` — 绘制
-- `src/rules.ts` / `generate/serialize.ts` / JSX 类型 — 归属
+- `src/rules.ts` / `src/jsx-intrinsics.ts` — 归属
 - `src/report.ts` — 报告与 `effect-clipped`

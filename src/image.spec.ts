@@ -4,7 +4,6 @@ import { join } from 'node:path'
 import { createCanvas, type CanvasRenderingContext2D } from '@napi-rs/canvas'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { homedir } from 'node:os'
-import { createHostElement, serializeFvgDocument } from '../generate/serialize.js'
 import { initFontsForMeasure } from './fonts.js'
 import { parseObjectPosition } from './image.js'
 import { layoutSource } from './layout.js'
@@ -141,20 +140,6 @@ describe('img', () => {
     const corner = await pixelAt(rounded.png, 31, 31)
     expect(center[0]).toBeGreaterThan(200)
     expect(corner[0]).toBeLessThan(20)
-  })
-
-  it('序列化时 src 留在属性，尺寸进 style', () => {
-    const root = createHostElement('layer')
-    root.props = { width: 100, height: 80 }
-    const img = createHostElement('img')
-    img.props = { src: 'a.png', alt: '封面', width: 40, height: 20, objectFit: 'cover' }
-    root.children = [img]
-    const text = serializeFvgDocument(root)
-    expect(text).toContain('src="a.png"')
-    expect(text).toContain('alt="封面"')
-    expect(text).toContain('width: 40')
-    expect(text).toContain('object-fit: cover')
-    expect(text).not.toContain('src:')
   })
 
   it('object-position', () => {
