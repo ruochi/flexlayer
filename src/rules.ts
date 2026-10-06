@@ -150,7 +150,7 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
         ),
       )
     }
-    const graphic = GRAPHIC_ATTRS.filter((key) => present(attrs, key))
+    const graphic = GRAPHIC_ATTRS.filter((key) => key !== 'cx' && key !== 'cy' && present(attrs, key))
     if (graphic.length > 0) {
       out.push(
         flagged(
@@ -248,7 +248,7 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
         ),
       )
     }
-    if ((isShapeTag(node.tag) || node.draw) && present(attrs, 'anchor')) {
+    if (isShapeTag(node.tag) && present(attrs, 'anchor')) {
       out.push(
         flagged(
           'info',

@@ -1,8 +1,10 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { createCanvas, type Canvas } from '@napi-rs/canvas'
 import { isAbsolute, resolve } from 'node:path'
 import { MessageChannel, Worker, receiveMessageOnPort, type MessagePort } from 'node:worker_threads'
+import { fileURLToPath } from 'node:url'
 import type { Box } from './types.js'
 
 export type ObjectFit = 'fill' | 'contain' | 'cover' | 'none'
@@ -165,14 +167,23 @@ function imageBytesSync(key: string): Buffer {
 const nap = new Int32Array(new SharedArrayBuffer(4))
 let decoderPort: MessagePort | null = null
 let decodeSeq = 0
+let decoderError: Error | null = null
+
+function canvasPackageEntry(): string {
+  const injected = (globalThis as { __flexlayerCanvasEntry?: string }).__flexlayerCanvasEntry
+  if (injected) return injected
+  return createRequire(fileURLToPath(import.meta.url)).resolve('@napi-rs/canvas')
+}
 
 function decoderPortOnce(): MessagePort {
-  if (decoderPort) return decoderPort
+  if (decoderPort && !decoderError) return decoderPort
+  decoderError = null
   const { port1, port2 } = new MessageChannel()
+  const canvasEntry = canvasPackageEntry()
   const worker = new Worker(
     `
     const { parentPort } = require('worker_threads')
-    const { createCanvas, loadImage } = require('@napi-rs/canvas')
+    const { createCanvas, loadImage } = require(${JSON.stringify(canvasEntry)})
     parentPort.on('message', ({ port }) => {
       port.on('message', async ({ id, bytes }) => {
         try {
@@ -190,7 +201,13 @@ function decoderPortOnce(): MessagePort {
     `,
     { eval: true },
   )
+  worker.unref()
+  worker.on('error', (err) => {
+    decoderError = err instanceof Error ? err : new Error(String(err))
+    decoderPort = null
+  })
   worker.postMessage({ port: port2 }, [port2])
+  port1.unref()
   decoderPort = port1
   return port1
 }
@@ -202,6 +219,11 @@ function decodeImageSync(bytes: Buffer): Canvas {
   port.postMessage({ id, bytes })
   const start = Date.now()
   while (Date.now() - start < 15000) {
+    if (decoderError) {
+      const err = decoderError
+      decoderError = null
+      throw err
+    }
     const got = receiveMessageOnPort(port)
     if (!got) {
       Atomics.wait(nap, 0, 0, 2)

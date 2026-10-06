@@ -56,21 +56,22 @@ function stripMeshes(node: LayoutNode): LayoutNode | null {
   return paintable(node) ? node : null
 }
 
-type MeshInstance = { node: MeshLayoutNode; toLayer: Mat4 }
+type MeshInstance = { node: MeshLayoutNode; toLayer: Mat4; opacity: number }
 type PlaneInstance = { node: LayoutNode; peeled: LayoutNode; toLayer: Mat4 }
 
-function collectMeshes(node: LayoutNode, toParent: Mat4, out: MeshInstance[]) {
+function collectMeshes(node: LayoutNode, toParent: Mat4, ancestorOpacity: number, out: MeshInstance[]) {
   if (node.kind === 'layer' && ownsMeshScene(node)) return
   const toLayer = mul(toParent, poseMatrix(node))
   if (node.kind === 'mesh') {
-    out.push({ node, toLayer })
+    out.push({ node, toLayer, opacity: ancestorOpacity })
     return
   }
   if (node.kind === 'layer' || node.kind === 'flex') {
     const insetX = node.kind === 'flex' ? node.padding.left + (node.border?.width ?? 0) : 0
     const insetY = node.kind === 'flex' ? node.padding.top + (node.border?.width ?? 0) : 0
     const content = mul(toLayer, translation(insetX, insetY))
-    for (const child of node.children) collectMeshes(child, content, out)
+    const next = ancestorOpacity * (node.opacity ?? 1)
+    for (const child of node.children) collectMeshes(child, content, next, out)
   }
 }
 
@@ -103,7 +104,7 @@ export function renderMeshLayer(
   const planes: PlaneInstance[] = []
   for (const child of layer.children) {
     if (planeDepth(child) >= perspective) continue
-    collectMeshes(child, IDENTITY, meshes)
+    collectMeshes(child, IDENTITY, 1, meshes)
     if (child.kind === 'mesh') continue
     const peeled = stripMeshes(child)
     if (peeled && paintable(peeled)) planes.push({ node: child, peeled, toLayer: poseMatrix(child) })

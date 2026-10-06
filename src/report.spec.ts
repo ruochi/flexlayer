@@ -143,9 +143,13 @@ describe('buildReport', () => {
     )
     expect(inside.issues.some((issue) => issue.code === 'effect-clipped')).toBe(false)
     const open = await checkFvg(
-      `<layer width="140" height="140" background="#fff"><layer x="20" y="20" width="100" height="100"><rect x="15" y="15" width="70" height="70" fill="#000" glow="48 #fff" /></layer></layer>`,
+      `<layer width="140" height="140" background="#fff"><layer x="20" y="20" width="100" height="100"><rect x="15" y="15" width="70" height="70" fill="#000" glow="80 #fff" /></layer></layer>`,
     )
     expect(open.issues.some((issue) => issue.code === 'effect-clipped')).toBe(true)
+    const margin = await checkFvg(
+      `<layer width="160" height="160" background="#fff"><rect x="40" y="40" width="80" height="80" fill="#000" glow="40 #fff" /></layer>`,
+    )
+    expect(margin.issues.some((issue) => issue.code === 'effect-clipped')).toBe(false)
   })
 
   it('倾斜平面的光晕还在画布里时不报 effect-clipped', async () => {

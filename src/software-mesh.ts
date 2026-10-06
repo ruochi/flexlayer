@@ -33,7 +33,7 @@ type RasterBitmap = {
 export type SoftwareMeshInput = {
   layer: LayerLayoutNode
   perspective: number
-  meshes: Array<{ node: MeshLayoutNode; toLayer: Mat4 }>
+  meshes: Array<{ node: MeshLayoutNode; toLayer: Mat4; opacity?: number }>
   planes: Array<{ node: LayoutNode; peeled: LayoutNode; toLayer: Mat4 }>
   scale: number
   raster: (node: LayoutNode) => RasterBitmap
@@ -229,6 +229,26 @@ function pointInRing(x: number, y: number, ring: Pt[]) {
     if (hit) inside = !inside
   }
   return inside
+}
+
+/** 子圈整段都落在外圈里才是洞。笔画搭接时重心可能掉进对方，但形状本身伸到外面，仍是另一块实体。 */
+function ringContains(outer: Pt[], inner: Pt[]) {
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const p of outer) {
+    if (p.x < minX) minX = p.x
+    if (p.y < minY) minY = p.y
+    if (p.x > maxX) maxX = p.x
+    if (p.y > maxY) maxY = p.y
+  }
+  let inside = 0
+  for (const p of inner) {
+    if (p.x < minX - 0.75 || p.x > maxX + 0.75 || p.y < minY - 0.75 || p.y > maxY + 0.75) return false
+    if (pointInRing(p.x, p.y, outer)) inside++
+  }
+  return inside >= inner.length * 0.9
 }
 
 function segmentsCross(a: Pt, b: Pt, c: Pt, d: Pt) {
@@ -443,16 +463,13 @@ function buildExtrude(node: MeshLayoutNode) {
     .filter((points) => points.length >= 3 && Math.abs(signedArea(points)) > 1e-4)
   const items = rings.map((points) => ({ points, area: Math.abs(signedArea(points)), parent: -1 }))
   for (let i = 0; i < items.length; i++) {
-    const sample = items[i]!.points.reduce((acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y }), { x: 0, y: 0 })
-    sample.x /= items[i]!.points.length
-    sample.y /= items[i]!.points.length
     let best = -1
     let bestArea = Infinity
     for (let j = 0; j < items.length; j++) {
       if (i === j) continue
       const other = items[j]!
       if (other.area <= items[i]!.area + 1e-4 || other.area >= bestArea) continue
-      if (pointInRing(sample.x, sample.y, other.points)) {
+      if (ringContains(other.points, items[i]!.points)) {
         best = j
         bestArea = other.area
       }
@@ -1152,7 +1169,7 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
           r: prim.color[0],
           g: prim.color[1],
           b: prim.color[2],
-          a: prim.color[3],
+          a: byte(prim.color[3] * (instance.opacity ?? 1)),
           doubleSided: prim.doubleSided,
           shaded: true,
           depthWrite: prim.color[3] >= 255,
@@ -1168,7 +1185,7 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
     }
     const geometry = geometryOf(node)
     if (!geometry) continue
-    const [r, g, b, a] = fillBytes(node.fill, node.opacity)
+    const [r, g, b, a] = fillBytes(node.fill, (instance.opacity ?? 1) * node.opacity)
     batches.push({
       positions: geometry.positions,
       normals: geometry.normals,

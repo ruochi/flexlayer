@@ -87,8 +87,11 @@ function linePad(node: LineLayoutNode): number {
 }
 
 function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, rx: number, ry = rx) {
-  const rrx = Math.min(rx, w / 2)
-  const rry = Math.min(ry, h / 2)
+  // 只写一个半径（border-radius、或 rect 的 rx）时两角一样，收成圆角胶囊。
+  // 分别写了 rx、ry 才按椭圆角各自钳制。
+  const same = Math.abs(rx - ry) < 0.01
+  const rrx = same ? Math.min(Math.max(rx, 0), w / 2, h / 2) : Math.min(Math.max(rx, 0), w / 2)
+  const rry = same ? rrx : Math.min(Math.max(ry, 0), h / 2)
   if (rrx === rry) {
     const rad = rrx
     ctx.beginPath()

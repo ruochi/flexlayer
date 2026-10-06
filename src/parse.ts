@@ -70,9 +70,24 @@ function nodeFor(raw: string, attrs: Record<string, string>, children: FvgChild[
   return node
 }
 
+function lineColAt(lineStarts: number[], index: number): { line: number; column: number } {
+  let lo = 0
+  let hi = lineStarts.length - 1
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1
+    if (lineStarts[mid]! <= index) lo = mid
+    else hi = mid - 1
+  }
+  return { line: lo + 1, column: index - lineStarts[lo]! + 1 }
+}
+
 /** 解析 Flex Layer 标记。已知标签归一成小写；不认识的标签保持原样。 */
 export function parseFvg(source: string): FvgNode[] {
   const src = source.replace(/<!--[\s\S]*?-->/g, '').replace(/<\?xml[\s\S]*?\?>/g, '')
+  const lineStarts = [0]
+  for (let i = 0; i < src.length; i++) {
+    if (src.charCodeAt(i) === 10) lineStarts.push(i + 1)
+  }
   const root: FvgNode = { tag: '#root', attrs: {}, children: [] }
   const stack: FvgNode[] = [root]
   let pos = 0
@@ -114,6 +129,7 @@ export function parseFvg(source: string): FvgNode[] {
       const closeMatch = /<\/draw\s*>/i.exec(src.slice(bodyStart))
       const body = closeMatch ? src.slice(bodyStart, bodyStart + closeMatch.index) : src.slice(bodyStart)
       const node = nodeFor(raw, attrs, body ? [body] : [])
+      node.loc = { file: '', ...lineColAt(lineStarts, lt) }
       stack[stack.length - 1].children.push(node)
       pos = closeMatch ? bodyStart + closeMatch.index + closeMatch[0].length : src.length
       continue

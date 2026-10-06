@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { canvas } from './canvas.js'
@@ -18,6 +19,11 @@ async function pixelAt(png: Buffer, x: number, y: number) {
 }
 
 describe('canvas.create', () => {
+  it('旧的 canvas({...}) 提示怎么改', () => {
+    const call = canvas as unknown as (props: Record<string, unknown>) => unknown
+    expect(() => call({ width: 100, background: '#fff' })).toThrow(/canvas\.create/)
+  })
+
   it('只接受 layer', () => {
     expect(() => canvas.create(h('h1', {}, '甲'))).toThrow(/layer/)
     expect(() => canvas.create(h('rect', { width: '10', height: '10', fill: '#fff' }))).toThrow(/layer/)
@@ -148,6 +154,22 @@ describe('canvas.create', () => {
     expect(freshFontLoadsCount()).toBe(fonts)
     expect(freshImageLoadsCount()).toBe(images + 1)
   })
+
+  it('字体还没注册时直接报错，注册后再按真字体量', () => {
+    const src = ['/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf', '/usr/share/fonts/truetype/croscore/Cousine-Regular.ttf'].find(
+      (path) => existsSync(path),
+    )
+    if (!src) return
+    const family = 'ProbeUnregisteredScale'
+    const text = h('h1', { style: `font-family:${family}; font-size:48px; white-space:nowrap` }, '0000000000')
+    expect(() => canvas.create(h('layer', { width: '200' }, text))).toThrow(/还没注册/)
+    const fallback = canvas.create(
+      h('layer', { width: '200', 'font-family': 'ChillDuanSans' }, h('h1', { style: 'font-size:48px; white-space:nowrap' }, '0000000000')),
+    )
+    canvas.font(family, src)
+    const real = canvas.create(h('layer', { width: '200' }, h('h1', { style: `font-family:${family}; font-size:48px; white-space:nowrap` }, '0000000000')))
+    expect(Math.abs(Number(real.attrs.scale) - Number(fallback.attrs.scale))).toBeGreaterThan(0.05)
+  })
 })
 
 describe('g 与组件', () => {
@@ -186,9 +208,11 @@ describe('g 与组件', () => {
     const shaft = await pixelAt(png, 40, 20)
     const head = await pixelAt(png, 68, 24)
     const sky = await pixelAt(png, 10, 4)
+    const pastTip = await pixelAt(png, 82, 20)
     expect(shaft[0]).toBeGreaterThan(200)
     expect(head[0]).toBeGreaterThan(200)
     expect(sky[0]).toBeLessThan(20)
+    expect(pastTip[0]).toBeLessThan(20)
     const parsed = await layoutSource(source, process.cwd())
     expect(parsed.issues.filter((issue) => issue.code === 'unknown-tag')).toEqual([])
     const emitted = emitLayer(

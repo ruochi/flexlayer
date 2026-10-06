@@ -7,6 +7,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url'
 import * as esbuild from 'esbuild'
 import type { Composition } from './frame.js'
 import type { FvgNode } from './parse.js'
+import { setLayerBaseDir } from './canvas.js'
 import { formatSourceLoc } from './source-loc.js'
 import { registerFontsFromDocument } from './fonts.js'
 import { nondeterministicCalls, staticLayerFonts } from './syntax.js'
@@ -109,6 +110,8 @@ async function importCode(file: string): Promise<Record<string, unknown>> {
       jsx: 'automatic',
       jsxDev: true,
       jsxImportSource: '@dc/flexlayer',
+      // 打包后 import.meta.url 落在临时目录，图片解码线程要从这里找到 canvas。
+      banner: { js: `globalThis.__flexlayerCanvasEntry = ${JSON.stringify(require.resolve('@napi-rs/canvas'))}` },
       plugins: [
         {
           name: 'flexlayer-jsx',
@@ -167,6 +170,7 @@ export async function loadLayerFile(file: string): Promise<LoadedLayer> {
   if (!CODE_EXT.has(extname(file).toLowerCase())) return { kind: 'markup', source }
   const fonts = staticLayerFonts(source, file)
   if (fonts.length > 0) await registerFontsFromDocument(fonts, dirname(file))
+  setLayerBaseDir(dirname(file))
   const loaded = withAbsoluteLocs(resolveExport(await importCode(file), file), file)
   const issues = nondeterministicIssues(source, file)
   return { ...loaded, issues }

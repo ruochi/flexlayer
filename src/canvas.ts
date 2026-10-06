@@ -1,10 +1,47 @@
+import { dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { registerComponent, type ComponentFn } from './components.js'
-import { measureLayer, noteMeasuredSize, parseSafe, prepareAssetsSync, type MeasureEnv } from './layout.js'
+import { ensureBuiltinFontsSync, fontReady, registerFontPath, resolveFontSrcSync } from './fonts.js'
+import { fontFamiliesOf, measureLayer, noteMeasuredSize, parseSafe, prepareAssetsSync, type MeasureEnv } from './layout.js'
 import type { FvgNode } from './parse.js'
 import { isDisplayFlex } from './rules.js'
 import { parseNumber } from './style.js'
 import { isTextBoxTag } from './text.js'
 import type { Anchor, Issue } from './types.js'
+
+const BASE_KEY = '__flexlayerBaseDir'
+
+type GlobalBase = typeof globalThis & { __flexlayerBaseDir?: string }
+
+/** loadLayerFile 在执行 .tsx 之前记下源文件所在目录。打包后的栈指向临时文件，不能用来找字体。 */
+export function setLayerBaseDir(dir: string): void {
+  ;(globalThis as GlobalBase)[BASE_KEY] = dir
+}
+
+function fileFromStack(line: string): string | null {
+  const matched = /\((?:file:\/\/)?([^)]+):\d+:\d+\)$/.exec(line) ?? /at (?:file:\/\/)?(\S+):\d+:\d+$/.exec(line)
+  if (!matched) return null
+  let file = matched[1]!
+  if (file.startsWith('file://')) file = fileURLToPath(file)
+  return file
+}
+
+/** `<font src>` 和图片的相对路径。打包执行时用源文件目录，直接调用时用调用方文件，否则用当前目录。 */
+export function layerBaseDir(): string {
+  const pinned = (globalThis as GlobalBase)[BASE_KEY]
+  const stack = new Error().stack ?? ''
+  const bundled = /flexlayer-[^/\\]*[/\\]entry\.mjs/.test(stack)
+  if (bundled && pinned) return pinned
+  for (const line of stack.split('\n')) {
+    const file = fileFromStack(line)
+    if (!file) continue
+    if (/[/\\](src|dist)[/\\]canvas\.[cm]?[jt]s/.test(file)) continue
+    if (file.includes('/node_modules/') || file.includes('\\node_modules\\')) continue
+    if (file.includes('flexlayer-')) continue
+    return dirname(file)
+  }
+  return pinned || process.cwd()
+}
 
 const UNLIMITED = 1_000_000
 
@@ -69,7 +106,7 @@ function wraps(node: FvgNode): boolean {
 
 function measure(node: FvgNode, maxContentWidth: number) {
   const env: MeasureEnv = {
-    baseDir: process.cwd(),
+    baseDir: layerBaseDir(),
     color: node.attrs.color ?? '#111111',
     fontFamily: node.attrs['font-family'] ?? 'ChillDuanSans',
     maxContentWidth,
@@ -93,7 +130,16 @@ export function create(node: FvgNode): CreatedLayer {
   if (!node || typeof node !== 'object' || node.tag !== 'layer') {
     throw new Error('canvas.create 只接受 <layer>')
   }
-  prepareAssetsSync(node, process.cwd())
+  const baseDir = layerBaseDir()
+  prepareAssetsSync(node, baseDir, { nestedFonts: true })
+  const families = fontFamiliesOf(node)
+  ensureBuiltinFontsSync(families)
+  for (const family of families) {
+    if (fontReady(family)) continue
+    throw new Error(
+      `字体「${family}」还没注册，量出来的尺寸会按备用字体计算。把 <font family="${family}" src="…"> 写进这一层，或先调用 canvas.font("${family}", "字体文件")`,
+    )
+  }
   const width = parseNumber(node.attrs.width)
   const height = parseNumber(node.attrs.height)
   const widthSet = node.attrs.width != null && node.attrs.width !== ''
@@ -134,7 +180,16 @@ export function create(node: FvgNode): CreatedLayer {
   })
 }
 
-export const canvas = {
+function retiredCanvas(..._args: unknown[]): never {
+  throw new Error(
+    'canvas({...}) 已去掉。底色写成铺满的 <rect fill>，color 和 font-family 写在 <layer> 上，然后调用 canvas.create(<layer>…</layer>)。自定义字体先 canvas.font(family, src)，或把 <font family src> 写进正在量的这一层。',
+  )
+}
+
+export const canvas = Object.assign(retiredCanvas, {
   create,
   component: registerComponent as (name: string, render: ComponentFn) => void,
-}
+  font(family: string, src: string) {
+    registerFontPath(family, resolveFontSrcSync(src, layerBaseDir()))
+  },
+})

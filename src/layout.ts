@@ -13,7 +13,7 @@ import { parseColor } from './gradientField.js'
 import { imageInk, peekLayerImage, preloadLayerImagesSync, parseObjectFit, parseObjectPosition } from './image.js'
 import type { FvgNode } from './parse.js'
 import { parseFvg } from './parse.js'
-import { ensureBuiltinFontsSync, registerFontsFromDocumentSync } from './fonts.js'
+import { ensureBuiltinFontsSync, primaryFontFamily, registerFontsFromDocumentSync } from './fonts.js'
 import { materialize } from './components.js'
 import { catmullRomPath } from './curve.js'
 import { isGradient, parseGradient, solidPaint } from './gradient.js'
@@ -1892,6 +1892,34 @@ function collectSymbols(node: FvgNode, symbols: Map<string, FvgNode>, issues: Is
   })
 }
 
+function collectFontDecls(node: FvgNode, out: Array<{ family: string; src: string }>) {
+  const concrete = materialize(node)
+  const font = fontDecl(concrete)
+  if (font?.family && font.src) out.push(font)
+  for (const child of concrete.children) {
+    if (typeof child !== 'string') collectFontDecls(child, out)
+  }
+}
+
+/** 这一层实际会拿来排文字的字体名。 */
+export function fontFamiliesOf(node: FvgNode): string[] {
+  const out = new Set<string>()
+  const visit = (current: FvgNode) => {
+    const concrete = materialize(current)
+    const add = (raw: string | undefined) => {
+      const name = primaryFontFamily(raw)
+      if (name) out.add(name)
+    }
+    add(concrete.attrs['font-family'])
+    add(parseStyle(concrete.attrs.style)['font-family'])
+    for (const child of concrete.children) {
+      if (typeof child !== 'string') visit(child)
+    }
+  }
+  visit(node)
+  return [...out]
+}
+
 function collectFontFamilies(node: FvgNode, out: Set<string>) {
   const concrete = materialize(node)
   const style = parseStyle(concrete.attrs.style)
@@ -1971,6 +1999,8 @@ export type PrepareOptions = {
   /** 预先加载的图。写在 layer 里的图会在 create 时自动准备 */
   images?: string[]
   fontFamily?: string
+  /** 把嵌套 layer 里的 <font> 也注册。canvas.create 量尺寸时需要。 */
+  nestedFonts?: boolean
 }
 
 /** 准备字体、图片和 Yoga，并在这个进程里记住。已经备过的直接跳过。 */
@@ -1978,10 +2008,13 @@ export function prepareAssetsSync(root: FvgNode | null, baseDir: string, options
   getYoga()
   const fontNodes = [...(options.fonts ?? [])]
   if (root) {
-    for (const child of root.children) {
-      if (typeof child === 'string') continue
-      const font = fontDecl(child)
-      if (font) fontNodes.push(font)
+    if (options.nestedFonts) collectFontDecls(root, fontNodes)
+    else {
+      for (const child of root.children) {
+        if (typeof child === 'string') continue
+        const font = fontDecl(child)
+        if (font) fontNodes.push(font)
+      }
     }
   }
   registerFontsFromDocumentSync(

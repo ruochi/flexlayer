@@ -184,6 +184,18 @@ describe('软件光栅', () => {
     expect(hole[0]).toBeLessThan(40)
   })
 
+  it('搭在另一笔上的形状仍是实体，不会被挖成洞', async () => {
+    const { png } = await render(`
+      <layer width="200" height="140" background="#101010" perspective="800">
+        <extrude d="M0 0 H60 V24 H0 Z M30 8 L50 8 L50 16 L80 36 L40 36 L30 16 Z" depth="12" x="60" y="52" fill="#f2f2f2" />
+      </layer>
+    `)
+    const bar = await pixelAt(png, 80, 64)
+    const tip = await pixelAt(png, 130, 82)
+    expect(bar[0]).toBeGreaterThan(180)
+    expect(tip[0]).toBeGreaterThan(180)
+  })
+
   it('网格超出所在 layer 时仍画在父画布上', async () => {
     const spilled = await render(`
       <layer width="200" height="120" background="#000000">
