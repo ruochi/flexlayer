@@ -10,7 +10,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 3. **y 轴向下**：和 Canvas、HTML 一致，`y="400"` 表示距离父级顶部 400 像素。
 4. **显式写了就照做**：写了尺寸、位置就严格使用，不会被悄悄改掉；有问题只在报告里指出。
 5. **没写的由渲染器决定，并写进报告**：比如自动换行。
-6. **写错了要说怎么改**：有歧义或会被忽略的写法报 `warn` 并给出 `hint`；含义明确但不规范的写法照常渲染，报 `info`。不认识的属性名一律保留，给 `draw` 用。
+6. **写错了要说怎么改**：有歧义或会被忽略的写法报 `warn` 并给出 `hint`；含义明确但不规范的写法照常渲染，报 `info`。和已知属性编辑距离不超过 2 的名字报 `warn`，`hint` 写出正确属性，例如 `widht` 提示改成 `width`。其余不认识的名字仍留给 `draw`。
 
 给模型的硬性约定见 [AGENTS.md](AGENTS.md)。效果图见 [docs/GALLERY.md](docs/GALLERY.md)。
 
@@ -234,7 +234,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 `.tsx` 里可以从字体取出每个字的轮廓。这是程序接口，不是标签。
 
 ```ts
-import { glyph } from '@dc/flexlayer'
+import { glyph } from 'flexlayer'
 
 const chars = await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })
 ```
@@ -541,7 +541,7 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
       "id": "title",
       "tag": "h1",
       "box": { "x": 330, "y": 600, "width": 420, "height": 106, "left": 330, "top": 600, "right": 750, "bottom": 706, "centerX": 540, "centerY": 653 },
-      "ink": { "...": "变换并裁剪后的着墨外接矩形，字段同 box" },
+      "ink": { "...": "旋转、缩放、透视之后的着墨外接矩形。像素对位看 ink，box 仍是没转之前的布局盒" },
       "opacity": 1,
       "fontSize": 88,
       "lines": [{ "text": "比特币减半", "box": { "...": "..." } }]
@@ -553,8 +553,8 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 }
 ```
 
-- `box`：布局盒子（含 padding 和 border），只累加平移，不受 `rotate`、`scale` 和透视影响。
-- `ink`：实际着墨经过旋转、缩放之后的外接矩形；落在带 `perspective` 的平面上时，改成投影后的外接矩形。并和祖先里 `overflow="hidden"` 的 layer、以及 `<mask>` 的外接范围求过交集。文字是字形的真实边界，形状是布局盒子变换后的范围。`overflow-canvas` 看的是这个投影后的 `ink`，不是 `box`。线条的中心线落在画布边上时，描边半径探出去不算超出；中心线本身越出画布仍然算。
+- `box`：布局盒子（含 padding 和 border），只累加平移。`rotate`、`scale` 和透视都不改变它。旋转之后 `box.x` 仍是没转之前的左上角。
+- `ink`：同一元素转完、缩完之后真正落在画布上的着墨外接矩形。落在带 `perspective` 的平面上时，改成投影后的外接矩形。并和祖先里 `overflow="hidden"` 的 layer、以及 `<mask>` 的外接范围求过交集。文字是字形的真实边界，形状是布局盒子变换后的范围。做像素对位看 `ink`，不要看 `box`。`overflow-canvas` 看的也是这个投影后的 `ink`。线条的中心线落在画布边上时，描边半径探出去不算超出；中心线本身越出画布仍然算。
 - `effect`：阴影、光晕、图层模糊或玻璃可能占用的范围，字段同 `box`。没有这些外扩效果时不写。已经被 `overflow="hidden"` 或 `<mask>` 裁掉的部分不算在里面。这个范围画出画布时报 `effect-clipped`。
 - `quad`：有透视投影时才有。投影后的四个角，画布坐标，顺序为左上、右上、右下、左下。用来看斜着的平面实际落在哪儿。
 - `opacity`：从根到该元素逐层相乘后的透明度。
@@ -574,7 +574,7 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 | `auto-wrap` | info | 文字超出可用宽度，被自动换行 |
 | `non-canonical` | info | 含义明确，但不是规范写法。照常渲染，`hint` 里是规范写法 |
 | `unknown-tag` | warn | 不认识的标签 |
-| `invalid-attr` | warn | 属性放错了位置，或两种写法混用。不认识的属性名不报，留给 `draw` |
+| `invalid-attr` | warn | 属性放错了位置，或两种写法混用。和已知属性编辑距离不超过 2 的名字也记在这里，`hint` 给出正确写法。其余不认识的属性名不报，留给 `draw` |
 | `invalid-child` | warn | 非法子元素：线条或 `g` 放进 flex 容器，文字盒子里放了 `h1`–`h3`、`p`、`div`、`g` 或图片，`mask` 放错位置或一层写了多个 |
 | `empty-mask` | warn | `mask` 里没有可用的形状或图片，不生效 |
 | `invalid-draw` | error / warn | `<draw>` 语法错误（error）或内容为空（warn） |
@@ -586,7 +586,7 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 | `effect-clipped` | warn | 本体在画布内，阴影、光晕或图层模糊超出画布 |
 | `flatten-3d` | warn | `rotateX`、`rotateY`、`z` 没有落在带 `perspective` 的 layer 里，仍按二维绘制。`sphere`、`box`、`extrude`、`model` 同样报这个码，并且不绘制 |
 | `behind-camera` | warn | 平面或网格的 `z` 大于等于所在 layer 的 `perspective`，不绘制 |
-| `emit-draw` | warn | `--emit` 时 `draw` 函数用了外部变量，或读不出函数体。按语法判断：字符串、注释，以及同一条声明里的多个名字，都不算外部变量。写出的 `<draw>` 可能跑不起来 |
+| `emit-draw` | warn | `--emit` 时 `draw` 函数用了外部变量，或读不出函数体。按语法判断：字符串、注释，以及同一条声明里的多个名字，都不算外部变量。这种 `<draw>` 不会写进 `.layer` |
 | `nondeterministic` | warn | `.tsx` 里调用了 `Math.random()`、`Date.now()`、`crypto.randomUUID()` 或 `crypto.getRandomValues()`。字符串、注释和类型里的同名文字不算。同一帧可能得到不同的图 |
 | `type-error` | error | `.tsx` 等源文件的 TypeScript 诊断。`.layer` 不跑类型检查 |
 | `measure-mismatch` | warn | `canvas.create` 量到的宽高和最终排版不一致。消息里带上两个尺寸。常见原因是 `width`、`safe` 或字号和最终画布不一样 |
@@ -599,13 +599,13 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 flexlayer render scene.layer -o scene.png --report scene.json   # 渲染 PNG + 报告
 flexlayer render scene.layer --debug                             # 叠加画出盒子（蓝）和着墨范围（红）
 flexlayer render scene.layer --scale 0.5                         # 缩小输出，方便 AI 快速查看
-flexlayer check scene.layer                                      # 只输出检查结果，不出图
+flexlayer check scene.layer                                      # 只输出检查结果，不出图。没有问题时打印 ✓ 0 issues
 flexlayer render scene.tsx -o scene.png --emit scene.layer       # 执行 JSX，再渲染；--emit 写回 .layer
 flexlayer render scene.tsx --frame 12 -o frame.png               # Composition 的第 12 帧
 flexlayer render scene.tsx --frames out/                         # Composition 的每一帧
 ```
 
-`.tsx`、`.jsx`、`.ts`、`.js` 会先执行，并做类型检查，类型错误记为 `type-error`。标准库和 Node 的类型由渲染器自带，不依赖文件旁边的 `node_modules`。`import ... from 'node:fs'` 可以类型检查。不认识的属性名和 `.layer` 一样保留给 `draw`，不算 `type-error`。属性放错位置同样由检查报 `invalid-attr`，不记成类型错误。`import './x.tsx'` 这种带扩展名的引用可以通过。有类型错误时仍然出图，退出码为 1。文件里写 `/** @jsxImportSource @dc/flexlayer */`，标签和属性与 `.layer` 相同。默认导出一个 `<layer>` 节点，或返回该节点的函数。命名导出 `composition`（或默认导出）可以是第 13 章的 `Composition`。执行结果是同一棵节点树，后面的布局、问题码和绘制都不变。推荐用 `canvas.create(<layer>…</layer>)` 量好再摆。`create` 是同步的，准备在进程里记住，多帧不会重新开始。见第 15 章。`check` 在没有 `--frame` 时抽查第 0 帧、中间一帧和最后一帧。`--emit` 把树写回 `.layer`；`draw` 函数若用了外部变量，记 `emit-draw`，函数体仍会写出来。帧数超过 300 且没有 `--frame` 或 `--frames` 时不渲染联系表。
+`.tsx`、`.jsx`、`.ts`、`.js` 会先执行，并做类型检查，类型错误记为 `type-error`。标准库和 Node 的类型由渲染器自带，不依赖文件旁边的 `node_modules`。`import ... from 'node:fs'` 可以类型检查。不认识的属性名和 `.layer` 一样保留给 `draw`，不算 `type-error`。属性放错位置同样由检查报 `invalid-attr`，不记成类型错误。`import './x.tsx'` 这种带扩展名的引用可以通过。有类型错误时仍然出图，退出码为 1。文件里写 `/** @jsxImportSource flexlayer */`，标签和属性与 `.layer` 相同。默认导出一个 `<layer>` 节点，或返回该节点的函数。命名导出 `composition`（或默认导出）可以是第 13 章的 `Composition`。执行结果是同一棵节点树，后面的布局、问题码和绘制都不变。推荐用 `canvas.create(<layer>…</layer>)` 量好再摆。`create` 是同步的，准备在进程里记住，多帧不会重新开始。见第 15 章。`check` 在没有 `--frame` 时抽查第 0 帧、中间一帧和最后一帧。`--emit` 把树写回 `.layer`；`draw` 函数若用了外部变量，记 `emit-draw`，并且不写出 `<draw>`。帧数超过 300 且没有 `--frame` 或 `--frames` 时不渲染联系表。
 
 默认字体寒蝉端黑体，以及 [docs/RESOURCES.md](docs/RESOURCES.md) 里的其它字体，首次使用时自动下载到 `~/.cache/flexlayer/fonts`。
 
@@ -642,7 +642,7 @@ flexlayer render scene.tsx --frames out/                         # Composition �
 未知标签若同时带有 `draw` 以及 `width` 与 `height`（属性或 `style`），会当作自定义盒子参与布局，不再报 `unknown-tag`；缺少尺寸时仍警告并跳过。
 
 ```ts
-import { h, renderLayer } from '@dc/flexlayer'
+import { h, renderLayer } from 'flexlayer'
 
 const root = h('layer', { width: '1080', height: '1920', background: '#0f1115', color: '#ffffff' },
   h('layer', { x: '540', y: '700', anchor: 'center' },
@@ -663,7 +663,7 @@ const root = h('layer', { width: '1080', height: '1920', background: '#0f1115', 
 await renderLayer(root)
 ```
 
-JSX 可将 `jsxImportSource` 设为 `@dc/flexlayer`，使用 `@dc/flexlayer/jsx-runtime`。
+JSX 可将 `jsxImportSource` 设为 `flexlayer`，使用 `flexlayer/jsx-runtime`。
 
 带 `draw` 且写了尺寸的自定义元素，定位和形状相同。根节点 `<layer>` 的 `draw` / `<draw>` 和其它元素一样，在画布底色和子元素画完之后执行。`el.w`、`el.h` 是画布尺寸，`el.t` 是当前秒数。`opacity`、`rotate`、`scale` 作用到整幅画面。
 
@@ -672,7 +672,7 @@ JSX 可将 `jsxImportSource` 设为 `@dc/flexlayer`，使用 `@dc/flexlayer/jsx-
 动画由程序按时间生成一棵 Flex Layer 节点，再交给渲染器。`t` 的单位是秒。单帧 `renderLayer` 不传 `t` 时，`el.t` 为 `0`。
 
 ```ts
-import { h, renderComposition, type Composition } from '@dc/flexlayer'
+import { h, renderComposition, type Composition } from 'flexlayer'
 
 const scene: Composition = {
   id: 'halving',
@@ -715,13 +715,13 @@ const { frames, contactSheet } = await renderComposition(scene)
 
 ## 15. 用 tsx 写 layer
 
-每一块都是 `canvas.create(<layer>…</layer>)`。参数必须已经是 `<layer>`，传入 `<h1>` 或 `<rect>` 会抛错。返回值就是这棵 `<layer>`，并带上量完之后的 `left`、`top`、`right`、`bottom`、`width`、`height`，供下一块的 `x`、`y` 使用。位置写在 `<layer>` 的 `x`、`y`、`anchor` 上。`.layer` 仍是渲染器读的格式，`--emit` 把展开结果写回去。
+每一块都是 `canvas.create(<layer>…</layer>)`。参数必须已经是 `<layer>`，传入 `<h1>` 或 `<rect>` 会抛错。返回值就是这棵 `<layer>`，并带上量完之后的 `left`、`top`、`right`、`bottom`、`width`、`height`，供下一块的 `x`、`y` 使用。这六个数是布局盒，不含 `rotate` 和 `scale`。转完之后的外接矩形在 `rotatedBox`（同样有 `left`、`top`、`right`、`bottom`、`width`、`height`）。下一块要避开转过的内容，用 `rotatedBox.bottom`，不要用 `bottom`。位置写在 `<layer>` 的 `x`、`y`、`anchor` 上。`.layer` 仍是渲染器读的格式，`--emit` 把展开结果写回去。
 
 `create` 是同步的。字体、图片和 Yoga 在这一次调用里备好，并在进程里记住。后面再写一帧，或渲染一段视频，已经备过的直接接着用，不会重新下载、重新解码。`composition` 的 `component` 里可以调用。
 
 ```tsx
-/** @jsxImportSource @dc/flexlayer */
-import { canvas } from '@dc/flexlayer'
+/** @jsxImportSource flexlayer */
+import { canvas } from 'flexlayer'
 
 const page = { width: 720, height: 540 }
 
@@ -747,14 +747,25 @@ export default canvas.create(
 
 完整例子见 [examples/poster.tsx](examples/poster.tsx)、[examples/hello.tsx](examples/hello.tsx)。
 
-- 底色用铺满的 `<rect fill>`。`color`、`font-family` 写在 `<layer>` 上。没写 `color` 是 `#111111`，没写 `font-family` 是 `ChillDuanSans`。自定义字体写 `<font family src>`，放在页面那一层里。
+- 底色用铺满的 `<rect fill>`。`color`、`font-family` 写在 `<layer>` 上。没写 `color` 是 `#111111`，没写 `font-family` 是 `ChillDuanSans`。自定义字体写 `<font family src>`，放在正在 `create` 的那一层里，或先调用 `canvas.font(family, src)`。字体还没注册就 `create`，会抛错，避免用备用字体量出另一套尺寸。`canvas({...})` 已去掉，调用时抛出同样的改法。
+- `<font src>` 和 `<img src>` 的相对路径按源文件所在目录解析，不按当前运行目录。
 - 根上没写 `safe` 时，渲染按短边的 4%。页面不想要这条边距就写 `safe="0"`。`create` 和最终渲染用同一条可用宽度，避免 `measure-mismatch`。
 - 只写 `width` 或只写 `height`，且里面没有会换行的文字：另一边按比例放缩，放大缩小都做。`scale` 写回节点，`origin` 为 `top-left`。返回的宽高是缩放后的。
 - 会换行的文字：`width` 是行宽，高度是排出来的，不缩放。
 - 宽高都写了：就是盒子。子元素按自己的 `x`、`y` 摆，不整层缩放。页面用这个。
 - 都没写：保持量出来的大小。
 - 手写的 `.layer` 不走这套比例放缩。写了 `width` 仍是盒子。
-- `canvas.component(name, render)` 按标签名注册组件。`render` 收到属性，返回 `<g>`、形状或它们的数组。排版前展开，`.layer` 和 JSX 走同一条路。`--emit` 仍写原来的标签。未注册的标签报 `unknown-tag`。同名再注册会替换。JSX 里大写函数组件在 `jsx()` 里展开，和这个注册表互不替代。内置 `arrow` 用这个注册。
+- `canvas.component(name, render)` 按标签名注册组件。`render` 收到属性，返回 `<g>`、形状或它们的数组。排版前展开，`.layer` 和 JSX 走同一条路。`--emit` 仍写原来的标签。未注册的标签报 `unknown-tag`。同名再注册会替换。JSX 里大写函数组件在 `jsx()` 里展开，和这个注册表互不替代。内置 `arrow` 用这个注册。自定义标签的类型写在 jsx 运行时上：
+
+```tsx
+declare module 'flexlayer/jsx-runtime' {
+  namespace JSX {
+    interface IntrinsicElements {
+      badge: { fill?: string }
+    }
+  }
+}
+```
 
 最终排版和量到的盒子不一致时，报 `measure-mismatch`（warn），消息里带上两个尺寸。常见原因是 `width`、`safe` 或字号和最终画布不一样。
 

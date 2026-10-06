@@ -7,6 +7,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url'
 import * as esbuild from 'esbuild'
 import type { Composition } from './frame.js'
 import type { FvgNode } from './parse.js'
+import { setLayerBaseDir } from './canvas.js'
 import { formatSourceLoc } from './source-loc.js'
 import { registerFontsFromDocument } from './fonts.js'
 import { nondeterministicCalls, staticLayerFonts } from './syntax.js'
@@ -108,17 +109,19 @@ async function importCode(file: string): Promise<Record<string, unknown>> {
       target: 'node20',
       jsx: 'automatic',
       jsxDev: true,
-      jsxImportSource: '@dc/flexlayer',
+      jsxImportSource: 'flexlayer',
+      // 打包后 import.meta.url 落在临时目录，图片解码线程要从这里找到 canvas。
+      banner: { js: `globalThis.__flexlayerCanvasEntry = ${JSON.stringify(require.resolve('@napi-rs/canvas'))}` },
       plugins: [
         {
           name: 'flexlayer-jsx',
           setup(build) {
-            build.onResolve({ filter: /^@dc\/flexlayer$/ }, () => ({ path: siblingModule('index') }))
-            build.onResolve({ filter: /^@dc\/flexlayer\/jsx-runtime$/ }, () => ({ path: siblingModule('jsx-runtime') }))
-            build.onResolve({ filter: /^@dc\/flexlayer\/jsx-dev-runtime$/ }, () => ({ path: siblingModule('jsx-dev-runtime') }))
+            build.onResolve({ filter: /^flexlayer$/ }, () => ({ path: siblingModule('index') }))
+            build.onResolve({ filter: /^flexlayer\/jsx-runtime$/ }, () => ({ path: siblingModule('jsx-runtime') }))
+            build.onResolve({ filter: /^flexlayer\/jsx-dev-runtime$/ }, () => ({ path: siblingModule('jsx-dev-runtime') }))
             // 打包进临时文件后，裸包名从 /tmp 解析不到。改成绝对路径再标成外部依赖。
             build.onResolve({ filter: /^[^./]/ }, (args) => {
-              if (args.path.startsWith('@dc/flexlayer')) return null
+              if (args.path === 'flexlayer' || args.path.startsWith('flexlayer/')) return null
               if (args.path.startsWith('node:') || BUILTINS.has(args.path)) return { path: args.path, external: true }
               return { path: require.resolve(args.path), external: true }
             })
@@ -167,6 +170,7 @@ export async function loadLayerFile(file: string): Promise<LoadedLayer> {
   if (!CODE_EXT.has(extname(file).toLowerCase())) return { kind: 'markup', source }
   const fonts = staticLayerFonts(source, file)
   if (fonts.length > 0) await registerFontsFromDocument(fonts, dirname(file))
+  setLayerBaseDir(dirname(file))
   const loaded = withAbsoluteLocs(resolveExport(await importCode(file), file), file)
   const issues = nondeterministicIssues(source, file)
   return { ...loaded, issues }

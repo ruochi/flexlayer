@@ -1,5 +1,5 @@
 import type { FvgNode } from './parse.js'
-import { ATTRS, HTML_STYLE_ATTRS, attrByName, issueFor } from './schema.js'
+import { ATTRS, ATTR_ORDER, HTML_STYLE_ATTRS, attrByName, issueFor } from './schema.js'
 import { parseNumber, parseStyle } from './style.js'
 import { isTextBoxTag } from './text.js'
 import type { Issue, IssueLevel } from './types.js'
@@ -117,7 +117,72 @@ export function legacyCenterIssues(node: FvgNode, path: string): Issue[] {
   ]
 }
 
-/** 只检查归属表里的已知属性。不认识的属性留给 draw 使用，不报错。 */
+const KNOWN_ATTRS = new Set<string>([...ATTR_ORDER, ...ATTRS.map((attr) => attr.name), 'style'])
+
+/** 超过 2 的距离直接记成 3，调用方只关心是否落在阈值里。 */
+function editDistance(a: string, b: string): number {
+  if (a === b) return 0
+  if (Math.abs(a.length - b.length) > 2) return 3
+  const m = a.length
+  const n = b.length
+  let prev = Array.from({ length: n + 1 }, (_, j) => j)
+  let cur = new Array<number>(n + 1)
+  for (let i = 1; i <= m; i++) {
+    cur[0] = i
+    let rowMin = cur[0]!
+    for (let j = 1; j <= n; j++) {
+      const cost = a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1
+      cur[j] = Math.min(prev[j]! + 1, cur[j - 1]! + 1, prev[j - 1]! + cost)
+      if (cur[j]! < rowMin) rowMin = cur[j]!
+    }
+    if (rowMin > 2) return 3
+    const swap = prev
+    prev = cur
+    cur = swap
+  }
+  return prev[n]! > 2 ? 3 : prev[n]!
+}
+
+/** 和某个已知属性编辑距离不超过 2 时，返回最近的名字。并列超过 3 个就不当成拼写。 */
+export function suggestAttrs(raw: string): string[] {
+  const name = raw.trim().toLowerCase()
+  if (!name || KNOWN_ATTRS.has(raw)) return []
+  let best = 3
+  let hits: string[] = []
+  for (const known of KNOWN_ATTRS) {
+    const dist = editDistance(name, known)
+    if (dist === 0) return [known]
+    if (dist > 2) continue
+    if (dist < best) {
+      best = dist
+      hits = [known]
+    } else if (dist === best) hits.push(known)
+  }
+  if (best > 2 || hits.length === 0 || hits.length > 3) return []
+  return hits
+}
+
+/** 拼写接近已知属性时报 warn。完全对不上的名字仍留给 draw。 */
+export function typoAttrIssues(node: FvgNode, path: string): Issue[] {
+  const out: Issue[] = []
+  for (const key of Object.keys(node.attrs)) {
+    if (!present(node.attrs, key)) continue
+    const suggestions = suggestAttrs(key)
+    if (suggestions.length === 0) continue
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        `不认识的属性 ${key}`,
+        `是不是想写 ${suggestions.join('、')}？`,
+      ),
+    )
+  }
+  return out
+}
+
+/** 只检查归属表里的已知属性。拼写接近已知属性的名字会 warn，其余留给 draw。 */
 export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: string): Issue[] {
   const out: Issue[] = []
   const attrs = node.attrs
@@ -150,7 +215,7 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
         ),
       )
     }
-    const graphic = GRAPHIC_ATTRS.filter((key) => present(attrs, key))
+    const graphic = GRAPHIC_ATTRS.filter((key) => key !== 'cx' && key !== 'cy' && present(attrs, key))
     if (graphic.length > 0) {
       out.push(
         flagged(
@@ -248,7 +313,7 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
         ),
       )
     }
-    if ((isShapeTag(node.tag) || node.draw) && present(attrs, 'anchor')) {
+    if (isShapeTag(node.tag) && present(attrs, 'anchor')) {
       out.push(
         flagged(
           'info',

@@ -1,6 +1,9 @@
+import { spawnSync } from 'node:child_process'
+import { mkdirSync, statSync, writeFileSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createCanvas, type CanvasRenderingContext2D } from '@napi-rs/canvas'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { homedir } from 'node:os'
@@ -148,5 +151,27 @@ describe('img', () => {
     expect(parseObjectPosition('50% 0%')).toEqual({ x: 0.5, y: 0 })
     expect(parseObjectPosition('left 20%')).toEqual({ x: 0, y: 0.2 })
     expect(parseObjectPosition('nope')).toBeNull()
+  })
+})
+
+describe('图片解码进程', () => {
+  it('在包目录外加载图片会写完 PNG 并退出', () => {
+    const src = pngDataUrl(4, 4, (ctx) => {
+      ctx.fillStyle = '#ff0000'
+      ctx.fillRect(0, 0, 4, 4)
+    })
+    const dir = join(tmpdir(), 'flexlayer-outside')
+    const layer = join(dir, 'pic.layer')
+    const png = join(dir, 'pic.png')
+    const cli = join(fileURLToPath(new URL('.', import.meta.url)), '..')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(layer, `<layer width="16" height="16" background="#000000"><img src="${src}" style="width:8px; height:8px" /></layer>`)
+    const result = spawnSync(join(cli, 'node_modules/.bin/tsx'), [join(cli, 'src/cli.ts'), 'render', layer, '-o', png], {
+      cwd: '/tmp',
+      encoding: 'utf8',
+      timeout: 30000,
+    })
+    expect(result.status).toBe(0)
+    expect(statSync(png).size).toBeGreaterThan(100)
   })
 })

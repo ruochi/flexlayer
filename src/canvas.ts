@@ -1,10 +1,48 @@
+import { applyToBox, aroundPivot, originOffset } from './matrix.js'
+import { dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { registerComponent, type ComponentFn } from './components.js'
-import { measureLayer, noteMeasuredSize, parseSafe, prepareAssetsSync, type MeasureEnv } from './layout.js'
+import { ensureBuiltinFontsSync, fontReady, registerFontPath, resolveFontSrcSync } from './fonts.js'
+import { fontFamiliesOf, measureLayer, noteMeasuredSize, parseSafe, prepareAssetsSync, type MeasureEnv } from './layout.js'
 import type { FvgNode } from './parse.js'
 import { isDisplayFlex } from './rules.js'
 import { parseNumber } from './style.js'
 import { isTextBoxTag } from './text.js'
 import type { Anchor, Issue } from './types.js'
+
+const BASE_KEY = '__flexlayerBaseDir'
+
+type GlobalBase = typeof globalThis & { __flexlayerBaseDir?: string }
+
+/** loadLayerFile 在执行 .tsx 之前记下源文件所在目录。打包后的栈指向临时文件，不能用来找字体。 */
+export function setLayerBaseDir(dir: string): void {
+  ;(globalThis as GlobalBase)[BASE_KEY] = dir
+}
+
+function fileFromStack(line: string): string | null {
+  const matched = /\((?:file:\/\/)?([^)]+):\d+:\d+\)$/.exec(line) ?? /at (?:file:\/\/)?(\S+):\d+:\d+$/.exec(line)
+  if (!matched) return null
+  let file = matched[1]!
+  if (file.startsWith('file://')) file = fileURLToPath(file)
+  return file
+}
+
+/** `<font src>` 和图片的相对路径。打包执行时用源文件目录，直接调用时用调用方文件，否则用当前目录。 */
+export function layerBaseDir(): string {
+  const pinned = (globalThis as GlobalBase)[BASE_KEY]
+  const stack = new Error().stack ?? ''
+  const bundled = /flexlayer-[^/\\]*[/\\]entry\.mjs/.test(stack)
+  if (bundled && pinned) return pinned
+  for (const line of stack.split('\n')) {
+    const file = fileFromStack(line)
+    if (!file) continue
+    if (/[/\\](src|dist)[/\\]canvas\.[cm]?[jt]s/.test(file)) continue
+    if (file.includes('/node_modules/') || file.includes('\\node_modules\\')) continue
+    if (file.includes('flexlayer-')) continue
+    return dirname(file)
+  }
+  return pinned || process.cwd()
+}
 
 const UNLIMITED = 1_000_000
 
@@ -20,19 +58,27 @@ const ANCHORS = new Set<Anchor>([
   'bottom-right',
 ])
 
-export type CreatedLayer = FvgNode & {
+export type LayerBox = {
   left: number
   top: number
   right: number
   bottom: number
   width: number
   height: number
-  issues: Issue[]
 }
 
-function parseAnchor(raw: string | undefined): Anchor {
-  const value = (raw ?? 'top-left').trim().toLowerCase() as Anchor
-  return ANCHORS.has(value) ? value : 'top-left'
+export type CreatedLayer = FvgNode & LayerBox & {
+  issues: Issue[]
+  /**
+   * `rotate`、`scale` 之后的外接矩形。`left` 到 `height` 仍是没转之前的布局盒。
+   * 下一块要避开转过的内容时，用 `rotatedBox.bottom`。
+   */
+  rotatedBox: LayerBox
+}
+
+function parseAnchor(raw: string | undefined, fallback: Anchor = 'top-left'): Anchor {
+  const value = (raw ?? fallback).trim().toLowerCase() as Anchor
+  return ANCHORS.has(value) ? value : fallback
 }
 
 /** (x, y) 是盒子上 anchor 那一点，返回盒子左上角。 */
@@ -69,7 +115,7 @@ function wraps(node: FvgNode): boolean {
 
 function measure(node: FvgNode, maxContentWidth: number) {
   const env: MeasureEnv = {
-    baseDir: process.cwd(),
+    baseDir: layerBaseDir(),
     color: node.attrs.color ?? '#111111',
     fontFamily: node.attrs['font-family'] ?? 'ChillDuanSans',
     maxContentWidth,
@@ -93,7 +139,16 @@ export function create(node: FvgNode): CreatedLayer {
   if (!node || typeof node !== 'object' || node.tag !== 'layer') {
     throw new Error('canvas.create 只接受 <layer>')
   }
-  prepareAssetsSync(node, process.cwd())
+  const baseDir = layerBaseDir()
+  prepareAssetsSync(node, baseDir, { nestedFonts: true })
+  const families = fontFamiliesOf(node)
+  ensureBuiltinFontsSync(families)
+  for (const family of families) {
+    if (fontReady(family)) continue
+    throw new Error(
+      `字体「${family}」还没注册，量出来的尺寸会按备用字体计算。把 <font family="${family}" src="…"> 写进这一层，或先调用 canvas.font("${family}", "字体文件")`,
+    )
+  }
   const width = parseNumber(node.attrs.width)
   const height = parseNumber(node.attrs.height)
   const widthSet = node.attrs.width != null && node.attrs.width !== ''
@@ -123,18 +178,47 @@ export function create(node: FvgNode): CreatedLayer {
   noteMeasuredSize(node, laid.width, laid.height)
   const anchor = parseAnchor(node.attrs.anchor)
   const origin = topLeft(parseNumber(node.attrs.x) ?? 0, parseNumber(node.attrs.y) ?? 0, laid.width, laid.height, anchor)
-  return Object.assign(node, {
+  const box: LayerBox = {
     left: origin.x,
     top: origin.y,
     right: origin.x + laid.width,
     bottom: origin.y + laid.height,
     width: laid.width,
     height: laid.height,
+  }
+  return Object.assign(node, box, {
+    rotatedBox: rotatedBoxOf(node, box),
     issues,
   })
 }
 
-export const canvas = {
+/** 绕 origin（默认中心）做 rotate、scale 之后的轴对齐外接矩形。 */
+function rotatedBoxOf(node: FvgNode, box: LayerBox): LayerBox {
+  const pivot = originOffset(parseAnchor(node.attrs.origin, 'center'), box.width, box.height)
+  const visual = applyToBox(
+    aroundPivot(box.left + pivot.x, box.top + pivot.y, parseNumber(node.attrs.rotate) ?? 0, parseNumber(node.attrs.scale) ?? 1),
+    { x: box.left, y: box.top, width: box.width, height: box.height },
+  )
+  return {
+    left: visual.x,
+    top: visual.y,
+    right: visual.x + visual.width,
+    bottom: visual.y + visual.height,
+    width: visual.width,
+    height: visual.height,
+  }
+}
+
+function retiredCanvas(..._args: unknown[]): never {
+  throw new Error(
+    'canvas({...}) 已去掉。底色写成铺满的 <rect fill>，color 和 font-family 写在 <layer> 上，然后调用 canvas.create(<layer>…</layer>)。自定义字体先 canvas.font(family, src)，或把 <font family src> 写进正在量的这一层。',
+  )
+}
+
+export const canvas = Object.assign(retiredCanvas, {
   create,
   component: registerComponent as (name: string, render: ComponentFn) => void,
-}
+  font(family: string, src: string) {
+    registerFontPath(family, resolveFontSrcSync(src, layerBaseDir()))
+  },
+})

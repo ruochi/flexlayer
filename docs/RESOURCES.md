@@ -1,6 +1,6 @@
 # 可用资源
 
-生成画面时用这里的名字和地址。字体、图片、配色、效果名都对得上当前实现。程序里 `import { resources } from '@dc/flexlayer'`，`resources.font('楷体')`、`resources.image('lake')`、`resources.palettes.night`。
+生成画面时用这里的名字和地址。字体、图片、配色、效果名都对得上当前实现。程序里 `import { resources } from 'flexlayer'`，`resources.font('楷体')`、`resources.image('lake')`、`resources.palettes.night`。
 
 ## 字体
 

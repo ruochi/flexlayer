@@ -17,9 +17,9 @@ function runtimePaths(): { baseUrl: string; paths: Record<string, string[]>; typ
     baseUrl: pkgRoot,
     typeRoots: [join(pkgRoot, 'node_modules/@types')],
     paths: {
-      '@dc/flexlayer': [`${dir}/index.${ext}`],
-      '@dc/flexlayer/jsx-runtime': [`${dir}/jsx-runtime.${ext}`],
-      '@dc/flexlayer/jsx-dev-runtime': [`${dir}/jsx-dev-runtime.${ext}`],
+      'flexlayer': [`${dir}/index.${ext}`],
+      'flexlayer/jsx-runtime': [`${dir}/jsx-runtime.${ext}`],
+      'flexlayer/jsx-dev-runtime': [`${dir}/jsx-dev-runtime.${ext}`],
     },
   }
 }
@@ -35,7 +35,7 @@ export function typecheckLayerFile(file: string): Issue[] {
     noEmit: true,
     skipLibCheck: true,
     jsx: ts.JsxEmit.ReactJSX,
-    jsxImportSource: '@dc/flexlayer',
+    jsxImportSource: 'flexlayer',
     module: ts.ModuleKind.ESNext,
     moduleResolution: ts.ModuleResolutionKind.Bundler,
     target: ts.ScriptTarget.ES2022,

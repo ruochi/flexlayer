@@ -2,7 +2,7 @@
 
 Flex Layer 用标签描述一帧画面：图形用 SVG 的写法，文字用 HTML 的写法，布局用 CSS flexbox。渲染器读入 `.layer`，输出 PNG 和一份布局报告。
 
-规范见 [SPEC.md](SPEC.md)。给模型的入口见 [AGENTS.md](AGENTS.md)，一页写法见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，字体、图片和配色见 [docs/RESOURCES.md](docs/RESOURCES.md)。当前版本是 0.2.2。
+规范见 [SPEC.md](SPEC.md)。给模型的入口见 [AGENTS.md](AGENTS.md)，一页写法见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，字体、图片和配色见 [docs/RESOURCES.md](docs/RESOURCES.md)。当前版本是 0.2.3。
 
 `layer` 上的 `perspective` 让直接子元素共用一个视距。`rotateX`、`rotateY`、`z` 写在要转动或推近的那一层上。`sphere`、`box`、`extrude`、`model` 和这些平面共用同一台视距。例子：`npx tsx src/cli.ts render examples/perspective.layer -o perspective.png`，`npx tsx src/cli.ts render examples/meshes.layer -o meshes.png`。
 
@@ -41,7 +41,7 @@ node dist/cli.js render examples/hello.layer -o hello.png
 推荐先量再摆。`canvas.create` 同步准备字体和图片，并在进程里记住。参数是一棵 `<layer>`，返回量好的盒子：
 
 ```tsx
-import { canvas } from '@dc/flexlayer'
+import { canvas } from 'flexlayer'
 
 const page = { width: 720, height: 540 }
 const title = canvas.create(
@@ -57,10 +57,10 @@ export default canvas.create(
 )
 ```
 
-文件头写 `/** @jsxImportSource @dc/flexlayer */`。例子见 `examples/poster.tsx`。也可以直接把节点交给渲染器：
+文件头写 `/** @jsxImportSource flexlayer */`。例子见 `examples/poster.tsx`。也可以直接把节点交给渲染器：
 
 ```ts
-import { renderLayer } from '@dc/flexlayer'
+import { renderLayer } from 'flexlayer'
 
 const { png, report } = await renderLayer(source, { scale: 0.5 })
 ```
@@ -81,7 +81,7 @@ const { png, report } = await renderLayer(source, { scale: 0.5 })
 用 `h()` 或 JSX 时，任意元素可挂 `draw={(ctx, el) => { ... }}`，再交给 `renderLayer(root)`：
 
 ```ts
-import { h, renderLayer } from '@dc/flexlayer'
+import { h, renderLayer } from 'flexlayer'
 
 const root = h(
   'layer',
@@ -108,7 +108,7 @@ await renderLayer(root)
 从字体取出某个字的轮廓。`d` 的原点在字身左上角，字宽和字身高度来自字体：
 
 ```ts
-import { glyph, h, renderLayer } from '@dc/flexlayer'
+import { glyph, h, renderLayer } from 'flexlayer'
 
 const [chun] = await glyph('春', { font: 'Kai', size: 200, weight: 700 })
 const root = h(
@@ -126,7 +126,7 @@ await renderLayer(root)
 按帧生成一组 PNG 和一张联系表：
 
 ```ts
-import { h, renderComposition, type Composition } from '@dc/flexlayer'
+import { h, renderComposition, type Composition } from 'flexlayer'
 
 const scene: Composition = {
   id: 'slide',

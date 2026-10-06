@@ -1,7 +1,24 @@
 import { h, type FvgProps } from './h.js'
+import { JSX as JsxTypes } from './jsx-intrinsics.js'
 import type { FvgChild, FvgNode, SourceLoc } from './parse.js'
 
-export type { JSX } from './jsx-intrinsics.js'
+/**
+ * 自定义标签往这个接口上加。`jsxImportSource` 看的是本模块，不是包根。
+ *
+ * declare module 'flexlayer/jsx-runtime' {
+ *   namespace JSX {
+ *     interface IntrinsicElements {
+ *       badge: { fill?: string }
+ *     }
+ *   }
+ * }
+ */
+export namespace JSX {
+  export type Element = JsxTypes.Element
+  export interface ElementChildrenAttribute extends JsxTypes.ElementChildrenAttribute {}
+  export interface IntrinsicAttributes extends JsxTypes.IntrinsicAttributes {}
+  export interface IntrinsicElements extends JsxTypes.IntrinsicElements {}
+}
 
 export const Fragment: unique symbol = Symbol.for('flexlayer.Fragment')
 

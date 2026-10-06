@@ -1,5 +1,5 @@
-/** @jsxImportSource @dc/flexlayer */
-import { canvas } from '@dc/flexlayer'
+/** @jsxImportSource flexlayer */
+import { canvas } from 'flexlayer'
 
 const page = { width: 720, height: 540 }
 

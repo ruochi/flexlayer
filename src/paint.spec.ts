@@ -309,3 +309,20 @@ describe('paint containers', () => {
     expect(centeredBox.top).toBeCloseTo(0, 0)
   })
 })
+
+describe('圆角', () => {
+  it('过大的单一半径画成胶囊，分开的 rx、ry 仍是椭圆', async () => {
+    const pill = await renderFvg(
+      `<layer width="80" height="20" background="#000000"><rect x="0" y="0" width="80" height="20" rx="999" fill="#ffffff" /></layer>`,
+    )
+    const html = await renderFvg(
+      `<layer width="80" height="20" background="#000000"><div style="width:80px; height:20px; background:#ffffff; border-radius:999px"></div></layer>`,
+    )
+    const ellipse = await renderFvg(
+      `<layer width="80" height="20" background="#000000"><rect x="0" y="0" width="80" height="20" rx="40" ry="10" fill="#ffffff" /></layer>`,
+    )
+    expect((await pixelAt(pill.png, 12, 1))[0]).toBeGreaterThan(200)
+    expect((await pixelAt(html.png, 12, 1))[0]).toBeGreaterThan(200)
+    expect((await pixelAt(ellipse.png, 12, 1))[0]).toBeLessThan(40)
+  })
+})

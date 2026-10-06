@@ -13,7 +13,7 @@ import { parseColor } from './gradientField.js'
 import { imageInk, peekLayerImage, preloadLayerImagesSync, parseObjectFit, parseObjectPosition } from './image.js'
 import type { FvgNode } from './parse.js'
 import { parseFvg } from './parse.js'
-import { ensureBuiltinFontsSync, registerFontsFromDocumentSync } from './fonts.js'
+import { ensureBuiltinFontsSync, primaryFontFamily, registerFontsFromDocumentSync } from './fonts.js'
 import { materialize } from './components.js'
 import { catmullRomPath } from './curve.js'
 import { isGradient, parseGradient, solidPaint } from './gradient.js'
@@ -45,7 +45,7 @@ import {
   isTextBoxTag,
   layoutText,
 } from './text.js'
-import { checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, legacyCenterIssues, rowColumnHint } from './rules.js'
+import { checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, legacyCenterIssues, rowColumnHint, typoAttrIssues } from './rules.js'
 import { canonicalTag, FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag } from './tags.js'
 import { boundsOf, parseSvgTransform } from './svg-transform.js'
 import type {
@@ -1866,6 +1866,17 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
   }
 }
 
+function noteAttrTypos(node: FvgNode, path: string, issues: Issue[]) {
+  const concrete = materialize(node)
+  issues.push(...typoAttrIssues(concrete, path))
+  let index = 0
+  for (const child of concrete.children) {
+    if (typeof child === 'string') continue
+    noteAttrTypos(child, `${path}/${child.tag}[${index}]`, issues)
+    index += 1
+  }
+}
+
 function collectSymbols(node: FvgNode, symbols: Map<string, FvgNode>, issues: Issue[], path: string) {
   if (node.tag === 'symbol') {
     const id = node.attrs.id?.trim()
@@ -1890,6 +1901,34 @@ function collectSymbols(node: FvgNode, symbols: Map<string, FvgNode>, issues: Is
   node.children.forEach((child, index) => {
     if (typeof child !== 'string') collectSymbols(child, symbols, issues, `${path}/${child.tag}[${index}]`)
   })
+}
+
+function collectFontDecls(node: FvgNode, out: Array<{ family: string; src: string }>) {
+  const concrete = materialize(node)
+  const font = fontDecl(concrete)
+  if (font?.family && font.src) out.push(font)
+  for (const child of concrete.children) {
+    if (typeof child !== 'string') collectFontDecls(child, out)
+  }
+}
+
+/** 这一层实际会拿来排文字的字体名。 */
+export function fontFamiliesOf(node: FvgNode): string[] {
+  const out = new Set<string>()
+  const visit = (current: FvgNode) => {
+    const concrete = materialize(current)
+    const add = (raw: string | undefined) => {
+      const name = primaryFontFamily(raw)
+      if (name) out.add(name)
+    }
+    add(concrete.attrs['font-family'])
+    add(parseStyle(concrete.attrs.style)['font-family'])
+    for (const child of concrete.children) {
+      if (typeof child !== 'string') visit(child)
+    }
+  }
+  visit(node)
+  return [...out]
 }
 
 function collectFontFamilies(node: FvgNode, out: Set<string>) {
@@ -1945,6 +1984,7 @@ export function measureLayer(node: FvgNode, env: MeasureEnv): { laid: LayerLayou
   const issues: Issue[] = []
   const symbols = new Map<string, FvgNode>()
   collectSymbols(node, symbols, issues, 'layer')
+  noteAttrTypos(node, 'layer', issues)
   attachDrawTags(node, issues, 'layer')
   const ctx: LayoutContext = {
     color: env.color,
@@ -1971,6 +2011,8 @@ export type PrepareOptions = {
   /** 预先加载的图。写在 layer 里的图会在 create 时自动准备 */
   images?: string[]
   fontFamily?: string
+  /** 把嵌套 layer 里的 <font> 也注册。canvas.create 量尺寸时需要。 */
+  nestedFonts?: boolean
 }
 
 /** 准备字体、图片和 Yoga，并在这个进程里记住。已经备过的直接跳过。 */
@@ -1978,10 +2020,13 @@ export function prepareAssetsSync(root: FvgNode | null, baseDir: string, options
   getYoga()
   const fontNodes = [...(options.fonts ?? [])]
   if (root) {
-    for (const child of root.children) {
-      if (typeof child === 'string') continue
-      const font = fontDecl(child)
-      if (font) fontNodes.push(font)
+    if (options.nestedFonts) collectFontDecls(root, fontNodes)
+    else {
+      for (const child of root.children) {
+        if (typeof child === 'string') continue
+        const font = fontDecl(child)
+        if (font) fontNodes.push(font)
+      }
     }
   }
   registerFontsFromDocumentSync(
@@ -2031,6 +2076,7 @@ export function layoutSync(rootNode: FvgNode, assets: LayoutAssets): FvgDocument
   const sources = new Map<string, string>()
   const symbols = new Map<string, FvgNode>()
   collectSymbols(rootNode, symbols, issues, 'layer')
+  noteAttrTypos(rootNode, 'layer', issues)
   if (attrs.style?.trim()) {
     issues.push({
       level: 'warn',

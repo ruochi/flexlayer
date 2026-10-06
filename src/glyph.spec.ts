@@ -157,7 +157,7 @@ describe('glyph', () => {
     const file = join(dir, 'chun.tsx')
     await writeFile(
       file,
-      `import { glyph } from '@dc/flexlayer'
+      `import { glyph } from 'flexlayer'
       const [chun] = await glyph('春', { font: 'Kai', size: 80 })
       export default (
         <layer width="200" height="200" background="#111111">
@@ -181,7 +181,7 @@ describe('glyph', () => {
     const file = join(dir, 'poster.tsx')
     await writeFile(
       file,
-      `import { glyph } from '@dc/flexlayer'
+      `import { glyph } from 'flexlayer'
       const [chun] = await glyph('春', { font: 'PosterKai', size: 48 })
       export default (
         <layer width="80" height="80" background="#111111">

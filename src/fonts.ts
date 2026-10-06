@@ -122,6 +122,46 @@ export function builtinFont(family: string): BuiltinFont | undefined {
   return FONT_ALIASES[family.trim().toLowerCase()]
 }
 
+const GENERIC_FAMILIES = new Set([
+  'serif',
+  'sans-serif',
+  'monospace',
+  'cursive',
+  'fantasy',
+  'system-ui',
+  'ui-serif',
+  'ui-sans-serif',
+  'ui-monospace',
+  'ui-rounded',
+  'emoji',
+  'math',
+  'fangsong',
+  'inherit',
+  'initial',
+  'unset',
+  'revert',
+  'revert-layer',
+])
+
+/** font-family 里第一个具体的字体名。通用族和 inherit 返回 null。 */
+export function primaryFontFamily(raw: string | undefined): string | null {
+  if (!raw) return null
+  const first = raw.split(',')[0]?.trim() ?? ''
+  const name = first.replace(/^['"]|['"]$/g, '').trim()
+  if (!name || GENERIC_FAMILIES.has(name.toLowerCase())) return null
+  return name
+}
+
+/** 这个名字现在能不能拿来量尺寸。没注册时画布会悄悄换成备用字体。 */
+export function fontReady(family: string): boolean {
+  const name = family.trim()
+  if (!name) return true
+  const builtin = builtinFont(name)
+  if (builtin) return registered.has(builtin.cssFamily) || GlobalFonts.has(builtin.cssFamily)
+  if (name.toLowerCase().includes('chillduan')) return GlobalFonts.has(DEFAULT_FONT_FAMILY)
+  return GlobalFonts.has(name)
+}
+
 function isVariableFamily(family: string): boolean {
   const norm = family.trim().toLowerCase()
   return norm === 'chillduansans' || norm.includes('chillduan')

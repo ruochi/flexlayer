@@ -1,3 +1,4 @@
+import { copyFileSync, existsSync } from 'node:fs'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { chdir } from 'node:process'
 import { tmpdir } from 'node:os'
@@ -9,7 +10,7 @@ import { emitLayer } from './emit.js'
 import { h } from './h.js'
 import { Fragment, jsx, jsxDEV, type JsxSource } from './jsx-runtime.js'
 import { loadLayerFile } from './load-source.js'
-import { checkFvg } from './render.js'
+import { checkFvg, renderFvg } from './render.js'
 import { nondeterministicCalls, readDrawFunction } from './syntax.js'
 import { typecheckLayerFile } from './typecheck.js'
 
@@ -289,11 +290,13 @@ describe('emitLayer', () => {
   })
 
   it('<draw> 引用外部变量时不让整张图退出', async () => {
-    const source = `<layer width="40" height="40" background="#000"><rect width="10" height="10" fill="#fff"><draw>\nctx.fillStyle = OUT\n</draw></rect></layer>`
+    const source = `<layer width="40" height="40" background="#000">\n  <rect width="10" height="10" fill="#fff">\n    <draw>\nctx.fillStyle = OUT\n</draw>\n  </rect>\n</layer>`
     const report = await checkFvg(source)
     const issue = report.issues.find((item) => item.code === 'invalid-draw')
     expect(issue?.level).toBe('error')
     expect(issue?.message).toContain('OUT')
+    expect(issue?.path).toBe('layer/rect[0]/draw[0]')
+    expect(issue?.source).toBe('3:5')
     const { renderFvg } = await import('./render.js')
     await expect(renderFvg(source)).resolves.toMatchObject({ png: expect.any(Buffer) })
   })
@@ -333,12 +336,12 @@ describe('load .tsx', () => {
     expect(typeof right !== 'string' && right && 'attrs' in right && right.attrs.x).toBe('90')
   })
 
-  it('可以从 @dc/flexlayer 引用运行时函数', async () => {
+  it('可以从 flexlayer 引用运行时函数', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'flexlayer-tsx-'))
     const file = join(dir, 'use-lib.tsx')
     await writeFile(
       file,
-      `import { interpolate } from '@dc/flexlayer'
+      `import { interpolate } from 'flexlayer'
       export default function Box() {
         const x = interpolate(1, [0, 1], [4, 16])
         return (
@@ -457,7 +460,7 @@ describe('load .tsx', () => {
     const file = join(dir, 'spill.tsx')
     await writeFile(
       file,
-      `import type { Composition } from '@dc/flexlayer'
+      `import type { Composition } from 'flexlayer'
       export const composition: Composition = {
         id: 'spill',
         width: 40,
@@ -488,5 +491,85 @@ describe('load .tsx', () => {
     expect(overflow.length).toBeGreaterThan(0)
     expect(overflow.every((issue) => issue.frame === 4)).toBe(true)
     expect(parts[0]?.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
+  })
+
+  it('canvas.component 在打包后的 tsx 里生效，类型用 jsx-runtime 声明', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'flexlayer-badge-'))
+    const file = join(dir, 'badge.tsx')
+    await writeFile(
+      file,
+      `/** @jsxImportSource flexlayer */
+import { canvas } from 'flexlayer'
+
+declare module 'flexlayer/jsx-runtime' {
+  namespace JSX {
+    interface IntrinsicElements {
+      badge: { fill?: string }
+    }
+  }
+}
+
+canvas.component('badge', () => <circle cx="24" cy="24" r="16" fill="#00ff00" />)
+
+export default (
+  <layer width="48" height="48" background="#000000">
+    <badge />
+  </layer>
+)
+`,
+    )
+    expect(typecheckLayerFile(file)).toEqual([])
+    const bare = join(dir, 'bare.tsx')
+    await writeFile(
+      bare,
+      `/** @jsxImportSource flexlayer */
+export default <layer width="48" height="48"><badge /></layer>
+`,
+    )
+    expect(typecheckLayerFile(bare).some((issue) => issue.message.includes('badge'))).toBe(true)
+    const loaded = await loadLayerFile(file)
+    expect(loaded.kind).toBe('node')
+    if (loaded.kind !== 'node') return
+    const report = await checkFvg(loaded.node)
+    expect(report.issues.filter((issue) => issue.code === 'unknown-tag')).toEqual([])
+    const { png } = await renderFvg(loaded.node)
+    const { createCanvas, loadImage } = await import('@napi-rs/canvas')
+    const img = await loadImage(png)
+    const canvasEl = createCanvas(img.width, img.height)
+    const ctx = canvasEl.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    const pixel = ctx.getImageData(24, 24, 1, 1).data
+    expect(pixel[1]).toBeGreaterThan(200)
+  })
+
+  it('canvas.create 里的相对字体路径按源文件目录解析', async () => {
+    const src = ['/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf', '/usr/share/fonts/truetype/croscore/Cousine-Regular.ttf'].find(
+      (path) => existsSync(path),
+    )
+    if (!src) return
+    const dir = await mkdtemp(join(tmpdir(), 'flexlayer-font-'))
+    copyFileSync(src, join(dir, 'RelProbe.ttf'))
+    const file = join(dir, 'poster.tsx')
+    await writeFile(
+      file,
+      `/** @jsxImportSource flexlayer */
+import { canvas } from 'flexlayer'
+const block = canvas.create(
+  <layer width="240">
+    <font family="RelProbe" src="./RelProbe.ttf" />
+    <h1 style="font-family:RelProbe; font-size:32px; white-space:nowrap">0000000000</h1>
+  </layer>,
+)
+export default <layer width="240" height="80">{block}</layer>
+`,
+    )
+    const cwd = process.cwd()
+    try {
+      chdir('/tmp')
+      const loaded = await loadLayerFile(file)
+      expect(loaded.kind).toBe('node')
+    } finally {
+      chdir(cwd)
+    }
   })
 })

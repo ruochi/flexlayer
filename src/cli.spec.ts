@@ -1,3 +1,6 @@
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
@@ -27,5 +30,17 @@ describe('render hello.layer', () => {
     expect(report.width).toBe(1080)
     expect(report.height).toBe(1920)
     expect(report.elements.length).toBeGreaterThan(0)
+  })
+
+  it('check 没有问题时打印 ✓ 0 issues', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flexlayer-check-'))
+    const file = join(dir, 'ok.layer')
+    writeFileSync(file, `<layer width="40" height="40" background="#000"><rect x="0" y="0" width="10" height="10" fill="#fff" /></layer>`)
+    const result = spawnSync(join(pkgDir, 'node_modules/.bin/tsx'), [join(pkgDir, 'src/cli.ts'), 'check', file], {
+      cwd: pkgDir,
+      encoding: 'utf8',
+    })
+    expect(result.status).toBe(0)
+    expect(result.stdout.trim()).toBe('✓ 0 issues')
   })
 })

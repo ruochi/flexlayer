@@ -116,6 +116,15 @@ describe('属性归属', () => {
     expect(report.issues).toEqual([])
   })
 
+  it('拼写接近已知属性时报 warn，并指出正确名字', async () => {
+    const report = await issues(`<layer width="80" height="40"><rect x="0" y="0" widht="20" height="10" fil="#ff0000" /></layer>`)
+    const hits = report.issues.filter((issue) => issue.message.includes('不认识的属性'))
+    expect(hits.map((issue) => issue.hint)).toEqual(expect.arrayContaining(['是不是想写 width？', '是不是想写 fill？']))
+    expect(hits.every((issue) => issue.level === 'warn' && issue.code === 'invalid-attr')).toBe(true)
+    const root = await issues(`<layer widht="80" height="40" background="#000"></layer>`)
+    expect(root.issues.some((issue) => issue.path === 'layer' && issue.hint === '是不是想写 width？')).toBe(true)
+  })
+
   it('大写标签照常渲染，并提示改成小写', async () => {
     const report = await issues(`<Layer width="80" height="80"><Circle cx="40" cy="40" r="10" fill="#fff" /></Layer>`)
     expect(report.elements.some((element) => element.tag === 'circle')).toBe(true)
@@ -123,6 +132,30 @@ describe('属性归属', () => {
     expect(notes.map((issue) => issue.message)).toEqual(
       expect.arrayContaining([expect.stringContaining('<Layer>'), expect.stringContaining('<Circle>')]),
     )
+  })
+
+  it('HTML 上的 cx、cy 只警告一次', async () => {
+    const report = await issues(`<layer width="400" height="200"><p cx="40" cy="40">甲</p></layer>`)
+    const hits = report.issues.filter((issue) => issue.code === 'invalid-attr')
+    expect(hits).toHaveLength(1)
+    expect(hits[0]?.message).toContain('定位')
+  })
+
+  it('HTML 上的 fill 仍报图形属性', async () => {
+    const report = await issues(`<layer width="400" height="200"><p cx="40" fill="#fff">甲</p></layer>`)
+    const hits = report.issues.filter((issue) => issue.code === 'invalid-attr')
+    expect(hits.some((issue) => issue.message.includes('定位'))).toBe(true)
+    expect(hits.some((issue) => issue.message.includes('fill'))).toBe(true)
+    expect(hits.some((issue) => issue.message.includes('cx'))).toBe(false)
+  })
+
+  it('带 draw 的 layer 写 anchor 不报形状不用 anchor', async () => {
+    const report = await issues(
+      `<layer width="80" height="80"><layer x="10" y="10" anchor="center"><draw>ctx.fillStyle = "#fff"</draw></layer></layer>`,
+    )
+    expect(report.issues.some((issue) => issue.message.includes('形状不用 anchor'))).toBe(false)
+    const shape = await issues(`<layer width="80" height="80"><rect x="10" y="10" width="20" height="20" anchor="center" /></layer>`)
+    expect(shape.issues.some((issue) => issue.message.includes('形状不用 anchor'))).toBe(true)
   })
 
   it('文字盒子里的块级标签报 invalid-child', async () => {

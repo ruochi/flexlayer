@@ -147,14 +147,17 @@ function expandBox(box: Box, pad: number): Box {
 }
 
 /**
- * 阴影和发光走 canvas `shadowBlur`，看得见的范围大约就是 blur 本身。
- * 按 blur×2 会把明明还在画布里的效果报成裁切。
- * 图层模糊和玻璃是 CSS `blur()`，参数是标准差，外扩仍按两倍计。
+ * 阴影和发光走 canvas `shadowBlur`。看得见的范围大约是 blur 的 0.55 倍，
+ * 再往外只剩几乎全透明的尾巴。按 blur 本身会把离边缘还有十几到几十像素的效果报成裁切。
+ * 偏移和 spread 是实打实的位移，仍按原值加。图层模糊和玻璃是 CSS `blur()`，外扩按两倍计。
  */
 function effectPadOf(node: { shadow?: LayoutNode['shadow']; glow?: LayoutNode['glow']; blur?: number; glass?: LayoutNode['glass'] }): number {
+  const visible = 0.55
   return Math.max(
-    node.shadow ? node.shadow.blur + node.shadow.spread + Math.max(Math.abs(node.shadow.x), Math.abs(node.shadow.y)) : 0,
-    node.glow ? node.glow.blur + node.glow.spread : 0,
+    node.shadow
+      ? (node.shadow.blur + node.shadow.spread) * visible + Math.max(Math.abs(node.shadow.x), Math.abs(node.shadow.y))
+      : 0,
+    node.glow ? (node.glow.blur + node.glow.spread) * visible : 0,
     node.blur != null ? node.blur * 2 : 0,
     node.glass ? node.glass.blur * 2 : 0,
   )
