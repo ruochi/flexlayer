@@ -1,6 +1,6 @@
 import { apply, applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset, translated, type Matrix } from './matrix.js'
 import { applyPoseMatrix, has3dPose, planeDepth, poseMatrix, posePoint, project as projectPoint } from './perspective.js'
-import type { Box, ElementReport, FvgDocument, FvgReport, Issue, LayoutNode, MeshLayoutNode } from './types.js'
+import type { Box, ElementReport, FvgDocument, FvgReport, InlineOwner, Issue, LayoutNode, MeshLayoutNode, TextLayoutNode } from './types.js'
 import { boxToRect, emptyBox, translateBox, unionBoxes } from './types.js'
 
 const VISIBLE_OPACITY = 0.01
@@ -246,6 +246,90 @@ function makeProjector(
   }
 }
 
+function textAlignShift(node: TextLayoutNode, lineWidth: number): number {
+  const bw = node.border?.width ?? 0
+  const inner = node.width - node.padding.left - node.padding.right - bw * 2
+  if (node.textAlign === 'center') return (inner - lineWidth) / 2
+  if (node.textAlign === 'right') return inner - lineWidth
+  return 0
+}
+
+/** 内容坐标（行内段的 x、行 ink 的 y）变到画布，和文字行的 box 用同一套变换。 */
+function mapTextContentBox(
+  node: TextLayoutNode,
+  content: Box,
+  matrix: Matrix,
+  clip: Box | undefined,
+  plane: PlaneSpace | undefined,
+  planeRoot: boolean,
+): Box {
+  const padX = node.padding.left + (node.border?.width ?? 0)
+  const padY = node.padding.top + (node.border?.width ?? 0)
+  if (plane) {
+    const local = translateBox(content, padX, padY)
+    const placed = toPlaneBox(plane, node, local, planeRoot)
+    const visible = plane.localClip ? intersectBox(placed, plane.localClip) : placed
+    return finishCanvas(projectBox(plane.project, visible), plane.canvasClip)
+  }
+  return clipInk(applyToBox(matrix, translateBox(content, node.x + padX, node.y + padY)), clip)
+}
+
+function inlineElementReports(
+  node: TextLayoutNode,
+  matrix: Matrix,
+  opacity: number,
+  clip: Box | undefined,
+  plane: PlaneSpace | undefined,
+  planeRoot: boolean,
+): ElementReport[] {
+  const grouped = new Map<string, { owner: InlineOwner; union: Box | null; lines: Array<{ text: string; box: Box }> }>()
+  const order: string[] = []
+  for (const line of node.textLayout.lines) {
+    const shift = textAlignShift(node, line.width)
+    const onLine = new Map<string, { text: string; box: Box }>()
+    for (const seg of line.segments) {
+      const owner = seg.owner
+      if (!owner || !seg.text) continue
+      const piece: Box = { x: shift + seg.x, y: line.ink.y, width: seg.width, height: line.ink.height }
+      let acc = grouped.get(owner.path)
+      if (!acc) {
+        acc = { owner, union: null, lines: [] }
+        grouped.set(owner.path, acc)
+        order.push(owner.path)
+      }
+      acc.union = acc.union ? unionBoxes(acc.union, piece) : piece
+      const part = onLine.get(owner.path)
+      if (!part) onLine.set(owner.path, { text: seg.text, box: piece })
+      else {
+        part.text += seg.text
+        part.box = unionBoxes(part.box, piece)
+      }
+    }
+    for (const [path, part] of onLine) grouped.get(path)!.lines.push(part)
+  }
+
+  const out: ElementReport[] = []
+  for (const path of order) {
+    const acc = grouped.get(path)!
+    if (!acc.union) continue
+    const ink = mapTextContentBox(node, acc.union, matrix, clip, plane, planeRoot)
+    out.push({
+      path: acc.owner.path,
+      id: acc.owner.id,
+      tag: acc.owner.tag,
+      inline: true,
+      box: boxToRect(ink),
+      ink: boxToRect(ink),
+      opacity,
+      lines: acc.lines.map((line) => ({
+        text: line.text,
+        box: boxToRect(mapTextContentBox(node, line.box, matrix, clip, plane, planeRoot)),
+      })),
+    })
+  }
+  return out
+}
+
 function walk(
   node: LayoutNode,
   parentMatrix: Matrix,
@@ -351,6 +435,14 @@ function walk(
   let effectClip = clip
   if (!plane && ownMask) effectClip = tighten(effectClip, applyToBox(childMatrix, ownMask))
   effects.push(plane ? { plane: true, box: planeEffect } : { plane: false, clip: effectClip })
+
+  if (node.kind === 'text') {
+    for (const extra of inlineElementReports(node, matrix, opacity, clip, plane, planeRoot)) {
+      elements.push(extra)
+      inkSlack.push(0)
+      effects.push(plane ? { plane: true, box: null } : { plane: false, clip: effectClip })
+    }
+  }
 
   if (node.kind === 'group') {
     const childMatrix = multiply(matrix, node.svg)
@@ -525,7 +617,7 @@ export function buildReport(doc: FvgDocument): FvgReport {
         hint: '把元素往里移，或减小 blur',
       })
     }
-    if (el.lines != null && (el.tag === 'h1' || el.tag === 'h2' || el.tag === 'h3' || el.tag === 'p' || el.tag === 'div' || el.tag === 'span')) {
+    if (!el.inline && el.lines != null && (el.tag === 'h1' || el.tag === 'h2' || el.tag === 'h3' || el.tag === 'p' || el.tag === 'div' || el.tag === 'span')) {
       if (el.ink.left < doc.safe.left - 1e-3 || el.ink.right > doc.width - doc.safe.right + 1e-3) {
         issues.push({
           level: 'warn',
@@ -546,7 +638,7 @@ export function buildReport(doc: FvgDocument): FvgReport {
     }
   }
 
-  const textInks = visible.filter((e) => e.lines != null)
+  const textInks = visible.filter((e) => e.lines != null && !e.inline)
   for (let i = 0; i < textInks.length; i++) {
     for (let j = i + 1; j < textInks.length; j++) {
       const a = textInks[i]!

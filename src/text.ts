@@ -2,7 +2,7 @@ import type { FvgChild, FvgNode } from './parse.js'
 import { applyCanvasFont } from './fonts.js'
 import { getMeasureCtx } from './measureCtx.js'
 import { parseFontWeight, parsePx } from './style.js'
-import type { Box, TextLayoutResult, TextRunStyle, TextSegment } from './types.js'
+import type { Box, InlineOwner, TextLayoutResult, TextRunStyle, TextSegment } from './types.js'
 import { emptyBox, unionBoxes } from './types.js'
 
 const INLINE_TAGS = new Set(['span', 'strong', 'b', 'em', 'br'])
@@ -118,15 +118,20 @@ function walkInline(
   style: TextRunStyle,
   out: TextSegment[],
   hardBreakNext: boolean,
+  parentPath: string,
+  inherited: InlineOwner | undefined,
 ): void {
   let breakNext = hardBreakNext
+  let elementIndex = 0
   for (const child of nodes) {
     if (typeof child === 'string') {
-      if (child) out.push({ text: child, style, hardBreakBefore: breakNext })
+      if (child) out.push({ text: child, style, hardBreakBefore: breakNext, owner: inherited })
       breakNext = false
       continue
     }
     const tag = child.tag.toLowerCase()
+    const path = `${parentPath}/${tag}[${elementIndex}]`
+    elementIndex += 1
     if (tag === 'br') {
       breakNext = true
       continue
@@ -136,12 +141,14 @@ function walkInline(
     if (tag === 'strong' || tag === 'b') segStyle = { ...style, fontWeight: 700 }
     if (tag === 'em') segStyle = { ...style, fontWeight: Math.min(900, style.fontWeight + 100) }
     segStyle = mergeStyle(segStyle, parseStyleAttr(child.attrs.style))
-    walkInline(child.children, segStyle, out, breakNext)
+    const id = child.attrs.id?.trim()
+    const owner = id ? { id, path, tag } : inherited
+    walkInline(child.children, segStyle, out, breakNext, path, owner)
     breakNext = false
   }
 }
 
-export function extractTextSegments(node: FvgNode, defaults: TextBoxDefaults): TextSegment[] {
+export function extractTextSegments(node: FvgNode, defaults: TextBoxDefaults, parentPath = ''): TextSegment[] {
   const base: TextRunStyle = {
     fontFamily: defaults.fontFamily,
     fontSize: defaults.fontSize,
@@ -151,7 +158,7 @@ export function extractTextSegments(node: FvgNode, defaults: TextBoxDefaults): T
   }
   const style = mergeStyle(base, parseStyleAttr(node.attrs.style))
   const segs: TextSegment[] = []
-  walkInline(node.children, style, segs, false)
+  walkInline(node.children, style, segs, false, parentPath, undefined)
   return normalizeInlineSegments(segs)
 }
 
@@ -162,6 +169,11 @@ type Unit = {
   glueLeft: boolean
   glueRight: boolean
   isSpace: boolean
+  owner?: InlineOwner
+}
+
+function sameOwner(a: InlineOwner | undefined, b: InlineOwner | undefined): boolean {
+  return a?.path === b?.path
 }
 
 function measureTextWidth(text: string, style: TextRunStyle): number {
@@ -205,31 +217,20 @@ function segmentsToUnits(segments: TextSegment[]): Unit[] {
     } else if (seg.hardBreakBefore && units.length === 0) {
       // 段首硬换行忽略
     }
+    const push = (text: string, width: number, glueLeft: boolean, glueRight: boolean, isSpace: boolean) => {
+      units.push({ text, style: seg.style, width, glueLeft, glueRight, isSpace, owner: seg.owner })
+    }
     let i = 0
     const s = seg.text
     while (i < s.length) {
       const ch = s[i]!
       if (isCollapsibleSpaceChar(ch)) {
-        units.push({
-          text: ' ',
-          style: seg.style,
-          width: measureTextWidth(' ', seg.style),
-          glueLeft: true,
-          glueRight: true,
-          isSpace: true,
-        })
+        push(' ', measureTextWidth(' ', seg.style), true, true, true)
         i++
         continue
       }
       if (isCjk(ch)) {
-        units.push({
-          text: ch,
-          style: seg.style,
-          width: measureTextWidth(ch, seg.style),
-          glueLeft: false,
-          glueRight: false,
-          isSpace: false,
-        })
+        push(ch, measureTextWidth(ch, seg.style), false, false, false)
         i++
         continue
       }
@@ -237,25 +238,11 @@ function segmentsToUnits(segments: TextSegment[]): Unit[] {
         let j = i + 1
         while (j < s.length && isWordChar(s[j]!)) j++
         const word = s.slice(i, j)
-        units.push({
-          text: word,
-          style: seg.style,
-          width: measureTextWidth(word, seg.style),
-          glueLeft: false,
-          glueRight: false,
-          isSpace: false,
-        })
+        push(word, measureTextWidth(word, seg.style), false, false, false)
         i = j
         continue
       }
-      units.push({
-        text: ch,
-        style: seg.style,
-        width: measureTextWidth(ch, seg.style),
-        glueLeft: false,
-        glueRight: false,
-        isSpace: false,
-      })
+      push(ch, measureTextWidth(ch, seg.style), false, false, false)
       i++
     }
   }
@@ -294,14 +281,14 @@ function glueUnits(lineUnits: Unit[]): Unit[] {
     let style = u.style
     if (i + 1 < end) {
       const next = lineUnits[i + 1]!
-      if (LINE_TAIL_FORBIDDEN.has(u.text.slice(-1)!) && !next.isSpace) {
+      if (LINE_TAIL_FORBIDDEN.has(u.text.slice(-1)!) && !next.isSpace && sameOwner(u.owner, next.owner)) {
         text += next.text
         i++
       }
     }
     if (out.length > 0) {
       const prev = out[out.length - 1]!
-      if (LINE_HEAD_FORBIDDEN.has(text[0]!) && !prev.isSpace) {
+      if (LINE_HEAD_FORBIDDEN.has(text[0]!) && !prev.isSpace && sameOwner(prev.owner, u.owner)) {
         out[out.length - 1] = {
           ...prev,
           text: prev.text + text,
@@ -417,6 +404,7 @@ function layoutVertical(opts: LayoutTextOptions): TextLayoutResult {
     ascent: number
     descent: number
     breakBefore: boolean
+    owner?: InlineOwner
   }
   const glyphs: Glyph[] = []
   for (const segment of opts.segments) {
@@ -432,6 +420,7 @@ function layoutVertical(opts: LayoutTextOptions): TextLayoutResult {
         ascent: measured.ascent,
         descent: measured.descent,
         breakBefore: index === 0 && Boolean(segment.hardBreakBefore),
+        owner: segment.owner,
       })
     })
   }
@@ -474,7 +463,7 @@ function layoutVertical(opts: LayoutTextOptions): TextLayoutResult {
       const lineInk = { x: glyphX, y: baselineY - glyph.ascent, width: glyph.width, height: glyph.ascent + glyph.descent }
       ink = unionBoxes(ink, lineInk)
       laidLines.push({
-        segments: [{ text: glyph.text, style: glyph.drawStyle, x: glyphX, width: glyph.width }],
+        segments: [{ text: glyph.text, style: glyph.drawStyle, x: glyphX, width: glyph.width, owner: glyph.owner }],
         width: contentWidth,
         height: lineH,
         baselineY,
@@ -550,7 +539,7 @@ export function layoutText(opts: LayoutTextOptions): TextLayoutResult {
       const inkM = measureInk(u.text, u.style)
       maxAsc = Math.max(maxAsc, inkM.ascent)
       maxDesc = Math.max(maxDesc, inkM.descent)
-      segOut.push({ text: u.text, style: u.style, x, width: u.width })
+      segOut.push({ text: u.text, style: u.style, x, width: u.width, owner: u.owner })
       x += u.width
       lineW = x
     }

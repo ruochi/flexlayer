@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { h } from './h.js'
 import { initFontsForMeasure } from './fonts.js'
 import { mergeFrameIssues, sampleFrames } from './check-frames.js'
-import { interpolate, renderComposition, renderFrames, sequence, spring, type Composition } from './frame.js'
+import { Easing, interpolate, noise, random, renderComposition, renderFrames, sequence, spring, type Composition } from './frame.js'
 import { formatIssueLine } from './report.js'
 import { renderFvg } from './render.js'
 
@@ -203,6 +203,40 @@ describe('interpolate / spring / sequence', () => {
     expect(interpolate(-5, [0, 10], [0, 100])).toBe(0)
     expect(interpolate(20, [0, 10], [0, 100])).toBe(100)
     expect(interpolate(20, [0, 10], [0, 100], { extrapolateRight: 'extend' })).toBe(200)
+  })
+
+  it('interpolate 多点区间和 easing', () => {
+    expect(interpolate(15, [0, 30, 60], [0, 1, 0])).toBe(0.5)
+    expect(interpolate(45, [0, 30, 60], [0, 1, 0])).toBe(0.5)
+    expect(interpolate(30, [0, 30, 60], [0, 1, 0])).toBe(1)
+    expect(interpolate(-10, [0, 30, 60], [0, 1, 0])).toBe(0)
+    expect(interpolate(90, [0, 30, 60], [0, 1, 0])).toBe(0)
+    expect(interpolate(90, [0, 30, 60], [0, 1, 0], { extrapolateRight: 'extend' })).toBeCloseTo(-1)
+    expect(interpolate(5, [0, 10], [0, 100], { easing: Easing.quad })).toBe(25)
+    expect(interpolate(5, [0, 10], [0, 100], { easing: Easing.out(Easing.quad) })).toBe(75)
+    expect(interpolate(5, [0, 10], [0, 100], { easing: Easing.bezier(0, 0, 1, 1) })).toBeCloseTo(50)
+    expect(interpolate(0, [0, 10], [0, 100])).toBe(0)
+    expect(() => interpolate(1, [0, 1], [0])).toThrow(/长度必须一致/)
+    expect(() => interpolate(1, [0], [0])).toThrow(/至少需要两个点/)
+    expect(() => interpolate(1, [0, 2, 1], [0, 1, 0])).toThrow(/单调递增/)
+  })
+
+  it('random 和 noise 由 seed 决定', () => {
+    expect(random('flex')).toBe(random('flex'))
+    expect(random(7)).toBe(random(7))
+    expect(random('flex')).not.toBe(random('layer'))
+    expect(random('flex')).toBeGreaterThanOrEqual(0)
+    expect(random('flex')).toBeLessThan(1)
+    expect(noise('a', 1.25, 0.5)).toBe(noise('a', 1.25, 0.5))
+    expect(noise('a', 1.25, 0.5)).not.toBe(noise('b', 1.25, 0.5))
+    const near = Math.abs(noise('a', 0.2) - noise('a', 0.21))
+    expect(near).toBeLessThan(0.05)
+    expect(near).toBeGreaterThan(0)
+    for (let i = 0; i < 20; i++) {
+      const value = noise('a', i * 0.37, i * 0.13, i * 0.07)
+      expect(value).toBeGreaterThanOrEqual(-1)
+      expect(value).toBeLessThanOrEqual(1)
+    }
   })
 
   it('spring 从 0 趋近 1', () => {

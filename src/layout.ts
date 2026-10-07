@@ -627,14 +627,18 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
   const fontWeight = parseFontWeight(style['font-weight']) ?? defaultFontWeightForTag(tag)
   const fontFamily = style['font-family']?.trim() || ctx.fontFamily
   const color = style.color ?? ctx.color
-  const segments = extractTextSegments(node, {
-    fontFamily,
-    fontSize,
-    fontWeight,
-    color,
-    letterSpacing: parsePx(style['letter-spacing']) ?? 0,
-    lineHeightRatio: parseNumber(style['line-height']) ?? (1.2),
-  })
+  const segments = extractTextSegments(
+    node,
+    {
+      fontFamily,
+      fontSize,
+      fontWeight,
+      color,
+      letterSpacing: parsePx(style['letter-spacing']) ?? 0,
+      lineHeightRatio: parseNumber(style['line-height']) ?? 1.2,
+    },
+    ctx.pathPrefix,
+  )
   const nowrap = style['white-space'] === 'nowrap'
   const textWrap = style['text-wrap'] === 'wrap' ? 'wrap' : 'balance'
   const fixedW = parsePx(style.width)

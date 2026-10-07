@@ -51,22 +51,150 @@ export type RenderCompositionResult = {
 
 export type Extrapolate = 'clamp' | 'extend'
 
-/** 线性映射。默认两端钳制，不外推。 */
+/** 把 0 到 1 的进度变成另一条 0 到 1 的曲线。 */
+export type Easing = (progress: number) => number
+
+function easeIn(easing: Easing): Easing {
+  return easing
+}
+
+function easeOut(easing: Easing): Easing {
+  return (t) => 1 - easing(1 - t)
+}
+
+function easeInOut(easing: Easing): Easing {
+  return (t) => (t < 0.5 ? easing(t * 2) / 2 : 1 - easing((1 - t) * 2) / 2)
+}
+
+function bezierEasing(x1: number, y1: number, x2: number, y2: number): Easing {
+  if (x1 < 0 || x1 > 1 || x2 < 0 || x2 > 1) throw new Error('bezier 的 x 控制点必须在 0 到 1 之间')
+  const cx = 3 * x1
+  const bx = 3 * (x2 - x1) - cx
+  const ax = 1 - cx - bx
+  const cy = 3 * y1
+  const by = 3 * (y2 - y1) - cy
+  const ay = 1 - cy - by
+  const sampleX = (t: number) => ((ax * t + bx) * t + cx) * t
+  const sampleY = (t: number) => ((ay * t + by) * t + cy) * t
+  const sampleDX = (t: number) => (3 * ax * t + 2 * bx) * t + cx
+  const solveX = (x: number) => {
+    let t = x
+    for (let i = 0; i < 8; i++) {
+      const delta = sampleX(t) - x
+      if (Math.abs(delta) < 1e-6) return t
+      const slope = sampleDX(t)
+      if (Math.abs(slope) < 1e-6) break
+      t -= delta / slope
+    }
+    let lo = 0
+    let hi = 1
+    t = x
+    for (let i = 0; i < 24; i++) {
+      const xEst = sampleX(t)
+      if (Math.abs(xEst - x) < 1e-6) return t
+      if (xEst < x) lo = t
+      else hi = t
+      t = (lo + hi) / 2
+    }
+    return t
+  }
+  return (x) => {
+    if (x <= 0) return 0
+    if (x >= 1) return 1
+    return sampleY(solveX(x))
+  }
+}
+
+export const Easing: {
+  linear: Easing
+  quad: Easing
+  cubic: Easing
+  in: (easing: Easing) => Easing
+  out: (easing: Easing) => Easing
+  inOut: (easing: Easing) => Easing
+  bezier: (x1: number, y1: number, x2: number, y2: number) => Easing
+} = {
+  linear: (t) => t,
+  quad: (t) => t * t,
+  cubic: (t) => t * t * t,
+  in: easeIn,
+  out: easeOut,
+  inOut: easeInOut,
+  bezier: bezierEasing,
+}
+
+/** 同一个 seed 永远得到同一个 `[0, 1)` 里的数。 */
+export function random(seed: number | string): number {
+  const text = typeof seed === 'number' ? String(seed) : seed
+  let h = 2166136261
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  let a = h >>> 0
+  a = (a + 0x6d2b79f5) | 0
+  let t = Math.imul(a ^ (a >>> 15), 1 | a)
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+}
+
+function fade(t: number): number {
+  return t * t * t * (t * (t * 6 - 15) + 10)
+}
+
+/** 平滑噪声，结果在 `[-1, 1]`。同一个 seed 和坐标永远得到同一个数。 */
+export function noise(seed: number | string, x: number, y = 0, z = 0): number {
+  const x0 = Math.floor(x)
+  const y0 = Math.floor(y)
+  const z0 = Math.floor(z)
+  const tx = fade(x - x0)
+  const ty = fade(y - y0)
+  const tz = fade(z - z0)
+  const at = (ix: number, iy: number, iz: number) => random(`${seed}\0${ix}\0${iy}\0${iz}`) * 2 - 1
+  const lerp = (a: number, b: number, t: number) => a + (b - a) * t
+  const x00 = lerp(at(x0, y0, z0), at(x0 + 1, y0, z0), tx)
+  const x10 = lerp(at(x0, y0 + 1, z0), at(x0 + 1, y0 + 1, z0), tx)
+  const x01 = lerp(at(x0, y0, z0 + 1), at(x0 + 1, y0, z0 + 1), tx)
+  const x11 = lerp(at(x0, y0 + 1, z0 + 1), at(x0 + 1, y0 + 1, z0 + 1), tx)
+  return lerp(lerp(x00, x10, ty), lerp(x01, x11, ty), tz)
+}
+
+/**
+ * 把 value 从输入区间映射到输出区间。两点调用和以前一样。
+ * 多点时输入必须严格递增，两边长度一致，否则抛错。两点重合时仍按旧规则取端点。
+ * `easing` 只作用在当前这一段、且进度落在 0 到 1 里的时候。默认两端钳制，不外推。
+ */
 export function interpolate(
   value: number,
-  inputRange: [number, number],
-  outputRange: [number, number],
-  options?: { extrapolateLeft?: Extrapolate; extrapolateRight?: Extrapolate },
+  inputRange: readonly number[],
+  outputRange: readonly number[],
+  options?: { extrapolateLeft?: Extrapolate; extrapolateRight?: Extrapolate; easing?: Easing },
 ): number {
-  const [in0, in1] = inputRange
-  const [out0, out1] = outputRange
-  if (in0 === in1) return value <= in0 ? out0 : out1
+  if (inputRange.length !== outputRange.length) throw new Error('interpolate 的输入和输出长度必须一致')
+  if (inputRange.length < 2) throw new Error('interpolate 至少需要两个点')
+  for (let i = 1; i < inputRange.length; i++) {
+    const prev = inputRange[i - 1]!
+    const next = inputRange[i]!
+    if (next < prev || (next === prev && inputRange.length !== 2)) throw new Error('interpolate 的输入必须单调递增')
+  }
+  if (inputRange.length === 2 && inputRange[0] === inputRange[1]) {
+    return value <= inputRange[0]! ? outputRange[0]! : outputRange[1]!
+  }
+  let index = 1
+  for (; index < inputRange.length - 1; index++) {
+    if (value < inputRange[index]!) break
+  }
+  const in0 = inputRange[index - 1]!
+  const in1 = inputRange[index]!
+  const out0 = outputRange[index - 1]!
+  const out1 = outputRange[index]!
   let progress = (value - in0) / (in1 - in0)
   const left = options?.extrapolateLeft ?? 'clamp'
   const right = options?.extrapolateRight ?? 'clamp'
-  if (progress < 0 && left === 'clamp') progress = 0
-  if (progress > 1 && right === 'clamp') progress = 1
-  return out0 + progress * (out1 - out0)
+  if (index === 1 && progress < 0 && left === 'clamp') progress = 0
+  if (index === inputRange.length - 1 && progress > 1 && right === 'clamp') progress = 1
+  const eased = progress >= 0 && progress <= 1 && options?.easing ? options.easing(progress) : progress
+  return out0 + eased * (out1 - out0)
 }
 
 export type SpringConfig = {

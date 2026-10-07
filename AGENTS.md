@@ -83,7 +83,7 @@ export default canvas.create(
 字体、图片、配色和效果名用 [docs/RESOURCES.md](docs/RESOURCES.md)。`font-family="Song"` 这种目录里的名字会自己下载，不要编造字体文件地址，也不要把 `fonts.googleapis.com` 的 CSS 地址写进 `<font src>`。
 
 - 直接写 `.layer`：渲染器和 `--emit` 用的文本。静态单帧可以手写。速查见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，例子在 [examples/](examples/)。
-- 动画导出 `composition`（见 SPEC 第 13 章）。文件头写 `/** @jsxImportSource flexlayer */`，标签不用 import。`flexlayer check` / `render` 会执行它。`--emit out.layer` 把展开结果写回 `.layer`。`draw={(ctx, el) => ...}` 里只用 `ctx` 和 `el`，否则 `--emit` 报 `emit-draw`，并且不写出 `<draw>`。不要用 `Math.random` 或 `Date.now`。例子：`examples/slide.tsx`。
+- 动画导出 `composition`（见 SPEC 第 13 章）。文件头写 `/** @jsxImportSource flexlayer */`，标签不用 import。`flexlayer check` / `render` 会执行它。`--emit out.layer` 把展开结果写回 `.layer`。`draw={(ctx, el) => ...}` 里只用 `ctx` 和 `el`，否则 `--emit` 报 `emit-draw`，并且不写出 `<draw>`。不要用 `Math.random` 或 `Date.now`。可重复的随机数用 `random(seed)` 或 `noise`。例子：`examples/slide.tsx`。
 - 要从字体取出某个字的轮廓，`import { glyph } from 'flexlayer'`。`await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })` 按码位返回数组，每项有 `text`、`d`、`font`、`size`、`weight`、字宽 `width`、字身高度 `height`、`baseline`、`ink` 和 `missing`。`d` 的原点在字身左上角，y 向下，单位是像素。字宽和字身高度来自字体，不来自路径外接框。缺字（`😀`、`𠀀`）`missing` 为 `true`，`d` 是同一个缺字方框。可变字体只出默认字重。见 SPEC 5.4。
 
 ```ts
@@ -101,7 +101,7 @@ const { png, report } = await renderLayer(source, { baseDir: process.cwd() })
 | `renderLayer` / `checkLayer` | 渲染 PNG，或只排版并出报告 |
 | `glyph` | 按码位取轮廓 |
 | `h` | 不用 JSX 时建节点 |
-| `renderFrames` / `renderComposition` / `interpolate` / `spring` / `sequence` | 逐帧产出，或一次拿回全部 PNG。三个时间函数不绘制 |
+| `renderFrames` / `renderComposition` / `interpolate` / `spring` / `sequence` / `random` / `noise` | 逐帧产出，或一次拿回全部 PNG。`interpolate` 可写多点区间和 `Easing`。`random`、`noise` 由 seed 决定 |
 | `parseFvg` / `emitLayer` | 解析 `.layer` 文本，或把节点写回文本 |
 | `buildReport` / `formatIssueLine` / `formatSourceLoc` | 报告、终端里的一行问题、源码位置 |
 | `resources` | 字体、图片、配色、`grade` / `glass` / `blend` 的可用名字 |

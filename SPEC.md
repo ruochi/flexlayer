@@ -233,6 +233,8 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 5. 避头尾：`，。、；：？！）」』》】…` 等不会出现在行首，`（「『《【` 等不会出现在行尾。
 6. 硬换行只用 `<br>`。源码里的换行和连续空格折成一个空格，每一行的行首行尾空格去掉。行内标签交界处的空格保留，`A <span>B</span> C` 是 `A B C`。`&nbsp;` 不折叠，也不当行首行尾空格去掉。
 
+带 `id` 的行内标签（`span`、`strong`、`b`、`em`）会在报告的元素表里多一条，`inline` 为 true。`path` 像 `layer/p[0]/span[0]`，序号按元素子节点计，和布局路径一样，`<br>` 也占一个序号。`lines` 是每一行里属于它的那一段。`box` 和 `ink` 都是这些段合起来、再乘上父文字元素的变换（含祖先的 `rotate`、`scale` 和透视）之后的外接矩形；行内标签没有单独的布局盒。最内层写了 `id` 的那段拥有这些字，里面没写 `id` 的行内标签沿用外层。没写 `id` 的行内标签不进元素表。这些 `inline` 元素不参与 `outside-safe`、`min-font-size` 和 `text-overlap`，避免和父段落各报一次。
+
 ### 5.4 轮廓 glyph
 
 `.tsx` 里可以从字体取出每个字的轮廓。这是程序接口，不是标签。
@@ -562,6 +564,7 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 - `effect`：阴影、光晕、图层模糊或玻璃可能占用的范围，字段同 `box`。没有这些外扩效果时不写。已经被 `overflow="hidden"` 或 `<mask>` 裁掉的部分不算在里面。这个范围画出画布时报 `effect-clipped`。
 - `quad`：有透视投影时才有。投影后的四个角，画布坐标，顺序为左上、右上、右下、左下。用来看斜着的平面实际落在哪儿。
 - `opacity`：从根到该元素逐层相乘后的透明度。
+- `inline`：带 `id` 的行内标签才有，为 true。`box` 和 `ink` 都是这段文字变换后的外接矩形，见第 5 章。不参与安全区、最小字号和文字重叠检查。
 
 `opacity` 小于 0.01 的元素仍会出现在 `elements` 里，但不参与下面的越界、安全区、重叠和最小字号检查。最小字号按声明的 `font-size` 判断，不乘 `scale`。
 
@@ -719,15 +722,20 @@ for await (const { frame, png, report } of renderFrames(scene, { from: 0, to: 30
 
 随时间变化的位置、尺寸和文字写在 `component` 里，布局每一帧重新计算。`draw` 里用 `el.t` 读取秒数，用 `el.frame` 和 `el.fps` 读取帧号和帧率。单帧渲染不传这两个数时，它们是 `0`。
 
-三个纯函数不绘制画面：
+这几个纯函数不绘制画面：
 
 | 函数 | 作用 |
 | --- | --- |
-| `interpolate(value, inputRange, outputRange)` | 线性映射，默认超出区间时钳制 |
+| `random(seed)` | 同一个 seed（数字或字符串）永远得到同一个 `[0, 1)` 里的数 |
+| `noise(seed, x, y?, z?)` | 平滑噪声，结果在 `[-1, 1]`。同一个 seed 和坐标永远得到同一个数 |
+| `interpolate(value, inputRange, outputRange, options?)` | 把 value 从输入区间映射到输出区间。可以写多点，例如 `[0, 30, 60]` 到 `[0, 1, 0]`。输入必须单调递增，两边长度一样，否则抛错。两点重合时仍取端点。`options.easing` 用 `Easing`，只作用在当前这一段、进度在 0 到 1 里的时候。默认超出区间时钳制 |
+| `Easing.linear` / `quad` / `cubic` | 进度曲线。`quad` 是 `t²`，`cubic` 是 `t³` |
+| `Easing.in` / `out` / `inOut` | 包一层已有曲线。`in` 就是这条曲线本身，`out` 是反过来，`inOut` 前半段进入、后半段离开 |
+| `Easing.bezier(x1, y1, x2, y2)` | 三次贝塞尔。两个 x 必须在 0 到 1 |
 | `spring({ frame, fps })` | 阻尼弹簧，从 0 趋近 1。`frame` 为 0 时是 0 |
 | `sequence(input, { from, durationInFrames }, render)` | 当前帧落在区间内时，把减去 `from` 的局部 `frame` 和 `t` 交给 `render`；否则返回 `null` |
 
-同一 `frame` 调用两次，得到同一张 PNG。命令行对 `.layer` 渲染这一帧；对导出 `Composition` 的 `.tsx`，用 `--frame` 取一帧，用 `--frames` 目录边写边出 PNG，或用 `--rgba` 把原始像素交给调用方。`.tsx` 里不要调用 `Math.random()` 或 `Date.now()`，否则报 `nondeterministic`。字符串和注释里写到这两个名字不会报。
+只写两个点时，`interpolate(value, [0, 10], [0, 100])` 和以前一样。同一 `frame` 调用两次，得到同一张 PNG。命令行对 `.layer` 渲染这一帧；对导出 `Composition` 的 `.tsx`，用 `--frame` 取一帧，用 `--frames` 目录边写边出 PNG，或用 `--rgba` 把原始像素交给调用方。`.tsx` 里不要调用 `Math.random()` 或 `Date.now()`，否则报 `nondeterministic`。需要可重复的随机数时用 `random(seed)` 或 `noise`。字符串和注释里写到 `Math.random` 或 `Date.now` 不会报。
 
 ## 14. 预留
 

@@ -173,6 +173,11 @@ export type ElementReport = {
   opacity: number
   fontSize?: number
   lines?: TextLineReport[]
+  /**
+   * 带 id 的行内标签。没有单独的布局盒：`box` 和 `ink` 都是这段文字乘上父元素变换后的外接矩形。
+   * 不参与 `outside-safe`、`min-font-size` 和 `text-overlap`。
+   */
+  inline?: boolean
   shadow?: ShadowSpec
   glow?: GlowSpec
   innerShadow?: ShadowSpec
@@ -206,14 +211,23 @@ export type TextRunStyle = {
   letterSpacing: number
 }
 
+/** 带 id 的行内标签。最内层有 id 的那段拥有这些字；里面没写 id 的行内标签沿用外层。 */
+export type InlineOwner = {
+  id: string
+  /** 如 `layer/p[0]/span[0]`，序号是元素子节点的序号。 */
+  path: string
+  tag: string
+}
+
 export type TextSegment = {
   text: string
   style: TextRunStyle
   hardBreakBefore?: boolean
+  owner?: InlineOwner
 }
 
 export type LaidTextLine = {
-  segments: Array<{ text: string; style: TextRunStyle; x: number; width: number }>
+  segments: Array<{ text: string; style: TextRunStyle; x: number; width: number; owner?: InlineOwner }>
   width: number
   height: number
   baselineY: number
