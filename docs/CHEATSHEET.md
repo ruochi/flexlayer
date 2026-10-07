@@ -40,7 +40,7 @@
 
 整层裁切用 `<mask>`，和内容并列写在 `layer` 里：`<mask><circle cx="160" cy="90" r="90" /></mask>`。实心是硬边，`fill="linear-gradient(to bottom, #fff, #fff0)"` 是软边。`overflow="hidden"` 只裁子元素。
 
-透视：`<layer perspective="700"><rect rotateY="28" z="40" /></layer>`。`z` 越大越靠近观众。没有 `perspective` 的祖先时，`rotateX`、`rotateY`、`z` 仍按二维画，并报 `flatten-3d`。例子见 [examples/perspective.layer](../examples/perspective.layer)。
+透视：`<layer perspective="700"><rect rotateY="28" z="40" /></layer>`。`z` 越大越靠近观众。没有网格时，直接子元素按中心深度从远到近画，深度相同按文档顺序。有 `sphere`、`box`、`extrude`、`model` 时改用深度缓冲，近的盖住远的。没有 `perspective` 的祖先时，`rotateX`、`rotateY`、`z` 仍按二维画，`z` 不改变顺序，并报 `flatten-3d`。例子见 [examples/perspective.layer](../examples/perspective.layer)。
 
 网格和透视共用这一层：`<layer perspective="700"><sphere cx="220" cy="340" r="90" z="50" fill="#4CC3D9" /><box x="355" y="350" width="150" height="100" depth="60" fill="#EF2D5E" /></layer>`。`extrude` 用 `d` 和 `depth`，`d` 里并排的形状各自挤出，套在里面的才是洞。`model` 放在有宽高的 layer 里，`src` 指向 `.glb`。网格的 `fill` 是纯色，渐变、`shadow`、`glow` 会警告。没有 `perspective` 时不绘制。例子见 [examples/meshes.layer](../examples/meshes.layer)。
 
