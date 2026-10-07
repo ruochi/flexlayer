@@ -38,7 +38,7 @@ async function pixelAt(png: Buffer, x: number, y: number): Promise<[number, numb
 
 async function render(source: string, scale = 1) {
   const doc = await layoutSource(source, process.cwd())
-  const png = await paintDocument(doc.root, {
+  const canvas = await paintDocument(doc.root, {
     width: doc.width,
     height: doc.height,
     background: doc.background,
@@ -46,7 +46,7 @@ async function render(source: string, scale = 1) {
     debug: false,
     t: 0,
   })
-  return { doc, png }
+  return { doc, png: canvas.toBuffer('image/png') }
 }
 
 describe('gradient()', () => {

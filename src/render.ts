@@ -1,3 +1,4 @@
+import type { Canvas } from '@napi-rs/canvas'
 import { layoutSync, prepareAssets, readLayerRoot } from './layout.js'
 import { paintDocument } from './paint.js'
 import { buildReport } from './report.js'
@@ -10,23 +11,35 @@ export type RenderResult = {
   report: FvgReport
 }
 
-export async function renderFvg(source: string | FvgNode, options: RenderOptions = {}): Promise<RenderResult> {
+export type CanvasRenderResult = {
+  canvas: Canvas
+  report: FvgReport
+}
+
+/** 排版并画到画布上，不编码。调用方决定写成 PNG 还是原始像素。 */
+export async function renderToCanvas(source: string | FvgNode, options: RenderOptions = {}): Promise<CanvasRenderResult> {
   if (options.fontsCacheDir) setFontsCacheDir(options.fontsCacheDir)
   await initFontsForMeasure({ fontsCacheDir: options.fontsCacheDir })
   const baseDir = options.baseDir ?? process.cwd()
   const opened = readLayerRoot(source)
   const assets = await prepareAssets(opened.root, baseDir, { fonts: opened.fonts })
   const doc = layoutSync(opened.root, assets)
-  const png = await paintDocument(doc.root, {
+  const canvas = await paintDocument(doc.root, {
     width: doc.width,
     height: doc.height,
     background: doc.background,
     scale: options.scale ?? 1,
     debug: options.debug ?? false,
     t: options.t ?? 0,
+    frame: options.frame ?? 0,
+    fps: options.fps ?? 0,
   })
-  const report = buildReport(doc)
-  return { png, report }
+  return { canvas, report: buildReport(doc) }
+}
+
+export async function renderFvg(source: string | FvgNode, options: RenderOptions = {}): Promise<RenderResult> {
+  const { canvas, report } = await renderToCanvas(source, options)
+  return { png: canvas.toBuffer('image/png'), report }
 }
 
 export async function checkFvg(source: string | FvgNode, options: RenderOptions = {}): Promise<FvgReport> {

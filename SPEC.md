@@ -593,7 +593,7 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 | `type-error` | error | `.tsx` 等源文件的 TypeScript 诊断。`.layer` 不跑类型检查 |
 | `measure-mismatch` | warn | `canvas.create` 量到的宽高和最终排版不一致。消息里带上两个尺寸。常见原因是 `width`、`safe` 或字号和最终画布不一样 |
 
-每条问题都可以带 `hint`，是可以直接照做的改法。从 `.tsx` 来的节点，问题和元素还可以带 `source`，形如 `examples/hello.tsx:18:5`。`.layer` 解析出来的节点没有这个字段。Composition 抽查出来的问题带 `frame`，是这条问题第一次出现的帧号。同一条问题出现在多帧时合并，其余帧号写在消息末尾。
+每条问题都可以带 `hint`，是可以直接照做的改法。从 `.tsx` 来的节点，问题和元素还可以带 `source`，形如 `examples/hello.tsx:18:5`。`.layer` 解析出来的节点没有这个字段。Composition 抽查出来的问题带 `frame`，是这一段第一次出现的帧号，并带 `frames`：含两端的区间，例如 `[[120, 180]]`。抽查序列里连续出现的合成一段；`--step` 大于 1 时，相邻的抽查帧也算连续，所以 120、125、130 合成 `[120, 130]`。中间有一帧抽到了、但这条问题没出现，就另起一段。区间里没被抽到的帧不表示检查过。帧号不写进 `message`。
 
 ## 11. 命令行
 
@@ -604,10 +604,13 @@ flexlayer render scene.layer --scale 0.5                         # 缩小输出�
 flexlayer check scene.layer                                      # 只输出检查结果，不出图。没有问题时打印 ✓ 0 issues
 flexlayer render scene.tsx -o scene.png --emit scene.layer       # 执行 JSX，再渲染；--emit 写回 .layer
 flexlayer render scene.tsx --frame 12 -o frame.png               # Composition 的第 12 帧
-flexlayer render scene.tsx --frames out/                         # Composition 的每一帧
+flexlayer render scene.tsx --frames out/ --from 0 --to 90        # 边渲染边写 PNG。--to 含端点
+flexlayer render scene.tsx --rgba -                              # 原始像素写到标准输出
+flexlayer check scene.tsx --frames 120-300 --step 5              # 检查这一段，每 5 帧一抽
+flexlayer check scene.tsx --frames all                           # 检查每一帧
 ```
 
-`.tsx`、`.jsx`、`.ts`、`.js` 会先执行，并做类型检查，类型错误记为 `type-error`。标准库和 Node 的类型由渲染器自带，不依赖文件旁边的 `node_modules`。`import ... from 'node:fs'` 可以类型检查。不认识的属性名和 `.layer` 一样保留给 `draw`，不算 `type-error`。属性放错位置同样由检查报 `invalid-attr`，不记成类型错误。`import './x.tsx'` 这种带扩展名的引用可以通过。有类型错误时仍然出图，退出码为 1。文件里写 `/** @jsxImportSource flexlayer */`，标签和属性与 `.layer` 相同。默认导出一个 `<layer>` 节点，或返回该节点的函数。命名导出 `composition`（或默认导出）可以是第 13 章的 `Composition`。执行结果是同一棵节点树，后面的布局、问题码和绘制都不变。推荐用 `canvas.create(<layer>…</layer>)` 量好再摆。`create` 是同步的，准备在进程里记住，多帧不会重新开始。见第 15 章。`check` 在没有 `--frame` 时抽查第 0 帧、中间一帧和最后一帧。`--emit` 把树写回 `.layer`；`draw` 函数若用了外部变量，记 `emit-draw`，并且不写出 `<draw>`。帧数超过 300 且没有 `--frame` 或 `--frames` 时不渲染联系表。
+`.tsx`、`.jsx`、`.ts`、`.js` 会先执行，并做类型检查，类型错误记为 `type-error`。标准库和 Node 的类型由渲染器自带，不依赖文件旁边的 `node_modules`。`import ... from 'node:fs'` 可以类型检查。不认识的属性名和 `.layer` 一样保留给 `draw`，不算 `type-error`。属性放错位置同样由检查报 `invalid-attr`，不记成类型错误。`import './x.tsx'` 这种带扩展名的引用可以通过。有类型错误时仍然出图，退出码为 1。文件里写 `/** @jsxImportSource flexlayer */`，标签和属性与 `.layer` 相同。默认导出一个 `<layer>` 节点，或返回该节点的函数。命名导出 `composition`（或默认导出）可以是第 13 章的 `Composition`。执行结果是同一棵节点树，后面的布局、问题码和绘制都不变。推荐用 `canvas.create(<layer>…</layer>)` 量好再摆。`create` 是同步的，准备在进程里记住，多帧不会重新开始。见第 15 章。`check` 在没有 `--frame` 和 `--frames` 时抽查第 0 帧、中间一帧和最后一帧。`--frames all` 检查每一帧，`--frames 120-300` 检查这一段（含两端），`--frames 12` 只检查这一帧，`--step N` 是步长。`--emit` 把树写回 `.layer`；`draw` 函数若用了外部变量，记 `emit-draw`，并且不写出 `<draw>`。帧数超过 300 且没有 `--frame`、`--frames` 或 `--rgba` 时不渲染联系表。`--frames <目录>` 边渲染边写 `frame-0000.png` 这种文件，文件名是帧号。`--from`、`--to` 含端点。`--rgba -` 按帧把不预乘的原始像素连续写到标准输出，日志改走标准错误，并在标准错误打出一行 `ffmpeg -f rawvideo -pix_fmt rgba -s WxH -r fps -i -`。`--rgba` 后面写成文件路径时，像素写入该文件。flexlayer 不调用 ffmpeg。多帧渲染打印的问题是全部帧合并后的结果。
 
 默认字体寒蝉端黑体，以及 [docs/RESOURCES.md](docs/RESOURCES.md) 里的其它字体，首次使用时自动下载到 `~/.cache/flexlayer/fonts`。
 
@@ -640,6 +643,8 @@ flexlayer render scene.tsx --frames out/                         # Composition �
 | `style` | 本标签 `style` 解析后的键值 |
 | `computed` | `color`、`fontFamily`、`fontSize`、`fontWeight`、`opacity`（继承根上的 `color` / `font-family` 与文字默认字号） |
 | `w`、`h` | 布局外框宽高 |
+| `t` | 当前秒数。单帧缺省为 0 |
+| `frame`、`fps` | 当前帧号和每秒帧数。单帧缺省为 0 |
 
 未知标签若同时带有 `draw` 以及 `width` 与 `height`（属性或 `style`），会当作自定义盒子参与布局，不再报 `unknown-tag`；缺少尺寸时仍警告并跳过。
 
@@ -693,9 +698,19 @@ const scene: Composition = {
 const { frames, contactSheet } = await renderComposition(scene)
 ```
 
-`renderComposition` 对 `frame = 0 .. durationInFrames - 1` 调用 `component({ frame, fps, t: frame / fps })`，再 `renderLayer(node, { t })`。`fps` 必须大于 0，`durationInFrames` 为不小于 1 的整数。返回每一帧的 PNG 和布局报告（`frames`、`reports`），以及一张白色底的联系表：列数约为帧数的平方根，单元格按比例缩小、不放大，最长边不超过 480px，整张宽度不超过 3840px。
+`renderComposition` 对 `frame = 0 .. durationInFrames - 1` 调用 `component({ frame, fps, t: frame / fps })`，再渲染。`fps` 必须大于 0，`durationInFrames` 为不小于 1 的整数。返回每一帧的 PNG 和布局报告（`frames`、`reports`），以及一张白色底的联系表：列数约为帧数的平方根，单元格按比例缩小、不放大，最长边不超过 480px，整张宽度不超过 3840px。它在 `renderFrames` 上实现，返回值和以前一样。
 
-随时间变化的位置、尺寸和文字写在 `component` 里，布局每一帧重新计算。`draw` 里用 `el.t` 读取同一个秒数。
+`renderFrames(comp, { from, to, step, format })` 是异步迭代器，逐帧产出，不把整段留在内存里。`to` 含端点，缺省从 0 到最后一帧，`step` 缺省为 1。`format` 缺省 `'png'`；`'rgba'` 时 `rgba` 是不预乘的原始像素，长度为 `width × height × 4`，`width` 和 `height` 是这一帧画布的像素尺寸。每一项还有 `frame`、`t` 和 `report`。
+
+```ts
+for await (const { frame, png, report } of renderFrames(scene, { from: 0, to: 30 })) {
+  // png 是这一帧
+}
+```
+
+`createContactSheet({ count, width, height })` 可以逐帧 `add` PNG 或画布，最后 `toPng()`。尺寸规则和 `renderComposition` 的联系表相同。`contactSheetFromPngs` 仍一次吃进全部 PNG。
+
+随时间变化的位置、尺寸和文字写在 `component` 里，布局每一帧重新计算。`draw` 里用 `el.t` 读取秒数，用 `el.frame` 和 `el.fps` 读取帧号和帧率。单帧渲染不传这两个数时，它们是 `0`。
 
 三个纯函数不绘制画面：
 
@@ -705,11 +720,11 @@ const { frames, contactSheet } = await renderComposition(scene)
 | `spring({ frame, fps })` | 阻尼弹簧，从 0 趋近 1。`frame` 为 0 时是 0 |
 | `sequence(input, { from, durationInFrames }, render)` | 当前帧落在区间内时，把减去 `from` 的局部 `frame` 和 `t` 交给 `render`；否则返回 `null` |
 
-同一 `frame` 调用两次，得到同一张 PNG。命令行对 `.layer` 渲染这一帧；对导出 `Composition` 的 `.tsx`，用 `--frame` 取一帧，或输出联系表和 `--frames` 目录里的帧序列。`.tsx` 里不要调用 `Math.random()` 或 `Date.now()`，否则报 `nondeterministic`。字符串和注释里写到这两个名字不会报。
+同一 `frame` 调用两次，得到同一张 PNG。命令行对 `.layer` 渲染这一帧；对导出 `Composition` 的 `.tsx`，用 `--frame` 取一帧，用 `--frames` 目录边写边出 PNG，或用 `--rgba` 把原始像素交给调用方。`.tsx` 里不要调用 `Math.random()` 或 `Date.now()`，否则报 `nondeterministic`。字符串和注释里写到这两个名字不会报。
 
 ## 14. 预留
 
-- 把帧序列编码成视频，以及时间轴预览。
+- 把帧序列编码成视频。原始像素已经可以从 `renderFrames` 的 `rgba` 或命令行 `--rgba` 拿走，编码由调用方完成，flexlayer 不依赖 ffmpeg。时间轴预览还没有。
 - 墨迹布局：按着墨范围计算间距、居中、包裹。
 - `Icon`。
 - `Scene3D` 这个名字仍保留，不要挪作他用。`sphere`、`box`、`extrude`、`model` 画在父 `layer` 的 `perspective` 里，见第 3 章。单独的视口、作者灯光和阴影还没有，讨论见 [docs/proposals/3D.md](docs/proposals/3D.md)。

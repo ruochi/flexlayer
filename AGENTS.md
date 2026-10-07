@@ -99,7 +99,7 @@ const { png, report } = await renderLayer(source, { baseDir: process.cwd() })
 | `renderLayer` / `checkLayer` | 渲染 PNG，或只排版并出报告 |
 | `glyph` | 按码位取轮廓 |
 | `h` | 不用 JSX 时建节点 |
-| `renderComposition` / `interpolate` / `spring` / `sequence` | 帧序列和三个时间函数 |
+| `renderFrames` / `renderComposition` / `interpolate` / `spring` / `sequence` | 逐帧产出，或一次拿回全部 PNG。三个时间函数不绘制 |
 | `parseFvg` / `emitLayer` | 解析 `.layer` 文本，或把节点写回文本 |
 | `buildReport` / `formatIssueLine` / `formatSourceLoc` | 报告、终端里的一行问题、源码位置 |
 | `resources` | 字体、图片、配色、`grade` / `glass` / `blend` 的可用名字 |
@@ -112,7 +112,10 @@ const { png, report } = await renderLayer(source, { baseDir: process.cwd() })
 
 ```bash
 npx tsx src/cli.ts check examples/hello.layer
+npx tsx src/cli.ts check examples/slide.tsx --frames 0-12 --step 3
 ```
+
+不写 `--frames` 时，动画只抽第 0 帧、中间一帧和最后一帧。`--frames all` 检查每一帧。问题的 `frames` 是区间，例如 `[[0, 12]]`，`frame` 仍是第一次出现的帧号。
 
 ### 4.2 `flexlayer render --report`
 
@@ -120,7 +123,7 @@ npx tsx src/cli.ts check examples/hello.layer
 npx tsx src/cli.ts render scene.layer -o scene.png --report scene.json
 ```
 
-`--scale 0.5` 可缩小 PNG。
+`--scale 0.5` 可缩小 PNG。动画用 `--frames out/` 边渲染边写 PNG，`--from`、`--to` 含端点。`--rgba -` 把原始像素写到标准输出，编码交给调用方。`renderFrames` 是对应的逐帧接口。
 
 ### 4.3 `flexlayer render --debug`
 
@@ -133,7 +136,7 @@ npx tsx src/cli.ts render scene.layer -o scene.png --report scene.json
 - **`ink`**：旋转、缩放之后的着墨外接矩形。有透视时是投影后的外接矩形。像素对位和 `overflow-canvas` 看它，不看 `box`。
 - **`quad`**：透视平面投影后的四个角（左上、右上、右下、左下）。斜着的平面落在哪儿看这里。
 - **`effect`**：阴影、光晕、图层模糊或玻璃可能占用的范围。没有这些外扩效果时不写这个字段。`effect-clipped` 表示它画出了画布。`overflow="hidden"` 和 `<mask>` 已经裁掉的部分不算。
-- **`issues`**：见 [SPEC.md 的问题码表](SPEC.md)。**error 必须修**，warn 视需求修。`grade` 回显的是预设展开后的参数。
+- **`issues`**：见 [SPEC.md 的问题码表](SPEC.md)。**error 必须修**，warn 视需求修。`grade` 回显的是预设展开后的参数。动画抽查合并后，`frame` 是第一次出现的帧，`frames` 是区间。
 
 ## 5. 工作流
 

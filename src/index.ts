@@ -2,15 +2,20 @@ export { renderFvg, checkFvg, renderLayer, checkLayer, type RenderResult } from 
 export { canvas, create, type CreatedLayer } from './canvas.js'
 export { registerComponent, arrowComponent, type ComponentFn, type ComponentProps } from './components.js'
 export { glyph, type Glyph, type GlyphInk, type GlyphOptions } from './glyph.js'
-export { renderComposition, interpolate, spring, sequence } from './frame.js'
+export { renderComposition, renderFrames, createContactSheet, contactSheetFromPngs, interpolate, spring, sequence } from './frame.js'
 export type {
   Composition,
   FrameInput,
   RenderCompositionOptions,
   RenderCompositionResult,
+  RenderFramesOptions,
+  RenderedFrame,
+  ContactSheet,
   SpringConfig,
   Extrapolate,
 } from './frame.js'
+export { mergeFrameIssues, sampleFrames } from './check-frames.js'
+export type { SampleSpec } from './check-frames.js'
 export { parseFvg } from './parse.js'
 export { h } from './h.js'
 export { emitLayer } from './emit.js'

@@ -81,3 +81,13 @@
   </layer>
 </layer>
 ```
+
+## 帧
+
+`renderFrames(comp, { from, to, step, format: 'png' })` 逐帧产出，`to` 含端点。`format: 'rgba'` 是不预乘的原始像素。`renderComposition` 仍一次返回全部 PNG 和联系表。`draw` 里 `el.t` 是秒，`el.frame` 和 `el.fps` 在单帧时是 0。
+
+```bash
+flexlayer render scene.tsx --frames out/ --from 0 --to 90
+flexlayer render scene.tsx --rgba -   # 标准输出是像素，自己接 ffmpeg
+flexlayer check scene.tsx --frames 0-90 --step 5
+```

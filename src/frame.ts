@@ -1,7 +1,7 @@
-import { createCanvas, loadImage } from '@napi-rs/canvas'
+import { createCanvas, loadImage, type Canvas } from '@napi-rs/canvas'
 import type { FvgNode } from './parse.js'
 import { prepareAssets } from './layout.js'
-import { renderFvg } from './render.js'
+import { renderToCanvas } from './render.js'
 import { setFontsCacheDir } from './fonts.js'
 import type { FvgReport, RenderOptions } from './types.js'
 
@@ -20,7 +20,28 @@ export type Composition = {
   component: (input: FrameInput) => FvgNode
 }
 
-export type RenderCompositionOptions = Pick<RenderOptions, 'scale' | 'baseDir' | 'fontsCacheDir'>
+export type RenderCompositionOptions = Pick<RenderOptions, 'scale' | 'baseDir' | 'fontsCacheDir' | 'debug'>
+
+export type RenderFramesOptions = RenderCompositionOptions & {
+  /** 含这一帧。缺省为 0。 */
+  from?: number
+  /** 含这一帧。缺省为最后一帧。 */
+  to?: number
+  /** 缺省为 1。 */
+  step?: number
+  /** 缺省为 png。rgba 是不预乘的原始像素。 */
+  format?: 'png' | 'rgba'
+}
+
+export type RenderedFrame = {
+  frame: number
+  t: number
+  width: number
+  height: number
+  png?: Buffer
+  rgba?: Buffer
+  report: FvgReport
+}
 
 export type RenderCompositionResult = {
   frames: Buffer[]
@@ -105,65 +126,149 @@ export function sequence<T>(
 const CONTACT_CELL_MAX = 480
 const CONTACT_SHEET_MAX_WIDTH = 3840
 
+export type ContactSheet = {
+  /** PNG 会先解码。调用次数不能超过创建时的 count。 */
+  add(frame: Canvas | Buffer): Promise<void>
+  toPng(): Buffer
+}
+
+function contactGrid(count: number, srcW: number, srcH: number) {
+  const columns = Math.ceil(Math.sqrt(count))
+  const rows = Math.ceil(count / columns)
+  const fit = Math.min(1, CONTACT_CELL_MAX / Math.max(srcW, srcH), CONTACT_SHEET_MAX_WIDTH / (columns * srcW))
+  const cellW = Math.max(1, Math.round(srcW * fit))
+  const cellH = Math.max(1, Math.round(srcH * fit))
+  return { columns, cellW, cellH }
+}
+
+function blankPng(): Buffer {
+  const canvas = createCanvas(1, 1)
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, 1, 1)
+  return canvas.toBuffer('image/png')
+}
+
+/**
+ * 逐帧往联系表里放。列数约为帧数的平方根，单元格只缩小不放大，空白为白色。
+ * 单元格最长边不超过 480px，整张宽度不超过 3840px。
+ */
+export function createContactSheet(input: { count: number; width: number; height: number }): ContactSheet {
+  if (!(input.count >= 1) || input.width <= 0 || input.height <= 0) {
+    return {
+      async add() {
+        throw new Error('空的联系表不能再加帧')
+      },
+      toPng: blankPng,
+    }
+  }
+  const { columns, cellW, cellH } = contactGrid(input.count, input.width, input.height)
+  const rows = Math.ceil(input.count / columns)
+  const canvas = createCanvas(columns * cellW, rows * cellH)
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  let placed = 0
+  return {
+    async add(frame) {
+      if (placed >= input.count) throw new Error('联系表已经放满')
+      const col = placed % columns
+      const row = Math.floor(placed / columns)
+      const image = Buffer.isBuffer(frame) ? await loadImage(frame) : frame
+      ctx.drawImage(image as Canvas, col * cellW, row * cellH, cellW, cellH)
+      placed++
+    },
+    toPng() {
+      return canvas.toBuffer('image/png')
+    },
+  }
+}
+
 /**
  * 把各帧 PNG 排成网格。列数约为帧数的平方根，单元格只缩小不放大，空白为白色。
  * 单元格最长边不超过 480px，整张宽度不超过 3840px。
  */
 export async function contactSheetFromPngs(frames: Buffer[]): Promise<Buffer> {
-  if (frames.length === 0) {
-    const canvas = createCanvas(1, 1)
-    const ctx = canvas.getContext('2d')
-    ctx.fillStyle = '#ffffff'
-    ctx.fillRect(0, 0, 1, 1)
-    return canvas.toBuffer('image/png')
+  if (frames.length === 0) return blankPng()
+  const first = await loadImage(frames[0]!)
+  const sheet = createContactSheet({ count: frames.length, width: first.width, height: first.height })
+  for (const frame of frames) await sheet.add(frame)
+  return sheet.toPng()
+}
+
+function assertComposition(comp: Composition) {
+  if (!(comp.fps > 0)) throw new Error('fps 必须大于 0')
+  if (!(comp.durationInFrames >= 1) || !Number.isInteger(comp.durationInFrames)) {
+    throw new Error('durationInFrames 至少为 1')
   }
-  const images = await Promise.all(frames.map((frame) => loadImage(frame)))
-  const srcW = images[0]!.width
-  const srcH = images[0]!.height
-  const columns = Math.ceil(Math.sqrt(frames.length))
-  const rows = Math.ceil(frames.length / columns)
-  const fit = Math.min(1, CONTACT_CELL_MAX / Math.max(srcW, srcH), CONTACT_SHEET_MAX_WIDTH / (columns * srcW))
-  const cellW = Math.max(1, Math.round(srcW * fit))
-  const cellH = Math.max(1, Math.round(srcH * fit))
-  const canvas = createCanvas(columns * cellW, rows * cellH)
-  const ctx = canvas.getContext('2d')
-  ctx.fillStyle = '#ffffff'
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-  for (let i = 0; i < images.length; i++) {
-    const col = i % columns
-    const row = Math.floor(i / columns)
-    ctx.drawImage(images[i]!, col * cellW, row * cellH, cellW, cellH)
+}
+
+function frameList(comp: Composition, options: RenderFramesOptions): number[] {
+  assertComposition(comp)
+  const last = comp.durationInFrames - 1
+  const from = options.from ?? 0
+  const to = options.to ?? last
+  const step = options.step ?? 1
+  if (!Number.isInteger(from) || !Number.isInteger(to) || !Number.isInteger(step) || step < 1 || from < 0 || to > last || from > to) {
+    throw new Error(`帧范围 ${from}-${to} 步长 ${step} 超出 0-${last}`)
   }
-  return canvas.toBuffer('image/png')
+  const frames: number[] = []
+  for (let frame = from; frame <= to; frame += step) frames.push(frame)
+  return frames
+}
+
+function canvasRgba(canvas: Canvas): Buffer {
+  const image = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height)
+  return Buffer.from(image.data)
+}
+
+/** 逐帧产出。`to` 含端点。字体和图片在第一帧之前准备一次。 */
+export async function* renderFrames(
+  comp: Composition,
+  options: RenderFramesOptions = {},
+): AsyncGenerator<RenderedFrame> {
+  const baseDir = options.baseDir ?? process.cwd()
+  if (options.fontsCacheDir) setFontsCacheDir(options.fontsCacheDir)
+  // 字体、图片和 Yoga 在进程里只准备一次。后面的帧接着用，没见过的图再补上。
+  await prepareAssets(null, baseDir)
+  const format = options.format ?? 'png'
+  for (const frame of frameList(comp, options)) {
+    const t = frame / comp.fps
+    const node = comp.component({ frame, fps: comp.fps, t })
+    const { canvas, report } = await renderToCanvas(node, {
+      t,
+      frame,
+      fps: comp.fps,
+      scale: options.scale,
+      debug: options.debug,
+      baseDir,
+      fontsCacheDir: options.fontsCacheDir,
+    })
+    const rendered: RenderedFrame = { frame, t, width: canvas.width, height: canvas.height, report }
+    if (format === 'rgba') rendered.rgba = canvasRgba(canvas)
+    else rendered.png = canvas.toBuffer('image/png')
+    yield rendered
+  }
 }
 
 export async function renderComposition(
   comp: Composition,
   options: RenderCompositionOptions = {},
 ): Promise<RenderCompositionResult> {
-  if (!(comp.fps > 0)) throw new Error('fps 必须大于 0')
-  if (!(comp.durationInFrames >= 1) || !Number.isInteger(comp.durationInFrames)) {
-    throw new Error('durationInFrames 至少为 1')
-  }
-  const baseDir = options.baseDir ?? process.cwd()
-  if (options.fontsCacheDir) setFontsCacheDir(options.fontsCacheDir)
-  // 字体、图片和 Yoga 在进程里只准备一次。后面的帧接着用，没见过的图再补上。
-  await prepareAssets(null, baseDir)
+  assertComposition(comp)
+  const scale = options.scale ?? 1
   const frames: Buffer[] = []
   const reports: FvgReport[] = []
-  for (let frame = 0; frame < comp.durationInFrames; frame++) {
-    const t = frame / comp.fps
-    const input: FrameInput = { frame, fps: comp.fps, t }
-    const node = comp.component(input)
-    const { png, report } = await renderFvg(node, {
-      t,
-      scale: options.scale,
-      baseDir,
-      fontsCacheDir: options.fontsCacheDir,
-    })
+  const sheet = createContactSheet({
+    count: comp.durationInFrames,
+    width: Math.max(1, Math.round(comp.width * scale)),
+    height: Math.max(1, Math.round(comp.height * scale)),
+  })
+  for await (const rendered of renderFrames(comp, { ...options, format: 'png' })) {
+    const png = rendered.png!
     frames.push(png)
-    reports.push(report)
+    reports.push(rendered.report)
+    await sheet.add(png)
   }
-  const contactSheet = await contactSheetFromPngs(frames)
-  return { frames, reports, contactSheet }
+  return { frames, reports, contactSheet: sheet.toPng() }
 }

@@ -28,6 +28,24 @@ async function pixelAt(png: Buffer, x: number, y: number): Promise<[number, numb
 }
 
 describe('draw(ctx, el)', () => {
+  it('单帧时 el.frame 和 el.fps 为 0', async () => {
+    let seen: { frame: number; fps: number } | null = null
+    const root = h(
+      'layer',
+      { width: '20', height: '20', background: '#ffffff' },
+      h('rect', {
+        width: '10',
+        height: '10',
+        fill: '#000000',
+        draw: (_ctx, el) => {
+          seen = { frame: el.frame, fps: el.fps }
+        },
+      }),
+    )
+    await renderFvg(root)
+    expect(seen).toEqual({ frame: 0, fps: 0 })
+  })
+
   it('h1 draw 收到 attr、style、computed 并在底边着色', async () => {
     let seen: Record<string, unknown> | null = null
 

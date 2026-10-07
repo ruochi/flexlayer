@@ -21,6 +21,10 @@ export type DrawElSnapshot = {
   h: number
   /** 当前帧的时间，单位秒。单帧渲染缺省为 0。 */
   t: number
+  /** 当前帧号。单帧渲染缺省为 0。 */
+  frame: number
+  /** 每秒帧数。单帧渲染缺省为 0。 */
+  fps: number
 }
 
 export type DrawFn = (ctx: CanvasRenderingContext2D, el: DrawElSnapshot) => void
@@ -82,6 +86,8 @@ export type Issue = {
   source?: string
   /** Composition 抽查时，这条问题第一次出现的帧。 */
   frame?: number
+  /** 这条问题出现的帧区间，两端都包含。抽查序列里连续出现的帧合成一段。 */
+  frames?: Array<[number, number]>
 }
 
 export type Anchor =
@@ -382,4 +388,8 @@ export type RenderOptions = {
   fontsCacheDir?: string
   /** 当前帧的时间，单位秒。缺省为 0。 */
   t?: number
+  /** 当前帧号。缺省为 0。 */
+  frame?: number
+  /** 每秒帧数。缺省为 0。 */
+  fps?: number
 }

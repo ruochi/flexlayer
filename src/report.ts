@@ -584,10 +584,20 @@ export function buildReport(doc: FvgDocument): FvgReport {
   }
 }
 
+function formatFrameSpan(frames: Array<[number, number]> | undefined, frame: number | undefined): string {
+  if (frames && frames.length > 0) {
+    const text = frames
+      .map(([start, end]) => (start === end ? `第${start}帧` : `第${start}–${end}帧`))
+      .join('、')
+    return `${text}  `
+  }
+  return frame != null ? `第${frame}帧  ` : ''
+}
+
 export function formatIssueLine(issue: Issue): string {
   const sym = issue.level === 'error' ? '✗ error' : issue.level === 'warn' ? '! warn' : '· info'
   const at = issue.source ? `${issue.source}  ` : ''
-  const frame = issue.frame != null ? `第${issue.frame}帧  ` : ''
+  const frame = formatFrameSpan(issue.frames, issue.frame)
   const line = `${at}${frame}${sym}  ${issue.code.padEnd(16)} ${issue.path.padEnd(24)} ${issue.message}`
   return issue.hint ? `${line}\n         ${issue.hint}` : line
 }

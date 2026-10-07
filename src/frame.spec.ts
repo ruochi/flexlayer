@@ -4,7 +4,9 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { h } from './h.js'
 import { initFontsForMeasure } from './fonts.js'
-import { interpolate, renderComposition, sequence, spring, type Composition } from './frame.js'
+import { mergeFrameIssues, sampleFrames } from './check-frames.js'
+import { interpolate, renderComposition, renderFrames, sequence, spring, type Composition } from './frame.js'
+import { formatIssueLine } from './report.js'
 import { renderFvg } from './render.js'
 
 beforeAll(async () => {
@@ -86,6 +88,84 @@ describe('renderComposition', () => {
   it('fps 或时长非法时抛出', async () => {
     await expect(renderComposition({ ...slide, fps: 0 })).rejects.toThrow(/fps/)
     await expect(renderComposition({ ...slide, durationInFrames: 0 })).rejects.toThrow(/durationInFrames/)
+  })
+})
+
+describe('renderFrames', () => {
+  it('from、to、step 含端点，rgba 长度是像素数乘 4', async () => {
+    const seen: Array<{ frame: number; fps: number; t: number }> = []
+    const comp: Composition = {
+      id: 'clock',
+      width: 8,
+      height: 8,
+      fps: 10,
+      durationInFrames: 6,
+      component: () =>
+        h(
+          'layer',
+          { width: '8', height: '8', background: '#000000' },
+          h('rect', {
+            width: '4',
+            height: '4',
+            fill: '#ffffff',
+            draw: (_ctx, el) => {
+              seen.push({ frame: el.frame, fps: el.fps, t: el.t })
+            },
+          }),
+        ),
+    }
+    const rendered = []
+    for await (const frame of renderFrames(comp, { from: 1, to: 4, step: 3, format: 'rgba' })) rendered.push(frame)
+    expect(rendered.map((frame) => frame.frame)).toEqual([1, 4])
+    expect(seen).toEqual([
+      { frame: 1, fps: 10, t: 0.1 },
+      { frame: 4, fps: 10, t: 0.4 },
+    ])
+    expect(rendered[0]!.width).toBe(8)
+    expect(rendered[0]!.height).toBe(8)
+    expect(rendered[0]!.rgba!.length).toBe(8 * 8 * 4)
+    expect(rendered[0]!.png).toBeUndefined()
+    expect(rendered[0]!.rgba![0]).toBe(255)
+    expect(rendered[0]!.rgba![28]).toBe(0)
+    expect(rendered[0]!.rgba![3]).toBe(255)
+  })
+
+  it('renderComposition 和逐帧 PNG 一致', async () => {
+    const once = await renderComposition(slide)
+    const streamed = []
+    for await (const frame of renderFrames(slide)) streamed.push(frame.png!)
+    expect(streamed).toHaveLength(once.frames.length)
+    for (let i = 0; i < streamed.length; i++) expect(streamed[i]!.equals(once.frames[i]!)).toBe(true)
+  })
+})
+
+describe('抽查帧', () => {
+  it('默认三帧，all 和区间可以带 step', () => {
+    expect(sampleFrames(5)).toEqual([0, 2, 4])
+    expect(sampleFrames(5, 3)).toEqual([3])
+    expect(sampleFrames(10, { all: true, step: 3 })).toEqual([0, 3, 6, 9])
+    expect(sampleFrames(10, { range: [2, 8], step: 3 })).toEqual([2, 5, 8])
+  })
+
+  it('抽查序列里连续出现的合成一个区间，中间断开就分开', () => {
+    const issue = { level: 'error' as const, code: 'overflow-canvas', path: 'layer/rect[0]', message: '着墨超出画布' }
+    const merged = mergeFrameIssues([
+      { frame: 120, issues: [issue] },
+      { frame: 125, issues: [issue] },
+      { frame: 130, issues: [issue] },
+      { frame: 140, issues: [] },
+      { frame: 145, issues: [issue] },
+    ])
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toMatchObject({
+      frame: 120,
+      message: '着墨超出画布',
+      frames: [
+        [120, 130],
+        [145, 145],
+      ],
+    })
+    expect(formatIssueLine(merged[0]!)).toContain('第120–130帧、第145帧')
   })
 })
 

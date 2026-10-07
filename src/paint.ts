@@ -53,9 +53,17 @@ export type PaintOptions = {
   scale: number
   debug: boolean
   t: number
+  frame?: number
+  fps?: number
 }
 
-type PaintState = { canvasWidth: number; canvasHeight: number; meshFrames?: Map<LayerLayoutNode, MeshFrame> }
+type PaintState = {
+  canvasWidth: number
+  canvasHeight: number
+  meshFrames?: Map<LayerLayoutNode, MeshFrame>
+  frame: number
+  fps: number
+}
 
 const SILHOUETTE = '#000000'
 
@@ -336,7 +344,7 @@ function drawDebugOverlay(ctx: CanvasRenderingContext2D, node: LayoutNode) {
   ctx.restore()
 }
 
-function buildDrawEl(node: LayoutNode, t: number): DrawElSnapshot {
+function buildDrawEl(node: LayoutNode, t: number, state: PaintState): DrawElSnapshot {
   return {
     tag: node.tag,
     id: node.id,
@@ -347,15 +355,17 @@ function buildDrawEl(node: LayoutNode, t: number): DrawElSnapshot {
     w: node.width,
     h: node.height,
     t,
+    frame: state.frame,
+    fps: state.fps,
   }
 }
 
-function runElementDraw(ctx: CanvasRenderingContext2D, node: LayoutNode, t: number) {
+function runElementDraw(ctx: CanvasRenderingContext2D, node: LayoutNode, t: number, state: PaintState) {
   if (!node.draw) return
   ctx.save()
   ctx.translate(node.x, node.y)
   try {
-    node.draw(ctx, buildDrawEl(node, t))
+    node.draw(ctx, buildDrawEl(node, t, state))
   } catch (err) {
     // 布局已经把缺名字报成 invalid-draw。这里再抛出会让整张图以 "X is not defined" 退出。
     if (!(err instanceof ReferenceError)) throw err
@@ -1254,7 +1264,7 @@ function paintNodeEffectsAndBody(
   }
   if (node.overlay) paintOverlay(ctx, node, node.overlay)
   if (node.noise && !opts.skipNoise) paintNoise(ctx, node, node.noise)
-  runElementDraw(ctx, node, t)
+  runElementDraw(ctx, node, t, state)
 }
 
 /**
@@ -1390,9 +1400,10 @@ async function prepareMeshFrames(
   root: LayerLayoutNode,
   scale: number,
   t: number,
+  clock: { frame: number; fps: number },
 ): Promise<Map<LayerLayoutNode, MeshFrame>> {
   const frames = new Map<LayerLayoutNode, MeshFrame>()
-  const state: PaintState = { canvasWidth: 0, canvasHeight: 0, meshFrames: frames }
+  const state: PaintState = { canvasWidth: 0, canvasHeight: 0, frame: clock.frame, fps: clock.fps, meshFrames: frames }
   const visit = async (node: LayoutNode) => {
     if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
       for (const child of node.children) await visit(child)
@@ -1412,7 +1423,7 @@ async function prepareMeshFrames(
 export async function paintDocument(
   root: LayerLayoutNode,
   opts: PaintOptions,
-): Promise<Buffer> {
+): Promise<Canvas> {
   const w = Math.round(opts.width * opts.scale)
   const h = Math.round(opts.height * opts.scale)
   const canvas = createCanvas(w, h)
@@ -1420,7 +1431,9 @@ export async function paintDocument(
   const state: PaintState = {
     canvasWidth: w,
     canvasHeight: h,
-    meshFrames: await prepareMeshFrames(root, opts.scale, opts.t),
+    frame: opts.frame ?? 0,
+    fps: opts.fps ?? 0,
+    meshFrames: await prepareMeshFrames(root, opts.scale, opts.t, { frame: opts.frame ?? 0, fps: opts.fps ?? 0 }),
   }
   const rootPaintsBackground =
     root.background != null &&
@@ -1485,5 +1498,5 @@ export async function paintDocument(
       }
     }
   }
-  return canvas.toBuffer('image/png')
+  return canvas
 }

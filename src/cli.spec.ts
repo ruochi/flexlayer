@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { readFile } from 'node:fs/promises'
@@ -42,5 +42,72 @@ describe('render hello.layer', () => {
     })
     expect(result.status).toBe(0)
     expect(result.stdout.trim()).toBe('✓ 0 issues')
+  })
+})
+
+const tsxBin = join(pkgDir, 'node_modules/.bin/tsx')
+const cliPath = join(pkgDir, 'src/cli.ts')
+
+function runCli(args: string[]) {
+  return spawnSync(tsxBin, [cliPath, ...args], { cwd: pkgDir, encoding: 'utf8' })
+}
+
+function runCliBuffer(args: string[]) {
+  return spawnSync(tsxBin, [cliPath, ...args], { cwd: pkgDir })
+}
+
+describe('帧序列命令行', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'flexlayer-frames-'))
+  const scene = join(dir, 'scene.tsx')
+  writeFileSync(
+    scene,
+    `import type { Composition } from 'flexlayer'
+export const composition: Composition = {
+  id: 'span',
+  width: 40,
+  height: 40,
+  fps: 1,
+  durationInFrames: 6,
+  component: ({ frame }) => (
+    <layer width="40" height="40" background="#000">
+      <rect x="4" y="4" width="8" height="8" fill="#ccc" />
+      <circle cx={frame === 4 ? 80 : 20} cy="20" r="4" fill="#fff" />
+    </layer>
+  ),
+}
+`,
+  )
+
+  it('check --frames 0-5 --step 2 把问题收成区间', () => {
+    const reportPath = join(dir, 'report.json')
+    const result = runCli(['check', scene, '--frames', '0-5', '--step', '2', '--report', reportPath])
+    expect(result.status).toBe(1)
+    expect(result.stdout).toContain('overflow-canvas')
+    expect(result.stdout).toContain('第4帧')
+    expect(result.stdout).not.toContain('也出现在')
+    const report = JSON.parse(readFileSync(reportPath, 'utf8')) as {
+      issues: Array<{ code: string; frame?: number; frames?: Array<[number, number]> }>
+    }
+    const overflow = report.issues.filter((issue) => issue.code === 'overflow-canvas')
+    expect(overflow).toEqual([expect.objectContaining({ frame: 4, frames: [[4, 4]] })])
+  })
+
+  it('--frames 边写边出，只包含 from 到 to', () => {
+    const framesDir = join(dir, 'frames')
+    const result = runCli(['render', scene, '--frames', framesDir, '--from', '1', '--to', '3'])
+    expect(result.status).toBe(0)
+    expect(readdirSync(framesDir).sort()).toEqual(['frame-0001.png', 'frame-0002.png', 'frame-0003.png'])
+    expect(existsSync(join(dir, 'scene.png'))).toBe(true)
+  })
+
+  it('--rgba - 的标准输出只有像素', () => {
+    const result = runCliBuffer(['render', scene, '--rgba', '-'])
+    expect(result.stdout.length).toBe(6 * 40 * 40 * 4)
+    expect(result.stdout[0]).toBe(0)
+    const err = result.stderr.toString('utf8')
+    expect(err).toContain('-f rawvideo -pix_fmt rgba -s 40x40 -r 1 -i -')
+    expect(err).toContain('overflow-canvas')
+    expect(result.stdout.subarray(0, 8).toString('utf8')).not.toContain('ffmpeg')
+    expect(result.status).toBe(1)
   })
 })
