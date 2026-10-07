@@ -190,6 +190,25 @@ function measureTextWidth(text: string, style: TextRunStyle): number {
   return w
 }
 
+/**
+ * 按码位拆开一段文字的笔位。前缀宽度和排版用同一次测量，字偶距和字距都在里面。
+ * 最后一笔补上差额，加起来等于这一段的排版宽度。
+ */
+export function splitAdvances(text: string, style: TextRunStyle, total: number): Array<{ text: string; width: number }> {
+  const chars = Array.from(text)
+  if (chars.length === 0) return []
+  if (chars.length === 1) return [{ text: chars[0]!, width: total }]
+  const widths: number[] = []
+  let prev = 0
+  for (let i = 0; i < chars.length - 1; i++) {
+    const w = measureTextWidth(chars.slice(0, i + 1).join(''), style)
+    widths.push(w - prev)
+    prev = w
+  }
+  widths.push(total - prev)
+  return chars.map((ch, i) => ({ text: ch, width: widths[i]! }))
+}
+
 function measureInk(text: string, style: TextRunStyle): { width: number; ascent: number; descent: number } {
   const ctx = getMeasureCtx()
   applyCanvasFont(ctx, style.fontFamily, style.fontWeight, style.fontSize)
