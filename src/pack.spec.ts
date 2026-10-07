@@ -50,8 +50,8 @@ describe('打包', () => {
         writeFileSync(
           join(app, 'scene.tsx'),
           `import { readFileSync } from 'node:fs'
-const color: string = readFileSync ? '#fff' : '#000'
-export default <layer width="40" height="40" background={color}><rect x="4" y="4" width="16" height="16" fill="#fff" /></layer>
+const bytes = readFileSync
+export default <layer width="40" height="40" background="#111"><p style="font-size:12px">{bytes.name}</p></layer>
 `,
         )
         const ok = run(bin, ['check', 'scene.tsx'], app)
