@@ -50,8 +50,9 @@ describe('打包', () => {
         writeFileSync(
           join(app, 'scene.tsx'),
           `import { readFileSync } from 'node:fs'
-const bytes = readFileSync
-export default <layer width="40" height="40" background="#111"><p style="font-size:12px">{bytes.name}</p></layer>
+const read: typeof readFileSync = readFileSync
+void read
+export default <layer width="40" height="40" background="#111" />
 `,
         )
         const ok = run(bin, ['check', 'scene.tsx'], app)
