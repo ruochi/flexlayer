@@ -28,10 +28,17 @@ function flattenChildren(parts: unknown[]): FvgChild[] {
   return out
 }
 
-/** 构建 Flex Layer 节点；`draw` 挂在节点上，不进 `attrs`。 */
+function isPlainData(value: unknown): boolean {
+  return Array.isArray(value) || (typeof value === 'object' && value != null)
+}
+
+/** 构建 Flex Layer 节点；`draw` 和 `data` 挂在节点上，不进 `attrs`。 */
 export function h(tag: string, props: FvgProps | null, ...children: unknown[]): FvgNode {
   const attrs: Record<string, string> = {}
   let draw: DrawFn | undefined
+  let data: unknown
+  let hasData = false
+  const badAttrs: string[] = []
   const p = props ?? {}
 
   for (const [key, value] of Object.entries(p)) {
@@ -39,10 +46,25 @@ export function h(tag: string, props: FvgProps | null, ...children: unknown[]): 
       draw = value as DrawFn
       continue
     }
+    if (key === 'data') {
+      if (value !== undefined) {
+        data = value
+        hasData = true
+      }
+      continue
+    }
     if (key === 'children' || key === 'key' || key === 'ref') continue
     if (typeof value === 'function') continue
     if (value == null || value === false) continue
-    attrs[key] = key === 'style' && typeof value === 'object' ? styleToString(value as Record<string, unknown>) : String(value)
+    if (key === 'style' && typeof value === 'object') {
+      attrs.style = styleToString(value as Record<string, unknown>)
+      continue
+    }
+    if (isPlainData(value)) {
+      badAttrs.push(key)
+      continue
+    }
+    attrs[key] = String(value)
   }
 
   const fromProps = p.children
@@ -53,6 +75,8 @@ export function h(tag: string, props: FvgProps | null, ...children: unknown[]): 
 
   const name = canonicalTag(tag)
   const node: FvgNode = { tag: name, attrs, children: merged, draw }
+  if (hasData) node.data = data
+  if (badAttrs.length > 0) node.badAttrs = badAttrs
   if (tag !== name) node.writtenTag = tag
   return node
 }

@@ -47,10 +47,54 @@ function emitDraw(fn: DrawFn, path: string, indent: string, issues: Issue[]): st
   return `${indent}<draw>\n${lines.join('\n')}\n${indent}</draw>\n`
 }
 
+function jsonReady(value: unknown, seen: WeakSet<object>): boolean {
+  if (value == null || typeof value === 'string' || typeof value === 'boolean') return true
+  if (typeof value === 'number') return Number.isFinite(value)
+  if (typeof value !== 'object') return false
+  if (seen.has(value)) return false
+  seen.add(value)
+  const proto = Object.getPrototypeOf(value)
+  const ok =
+    Array.isArray(value)
+      ? value.every((item) => jsonReady(item, seen))
+      : (proto === Object.prototype || proto === null) &&
+        Object.values(value as Record<string, unknown>).every((item) => jsonReady(item, seen))
+  seen.delete(value)
+  return ok
+}
+
+function emitData(node: FvgNode, path: string, issues: Issue[]): string {
+  if (node.data === undefined) return ''
+  if (!jsonReady(node.data, new WeakSet())) {
+    issues.push({
+      level: 'warn',
+      code: 'emit-data',
+      path,
+      message: 'data 不能写成 JSON，没有写回',
+      hint: 'data 只用对象、数组、字符串和数字。函数、Map 和循环引用写不回去',
+    })
+    return ''
+  }
+  const json = JSON.stringify(node.data)
+  if (json == null) {
+    issues.push({
+      level: 'warn',
+      code: 'emit-data',
+      path,
+      message: 'data 不能写成 JSON，没有写回',
+      hint: 'data 只用对象、数组、字符串和数字。函数、Map 和循环引用写不回去',
+    })
+    return ''
+  }
+  const quoted = json.replace(/&/g, '&amp;').replace(/'/g, '&apos;')
+  return ` data='${quoted}'`
+}
+
 function emitNode(node: FvgNode, indent: string, path: string, issues: Issue[]): string {
-  const attrs = Object.entries(node.attrs)
-    .map(([key, value]) => ` ${key}="${escapeAttr(value)}"`)
-    .join('')
+  const attrs =
+    Object.entries(node.attrs)
+      .map(([key, value]) => ` ${key}="${escapeAttr(value)}"`)
+      .join('') + emitData(node, path, issues)
   const childIndent = `${indent}  `
   const parts: string[] = []
   let elementIndex = 0

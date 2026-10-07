@@ -82,6 +82,8 @@
 </layer>
 ```
 
+结构化数据：`data={{ values: [1, 2] }}`，`.layer` 里 `data='{"values":[1,2]}'`。`draw` 读 `el.data`。别的属性不要传对象或数组。
+
 ## 帧
 
 `renderFrames(comp, { from, to, step, format: 'png' })` 逐帧产出，`to` 含端点。`format: 'rgba'` 是不预乘的原始像素。`renderComposition` 仍一次返回全部 PNG 和联系表。`draw` 里 `el.t` 是秒，`el.frame` 和 `el.fps` 在单帧时是 0。

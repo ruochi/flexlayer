@@ -354,6 +354,7 @@ function buildDrawEl(node: LayoutNode, t: number, state: PaintState): DrawElSnap
     computed: node.computed,
     w: node.width,
     h: node.height,
+    data: node.data,
     t,
     frame: state.frame,
     fps: state.fps,

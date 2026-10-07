@@ -447,6 +447,7 @@ function layoutDrawMeta(node: FvgNode, ctx: LayoutContext) {
   const style = parseStyle(node.attrs.style)
   return {
     draw: node.draw,
+    data: node.data,
     attr: { ...node.attrs },
     style,
     computed: computeDrawStyle(node, ctx, style),
@@ -2090,6 +2091,7 @@ export function layoutSync(rootNode: FvgNode, assets: LayoutAssets): FvgDocument
     throw new Error(`Flex Layer 根元素必须是 <layer>，收到 <${rootNode.tag}>`)
   }
   noteTagSpellings(rootNode, 'layer', issues)
+  noteStructuredData(rootNode, 'layer', issues)
   issues.push(...legacyCenterIssues(rootNode, 'layer'))
   attachDrawTags(rootNode, issues, 'layer')
   const paintCtx: LayoutContext = {
@@ -2123,6 +2125,34 @@ function canonicalizeTree(node: FvgNode): void {
   }
   for (const child of node.children) {
     if (typeof child !== 'string') canonicalizeTree(child)
+  }
+}
+
+/** 对象属性不能塞进字符串。`data` 解析失败是 error。 */
+function noteStructuredData(node: FvgNode, path: string, issues: Issue[]): void {
+  for (const name of node.badAttrs ?? []) {
+    issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path,
+      message: `属性 ${name} 是对象或数组，不能写成字符串`,
+      hint: '结构化数据放进 data',
+    })
+  }
+  if (node.dataError != null) {
+    issues.push({
+      level: 'error',
+      code: 'invalid-attr',
+      path,
+      message: 'data 不是合法的 JSON',
+      hint: `写成 data='{"values":[3,5,8]}'`,
+    })
+  }
+  let index = 0
+  for (const child of node.children) {
+    if (typeof child === 'string') continue
+    noteStructuredData(child, `${path}/${child.tag}[${index}]`, issues)
+    index++
   }
 }
 

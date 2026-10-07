@@ -15,8 +15,10 @@ type JsxAttr = string | number | boolean | undefined | FvgStyle | DrawFn | JsxCh
 type FvgNodeBase = {
   id?: string
   draw?: DrawFn
+  /** 结构化数据。`draw` 里读 `el.data`，不要把对象塞进别的属性。 */
+  data?: unknown
   children?: JsxChild
-  [name: string]: JsxAttr
+  [name: string]: JsxAttr | unknown
 }
 
 /** 文字和图片。视觉属性写 style。 */

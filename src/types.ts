@@ -19,6 +19,8 @@ export type DrawElSnapshot = {
   computed: DrawComputedStyle
   w: number
   h: number
+  /** `data` 属性。没有时是 undefined。 */
+  data?: unknown
   /** 当前帧的时间，单位秒。单帧渲染缺省为 0。 */
   t: number
   /** 当前帧号。单帧渲染缺省为 0。 */
@@ -257,6 +259,8 @@ export type LayoutNodeBase = {
   borderRadius?: number
   padding: { top: number; right: number; bottom: number; left: number }
   draw?: DrawFn
+  /** `data` 属性。没有时是 undefined。 */
+  data?: unknown
   attr: Record<string, string>
   style: StyleMap
   computed: DrawComputedStyle

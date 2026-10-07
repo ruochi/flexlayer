@@ -13,6 +13,12 @@ export type FvgNode = {
   attrs: Record<string, string>
   children: FvgChild[]
   draw?: DrawFn
+  /** 结构化数据。不进 `attrs`，`draw` 里从 `el.data` 读。 */
+  data?: unknown
+  /** h() 收到对象或数组、却没有放进 data 的属性名。 */
+  badAttrs?: string[]
+  /** `.layer` 里 `data` 不是合法 JSON 时的原文。 */
+  dataError?: string
   /** 源码里的标签名。仅当和规范小写不同时记下，用来报 non-canonical。 */
   writtenTag?: string
   /** `.tsx` 里这个标签所在的位置。`.layer` 解析出来的节点没有。 */
@@ -63,10 +69,22 @@ function parseAttrs(text: string): Record<string, string> {
   return attrs
 }
 
+function takeData(node: FvgNode) {
+  if (!Object.prototype.hasOwnProperty.call(node.attrs, 'data')) return
+  const raw = node.attrs.data ?? ''
+  delete node.attrs.data
+  try {
+    node.data = JSON.parse(raw)
+  } catch {
+    node.dataError = raw
+  }
+}
+
 function nodeFor(raw: string, attrs: Record<string, string>, children: FvgChild[]): FvgNode {
   const tag = canonicalTag(raw)
   const node: FvgNode = { tag, attrs, children }
   if (raw !== tag) node.writtenTag = raw
+  takeData(node)
   return node
 }
 
