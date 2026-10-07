@@ -394,3 +394,318 @@ describe('绘制', () => {
     expect(center[2]).toBeLessThan(40)
   })
 })
+
+function isWhite(p: readonly number[]) {
+  return p[0]! > 230 && p[1]! > 230 && p[2]! > 230
+}
+function isBlack(p: readonly number[]) {
+  return p[0]! < 45 && p[1]! < 45 && p[2]! < 45
+}
+function isGreen(p: readonly number[]) {
+  return p[1]! > 120 && p[0]! < 80 && p[2]! < 80
+}
+function isRed(p: readonly number[]) {
+  return p[0]! > 170 && p[1]! < 90 && p[2]! < 90
+}
+function isBlue(p: readonly number[]) {
+  return p[2]! > 170 && p[0]! < 90 && p[1]! < 90
+}
+
+/** 横笔「一」的上沿。返回笔画中线和最上一个墨迹像素。 */
+function barTop(
+  at: (x: number, y: number) => readonly number[],
+  width: number,
+  height: number,
+  ink: (p: readonly number[]) => boolean,
+) {
+  let best = 0
+  let row = 0
+  let x0 = 0
+  let x1 = 0
+  for (let y = 0; y < height; y++) {
+    let count = 0
+    let left = -1
+    let right = -1
+    for (let x = 0; x < width; x++) {
+      if (!ink(at(x, y))) continue
+      count++
+      if (left < 0) left = x
+      right = x
+    }
+    if (count > best) {
+      best = count
+      row = y
+      x0 = left
+      x1 = right
+    }
+  }
+  const midX = Math.round((x0 + x1) / 2)
+  let top = row
+  while (top > 0 && ink(at(midX, top - 1))) top--
+  return { midX, top, x0, x1, count: best }
+}
+
+describe('墨迹 spread 与 ink-stroke', () => {
+  const bar = (style: string) =>
+    `<Layer width="420" height="240" background="#00aa00">
+      <Layer cx="24" cy="16" anchor="top-left">
+        <h1 style="font-size:150px; font-weight:700; color:#ffffff; ${style}">一</h1>
+      </Layer>
+    </Layer>`
+
+  it('文字 shadow 的 spread 按字形外扩，spread 0 与无投影一致', async () => {
+    const spread = await renderFvg(
+      `<Layer width="420" height="240" background="#e8dcc4">
+        <Layer cx="24" cy="16" anchor="top-left">
+          <h1 style="font-size:150px; font-weight:700; color:#ffffff; shadow:0 0 0 6 #1b1612">一</h1>
+        </Layer>
+      </Layer>`,
+    )
+    const zero = await renderFvg(
+      `<Layer width="420" height="240" background="#e8dcc4">
+        <Layer cx="24" cy="16" anchor="top-left">
+          <h1 style="font-size:150px; font-weight:700; color:#ffffff; shadow:0 0 0 0 #1b1612">一</h1>
+        </Layer>
+      </Layer>`,
+    )
+    const plain = await renderFvg(
+      `<Layer width="420" height="240" background="#e8dcc4">
+        <Layer cx="24" cy="16" anchor="top-left">
+          <h1 style="font-size:150px; font-weight:700; color:#ffffff">一</h1>
+        </Layer>
+      </Layer>`,
+    )
+    const s = await pixels(spread.png)
+    const z = await pixels(zero.png)
+    const p = await pixels(plain.png)
+    const edge = barTop(p.at, p.width, p.height, isWhite)
+    expect(edge.count).toBeGreaterThan(40)
+    const outline = s.at(edge.midX, edge.top - 3)
+    expect(outline[0]!).toBeLessThan(80)
+    expect(outline[1]!).toBeLessThan(80)
+    expect(s.at(edge.midX, edge.top - 9)[0]!).toBeGreaterThan(180)
+    expect(isWhite(s.at(edge.midX, edge.top + 4))).toBe(true)
+    expect(z.at(edge.midX, edge.top - 3)).toEqual(p.at(edge.midX, edge.top - 3))
+    expect(z.at(edge.midX, edge.top + 4)).toEqual(p.at(edge.midX, edge.top + 4))
+  })
+
+  it('文字 glow 写 spread 时外圈更亮', async () => {
+    const scene = (glow: string) =>
+      `<Layer width="420" height="240" background="#000000">
+        <Layer cx="24" cy="16" anchor="top-left">
+          <h1 style="font-size:150px; font-weight:700; color:#ffffff; glow:${glow}">一</h1>
+        </Layer>
+      </Layer>`
+    const tight = await pixels((await renderFvg(scene('8 0 #ff6600'))).png)
+    const wide = await pixels((await renderFvg(scene('8 16 #ff6600'))).png)
+    const edge = barTop(tight.at, tight.width, tight.height, isWhite)
+    const far = edge.top - 14
+    expect(wide.at(edge.midX, far)[0]!).toBeGreaterThan(tight.at(edge.midX, far)[0]! + 25)
+  })
+
+  it('图片 shadow 的 spread 跟着透明通道，不按矩形盒子', async () => {
+    const canvas = createCanvas(80, 80)
+    const ctx = canvas.getContext('2d')
+    ctx.clearRect(0, 0, 80, 80)
+    ctx.fillStyle = '#ff00ff'
+    ctx.beginPath()
+    ctx.arc(40, 40, 16, 0, Math.PI * 2)
+    ctx.fill()
+    const src = `data:image/png;base64,${canvas.toBuffer('image/png').toString('base64')}`
+    const { png } = await renderFvg(
+      `<Layer width="160" height="160" background="#ffffff">
+        <Layer x="40" y="40">
+          <img src="${src}" style="width:80px; height:80px; shadow:0 0 0 8 #112233" />
+        </Layer>
+      </Layer>`,
+    )
+    const { at } = await pixels(png)
+    // 圆心 (80,80)，半径 16。spread 8 后约到半径 24；盒子角仍是白底。
+    expect(at(42, 42)[0]!).toBeGreaterThan(240)
+    const rim = at(80, 102)
+    expect(rim[0]!).toBeLessThan(80)
+    expect(rim[1]!).toBeLessThan(80)
+    expect(at(80, 80)[0]!).toBeGreaterThan(180)
+  })
+
+  it('白字 ink-stroke 外圈是黑色，字内仍是白色', async () => {
+    const { png, report } = await renderFvg(bar('ink-stroke:6 #000000'))
+    const { at, width, height } = await pixels(png)
+    const edge = barTop(at, width, height, isWhite)
+    expect(edge.count).toBeGreaterThan(40)
+    expect(isBlack(at(edge.midX, edge.top - 3))).toBe(true)
+    expect(isBlack(at(edge.midX, edge.top - 5))).toBe(true)
+    expect(isGreen(at(edge.midX, edge.top - 8))).toBe(true)
+    expect(isWhite(at(edge.midX, edge.top + 4))).toBe(true)
+    const h1 = report.elements.find((el) => el.tag === 'h1')
+    expect(h1?.inkStroke).toEqual([{ width: 6, color: '#000000', position: 'outside' }])
+  })
+
+  it('inside 只描字形内侧', async () => {
+    const plain = await pixels((await renderFvg(bar(''))).png)
+    const { png } = await renderFvg(bar('ink-stroke:6 #000000 inside'))
+    const stroked = await pixels(png)
+    const edge = barTop(plain.at, plain.width, plain.height, isWhite)
+    expect(isGreen(stroked.at(edge.midX, edge.top - 3))).toBe(true)
+    expect(isBlack(stroked.at(edge.midX, edge.top + 1))).toBe(true)
+    expect(isBlack(stroked.at(edge.midX, edge.top + 3))).toBe(true)
+  })
+
+  it('center 内外各约一半', async () => {
+    const plain = await pixels((await renderFvg(bar(''))).png)
+    const stroked = await pixels((await renderFvg(bar('ink-stroke:6 #000000 center'))).png)
+    const edge = barTop(plain.at, plain.width, plain.height, isWhite)
+    // 外半约 3px：紧贴笔画外侧是黑，再往外回到背景。内半盖住笔画上沿。
+    expect(isBlack(stroked.at(edge.midX, edge.top - 2))).toBe(true)
+    expect(isGreen(stroked.at(edge.midX, edge.top - 6))).toBe(true)
+    expect(isBlack(stroked.at(edge.midX, edge.top))).toBe(true)
+    expect(isWhite(stroked.at(edge.midX, edge.top + 6))).toBe(true)
+  })
+
+  it('双层描边按到墨迹的总距离分带', async () => {
+    const scene = `<Layer width="460" height="260" background="#0000ff">
+      <Layer cx="30" cy="20" anchor="top-left">
+        <h1 style="font-size:150px; font-weight:700; color:#00ff00; ink-stroke:6 #ffffff, 14 #ff0000">一</h1>
+      </Layer>
+    </Layer>`
+    const { png, report } = await renderFvg(scene)
+    const { at, width, height } = await pixels(png)
+    const edge = barTop(at, width, height, (p) => p[1]! > 180 && p[0]! < 80)
+    expect(isWhite(at(edge.midX, edge.top - 3))).toBe(true)
+    expect(isRed(at(edge.midX, edge.top - 10))).toBe(true)
+    expect(isBlue(at(edge.midX, edge.top - 18))).toBe(true)
+    expect(report.elements.find((el) => el.tag === 'h1')?.inkStroke).toEqual([
+      { width: 6, color: '#ffffff', position: 'outside' },
+      { width: 14, color: '#ff0000', position: 'outside' },
+    ])
+  })
+
+  it('Layer 上的描边把重叠的字合成一圈', async () => {
+    const one = (shift: number) =>
+      `<Layer width="420" height="240" background="#00aa00">
+        <Layer x="${40 + shift}" y="30">
+          <h1 style="font-size:140px; font-weight:700; color:#ffffff">口</h1>
+        </Layer>
+      </Layer>`
+    const left = await pixels((await renderFvg(one(0))).png)
+    const right = await pixels((await renderFvg(one(48))).png)
+    const both = await pixels(
+      (
+        await renderFvg(
+          `<Layer width="420" height="240" background="#00aa00" ink-stroke="8 #ff0000">
+            <Layer x="40" y="30">
+              <h1 style="font-size:140px; font-weight:700; color:#ffffff">口</h1>
+            </Layer>
+            <Layer x="88" y="30">
+              <h1 style="font-size:140px; font-weight:700; color:#ffffff">口</h1>
+            </Layer>
+          </Layer>`,
+        )
+      ).png,
+    )
+    let overlap = 0
+    let redInside = 0
+    for (let y = 0; y < left.height; y++) {
+      for (let x = 0; x < left.width; x++) {
+        if (!isWhite(left.at(x, y)) || !isWhite(right.at(x, y))) continue
+        overlap++
+        if (isRed(both.at(x, y))) redInside++
+      }
+    }
+    expect(overlap).toBeGreaterThan(30)
+    expect(redInside).toBe(0)
+    let redOutside = 0
+    for (let y = 0; y < both.height; y++) {
+      for (let x = 0; x < both.width; x++) {
+        if (isRed(both.at(x, y))) redOutside++
+      }
+    }
+    expect(redOutside).toBeGreaterThan(20)
+  })
+
+  it('渐变 overlay 染本体，不染外侧描边', async () => {
+    const scene = (overlay: string) =>
+      `<Layer width="360" height="200" background="#222222">
+        <Layer cx="16" cy="12" anchor="top-left" ${overlay}>
+          <h1 style="font-size:130px; font-weight:700; color:#ffffff; ink-stroke:6 #000000">一</h1>
+        </Layer>
+      </Layer>`
+    const plain = await pixels((await renderFvg(scene(''))).png)
+    const graded = await pixels(
+      (await renderFvg(scene('overlay="linear-gradient(to right, #ff0000, #0000ff)"'))).png,
+    )
+    const edge = barTop(plain.at, plain.width, plain.height, isWhite)
+    const left = graded.at(edge.x0 + 12, edge.top + 3)
+    const right = graded.at(edge.x1 - 12, edge.top + 3)
+    expect(left[0]!).toBeGreaterThan(left[2]! + 80)
+    expect(right[2]!).toBeGreaterThan(right[0]! + 80)
+    expect(isBlack(graded.at(edge.midX, edge.top - 3))).toBe(true)
+  })
+
+  it('shadow 轮廓带着外侧描边', async () => {
+    const scene = (stroke: string) =>
+      `<Layer width="180" height="180" background="#000000">
+        <rect x="60" y="50" width="40" height="40" fill="#ffffff" shadow="0 36 0 #ff0000" ${stroke} />
+      </Layer>`
+    const plain = await pixels((await renderFvg(scene(''))).png)
+    const stroked = await pixels((await renderFvg(scene('ink-stroke="10 #0000ff"'))).png)
+    const bottomRed = (at: (x: number, y: number) => readonly number[]) => {
+      let yMax = 0
+      for (let y = 0; y < 180; y++) {
+        if (isRed(at(80, y))) yMax = y
+      }
+      return yMax
+    }
+    expect(bottomRed(stroked.at)).toBeGreaterThan(bottomRed(plain.at) + 6)
+  })
+
+  it('描边颜色可以是渐变，坐标跟着元素盒子', async () => {
+    const { png, report } = await renderFvg(
+      `<Layer width="200" height="80" background="#000000">
+        <rect x="60" y="28" width="80" height="24" fill="#222222" ink-stroke="8 linear-gradient(to right, #ff0000, #0000ff)" />
+      </Layer>`,
+    )
+    const { at } = await pixels(png)
+    // 矩形左缘 x=60，描边再向左 8px；右缘 x=140。
+    expect(at(54, 40)[0]!).toBeGreaterThan(at(54, 40)[2]! + 80)
+    expect(at(146, 40)[2]!).toBeGreaterThan(at(146, 40)[0]! + 80)
+    expect(report.elements.find((el) => el.tag === 'rect')?.inkStroke?.[0]?.color).toContain('linear-gradient')
+  })
+
+  it('描边贴近画布边缘时报 effect-clipped', async () => {
+    const { report } = await renderFvg(
+      `<Layer width="120" height="80" background="#ffffff">
+        <rect x="9" y="25" width="30" height="30" fill="#000000" ink-stroke="20 #ff0000" />
+      </Layer>`,
+    )
+    expect(report.issues.some((issue) => issue.code === 'effect-clipped')).toBe(true)
+  })
+
+  it('文字 inner-shadow 的 spread 向笔画内侧扩', async () => {
+    const none = await pixels((await renderFvg(bar('inner-shadow:0 0 0 0 #000000'))).png)
+    const spread = await pixels((await renderFvg(bar('inner-shadow:0 0 0 6 #000000'))).png)
+    const edge = barTop(none.at, none.width, none.height, isWhite)
+    const rim = (at: (x: number, y: number) => readonly number[]) => at(edge.midX, edge.top + 2)
+    expect(rim(none.at)[0]!).toBeGreaterThan(220)
+    expect(rim(spread.at)[0]!).toBeLessThan(rim(none.at)[0]! - 40)
+  })
+
+  it('宽内描边提示会填死字腔，解析失败带 hint', async () => {
+    const wide = await renderFvg(
+      `<Layer width="200" height="80"><h1 style="font-size:40px; ink-stroke:8 #000 inside">口</h1></Layer>`,
+    )
+    const narrow = await renderFvg(
+      `<Layer width="400" height="220"><h1 style="font-size:180px; ink-stroke:6 #000 inside">口</h1></Layer>`,
+    )
+    expect(wide.report.issues.some((issue) => issue.code === 'ink-stroke-fill')).toBe(true)
+    expect(narrow.report.issues.some((issue) => issue.code === 'ink-stroke-fill')).toBe(false)
+    const bad = await renderFvg(`<Layer width="200" height="80"><h1 style="ink-stroke:nope">字</h1></Layer>`)
+    const issue = bad.report.issues.find((item) => item.code === 'invalid-attr' && item.message.includes('ink-stroke'))
+    expect(issue?.hint).toContain('6 #000 outside')
+    const alias = await renderFvg(
+      `<Layer width="200" height="80"><h1 style="-webkit-text-stroke:2px #000; outline:2px solid #000">字</h1></Layer>`,
+    )
+    const info = alias.report.issues.find((item) => item.code === 'non-canonical' && item.hint?.includes('ink-stroke'))
+    expect(info).toBeTruthy()
+  })
+})

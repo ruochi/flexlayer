@@ -458,6 +458,22 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
     )
   }
   if (html) {
+    const webkitStroke = styleMap['-webkit-text-stroke']
+    const outline = styleMap.outline ?? (present(attrs, 'outline') ? attrs.outline : undefined)
+    const wantsBrowserStroke =
+      (webkitStroke != null && webkitStroke.trim() !== '' && webkitStroke.trim().toLowerCase() !== 'none') ||
+      (outline != null && outline.trim() !== '' && outline.trim().toLowerCase() !== 'none' && outline.trim() !== '0')
+    if (wantsBrowserStroke) {
+      out.push(
+        flagged(
+          'info',
+          'non-canonical',
+          path,
+          'outline 与 -webkit-text-stroke 不会按墨迹描边',
+          '改用 ink-stroke，例如 style="ink-stroke:6 #000 outside"',
+        ),
+      )
+    }
     const htmlStyleForbidden = styleKeys.filter((key) => FORBID_IN_HTML_STYLE.has(key))
     if (htmlStyleForbidden.length > 0) {
       const first = attrByName(htmlStyleForbidden[0]!)

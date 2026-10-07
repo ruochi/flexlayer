@@ -91,7 +91,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | `background`、`padding`、`font-size`、`color`、`flex`、`flex-grow`、`flex-shrink`、`gap`、`border`、`border-radius`、`max-width`、`align-items`、`align-content`、`justify-content`、`flex-wrap`、`row-gap`、`column-gap`、`writing-mode`、`object-fit`、`object-position` | HTML 的 `style`。`layer` 或图形写了 `style` 报 `warn` |
 | `cx`、`cy`、`x1`、`y1`、`x2`、`y2`、`points`、`d`、`depth`、`fill`、`stroke`、`transform` | 图形属性，坐标是所在 `layer` 的局部坐标 |
 | `src`、`alt` | 只写在 `img` 或 `model` 上。图片宽高仍放进 `style` |
-| `shadow`、`glow`、`inner-shadow`、`inner-glow`、`blur`、`backdrop-blur`、`glass`、`noise`、`filter`、`blend` | 图形和 `layer` 写属性；文字写在 `style`。见第 9 章 |
+| `shadow`、`glow`、`inner-shadow`、`inner-glow`、`ink-stroke`、`blur`、`backdrop-blur`、`glass`、`noise`、`filter`、`blend` | 图形和 `layer` 写属性；文字写在 `style`。见第 9 章 |
 | `perspective`、`overlay`、`grade`、`grade-mask`、`bleed` | 只写在 `layer` 上。写在别处或写进 `style` 报 `warn` |
 | `data` | 任何元素都可以写。值是 JSON；程序里直接传对象或数组。`draw` 读 `el.data`，不在 `el.attr` |
 | `expect` | 任何元素都可以写。声明预期中的问题码，出现在该节点或子树里时降为 info。没出现报 `unused-expect` |
@@ -415,6 +415,7 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 
 | 属性 | 语法 | 说明 |
 | --- | --- | --- |
+| `ink-stroke` | `<宽度> <颜色或渐变> [outside\|inside\|center]`，逗号分隔多层 | 按墨迹距离描边。默认 `outside`。第二层宽度是到墨迹的总距离。`none` 不描边 |
 | `blur` | 单个非负像素 | 图层模糊：糊本元素（含 layer 子树）已绘制像素；外扩计入 `effect-clipped` |
 | `backdrop-blur` | 单个非负像素 | 背景模糊：糊元素背后已画内容，再透过半透明本体看见 |
 | `glass` | 见下 | 边缘凸弧面透镜折射 + 色散 + 朝光高光。与 `backdrop-blur` 同时写时以 `glass` 为准 |
@@ -432,6 +433,8 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 | paint | `glass` 的色调是一个色值 |
 | 作用范围 | `blur` 作用于已绘制像素；`backdrop-blur` / `glass` 取样背后的画面，再按墨迹贴回 |
 | 图 | [docs/gallery/blur-glass.png](docs/gallery/blur-glass.png)、[docs/gallery/glass-scene.png](docs/gallery/glass-scene.png) |
+
+`ink-stroke` 按着墨距离描边，不占用 `stroke`、`outline` 或 `-webkit-text-stroke`。写法：`6 #000`、`6 #000 outside`、`6 #fff inside`、`8 #fff center`，或 `6 #ffffff, 14 #c8321e`。颜色可以是纯色或渐变，坐标按该元素盒子计算。默认 `outside`。解析失败报 `invalid-attr`。写在 `layer` 上时按整棵子树合并后的墨迹描一圈。`shadow` / `glow` 的轮廓带上外侧描边。`inside` / `center` 的内侧宽度达到字号的约 8% 时，报 `ink-stroke-fill`。文字和图片的 `spread` 按墨迹 alpha 膨胀或收缩。
 
 ### 9.3 调色
 
@@ -639,7 +642,8 @@ registerFilter({
 | `missing-symbol` | warn | `use` 的 `href` 没有对应的 `symbol` |
 | `symbol-cycle` | warn | `symbol` 通过 `use` 引用了自己 |
 | `open-curve-fill` | warn | 开口的 `curve` 写了 `fill`，没有填充 |
-| `effect-clipped` | warn | 本体在画布内，阴影、光晕或图层模糊超出画布 |
+| `effect-clipped` | warn | 本体在画布内，阴影、光晕、描边或图层模糊超出画布 |
+| `ink-stroke-fill` | warn | `inside` / `center` 的内侧宽度达到字号的约 8%，容易填死字内空白 |
 | `flatten-3d` | warn | `rotateX`、`rotateY`、`z` 没有落在带 `perspective` 的 layer 里，仍按二维绘制。`sphere`、`box`、`extrude`、`model` 同样报这个码，并且不绘制 |
 | `behind-camera` | warn | 平面或网格的 `z` 大于等于所在 layer 的 `perspective`，不绘制 |
 | `emit-draw` | warn | `--emit` 时 `draw` 函数用了外部变量，或读不出函数体。按语法判断：字符串、注释，以及同一条声明里的多个名字，都不算外部变量。这种 `<draw>` 不会写进 `.layer` |
@@ -792,7 +796,7 @@ for await (const { frame, png, report } of renderFrames(scene, { from: 0, to: 30
 - 墨迹布局：按着墨范围计算间距、居中、包裹。
 - `Icon`。
 - `Scene3D` 这个名字仍保留，不要挪作他用。`sphere`、`box`、`extrude`、`model` 画在父 `layer` 的 `perspective` 里，见第 3 章。单独的视口、作者灯光和阴影还没有，讨论见 [docs/proposals/3D.md](docs/proposals/3D.md)。
-- 滤镜设计说明见 [docs/EFFECTS.md](docs/EFFECTS.md)。勿占用：`outer-glow`、`drop-shadow`、`backdrop-filter`、`texture`。
+- 滤镜设计说明见 [docs/EFFECTS.md](docs/EFFECTS.md)。勿占用：`outer-glow`、`drop-shadow`、`backdrop-filter`、`texture`、`outline`。
 
 ## 15. 用 tsx 写 layer
 
@@ -878,4 +882,3 @@ canvas.component('badge', (a) => {
 ```
 
 最终排版和量到的盒子不一致时，报 `measure-mismatch`（warn），消息里带上两个尺寸。常见原因是 `width`、`safe` 或字号和最终画布不一样。
-

@@ -26,14 +26,15 @@ import { backdropFilters, filtersPad, getFilter, orderedFilters } from './filter
 import { fitImageRect } from './image.js'
 import { canvasPaint, isGradient } from './gradient.js'
 import { gradientStyle, isGradientPaint, type GradientBox } from './gradientField.js'
-import { invert, multiply, originOffset } from './matrix.js'
+import { applyToBox, aroundPivot, invert, multiply, originOffset } from './matrix.js'
 import { ownsMeshScene, renderMeshLayer, type MeshFrame } from './mesh.js'
 import { drawTexturedPlane, has3dPose, PERSPECTIVE_AA, planeDepth, posePoint, project } from './perspective.js'
-import type {
-  AppliedFilter,
+import { outerInkStrokeReach } from './style.js'
+import { unionBoxes, type AppliedFilter, type Box,
   GlassSpec,
   GlowSpec,
   ImageLayoutNode,
+  InkStrokeSpec,
   LayerLayoutNode,
   LayoutNode,
   LineLayoutNode,
@@ -546,14 +547,15 @@ function drawNodeInk(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: nu
     drawShapeSilhouette(ctx, node, spread, ink)
     return
   }
-  if (node.kind === 'text') {
+  if (node.kind === 'text' || node.kind === 'image') {
     if (node.background && node.background !== 'transparent') drawBoxSilhouette(ctx, node, spread, ink)
-    drawTextNode(ctx, node, ink)
-    return
-  }
-  if (node.kind === 'image') {
-    if (node.background && node.background !== 'transparent') drawBoxSilhouette(ctx, node, spread, ink)
-    drawImageNode(ctx, node, ink)
+    const drawRaw = (target: PaintCtx) => {
+      if (node.kind === 'text') drawTextNode(target, node, ink)
+      else drawImageNode(target, node, ink)
+    }
+    // 字形和图片 alpha 不能靠几何外扩。spread 为 0 时仍直接画，避免和以前有像素差。
+    if (Math.abs(spread) < 1e-3) drawRaw(ctx as PaintCtx)
+    else paintDilatedInk(ctx as PaintCtx, spread, ink, leafInkBounds(node), drawRaw)
     return
   }
   if (node.kind === 'custom') {
@@ -664,6 +666,8 @@ function paintOverlay(ctx: PaintCtx, node: LayoutNode, overlay: OverlaySpec) {
   clipCtx.setTransform(k, 0, 0, k, 0, 0)
   clipCtx.translate(-node.x, -node.y)
   drawSubtreeInk(clipCtx, node, 0, '#ffffff')
+  // 内描边落在本体内，从蒙版里挖掉，避免渐变 overlay 染到描边。
+  eraseInnerStrokes(clipCtx, node)
   octx.globalCompositeOperation = 'destination-in'
   octx.drawImage(clip, 0, 0)
 
@@ -837,7 +841,7 @@ function paintBackdropBlur(ctx: PaintCtx, node: LayoutNode, radius: number) {
 
 const EDT_INF = 1e20
 
-/** Felzenszwalb 一维平方距离变换 */
+/** Felzenszwalb 一维平方距离变换。墨迹膨胀、描边和玻璃共用。 */
 function edt1d(f: Float64Array, n: number, d: Float64Array, v: Int32Array, z: Float64Array) {
   let k = 0
   v[0] = 0
@@ -862,10 +866,8 @@ function edt1d(f: Float64Array, n: number, d: Float64Array, v: Int32Array, z: Fl
   }
 }
 
-/** 墨迹内部每个像素到最近墨迹边缘的欧氏距离（设备像素） */
-function inkDistanceField(maskData: Uint8ClampedArray, w: number, h: number): Float32Array {
-  const grid = new Float64Array(w * h)
-  for (let i = 0; i < w * h; i++) grid[i] = maskData[i * 4 + 3]! >= 128 ? EDT_INF : 0
+/** 种子为 0、其余为 EDT_INF 的网格，原地写成到最近种子的平方距离。 */
+function edt2d(grid: Float64Array, w: number, h: number) {
   const n = Math.max(w, h)
   const f = new Float64Array(n)
   const d = new Float64Array(n)
@@ -881,9 +883,332 @@ function inkDistanceField(maskData: Uint8ClampedArray, w: number, h: number): Fl
     edt1d(f, w, d, v, z)
     for (let x = 0; x < w; x++) grid[y * w + x] = d[x]!
   }
+}
+
+/**
+ * 每个像素到最近种子的欧氏距离。
+ * bias 从开方结果里减去：玻璃用 0.5，让距离落到像素边界而不是像素中心。
+ */
+function distanceToSites(isSite: (index: number) => boolean, w: number, h: number, bias = 0): Float32Array {
+  const grid = new Float64Array(w * h)
+  for (let i = 0; i < w * h; i++) grid[i] = isSite(i) ? 0 : EDT_INF
+  edt2d(grid, w, h)
   const out = new Float32Array(w * h)
-  for (let i = 0; i < w * h; i++) out[i] = grid[i]! > 0 ? Math.max(0, Math.sqrt(grid[i]!) - 0.5) : 0
+  for (let i = 0; i < w * h; i++) {
+    const g = grid[i]!
+    out[i] = g > 0 ? Math.max(0, Math.sqrt(g) - bias) : 0
+  }
   return out
+}
+
+/** 墨迹内部每个像素到最近墨迹边缘的欧氏距离（设备像素） */
+function inkDistanceField(maskData: Uint8ClampedArray, w: number, h: number): Float32Array {
+  return distanceToSites((i) => maskData[i * 4 + 3]! < 128, w, h, 0.5)
+}
+
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  if (edge0 === edge1) return x >= edge1 ? 1 : 0
+  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)))
+  return t * t * (3 - 2 * t)
+}
+
+/** 描边环带。d 为到墨迹边界的距离；在 outer 处约 1px 做 smoothstep。 */
+function bandCoverage(d: number, inner: number, outer: number): number {
+  if (!(outer > inner) || d <= 0 || d >= outer + 0.5) return 0
+  const outerA = 1 - smoothstep(outer - 0.5, outer + 0.5, d)
+  const innerA = inner <= 0 ? 1 : smoothstep(inner - 0.5, inner + 0.5, d)
+  return outerA * innerA
+}
+
+const RASTER_MAX_SIDE = 8192
+
+function rasterizeUser(bounds: Box, draw: (ctx: PaintCtx) => void): { canvas: Canvas; x: number; y: number } | null {
+  if (![bounds.x, bounds.y, bounds.width, bounds.height].every((n) => Number.isFinite(n))) return null
+  const x = Math.floor(bounds.x)
+  const y = Math.floor(bounds.y)
+  const w = Math.ceil(bounds.x + bounds.width) - x
+  const h = Math.ceil(bounds.y + bounds.height) - y
+  if (w < 1 || h < 1 || w > RASTER_MAX_SIDE || h > RASTER_MAX_SIDE) return null
+  const canvas = createCanvas(w, h)
+  const octx = canvas.getContext('2d') as PaintCtx
+  octx.translate(-x, -y)
+  draw(octx)
+  return { canvas, x, y }
+}
+
+/** 把覆盖蒙版染成颜色或渐变，再画回当前用户空间。渐变坐标用元素盒子。 */
+function blitCoverage(
+  ctx: PaintCtx,
+  originX: number,
+  originY: number,
+  alpha: Uint8ClampedArray,
+  w: number,
+  h: number,
+  color: string,
+  gradientBox: Box | null,
+) {
+  let any = false
+  for (let i = 0; i < alpha.length; i++) {
+    if (alpha[i]! > 0) {
+      any = true
+      break
+    }
+  }
+  if (!any) return
+  const mask = createCanvas(w, h)
+  const mctx = mask.getContext('2d') as PaintCtx
+  const img = mctx.createImageData(w, h)
+  const px = img.data
+  for (let i = 0; i < w * h; i++) {
+    const a = alpha[i]!
+    if (a === 0) continue
+    const o = i * 4
+    px[o] = 255
+    px[o + 1] = 255
+    px[o + 2] = 255
+    px[o + 3] = a
+  }
+  mctx.putImageData(img, 0, 0)
+  const colored = createCanvas(w, h)
+  const cctx = colored.getContext('2d') as PaintCtx
+  if (gradientBox && isGradient(color)) {
+    cctx.translate(-originX, -originY)
+    cctx.fillStyle = paintOf(
+      cctx,
+      color,
+      gradientBox.x,
+      gradientBox.y,
+      Math.max(1, gradientBox.width),
+      Math.max(1, gradientBox.height),
+    )
+    cctx.fillRect(originX, originY, w, h)
+    cctx.setTransform(1, 0, 0, 1, 0, 0)
+  } else {
+    cctx.fillStyle = color
+    cctx.fillRect(0, 0, w, h)
+  }
+  cctx.globalCompositeOperation = 'destination-in'
+  cctx.drawImage(mask, 0, 0)
+  const smoothing = ctx.imageSmoothingEnabled
+  ctx.imageSmoothingEnabled = false
+  ctx.drawImage(colored, originX, originY)
+  ctx.imageSmoothingEnabled = smoothing
+}
+
+/** 按墨迹 alpha 膨胀（spread > 0）或收缩（spread < 0）。只在墨迹外框加 |spread| 的范围内做距离变换。 */
+function paintDilatedInk(
+  ctx: PaintCtx,
+  spread: number,
+  color: string,
+  bounds: Box,
+  drawRaw: (ctx: PaintCtx) => void,
+) {
+  if (Math.abs(spread) < 1e-3) {
+    drawRaw(ctx)
+    return
+  }
+  const pad = Math.ceil(Math.abs(spread)) + 2
+  const raster = rasterizeUser(
+    { x: bounds.x - pad, y: bounds.y - pad, width: bounds.width + pad * 2, height: bounds.height + pad * 2 },
+    drawRaw,
+  )
+  if (!raster) {
+    drawRaw(ctx)
+    return
+  }
+  const { canvas, x, y } = raster
+  const w = canvas.width
+  const h = canvas.height
+  const data = (canvas.getContext('2d') as PaintCtx).getImageData(0, 0, w, h).data
+  const inkAt = (i: number) => data[i * 4 + 3]! >= 128
+  const alpha = new Uint8ClampedArray(w * h)
+  if (spread > 0) {
+    const outside = distanceToSites(inkAt, w, h, 0)
+    for (let i = 0; i < w * h; i++) {
+      if (inkAt(i)) {
+        alpha[i] = 255
+        continue
+      }
+      const d = outside[i]!
+      if (d <= 0 || d >= spread + 0.5) continue
+      alpha[i] = Math.round(255 * (1 - smoothstep(spread - 0.5, spread + 0.5, d)))
+    }
+  } else {
+    const inside = distanceToSites((i) => !inkAt(i), w, h, 0)
+    const radius = -spread
+    for (let i = 0; i < w * h; i++) {
+      if (!inkAt(i)) continue
+      alpha[i] = Math.round(255 * smoothstep(radius - 0.5, radius + 0.5, inside[i]!))
+    }
+  }
+  blitCoverage(ctx, x, y, alpha, w, h, color, null)
+}
+
+function leafInkBounds(node: LayoutNode): Box {
+  const slop = 4
+  const b =
+    node.ink.width > 0.5 && node.ink.height > 0.5
+      ? { x: node.x + node.ink.x, y: node.y + node.ink.y, width: node.ink.width, height: node.ink.height }
+      : { x: node.x, y: node.y, width: Math.max(1, node.width), height: Math.max(1, node.height) }
+  return { x: b.x - slop, y: b.y - slop, width: b.width + slop * 2, height: b.height + slop * 2 }
+}
+
+/** 子树墨迹外框，坐标系与 drawInkMask 一致（含本节点的 x/y，不含本节点自己的旋转）。 */
+function groupInkBounds(node: LayoutNode): Box | null {
+  if (node.kind !== 'layer' && node.kind !== 'flex') return leafInkBounds(node)
+  const parts: Box[] = []
+  const add = (b: Box | null) => {
+    if (!b || b.width <= 0 || b.height <= 0) return
+    parts.push(b)
+  }
+  if ((node.background && node.background !== 'transparent') || (node.border && node.border.width > 0)) {
+    add(leafInkBounds(node))
+  }
+  const insetX = node.kind === 'flex' ? node.padding.left + (node.border?.width ?? 0) : 0
+  const insetY = node.kind === 'flex' ? node.padding.top + (node.border?.width ?? 0) : 0
+  for (const ch of node.children) {
+    const local = groupInkBounds(ch)
+    if (!local) continue
+    const transformed =
+      ch.rotate === 0 && ch.scaleX === 1 && ch.scaleY === 1
+        ? local
+        : applyToBox(
+            aroundPivot(
+              ch.x + originOffset(ch.origin, ch.width, ch.height).x,
+              ch.y + originOffset(ch.origin, ch.width, ch.height).y,
+              ch.rotate,
+              ch.scaleX,
+              ch.scaleY,
+            ),
+            local,
+          )
+    add({
+      x: transformed.x + node.x + insetX,
+      y: transformed.y + node.y + insetY,
+      width: transformed.width,
+      height: transformed.height,
+    })
+  }
+  if (parts.length === 0) return null
+  let acc = parts[0]!
+  for (let i = 1; i < parts.length; i++) acc = unionBoxes(acc, parts[i]!)
+  return { x: acc.x - 2, y: acc.y - 2, width: acc.width + 4, height: acc.height + 4 }
+}
+
+/** 画本节点墨迹。Layer / flex 合并子树，子元素带上自身的旋转和透明度。 */
+function drawInkMask(ctx: PaintCtx, node: LayoutNode, isTop: boolean) {
+  ctx.save()
+  if (!isTop) {
+    applyNodeTransform(ctx, node)
+    ctx.globalAlpha *= node.opacity
+  }
+  if (node.kind === 'layer' || node.kind === 'flex') {
+    drawNodeInk(ctx, node, 0, '#ffffff')
+    const insetX = node.kind === 'flex' ? node.padding.left + (node.border?.width ?? 0) : 0
+    const insetY = node.kind === 'flex' ? node.padding.top + (node.border?.width ?? 0) : 0
+    ctx.translate(node.x + insetX, node.y + insetY)
+    for (const ch of node.children) drawInkMask(ctx, ch, false)
+  } else {
+    drawNodeInk(ctx, node, 0, '#ffffff')
+  }
+  ctx.restore()
+}
+
+/**
+ * 阴影 / 光晕的轮廓 = 本体 ∪ 外侧描边，再按 spread 胀缩。
+ * Layer / flex 上的描边先合并子树再膨胀，重叠的字不会各留一圈。
+ */
+function drawEffectInk(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: number, state?: PaintState) {
+  const extra = outerInkStrokeReach(node.inkStroke)
+  if ((node.kind === 'layer' || node.kind === 'flex') && extra > 0) {
+    const bounds = groupInkBounds(node)
+    if (!bounds) return
+    paintDilatedInk(ctx as PaintCtx, spread + extra, SILHOUETTE, bounds, (octx) => drawInkMask(octx, node, true))
+    return
+  }
+  if (state) drawOuterInk(ctx, state, node, spread + extra)
+  else drawNodeInk(ctx, node, spread + extra)
+}
+
+type StrokeBand = { inner: number; outer: number; color: string; side: 'out' | 'in' }
+
+function collectStrokeBands(layers: InkStrokeSpec[], phase: 'outer' | 'inner'): StrokeBand[] {
+  const bands: StrokeBand[] = []
+  const take = (position: InkStrokeSpec['position'], side: 'out' | 'in', scale: number) => {
+    let prev = 0
+    for (const layer of layers) {
+      if (layer.position !== position) continue
+      bands.push({ inner: prev * scale, outer: layer.width * scale, color: layer.color, side })
+      prev = layer.width
+    }
+  }
+  if (phase === 'outer') {
+    take('outside', 'out', 1)
+    take('center', 'out', 0.5)
+  } else {
+    take('inside', 'in', 1)
+    take('center', 'in', 0.5)
+  }
+  bands.sort((a, b) => b.outer - a.outer)
+  return bands.filter((band) => band.outer > band.inner + 1e-3)
+}
+
+function paintInkStrokes(ctx: PaintCtx, node: LayoutNode, phase: 'outer' | 'inner') {
+  const layers = node.inkStroke
+  if (!layers?.length) return
+  const bands = collectStrokeBands(layers, phase)
+  if (bands.length === 0) return
+  const subtree = node.kind === 'layer' || node.kind === 'flex'
+  const base = subtree ? groupInkBounds(node) : leafInkBounds(node)
+  if (!base || base.width <= 0 || base.height <= 0) return
+  const reach = phase === 'outer' ? outerInkStrokeReach(layers) : 2
+  const pad = Math.ceil(Math.max(reach, 2)) + 2
+  const raster = rasterizeUser(
+    { x: base.x - pad, y: base.y - pad, width: base.width + pad * 2, height: base.height + pad * 2 },
+    (octx) => {
+      if (subtree) drawInkMask(octx, node, true)
+      else drawNodeInk(octx, node, 0, '#ffffff')
+    },
+  )
+  if (!raster) return
+  const { canvas, x, y } = raster
+  const w = canvas.width
+  const h = canvas.height
+  const src = (canvas.getContext('2d') as PaintCtx).getImageData(0, 0, w, h).data
+  const inkAt = (i: number) => src[i * 4 + 3]! >= 128
+  const outside = bands.some((band) => band.side === 'out') ? distanceToSites(inkAt, w, h, 0) : null
+  const inside = bands.some((band) => band.side === 'in') ? distanceToSites((i) => !inkAt(i), w, h, 0) : null
+  const box: Box = { x: node.x, y: node.y, width: node.width, height: node.height }
+  for (const band of bands) {
+    const field = band.side === 'out' ? outside : inside
+    if (!field) continue
+    const alpha = new Uint8ClampedArray(w * h)
+    for (let i = 0; i < w * h; i++) {
+      let cover = bandCoverage(field[i]!, band.inner, band.outer)
+      if (cover <= 0) continue
+      if (band.side === 'in') cover *= src[i * 4 + 3]! / 255
+      const a = Math.round(255 * cover)
+      if (a > 0) alpha[i] = a
+    }
+    blitCoverage(ctx, x, y, alpha, w, h, band.color, box)
+  }
+}
+
+/** 与 drawSubtreeInk 同一套坐标，把内侧描边从 overlay 蒙版里挖掉。 */
+function eraseInnerStrokes(ctx: PaintCtx, node: LayoutNode) {
+  if (node.inkStroke?.some((layer) => layer.position !== 'outside')) {
+    ctx.save()
+    ctx.globalCompositeOperation = 'destination-out'
+    paintInkStrokes(ctx, node, 'inner')
+    ctx.restore()
+  }
+  if (node.kind !== 'layer' && node.kind !== 'flex') return
+  const insetX = node.kind === 'flex' ? node.padding.left + (node.border?.width ?? 0) : 0
+  const insetY = node.kind === 'flex' ? node.padding.top + (node.border?.width ?? 0) : 0
+  ctx.save()
+  ctx.translate(node.x + insetX, node.y + insetY)
+  for (const ch of node.children) eraseInnerStrokes(ctx, ch)
+  ctx.restore()
 }
 
 /** 可分离盒式模糊，用来抹平二值距离场的台阶，让法线方向连续 */
@@ -1218,7 +1543,7 @@ function paintNodeEffectsAndBody(
   // glass 未写 shadow 时补一层柔和投影，接近系统控件浮起感
   const drawShadow = () => {
     if (node.shadow) {
-      drawEffect(ctx, state, node, shadowEffect(node.shadow), (spread) => drawOuterInk(ctx, state, node, spread))
+      drawEffect(ctx, state, node, shadowEffect(node.shadow), (spread) => drawEffectInk(ctx, node, spread, state))
     } else if (node.glass) {
       const depth = node.glass.variant === 'thick' ? 18 : node.glass.variant === 'clear' ? 12 : 14
       drawEffect(
@@ -1226,7 +1551,7 @@ function paintNodeEffectsAndBody(
         state,
         node,
         { dx: 0, dy: depth * 0.35, blur: depth, spread: 0, color: '#0000002e' },
-        (spread) => drawNodeInk(ctx, node, spread),
+        (spread) => drawEffectInk(ctx, node, spread, state),
       )
     }
   }
@@ -1237,8 +1562,10 @@ function paintNodeEffectsAndBody(
     if (opts.sampleBackdrop && node.backdropBlur) paintBackdropBlur(ctx, node, node.backdropBlur)
     drawShadow()
   }
-  if (node.glow) paintGlow(ctx, state, node, node.glow, (spread) => drawOuterInk(ctx, state, node, spread))
+  if (node.glow) paintGlow(ctx, state, node, node.glow, (spread) => drawEffectInk(ctx, node, spread, state))
+  paintInkStrokes(ctx, node, 'outer')
   paintBody(ctx, node, debug, t, state)
+  paintInkStrokes(ctx, node, 'inner')
   if (node.innerShadow) {
     paintInnerEffect(ctx, node, node.innerShadow, 'source-over')
   }
@@ -1331,12 +1658,13 @@ function paintWithLayerFilter(ctx: PaintCtx, node: LayoutNode, debug: boolean, t
   const pixel = orderedFilters(node.filters, 'pixel')
   const filter = canvasFilterCss(node)
   const masks = layerMaskOf(node)
+  const strokeReach = outerInkStrokeReach(node.inkStroke)
   const pad = Math.ceil(blur * 2 + 4 + filtersPad(node.filters))
   const shadowPad = node.shadow
-    ? node.shadow.blur * 2 + node.shadow.spread + Math.max(Math.abs(node.shadow.x), Math.abs(node.shadow.y))
+    ? node.shadow.blur * 2 + node.shadow.spread + strokeReach + Math.max(Math.abs(node.shadow.x), Math.abs(node.shadow.y))
     : 0
-  const glowPad = node.glow ? node.glow.blur * 2 + node.glow.spread : 0
-  let effectPad = Math.max(pad, Math.ceil(shadowPad), Math.ceil(glowPad))
+  const glowPad = node.glow ? node.glow.blur * 2 + node.glow.spread + strokeReach : 0
+  let effectPad = Math.max(pad, Math.ceil(shadowPad), Math.ceil(glowPad), Math.ceil(strokeReach))
   if (masks && node.glass) effectPad = Math.max(effectPad, Math.ceil(node.glass.blur * 2 + 8))
   if (masks && node.backdropBlur) effectPad = Math.max(effectPad, Math.ceil(node.backdropBlur * 2 + 4))
   const tw = Math.max(1, Math.ceil(node.width + effectPad * 2))

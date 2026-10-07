@@ -1,6 +1,7 @@
 import { filtersInPaintOrder, getFilter } from './filter.js'
 import { apply, applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset, translated, type Matrix } from './matrix.js'
 import { applyPoseMatrix, has3dPose, planeDepth, poseMatrix, posePoint, project as projectPoint } from './perspective.js'
+import { innerInkStrokeReach, outerInkStrokeReach } from './style.js'
 import type { Box, ElementReport, FvgDocument, FvgReport, InlineOwner, Issue, LayoutNode, MeshLayoutNode, TextLayoutNode } from './types.js'
 import { boxToRect, emptyBox, translateBox, unionBoxes } from './types.js'
 
@@ -152,15 +153,23 @@ function expandBox(box: Box, pad: number): Box {
  * 再往外只剩几乎全透明的尾巴。按 blur 本身会把离边缘还有十几到几十像素的效果报成裁切。
  * 偏移和 spread 是实打实的位移，仍按原值加。图层模糊和玻璃是 CSS `blur()`，外扩按两倍计。
  */
-function effectPadOf(node: { shadow?: LayoutNode['shadow']; glow?: LayoutNode['glow']; blur?: number; glass?: LayoutNode['glass'] }): number {
+function effectPadOf(node: {
+  shadow?: LayoutNode['shadow']
+  glow?: LayoutNode['glow']
+  blur?: number
+  glass?: LayoutNode['glass']
+  inkStroke?: LayoutNode['inkStroke']
+}): number {
   const visible = 0.55
+  const strokeReach = outerInkStrokeReach(node.inkStroke)
   return Math.max(
     node.shadow
-      ? (node.shadow.blur + node.shadow.spread) * visible + Math.max(Math.abs(node.shadow.x), Math.abs(node.shadow.y))
+      ? (node.shadow.blur + node.shadow.spread + strokeReach) * visible + Math.max(Math.abs(node.shadow.x), Math.abs(node.shadow.y))
       : 0,
-    node.glow ? (node.glow.blur + node.glow.spread) * visible : 0,
+    node.glow ? (node.glow.blur + node.glow.spread + strokeReach) * visible : 0,
     node.blur != null ? node.blur * 2 : 0,
     node.glass ? node.glass.blur * 2 : 0,
+    strokeReach,
   )
 }
 
@@ -396,6 +405,7 @@ function walk(
   if (node.glow) entry.glow = node.glow
   if (node.innerShadow) entry.innerShadow = node.innerShadow
   if (node.innerGlow) entry.innerGlow = node.innerGlow
+  if (node.inkStroke) entry.inkStroke = node.inkStroke
   if (node.blur != null) entry.blur = node.blur
   if (node.backdropBlur != null) entry.backdropBlur = node.backdropBlur
   if (node.noise) entry.noise = node.noise
@@ -623,8 +633,8 @@ export function buildReport(doc: FvgDocument): FvgReport {
         level: 'warn',
         code: 'effect-clipped',
         path: el.path,
-        message: '本体在画布内，但阴影、光晕或模糊超出画布',
-        hint: '把元素往里移，或减小 blur',
+        message: '本体在画布内，但阴影、光晕、描边或模糊超出画布',
+        hint: '把元素往里移，或减小 blur / ink-stroke',
       })
     }
     if (!el.inline && el.lines != null && (el.tag === 'h1' || el.tag === 'h2' || el.tag === 'h3' || el.tag === 'p' || el.tag === 'div' || el.tag === 'span')) {
@@ -643,6 +653,18 @@ export function buildReport(doc: FvgDocument): FvgReport {
           code: 'min-font-size',
           path: el.path,
           message: `字号 ${el.fontSize}px 小于建议最小 ${minFs.toFixed(1)}px`,
+        })
+      }
+    }
+    if (el.fontSize != null && el.inkStroke) {
+      const inner = innerInkStrokeReach(el.inkStroke)
+      if (inner >= el.fontSize * 0.08) {
+        issues.push({
+          level: 'warn',
+          code: 'ink-stroke-fill',
+          path: el.path,
+          message: '小字号宽内描边会填死字内空白（如「口」）',
+          hint: '把 inside / center 的内侧宽度收到字号的 8% 以内，或改用 outside',
         })
       }
     }

@@ -135,6 +135,79 @@ export function parseGlow(value: string | undefined): GlowValue | undefined {
   return { blur, spread, color: parts.color }
 }
 
+export type InkStrokePosition = 'outside' | 'inside' | 'center'
+/** 一层墨迹描边。width 是到墨迹的总距离，不是相对上一层的增量。 */
+export type InkStrokeValue = { width: number; color: string; position: InkStrokePosition }
+
+const INK_STROKE_POSITIONS = new Set<InkStrokePosition>(['outside', 'inside', 'center'])
+
+/** 按顶层逗号拆开，括号里的逗号留给渐变。 */
+function splitTopLevelCommas(value: string): string[] {
+  const parts: string[] = []
+  let depth = 0
+  let cur = ''
+  for (const ch of value) {
+    if (ch === '(') depth++
+    else if (ch === ')') depth = Math.max(0, depth - 1)
+    if (ch === ',' && depth === 0) {
+      if (cur.trim()) parts.push(cur.trim())
+      cur = ''
+    } else cur += ch
+  }
+  if (cur.trim()) parts.push(cur.trim())
+  return parts
+}
+
+/**
+ * `ink-stroke`: `<宽度> <颜色或渐变> [outside|inside|center] [, 下一层…]`。
+ * 多层从内到外，宽度是到墨迹的总距离。`none` 与无法解析都返回 undefined。
+ */
+export function parseInkStroke(value: string | undefined): InkStrokeValue[] | undefined {
+  if (!value || value.trim() === 'none') return undefined
+  const layers = splitTopLevelCommas(value)
+  if (layers.length === 0) return undefined
+  const out: InkStrokeValue[] = []
+  for (const layer of layers) {
+    const tokens = splitCssTokens(layer)
+    if (tokens.length < 2 || tokens.length > 3) return undefined
+    const width = parsePx(tokens[0])
+    if (width === undefined || !(width > 0)) return undefined
+    let position: InkStrokePosition = 'outside'
+    if (tokens.length === 3) {
+      const pos = tokens[2]!.toLowerCase()
+      if (!INK_STROKE_POSITIONS.has(pos as InkStrokePosition)) return undefined
+      position = pos as InkStrokePosition
+    }
+    const color = tokens[1]!
+    if (INK_STROKE_POSITIONS.has(color.toLowerCase() as InkStrokePosition)) return undefined
+    if (parsePx(color) !== undefined) return undefined
+    out.push({ width, color, position })
+  }
+  return out
+}
+
+/** 外侧描边伸出去的最大距离。center 只算外半。 */
+export function outerInkStrokeReach(layers: Array<{ width: number; position: string }> | undefined): number {
+  if (!layers?.length) return 0
+  let max = 0
+  for (const layer of layers) {
+    const reach = layer.position === 'inside' ? 0 : layer.position === 'center' ? layer.width / 2 : layer.width
+    if (reach > max) max = reach
+  }
+  return max
+}
+
+/** inside 的宽度，或 center 的内半。用来判断会不会填死字腔。 */
+export function innerInkStrokeReach(layers: Array<{ width: number; position: string }> | undefined): number {
+  if (!layers?.length) return 0
+  let max = 0
+  for (const layer of layers) {
+    const reach = layer.position === 'inside' ? layer.width : layer.position === 'center' ? layer.width / 2 : 0
+    if (reach > max) max = reach
+  }
+  return max
+}
+
 /** 单个非负长度，如 `12` / `12px`。 */
 export function parseBlurRadius(value: string | undefined): number | undefined {
   if (!value || value.trim() === 'none') return undefined
