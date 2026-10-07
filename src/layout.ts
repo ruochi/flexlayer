@@ -5,6 +5,7 @@ import {
   FlexDirection,
   Gutter,
   Justify,
+  Wrap,
   type Node as YogaNode,
 } from 'yoga-layout/load'
 import { attachDrawTags } from './draw-tag.js'
@@ -558,6 +559,38 @@ function mapAlign(v: string | undefined): Align {
       return Align.Stretch
     default:
       return Align.Center
+  }
+}
+
+function mapWrap(v: string | undefined): Wrap {
+  switch ((v ?? 'nowrap').trim()) {
+    case 'wrap':
+      return Wrap.Wrap
+    case 'wrap-reverse':
+      return Wrap.WrapReverse
+    default:
+      return Wrap.NoWrap
+  }
+}
+
+/** 缺省 flex-start。和 align-items 的缺省 center 不是同一件事。 */
+function mapAlignContent(v: string | undefined): Align {
+  switch ((v ?? 'flex-start').trim()) {
+    case 'center':
+      return Align.Center
+    case 'end':
+    case 'flex-end':
+      return Align.FlexEnd
+    case 'stretch':
+      return Align.Stretch
+    case 'space-between':
+      return Align.SpaceBetween
+    case 'space-around':
+      return Align.SpaceAround
+    case 'space-evenly':
+      return Align.SpaceEvenly
+    default:
+      return Align.FlexStart
   }
 }
 
@@ -1338,9 +1371,13 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
   const direction = flexDirectionOf(style)
   const appearance = readHtmlAppearance(style)
   if (appearance.background) appearance.background = readPaint(appearance.background, 'transparent', ctx, 'background')
-  const gap = parsePx(style.gap) ?? 0
+  const gap = parsePx(style.gap)
+  const columnGap = parsePx(style['column-gap']) ?? gap ?? 0
+  const rowGap = parsePx(style['row-gap']) ?? gap ?? 0
   const justify = mapJustify(style['justify-content'])
   const alignItems = mapAlign(style['align-items'])
+  const wrapMode = mapWrap(style['flex-wrap'])
+  const wrapping = wrapMode !== Wrap.NoWrap
 
   const fixedW = parsePx(style.width)
   const fixedH = parsePx(style.height)
@@ -1373,9 +1410,12 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
   config.setPointScaleFactor(0)
   const root = Yoga.Node.createWithConfig(config)
   root.setFlexDirection(direction === 'row' ? FlexDirection.Row : FlexDirection.Column)
+  root.setFlexWrap(wrapMode)
   root.setJustifyContent(justify)
   root.setAlignItems(alignItems)
-  if (gap > 0) root.setGap(direction === 'row' ? Gutter.Column : Gutter.Row, gap)
+  root.setAlignContent(mapAlignContent(style['align-content']))
+  if (columnGap > 0) root.setGap(Gutter.Column, columnGap)
+  if (rowGap > 0) root.setGap(Gutter.Row, rowGap)
 
   const mainAvailable =
     direction === 'row'
@@ -1386,9 +1426,10 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
 
   if (direction === 'row') {
     root.setWidth(Math.max(0, mainAvailable))
-    root.setHeight(Math.max(0, crossAvailable === Infinity ? 0 : crossAvailable))
+    if (fixedH != null) root.setHeight(Math.max(0, crossAvailable))
+    else if (!wrapping) root.setHeight(Math.max(0, crossAvailable === Infinity ? 0 : crossAvailable))
   } else {
-    root.setWidth(Math.max(0, crossAvailable))
+    if (!wrapping || fixedW != null) root.setWidth(Math.max(0, crossAvailable))
     root.setHeight(Math.max(0, mainAvailable))
   }
 
@@ -1420,6 +1461,8 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
   const laidChildren: LayoutNode[] = []
   let contentW = 0
   let contentH = 0
+  let minX = 0
+  let minY = 0
   for (let i = 0; i < measures.length; i++) {
     const m = measures[i]!
     const yn = yogaChildren[i]!
@@ -1447,6 +1490,8 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
       }
     }
     laidChildren.push(child)
+    minX = Math.min(minX, layout.left)
+    minY = Math.min(minY, layout.top)
     contentW = Math.max(contentW, layout.left + layout.width)
     contentH = Math.max(contentH, layout.top + layout.height)
   }
@@ -1456,10 +1501,13 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
   config.free()
 
   const outer = outerFromContent(contentW, contentH, appearance.padding, appearance.border)
-  if (fixedW != null && outer.width > fixedW + 1e-3) {
+  const borderW = (appearance.border?.width ?? 0) * 2
+  const innerW = fixedW != null ? fixedW - appearance.padding.left - appearance.padding.right - borderW : undefined
+  const innerH = fixedH != null ? fixedH - appearance.padding.top - appearance.padding.bottom - borderW : undefined
+  if (innerW != null && (minX < -1e-3 || contentW > innerW + 1e-3)) {
     ctx.issues.push({ level: 'warn', code: 'flex-overflow', path: ctx.pathPrefix, message: 'flex 内容超出写死的 width' })
   }
-  if (fixedH != null && outer.height > fixedH + 1e-3) {
+  if (innerH != null && (minY < -1e-3 || contentH > innerH + 1e-3)) {
     ctx.issues.push({ level: 'warn', code: 'flex-overflow', path: ctx.pathPrefix, message: 'flex 内容超出写死的 height' })
   }
 

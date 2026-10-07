@@ -284,6 +284,64 @@ describe('layoutSource', () => {
     expect(Math.abs(inside.width - plain.width)).toBeGreaterThan(1)
   })
 
+  it('flex-wrap 把放不下的子项换到下一行', async () => {
+    const doc = await layoutSource(
+      `<layer width="400" height="300" safe="0"><div style="display:flex; flex-wrap:wrap; width:220px; column-gap:20px; row-gap:8px; align-items:flex-start"><div style="width:100px; height:40px; background:#fff; flex-shrink:0"></div><div style="width:100px; height:40px; background:#fff; flex-shrink:0"></div><div style="width:100px; height:40px; background:#fff; flex-shrink:0"></div></div></layer>`,
+      process.cwd(),
+    )
+    const row = doc.root.children[0] as { height: number; children: Array<{ x: number; y: number }> }
+    const [a, b, c] = row.children
+    expect(a!.y).toBeCloseTo(0)
+    expect(b!.x).toBeCloseTo(a!.x + 100 + 20)
+    expect(b!.y).toBeCloseTo(a!.y)
+    expect(c!.x).toBeCloseTo(a!.x)
+    expect(c!.y).toBeCloseTo(a!.y + 40 + 8)
+    expect(row.height).toBeGreaterThan(80)
+    expect(doc.issues.some((issue) => issue.code === 'flex-overflow')).toBe(false)
+  })
+
+  it('换行以后仍超出写死的高度时报 flex-overflow', async () => {
+    const overflow = await layoutSource(
+      `<layer width="400" height="300" safe="0"><div style="display:flex; flex-wrap:wrap; width:220px; height:50px; align-items:flex-start"><div style="width:100px; height:40px; background:#fff; flex-shrink:0"></div><div style="width:100px; height:40px; background:#fff; flex-shrink:0"></div><div style="width:100px; height:40px; background:#fff; flex-shrink:0"></div></div></layer>`,
+      process.cwd(),
+    )
+    expect(overflow.issues.some((issue) => issue.code === 'flex-overflow' && issue.message.includes('height'))).toBe(true)
+
+    const fits = await layoutSource(
+      `<layer width="400" height="300" safe="0"><div style="display:flex; width:400px; height:50px; align-items:flex-start"><div style="width:100px; height:40px; background:#fff; flex-shrink:0"></div><div style="width:100px; height:40px; background:#fff; flex-shrink:0"></div></div></layer>`,
+      process.cwd(),
+    )
+    expect(fits.issues.some((issue) => issue.code === 'flex-overflow')).toBe(false)
+  })
+
+  it('align-content 缺省贴起点，写了 center 才把多行居中', async () => {
+    const place = async (align: string | undefined) => {
+      const extra = align ? `; align-content:${align}` : ''
+      const doc = await layoutSource(
+        `<layer width="400" height="300" safe="0"><div style="display:flex; flex-wrap:wrap; width:120px; height:200px; align-items:flex-start${extra}"><div style="width:100px; height:40px; background:#fff; flex-shrink:0"></div><div style="width:100px; height:40px; background:#fff; flex-shrink:0"></div></div></layer>`,
+        process.cwd(),
+      )
+      const column = doc.root.children[0] as { children: Array<{ y: number }> }
+      return column.children.map((child) => child.y)
+    }
+    const start = await place(undefined)
+    expect(start[0]).toBeCloseTo(0)
+    expect(start[1]).toBeCloseTo(40)
+    const centered = await place('center')
+    expect(centered[0]).toBeGreaterThan(20)
+    expect(centered[1]! - centered[0]!).toBeCloseTo(40)
+  })
+
+  it('wrap-reverse 把第一行放到交叉轴末端', async () => {
+    const doc = await layoutSource(
+      `<layer width="400" height="300" safe="0"><div style="display:flex; flex-wrap:wrap-reverse; width:120px; height:200px; align-items:flex-start"><div style="width:100px; height:40px; background:#fff; flex-shrink:0"></div><div style="width:100px; height:40px; background:#fff; flex-shrink:0"></div></div></layer>`,
+      process.cwd(),
+    )
+    const row = doc.root.children[0] as { height: number; children: Array<{ y: number }> }
+    expect(row.children[0]!.y).toBeGreaterThan(row.children[1]!.y)
+    expect(row.children[0]!.y + 40).toBeCloseTo(row.height, 0)
+  })
+
   it('invalid-child 线条进 flex', async () => {
     const doc = await layoutSource(
       `<layer width="200" height="200"><div style="display:flex"><line x1="0" y1="0" x2="10" y2="10" /></div></layer>`,

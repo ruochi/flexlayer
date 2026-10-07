@@ -87,7 +87,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | --- | --- |
 | `width`、`height`、`x`、`y`、`anchor` | `width`、`height` 以及 `x`、`y`、`anchor`。`x`、`y` 是左上角，默认 0；`anchor` 默认 `top-left`。HTML 上写了报 `warn` |
 | `opacity`、`rotate`、`rotateX`、`rotateY`、`z`、`scale`、`origin` | 图形、线条和 `layer` 写属性；文字写在 `style`。HTML 上写成属性报 `warn` |
-| `background`、`padding`、`font-size`、`color`、`flex`、`flex-grow`、`flex-shrink`、`gap`、`border`、`border-radius`、`max-width`、`align-items`、`justify-content`、`writing-mode`、`object-fit`、`object-position` | HTML 的 `style`。`layer` 或图形写了 `style` 报 `warn` |
+| `background`、`padding`、`font-size`、`color`、`flex`、`flex-grow`、`flex-shrink`、`gap`、`border`、`border-radius`、`max-width`、`align-items`、`align-content`、`justify-content`、`flex-wrap`、`row-gap`、`column-gap`、`writing-mode`、`object-fit`、`object-position` | HTML 的 `style`。`layer` 或图形写了 `style` 报 `warn` |
 | `cx`、`cy`、`x1`、`y1`、`x2`、`y2`、`points`、`d`、`depth`、`fill`、`stroke`、`transform` | 图形属性，坐标是所在 `layer` 的局部坐标 |
 | `src`、`alt` | 只写在 `img` 或 `model` 上。图片宽高仍放进 `style` |
 | `shadow`、`glow`、`inner-shadow`、`inner-glow`、`blur`、`backdrop-blur`、`glass`、`noise`、`filter`、`blend` | 图形和 `layer` 写属性；文字写在 `style`。见第 9 章 |
@@ -181,9 +181,11 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | 属性 | 默认值 | 说明 |
 | --- | --- | --- |
 | `width`、`height` | 包住内容 | 外框尺寸（含 padding 和 border） |
-| `gap` | `0` | 子元素间距 |
+| `gap` | `0` | 子元素间距。`row-gap`、`column-gap` 可以分开写，没写的那边沿用 `gap` |
+| `flex-wrap` | `nowrap` | `nowrap`、`wrap`、`wrap-reverse`。主轴放不下时换行 |
 | `padding` | `0` | 1 到 4 个值，同 CSS |
-| `align-items` | `center` | `start`、`center`、`end`、`stretch`。默认 `center`，CSS 里是 `stretch` |
+| `align-items` | `center` | `start`、`center`、`end`、`stretch`。默认 `center`，CSS 里是 `stretch`。管一行里的交叉轴 |
+| `align-content` | `flex-start` | `start`、`center`、`end`、`stretch`、`space-between`、`space-around`、`space-evenly`。多行在交叉轴上怎么排。默认贴起点，不是 `align-items` 的 `center` |
 | `justify-content` | `start` | `start`、`center`、`end`、`space-between`、`space-around`、`space-evenly` |
 | `background`、`border`、`border-radius` | 无 | 同 CSS，border 只支持实线 |
 
@@ -192,6 +194,8 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 - 文字默认 `flex-shrink:1`，空间不够时会换行变窄，但不会窄过最长的一个不可断开的词。
 - 形状和图片默认 `flex-shrink:0`，不会被压扁。
 - `align-items` 默认 `center`，CSS 里是 `stretch`。竖排 column 没写时，较窄的子项在交叉轴居中；和容器同宽的子项看起来仍贴着起点。左对齐写 `align-items:flex-start` 或 `start`。交叉轴位置由这一层自己的 `align-items` 决定，在子项上写 `justify-content` 改不了。
+- `align-content` 默认 `flex-start`。它排的是换行以后的多行，不是一行里面的子项。容器写死了高度、行又没占满时，行贴着起点；要居中写 `align-content:center`。
+- `flex-wrap:wrap` 之后，`flex-overflow` 看的是换行后的子元素有没有超出写死的宽高。换行能放下就不报；容器高度不够、下一行仍探出去，才报。
 
 **可用宽度**：放在 layer 里、没写 `width` 的 flex 容器，最宽只能到 layer 的宽度（根 layer 要减去左右安全区）。
 

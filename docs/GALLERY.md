@@ -11,6 +11,7 @@
 | [paint.png](gallery/paint.png) | `linear-gradient`、`radial-gradient`、`gradient()` 矩阵与锥形 |
 | [image.png](gallery/image.png) | `object-fit` 的 `fill`、`contain`、`cover`、`none` |
 | [text.png](gallery/text.png) | 标题字号、`max-width` 换行、flex 间距、`writing-mode:vertical-rl` |
+| [flex.png](gallery/flex.png) | `flex-wrap` 的标签云，以及 `column-gap` / `row-gap` 的卡片网格 |
 
 最小写法：
 

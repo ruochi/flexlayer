@@ -1,0 +1,40 @@
+<layer width="1080" height="420" background="#12161c" color="#f4f1ea" font-family="Kai" safe="0">
+  <layer x="64" y="48">
+    <p style="font-size:24px; color:#f5c16c">标签云</p>
+  </layer>
+  <layer x="64" y="100">
+    <div style="display:flex; flex-wrap:wrap; width:440px; column-gap:12px; row-gap:12px; align-items:center; align-content:flex-start">
+      <div style="padding:8px 18px; background:#243044; border-radius:20px; font-size:28px; flex-shrink:0; white-space:nowrap">春眠</div>
+      <div style="padding:8px 18px; background:#3a2a22; border-radius:20px; font-size:28px; flex-shrink:0; white-space:nowrap">不觉晓</div>
+      <div style="padding:8px 18px; background:#1e3a34; border-radius:20px; font-size:28px; flex-shrink:0; white-space:nowrap">处处</div>
+      <div style="padding:8px 18px; background:#243044; border-radius:20px; font-size:28px; flex-shrink:0; white-space:nowrap">闻啼鸟</div>
+      <div style="padding:8px 18px; background:#3a2a22; border-radius:20px; font-size:28px; flex-shrink:0; white-space:nowrap">夜来风雨声</div>
+      <div style="padding:8px 18px; background:#1e3a34; border-radius:20px; font-size:28px; flex-shrink:0; white-space:nowrap">花落知多少</div>
+      <div style="padding:8px 18px; background:#243044; border-radius:20px; font-size:28px; flex-shrink:0; white-space:nowrap">寒露</div>
+      <div style="padding:8px 18px; background:#3a2a22; border-radius:20px; font-size:28px; flex-shrink:0; white-space:nowrap">鸿雁来宾</div>
+    </div>
+  </layer>
+  <layer x="576" y="48">
+    <p style="font-size:24px; color:#f5c16c">卡片网格</p>
+  </layer>
+  <layer x="576" y="100">
+    <div style="display:flex; flex-wrap:wrap; width:456px; column-gap:16px; row-gap:16px; align-items:stretch">
+      <div style="display:flex; flex-direction:column; width:220px; padding:18px; background:#1c2430; border-radius:16px; align-items:flex-start">
+        <p style="font-size:28px">春分</p>
+        <p style="font-size:24px; color:#d5d0c6">昼夜均分</p>
+      </div>
+      <div style="display:flex; flex-direction:column; width:220px; padding:18px; background:#1c2430; border-radius:16px; align-items:flex-start">
+        <p style="font-size:28px">清明</p>
+        <p style="font-size:24px; color:#d5d0c6">桐始华</p>
+      </div>
+      <div style="display:flex; flex-direction:column; width:220px; padding:18px; background:#1c2430; border-radius:16px; align-items:flex-start">
+        <p style="font-size:28px">谷雨</p>
+        <p style="font-size:24px; color:#d5d0c6">萍始生</p>
+      </div>
+      <div style="display:flex; flex-direction:column; width:220px; padding:18px; background:#1c2430; border-radius:16px; align-items:flex-start">
+        <p style="font-size:28px">立夏</p>
+        <p style="font-size:24px; color:#d5d0c6">蝼蝈鸣</p>
+      </div>
+    </div>
+  </layer>
+</layer>
