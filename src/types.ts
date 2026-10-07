@@ -414,6 +414,14 @@ export type CustomLayoutNode = LayoutNodeBase & {
   kind: 'custom'
 }
 
+export type SqrtLayoutNode = LayoutNodeBase & {
+  kind: 'sqrt'
+  surdWidth: number
+  color: string
+  thickness: number
+  child: LayoutNode
+}
+
 export type MeshSpec =
   | { type: 'sphere'; r: number }
   | { type: 'box'; depth: number }
@@ -436,6 +444,7 @@ export type LayoutNode =
   | LineLayoutNode
   | CustomLayoutNode
   | MeshLayoutNode
+  | SqrtLayoutNode
 
 export type FvgDocument = {
   width: number

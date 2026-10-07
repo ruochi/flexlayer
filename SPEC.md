@@ -155,6 +155,10 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 `symbol` 定义一块可复用的图，本身不画出来。`use` 按 layer 的方式摆放它：`x`、`y`、`anchor`、`rotate`、`scale`、`opacity` 都写在 `use` 上。`symbol` 里的坐标是它自己的局部坐标。
 
+`<math>` 排 MathML 子集，可以放在 `layer` 里，也可以和文字一起放进 `display:flex`。不能放进文字盒子。字号默认 40px，可用 `style="font-size:…"`。公式不换行。
+
+支持 `math`、`mrow`、`mi`、`mn`、`mo`、`mtext`、`mfrac`、`msub`、`msup`、`msubsup`、`msqrt`、`mroot`、`munder`、`mover`、`munderover`、`mtable`、`mtr`、`mtd`。`mfrac` 的分子分母是 0.85 倍字号，线上下各留 0.28em。上下标是 0.7 倍；求和、连乘和 `lim` 的限在基座上下，积分号放大 1.35 倍、限在右侧。`msqrt` 左侧是随内容变高的根号。`mtable` 行距 0.2em，单元格间距 0.45em。单独写这些标签、不包在 `math` 里，报 `unknown-tag`。
+
 ```html
 <symbol id="dew" width="28" height="28">
   <circle cx="14" cy="14" r="12" fill="radial-gradient(#ffffff, #ffffff00)" />
@@ -636,7 +640,7 @@ registerFilter({
 | `non-canonical` | info | 含义明确，但不是规范写法。照常渲染，`hint` 里是规范写法 |
 | `unknown-tag` | warn | 不认识的标签 |
 | `invalid-attr` | warn | 属性放错了位置，或两种写法混用。和已知属性编辑距离不超过 2 的名字也记在这里，`hint` 给出正确写法。其余不认识的属性名不报，留给 `draw` |
-| `invalid-child` | warn | 非法子元素：线条或 `g` 放进 flex 容器，文字盒子里放了 `h1`–`h3`、`p`、`div`、`g` 或图片，`mask` 放错位置或一层写了多个 |
+| `invalid-child` | warn | 非法子元素：线条或 `g` 放进 flex 容器，文字盒子里放了 `h1`–`h3`、`p`、`div`、`g`、图片或 `math`，`mask` 放错位置或一层写了多个 |
 | `empty-mask` | warn | `mask` 里没有可用的形状或图片，不生效 |
 | `invalid-draw` | error / warn | `<draw>` 语法错误（error）或内容为空（warn） |
 | `missing-image` | warn | `img` 的 `src` 读不到 |

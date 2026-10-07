@@ -260,5 +260,23 @@ export namespace JSX {
     /** HTML 图片。src、alt 是属性，宽高写 style。`image` 与 `img` 相同。 */
     img: FvgHtml & { src?: string; alt?: string }
     image: FvgHtml & { src?: string; alt?: string }
+    math: FvgHtml
+    mrow: FvgHtml
+    mi: FvgHtml
+    mn: FvgHtml
+    mo: FvgHtml
+    mtext: FvgHtml
+    mfrac: FvgHtml
+    msub: FvgHtml
+    msup: FvgHtml
+    msubsup: FvgHtml
+    msqrt: FvgHtml
+    mroot: FvgHtml
+    munder: FvgHtml
+    mover: FvgHtml
+    munderover: FvgHtml
+    mtable: FvgHtml
+    mtr: FvgHtml
+    mtd: FvgHtml
   }
 }

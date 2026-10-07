@@ -2,6 +2,7 @@ import { filterIsLayerOnly, listFilters } from './filter.js'
 import type { FvgNode } from './parse.js'
 import { ATTRS, ATTR_ORDER, HTML_STYLE_ATTRS, attrByName, issueFor } from './schema.js'
 import { parseNumber, parseStyle } from './style.js'
+import { MATH_TAGS } from './math/rules.js'
 import { isTextBoxTag } from './text.js'
 import type { Issue, IssueLevel } from './types.js'
 import { isImageTag, isLineTag, isMeshTag, isShapeTag } from './tags.js'
@@ -553,6 +554,18 @@ export function checkTextBoxChildren(node: FvgNode, path: string): Issue[] {
           path,
           'g 不能放在文字盒子里',
           '包一层 layer，例如 <layer><g>…</g></layer>',
+        ),
+      )
+      continue
+    }
+    if (MATH_TAGS.has(tag)) {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-child',
+          path,
+          '文字盒子里不能放 math',
+          '公式写在同级的 <math> 里，和文字一起放进 display:flex',
         ),
       )
       continue

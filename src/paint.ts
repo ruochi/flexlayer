@@ -22,6 +22,7 @@ type PaintCtx = CanvasRenderingContext2D & {
   getTransform(): { a: number; b: number; c: number; d: number; e: number; f: number }
 }
 import { applyCanvasFont } from './fonts.js'
+import { paintMathSqrtPath } from './math/sqrt.js'
 import { backdropFilters, filtersPad, getFilter, orderedFilters } from './filter.js'
 import { fitImageRect } from './image.js'
 import { canvasPaint, isGradient } from './gradient.js'
@@ -571,6 +572,13 @@ function drawNodeInk(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: nu
 
 /** layer overlay：自身 chrome + 子树着墨（子元素局部坐标）。 */
 function drawSubtreeInk(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: number, ink = SILHOUETTE) {
+  if (node.kind === 'sqrt') {
+    ctx.save()
+    ctx.translate(node.x, node.y)
+    drawSubtreeInk(ctx, node.child, spread, ink)
+    ctx.restore()
+    return
+  }
   if (node.kind === 'group') {
     ctx.save()
     ctx.transform(node.svg.a, node.svg.b, node.svg.c, node.svg.d, node.svg.e, node.svg.f)
@@ -1503,6 +1511,17 @@ function paintBody(ctx: PaintCtx, node: LayoutNode, debug: boolean, t: number, s
     drawLine(ctx, node)
   } else if (node.kind === 'custom') {
     drawBoxChrome(ctx, node)
+  } else if (node.kind === 'sqrt') {
+    ctx.save()
+    ctx.translate(node.x, node.y)
+    ctx.strokeStyle = node.color
+    ctx.lineWidth = node.thickness
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    paintMathSqrtPath(ctx, node.width, node.height, node.surdWidth, node.thickness)
+    ctx.stroke()
+    paintNode(ctx, node.child, debug, t, state)
+    ctx.restore()
   } else if (node.kind === 'group') {
     ctx.save()
     ctx.transform(node.svg.a, node.svg.b, node.svg.c, node.svg.d, node.svg.e, node.svg.f)
@@ -1755,6 +1774,8 @@ async function prepareMeshFrames(
   const visit = async (node: LayoutNode) => {
     if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
       for (const child of node.children) await visit(child)
+    } else if (node.kind === 'sqrt') {
+      await visit(node.child)
     }
     if (node.kind !== 'layer' || !ownsMeshScene(node)) return
     const frame = renderMeshLayer(

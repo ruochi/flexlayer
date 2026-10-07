@@ -578,6 +578,10 @@ function walk(
     if (union && !plane && ownMask) union = intersectBox(union, applyToBox(childMatrix, ownMask))
     if (union) entry.ink = boxToRect(union)
   }
+
+  if (node.kind === 'sqrt') {
+    walk(node.child, matrix, opacity, absX, absY, clip, elements, effects, plane, false, meshView, inkSlack)
+  }
 }
 
 function layoutQuad(node: LayoutNode, plane: PlaneSpace, planeRoot: boolean): Quad | undefined {
@@ -785,6 +789,8 @@ function collectExpects(node: LayoutNode, decls: ExpectDecl[], issues: Issue[]) 
   }
   if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
     for (const child of node.children) collectExpects(child, decls, issues)
+  } else if (node.kind === 'sqrt') {
+    collectExpects(node.child, decls, issues)
   }
 }
 

@@ -48,6 +48,7 @@ import {
   layoutText,
 } from './text.js'
 import { applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset, translated } from './matrix.js'
+import { layoutMath } from './math/lower.js'
 import { allowsBleed, checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, legacyCenterIssues, rowColumnHint, typoAttrIssues } from './rules.js'
 import { canonicalTag, FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag } from './tags.js'
 import { boundsOf, parseSvgTransform } from './svg-transform.js'
@@ -1345,6 +1346,17 @@ function measureFlexChild(raw: FvgNode, ctx: LayoutContext, direction: 'row' | '
       isText: false,
     }
   }
+  if (node.tag === 'math') {
+    const laid = layoutMath(node, ctx)
+    return {
+      node: laid,
+      minMain: direction === 'row' ? laid.width : laid.height,
+      minCross: direction === 'row' ? laid.height : laid.width,
+      preferredMain: direction === 'row' ? laid.width : laid.height,
+      preferredCross: direction === 'row' ? laid.height : laid.width,
+      isText: false,
+    }
+  }
   if (node.tag === 'layer') {
     const nested = layoutLayer(node, ctx)
     return {
@@ -1945,6 +1957,7 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
     else if (isShapeTag(concrete.tag)) laid = layoutShape(concrete, subCtx, ctx.color)
     else if (isMeshTag(concrete.tag)) laid = layoutMesh(concrete, subCtx)
     else if (concrete.tag === 'layer') laid = layoutLayer(concrete, subCtx)
+    else if (concrete.tag === 'math') laid = layoutMath(concrete, subCtx)
     else {
       laid = layoutUnknownOrCustom(concrete, subCtx)
     }
