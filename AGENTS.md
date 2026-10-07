@@ -93,6 +93,8 @@ const { png, report } = await renderLayer(source, { baseDir: process.cwd() })
 
 从 `flexlayer` 拿出的就是这些。`renderFvg`、`checkFvg` 分别是 `renderLayer`、`checkLayer` 的别名。包名没有作用域。合并旧分支时，导入、`jsxImportSource` 和 `package.json` 的 `name` 以 `flexlayer` 为准，不要把旧的作用域名字合回来。合完在仓库根目录再跑一次 `npm install`，本地 `node_modules/.package-lock.json` 才会换成新名字。
 
+新滤镜用 `registerFilter`。内置的 `grade` 和 `filter` 也走这个接口。像素滤镜默认只写在 `layer` 上，见 [SPEC.md 第 9.3 节](SPEC.md)。
+
 | 导出 | 做什么 |
 | --- | --- |
 | `canvas.create` / `create` | 同步量一个 `<layer>`。`left` `top` `right` `bottom` 是没转之前的布局盒，`rotatedBox` 是转完之后的外接矩形。文字在 `text` 里，按行给出盒子和 `baseline` |
@@ -100,6 +102,7 @@ const { png, report } = await renderLayer(source, { baseDir: process.cwd() })
 | `canvas.component` / `registerComponent` | 按标签名注册组件。内置 `arrow` 也从这里来，`arrowComponent` 是它的函数 |
 | `renderLayer` / `checkLayer` | 渲染 PNG，或只排版并出报告 |
 | `glyph` | 按码位取轮廓 |
+| `registerFilter` / `unregisterFilter` / `getFilter` / `listFilters` | 登记像素或画布滤镜。内置 `grade` 和 `filter` 也在这张表上 |
 | `h` | 不用 JSX 时建节点 |
 | `renderFrames` / `renderComposition` / `interpolate` / `spring` / `sequence` / `random` / `noise` | 逐帧产出，或一次拿回全部 PNG。`interpolate` 可写多点区间和 `Easing`。`random`、`noise` 由 seed 决定 |
 | `parseFvg` / `emitLayer` | 解析 `.layer` 文本，或把节点写回文本 |

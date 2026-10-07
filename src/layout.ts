@@ -9,8 +9,7 @@ import {
   type Node as YogaNode,
 } from 'yoga-layout/load'
 import { attachDrawTags } from './draw-tag.js'
-import { parseGrade } from './grade.js'
-import { parseColor } from './gradientField.js'
+import { collectFilters, mergeFilters, type FilterIssue } from './filter.js'
 import { imageInk, peekLayerImage, preloadLayerImagesSync, parseObjectFit, parseObjectPosition } from './image.js'
 import type { FvgNode } from './parse.js'
 import { parseFvg } from './parse.js'
@@ -25,7 +24,6 @@ import {
   parseBlend,
   parseBlurRadius,
   parseBorder,
-  parseColorFilter,
   parseEdges,
   parseFontWeight,
   parseGlass,
@@ -52,6 +50,7 @@ import { canonicalTag, FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isMesh
 import { boundsOf, parseSvgTransform } from './svg-transform.js'
 import type {
   Anchor,
+  AppliedFilter,
   Box,
   CustomLayoutNode,
   DrawComputedStyle,
@@ -176,6 +175,7 @@ type EffectFields = {
   glass?: GlassSpec
   colorFilter?: ColorFilterSpec[]
   blend?: BlendMode
+  filters?: AppliedFilter[]
 }
 
 type EffectSource = Record<string, string | undefined>
@@ -188,6 +188,18 @@ function warnInvalid(ctx: LayoutContext, label: string, raw: string, hint: strin
     message: `无法解析 ${label}: ${raw}`,
     hint,
   })
+}
+
+function pushFilterIssues(ctx: LayoutContext, issues: FilterIssue[]) {
+  for (const issue of issues) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: issue.message,
+      hint: issue.hint,
+    })
+  }
 }
 
 function readEffects(src: EffectSource, ctx: LayoutContext, glowColor: string): EffectFields {
@@ -242,17 +254,11 @@ function readEffects(src: EffectSource, ctx: LayoutContext, glowColor: string): 
     warnInvalid(ctx, 'noise', noiseRaw, '写成 0.08 或 0.08 #ffffff，强度 0 到 1')
   }
 
-  const filterRaw = src.filter
-  const parsedFilter = parseColorFilter(filterRaw)
-  if (parsedFilter) out.colorFilter = parsedFilter
-  else if (filterRaw && filterRaw.trim() !== 'none') {
-    warnInvalid(
-      ctx,
-      'filter',
-      filterRaw,
-      '写成 brightness(1.1) contrast(1.2) saturate(0.8) grayscale(0.2) hue-rotate(15) sepia(0.1) invert(0)，不要写 blur/drop-shadow',
-    )
-  }
+  const shared = collectFilters(src, 'shared')
+  pushFilterIssues(ctx, shared.issues)
+  if (shared.applied.length) out.filters = shared.applied
+  const color = shared.applied.find((item) => item.name === 'filter')
+  if (color) out.colorFilter = color.spec as ColorFilterSpec[]
 
   const blendRaw = src.blend
   const parsedBlend = parseBlend(blendRaw)
@@ -319,35 +325,18 @@ function readLayerOverlay(attrs: Record<string, string>, ctx: LayoutContext): Ov
   return parsed
 }
 
-/** 仅 layer：解析 grade 与 grade-mask。 */
-function readLayerGrade(attrs: Record<string, string>, ctx: LayoutContext): { grade?: GradeSpec; gradeMask?: string } {
-  const parsed = parseGrade(attrs.grade)
-  const maskRaw = attrs['grade-mask']?.trim()
-  if (parsed && 'error' in parsed) {
-    warnInvalid(
-      ctx,
-      'grade',
-      attrs.grade!,
-      `${parsed.error}。写成 lomo 0.8, fade 0.1，或 shadows #2a6080, highlights #ffd8a8, contrast 1.1, vignette 0.4`,
-    )
+/** 仅 layer：解析 grade 以及 registerFilter 登记的像素滤镜。 */
+function readLayerFilters(
+  attrs: Record<string, string>,
+  ctx: LayoutContext,
+): { grade?: GradeSpec; gradeMask?: string; filters?: AppliedFilter[] } {
+  const { applied, issues } = collectFilters(attrs, 'layer')
+  pushFilterIssues(ctx, issues)
+  const grade = applied.find((item) => item.name === 'grade')
+  return {
+    ...(applied.length ? { filters: applied } : {}),
+    ...(grade ? { grade: grade.spec as GradeSpec, ...(grade.mask ? { gradeMask: grade.mask } : {}) } : {}),
   }
-  const grade = parsed && 'spec' in parsed ? parsed.spec : undefined
-  if (!maskRaw || maskRaw === 'none') return grade ? { grade } : {}
-  if (!grade) {
-    ctx.issues.push({
-      level: 'warn',
-      code: 'invalid-attr',
-      path: ctx.pathPrefix,
-      message: '写了 grade-mask 但没有可用的 grade',
-      hint: '和 grade 一起写，例如 <layer grade="lomo" grade-mask="radial-gradient(#fff0 30%, #fff)">',
-    })
-    return {}
-  }
-  if (isGradient(maskRaw) ? !parseGradient(maskRaw) : !parseColor(maskRaw)) {
-    warnInvalid(ctx, 'grade-mask', maskRaw, '写成 linear-gradient(to right, #fff, #fff0)、radial-gradient(#fff0 30%, #fff) 或 gradient(...)；alpha 是强度')
-    return { grade }
-  }
-  return { grade, gradeMask: maskRaw }
 }
 
 /** SVG 虚线。奇数段会再重复一遍，和描边相位对齐。非法值警告并当成实线。 */
@@ -1576,13 +1565,16 @@ function layoutUse(node: FvgNode, ctx: LayoutContext): LayerLayoutNode | null {
   const appearance = readAttrAppearance(node.attrs)
   // use 与 layer 一样不填背景；色块用 rect / HTML / <draw>
   appearance.background = undefined
+  const effects = readEffects(node.attrs, ctx, solidPaint(appearance.border?.color, ctx.color))
+  const filters = mergeFilters(laid.filters, effects.filters)
   return {
     ...laid,
     tag: 'use',
     id: node.attrs.id,
     path: ctx.pathPrefix,
     ...appearance,
-    ...readEffects(node.attrs, ctx, solidPaint(appearance.border?.color, ctx.color)),
+    ...effects,
+    ...(filters.length ? { filters } : {}),
     ...layoutDrawMeta(node, ctx),
   }
 }
@@ -1864,7 +1856,7 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
   })
 
   const overlay = readLayerOverlay(node.attrs, ctx)
-  const grade = readLayerGrade(node.attrs, ctx)
+  const layerFilters = readLayerFilters(node.attrs, ctx)
   let perspective: number | undefined
   const perspectiveRaw = node.attrs.perspective
   if (perspectiveRaw != null && perspectiveRaw.trim() !== '') {
@@ -1903,6 +1895,8 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
       hint: '在 layer 里写 <mask>…</mask>，不要写进 style',
     })
   }
+  const effects = readEffects(node.attrs, ctx, solidPaint(appearance.border?.color, ctx.color))
+  const filters = mergeFilters(effects.filters, layerFilters.filters)
   return {
     kind: 'layer',
     path: ctx.pathPrefix,
@@ -1918,9 +1912,10 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
     overflow: node.attrs.overflow === 'hidden' ? 'hidden' : 'visible',
     ...(perspective != null ? { perspective } : {}),
     ...(mask ? { mask } : {}),
-    ...readEffects(node.attrs, ctx, solidPaint(appearance.border?.color, ctx.color)),
+    ...effects,
     ...(overlay ? { overlay } : {}),
-    ...grade,
+    ...layerFilters,
+    ...(filters.length ? { filters } : {}),
     ...layoutDrawMeta(node, ctx),
   }
 }

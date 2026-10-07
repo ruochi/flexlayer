@@ -2,6 +2,8 @@ export { renderFvg, checkFvg, renderLayer, checkLayer, type RenderResult } from 
 export { canvas, create, type CreatedLayer, type PlacedChar, type PlacedLine, type PlacedText } from './canvas.js'
 export { registerComponent, arrowComponent, type ComponentFn, type ComponentProps } from './components.js'
 export { glyph, type Glyph, type GlyphInk, type GlyphOptions } from './glyph.js'
+export { getFilter, listFilters, registerFilter, unregisterFilter } from './filter.js'
+export type { FilterParseResult, FilterPixels, LayerFilter } from './filter.js'
 export { renderComposition, renderFrames, createContactSheet, contactSheetFromPngs, interpolate, spring, sequence, random, noise, Easing } from './frame.js'
 export type {
   Composition,

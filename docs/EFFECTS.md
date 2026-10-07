@@ -20,7 +20,7 @@
 
 归属：layer / 图形 / 线条 → 属性；文字 / flex HTML → `style`。**`overlay`、`grade`、`grade-mask` 例外：只允许写在 `layer` 上。** `<mask>` 是标签，不是属性。
 
-绘制顺序：`backdrop-blur` / `glass` 取样 → `shadow` → `glow` → 本体（`overflow="hidden"` 在这里裁子元素）→ `inner-shadow` → `inner-glow` → `overlay` → `noise`；若有 `blur`、`filter`、`grade` 或 `<mask>`，先画进离屏，依次做 `grade`、`blur` / `filter`，有 `grade` 时再叠 `noise`，然后按 `<mask>` 的 alpha 裁掉，再贴回。画布底色不进 `<mask>`。
+绘制顺序：`backdrop-blur` / `glass` 取样 → `shadow` → `glow` → 本体（`overflow="hidden"` 在这里裁子元素）→ `inner-shadow` → `inner-glow` → `overlay` → `noise`；若有 `blur`、`filter`、`grade`、其它已注册滤镜或 `<mask>`，先画进离屏，依次做像素滤镜（含 `grade`）、`blur` / 画布滤镜（含 `filter`），有像素滤镜时再叠 `noise`，然后按 `<mask>` 的 alpha 裁掉，再贴回。画布底色不进 `<mask>`。
 
 ## 墨迹原则
 
@@ -63,7 +63,7 @@
 
 给 AI 的入口只有三样：六个参数（`shadows`、`highlights`、`contrast`、`fade`、`saturate`、`vignette`，加上可选的 `midtones`、`warmth`）、一个预设名、一个遮罩。预设只是参数的一套固定值（`src/grade.ts` `GRADE_PRESETS`），没有单独的算法；报告回显展开后的值。
 
-实现（`src/grade.ts` `applyGrade`，在 `paintWithLayerFilter` 的离屏缓冲上原地改像素）：
+`grade` 是登记在 `src/filter.ts` 上的像素滤镜（`includeBackdrop`，遮罩属性 `grade-mask`）。`apply` 调用 `src/grade.ts` 的 `applyGrade`，在离屏缓冲上原地改像素：
 
 1. 像素转 OKLab。
 2. `contrast`：以 L=0.5 为支点缩放 L。`fade`：`L = f + L·(1-f)`，`f = fade × 0.3`。
@@ -86,10 +86,22 @@
 - 同时写 `blur` 与 `filter`：模糊以 `blur` 为准，报 `info`。
 - 勿占用：`outer-glow`、`drop-shadow`、`backdrop-filter`、`texture`。
 
+## 开放接口
+
+新滤镜用 `registerFilter`（`src/filter.ts`）。内置的 `grade`（像素）和 `filter`（画布 CSS）也在这个接口上，绘制不再单独分支。
+
+阴影、发光、玻璃、背景模糊、噪点、叠加不走这里：它们要墨迹轮廓或背后的像素，不是「这一层画完再改」。
+
+`pixel` 滤镜的 `apply` 拿到非预乘 RGBA，按满强度改像素，用 `frame` 知道盒子在缓冲里的位置。有遮罩时，引擎在 `apply` 之后用遮罩 alpha 和调用前的像素混合。`includeBackdrop: true` 时，写在根 layer 上会连画布底色一起处理。`canvas` 滤镜只返回一段 CSS filter 字符串。
+
+规范写法见 [SPEC.md 第 9.3 节](../SPEC.md)。
+
 ## 实现触点
 
-- `src/style.ts` — 解析
+- `src/filter.ts` — 滤镜注册、内置 `grade` / `filter`、从属性收集
+- `src/style.ts` — `filter` 的 CSS 函数解析；其余效果的解析
+- `src/grade.ts` — `grade` 的参数和像素算法
 - `src/types.ts` / `src/layout.ts` — 字段与 `readEffects`
-- `src/paint.ts` — 绘制
+- `src/paint.ts` — 绘制；像素滤镜走 `applyPixelFilters`
 - `src/rules.ts` / `src/jsx-intrinsics.ts` — 归属
 - `src/report.ts` — 报告与 `effect-clipped`

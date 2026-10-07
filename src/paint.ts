@@ -22,18 +22,17 @@ type PaintCtx = CanvasRenderingContext2D & {
   getTransform(): { a: number; b: number; c: number; d: number; e: number; f: number }
 }
 import { applyCanvasFont } from './fonts.js'
+import { backdropFilters, filtersPad, getFilter, orderedFilters } from './filter.js'
 import { fitImageRect } from './image.js'
-import { applyGrade } from './grade.js'
 import { canvasPaint, isGradient } from './gradient.js'
 import { gradientStyle, isGradientPaint, type GradientBox } from './gradientField.js'
 import { invert, multiply, originOffset } from './matrix.js'
 import { ownsMeshScene, renderMeshLayer, type MeshFrame } from './mesh.js'
 import { drawTexturedPlane, has3dPose, PERSPECTIVE_AA, planeDepth, posePoint, project } from './perspective.js'
-import { colorFilterToCss } from './style.js'
 import type {
+  AppliedFilter,
   GlassSpec,
   GlowSpec,
-  GradeSpec,
   ImageLayoutNode,
   LayerLayoutNode,
   LayoutNode,
@@ -1269,42 +1268,70 @@ function paintNodeEffectsAndBody(
 }
 
 /**
- * 对整块像素缓冲调色。origin 是盒子左上角在缓冲里的逻辑坐标，k 是逻辑到像素的缩放。
+ * 按注册顺序跑像素滤镜。origin 是盒子左上角在缓冲里的逻辑坐标，k 是逻辑到像素的缩放。
  * 遮罩按盒子铺，alpha 是强度。
  */
-function gradeCanvas(
+function applyPixelFilters(
   canvas: Canvas,
-  spec: GradeSpec,
-  maskPaint: string | undefined,
+  filters: AppliedFilter[],
   k: number,
   originX: number,
   originY: number,
   width: number,
   height: number,
 ) {
+  if (filters.length === 0) return
   const pw = canvas.width
   const ph = canvas.height
   if (pw <= 0 || ph <= 0) return
   const cctx = canvas.getContext('2d') as PaintCtx
   const image = cctx.getImageData(0, 0, pw, ph)
-  let mask: Uint8ClampedArray | undefined
-  if (maskPaint) {
-    const m = createCanvas(pw, ph)
-    const mctx = m.getContext('2d') as PaintCtx
-    mctx.setTransform(k, 0, 0, k, originX * k, originY * k)
-    mctx.fillStyle = paintOf(mctx, maskPaint, 0, 0, width, height)
-    mctx.fillRect(-originX, -originY, pw / k, ph / k)
-    mask = mctx.getImageData(0, 0, pw, ph).data
+  const frame = { x: originX * k, y: originY * k, width: width * k, height: height * k }
+  for (const item of filters) {
+    const apply = getFilter(item.name)?.apply
+    if (!apply) continue
+    let mask: Uint8ClampedArray | undefined
+    if (item.mask) {
+      const m = createCanvas(pw, ph)
+      const mctx = m.getContext('2d') as PaintCtx
+      mctx.setTransform(k, 0, 0, k, originX * k, originY * k)
+      mctx.fillStyle = paintOf(mctx, item.mask, 0, 0, width, height)
+      mctx.fillRect(-originX, -originY, pw / k, ph / k)
+      mask = mctx.getImageData(0, 0, pw, ph).data
+    }
+    const before = mask ? image.data.slice() : undefined
+    apply({ data: image.data, width: pw, height: ph, frame, mask }, item.spec)
+    if (before && mask) {
+      const data = image.data
+      for (let i = 0; i < data.length; i += 4) {
+        const m = mask[i + 3]! / 255
+        if (m >= 1) continue
+        data[i] = before[i]! + (data[i]! - before[i]!) * m
+        data[i + 1] = before[i + 1]! + (data[i + 1]! - before[i + 1]!) * m
+        data[i + 2] = before[i + 2]! + (data[i + 2]! - before[i + 2]!) * m
+        data[i + 3] = before[i + 3]! + (data[i + 3]! - before[i + 3]!) * m
+      }
+    }
   }
-  applyGrade(image.data, pw, ph, spec, { x: originX * k, y: originY * k, width: width * k, height: height * k }, mask)
   cctx.putImageData(image, 0, 0)
+}
+
+function canvasFilterCss(node: LayoutNode): string {
+  const parts: string[] = []
+  if ((node.blur ?? 0) > 0) parts.push(`blur(${node.blur}px)`)
+  for (const item of orderedFilters(node.filters, 'canvas')) {
+    const css = getFilter(item.name)?.canvasFilter?.(item.spec)
+    if (css) parts.push(css)
+  }
+  return parts.join(' ')
 }
 
 function paintWithLayerFilter(ctx: PaintCtx, node: LayoutNode, debug: boolean, t: number, state: PaintState) {
   const blur = node.blur ?? 0
-  const filterCss = node.colorFilter?.length ? colorFilterToCss(node.colorFilter) : ''
+  const pixel = orderedFilters(node.filters, 'pixel')
+  const filter = canvasFilterCss(node)
   const masks = layerMaskOf(node)
-  const pad = Math.ceil(blur * 2 + 4)
+  const pad = Math.ceil(blur * 2 + 4 + filtersPad(node.filters))
   const shadowPad = node.shadow
     ? node.shadow.blur * 2 + node.shadow.spread + Math.max(Math.abs(node.shadow.x), Math.abs(node.shadow.y))
     : 0
@@ -1322,20 +1349,16 @@ function paintWithLayerFilter(ctx: PaintCtx, node: LayoutNode, debug: boolean, t
   // 有 mask 时玻璃必须画进离屏，采样仍来自主画布，最后和阴影、模糊一起被裁掉
   const sampleHere = masks != null && (node.glass != null || node.backdropBlur != null)
   if (sampleHere) copyParentUnderlay(ctx, octx)
-  // 有 grade 时颗粒在调色之后再叠，不被染色
-  paintNodeEffectsAndBody(octx, node, debug, t, state, { sampleBackdrop: sampleHere, skipNoise: node.grade != null })
-  if (node.grade) gradeCanvas(off, node.grade, node.gradeMask, k, effectPad, effectPad, node.width, node.height)
-  const parts: string[] = []
-  if (blur > 0) parts.push(`blur(${blur}px)`)
-  if (filterCss) parts.push(filterCss)
-  const filter = parts.join(' ')
+  // 有像素滤镜时颗粒在调色之后再叠，不被染色
+  paintNodeEffectsAndBody(octx, node, debug, t, state, { sampleBackdrop: sampleHere, skipNoise: pixel.length > 0 })
+  if (pixel.length) applyPixelFilters(off, pixel, k, effectPad, effectPad, node.width, node.height)
   if (!masks) {
     ctx.save()
     ctx.filter = filter || 'none'
     ctx.drawImage(off, node.x - effectPad, node.y - effectPad, tw, th)
     ctx.filter = 'none'
     ctx.restore()
-    if (node.grade && node.noise) paintNoise(ctx, node, node.noise)
+    if (pixel.length && node.noise) paintNoise(ctx, node, node.noise)
     return
   }
   let target = off
@@ -1347,7 +1370,7 @@ function paintWithLayerFilter(ctx: PaintCtx, node: LayoutNode, debug: boolean, t
     fctx.drawImage(off, 0, 0, tw, th)
     fctx.filter = 'none'
   }
-  if (node.grade && node.noise) {
+  if (pixel.length && node.noise) {
     const nctx = target.getContext('2d') as PaintCtx
     nctx.save()
     nctx.setTransform(k, 0, 0, k, 0, 0)
@@ -1378,11 +1401,7 @@ function paintNode(
     pctx.globalCompositeOperation = node.blend
   }
   const hasMask = layerMaskOf(node) != null
-  const useLayerFilter =
-    (node.blur != null && node.blur > 0) ||
-    (node.colorFilter != null && node.colorFilter.length > 0) ||
-    node.grade != null ||
-    hasMask
+  const useLayerFilter = (node.blur != null && node.blur > 0) || (node.filters != null && node.filters.length > 0) || hasMask
   if (useLayerFilter) {
     // 先在主画布采样玻璃/背景模糊，再把本体效果离屏糊上。有 mask 时改在离屏里采样，好让 mask 一并裁掉。
     if (!hasMask) {
@@ -1455,15 +1474,24 @@ export async function paintDocument(
       ctx.fillRect(0, 0, w, h)
     }
   }
-  // 根 layer 的 grade 作用于整幅画布，连同画布底色
-  const rootGrade = root.grade
-  const body: LayerLayoutNode = rootGrade ? { ...root, grade: undefined, gradeMask: undefined, noise: undefined } : root
+  // 根 layer 上 includeBackdrop 的像素滤镜作用于整幅画布，连同画布底色。grade 是其中之一。
+  const backdrop = backdropFilters(root.filters)
+  const kept = (root.filters ?? []).filter((item) => !(item.includeBackdrop && item.kind === 'pixel'))
+  const body: LayerLayoutNode = backdrop.length
+    ? {
+        ...root,
+        filters: kept.length ? kept : undefined,
+        grade: backdrop.some((item) => item.name === 'grade') ? undefined : root.grade,
+        gradeMask: backdrop.some((item) => item.name === 'grade') ? undefined : root.gradeMask,
+        noise: undefined,
+      }
+    : root
   ctx.save()
   ctx.scale(opts.scale, opts.scale)
   paintNode(ctx, body, opts.debug, opts.t, state)
   ctx.restore()
-  if (rootGrade) {
-    gradeCanvas(canvas, rootGrade, root.gradeMask, opts.scale, 0, 0, opts.width, opts.height)
+  if (backdrop.length) {
+    applyPixelFilters(canvas, backdrop, opts.scale, 0, 0, opts.width, opts.height)
     if (root.noise) {
       const pctx = ctx as PaintCtx
       if (root.mask && root.mask.length > 0) {
