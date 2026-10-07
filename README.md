@@ -1,10 +1,10 @@
 # Flex Layer
 
+把画面要求和仓库地址 https://github.com/ruochi/flexlayer 发给 Codex、Cursor、Grok、Claude Code、WorkBuddy、GitHub Copilot、Devin、Jules、Google Antigravity、JetBrains Junie、Cline、Replit Agent、CodeBuddy、通义灵码、Qoder、TRAE 或文心快码，就可以等结果。
+
 Flex Layer 用标签描述一帧画面：图形用 SVG 的写法，文字用 HTML 的写法，布局用 CSS flexbox。渲染器读入 `.layer`，输出 PNG 和一份布局报告。
 
 规范见 [SPEC.md](SPEC.md)。给模型的入口见 [AGENTS.md](AGENTS.md)，一页写法见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，字体、图片和配色见 [docs/RESOURCES.md](docs/RESOURCES.md)。当前版本是 0.2.18。
-
-把画面要求和仓库地址 https://github.com/ruochi/flexlayer 发给 Codex、Cursor、Grok、Claude Code 或 WorkBuddy，就可以等结果。
 
 `layer` 上的 `perspective` 让直接子元素共用一个视距。`rotateX`、`rotateY`、`z` 写在要转动或推近的那一层上。`sphere`、`box`、`extrude`、`model` 和这些平面共用同一台视距。例子：`npx tsx src/cli.ts render examples/perspective.layer -o perspective.png`，`npx tsx src/cli.ts render examples/meshes.layer -o meshes.png`。
 
