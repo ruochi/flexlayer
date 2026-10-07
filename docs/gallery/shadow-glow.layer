@@ -50,7 +50,7 @@
   <rect width="260" height="160" rx="20" fill="#6aa1ff" inner-shadow="0 10 16 #00000099" x="90" y="500" />
   
   
-  <rect width="260" height="160" rx="20" fill="#142033" inner-glow="28 #7ec8ff" x="410" y="500" />
+  <rect width="260" height="160" rx="20" fill="#142033" inner-glow="28 #7ec8ff" ink-stroke="8 #7ec8ff outside" x="410" y="500" />
   
   
   <rect width="260" height="160" rx="20" fill="#3ecfc4" noise="0.35 #ffffff" x="730" y="500" />

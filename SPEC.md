@@ -514,7 +514,7 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 `grade` 和 `filter` 走同一套滤镜接口，新滤镜也登记在这里。名字就是属性名。像素滤镜（`kind: "pixel"`）在离屏里、`blur` 之前按 `order` 从小到大执行，相同则按注册顺序。画布滤镜（`kind: "canvas"`）返回一段 canvas filter CSS，和 `blur` 合成一条，`blur` 在前。
 
 ```ts
-import { registerFilter, renderLayer } from '@dc/flexlayer'
+import { registerFilter, renderLayer } from 'flexlayer'
 
 registerFilter({
   name: 'wash',
@@ -535,7 +535,7 @@ registerFilter({
 
 ```html
 <layer width="200" height="200" wash="0.4">
-  <rect x1="0" y1="0" x2="200" y2="200" fill="#808080" />
+  <rect x="0" y="0" width="200" height="200" fill="#808080" />
 </layer>
 ```
 
