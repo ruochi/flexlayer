@@ -6,7 +6,7 @@ import { ensureBuiltinFontsSync, fontReady, registerFontPath, resolveFontSrcSync
 import { fontFamiliesOf, measureLayer, noteMeasuredSize, parseSafe, prepareAssetsSync, type MeasureEnv } from './layout.js'
 import type { FvgNode } from './parse.js'
 import { isDisplayFlex } from './rules.js'
-import { parseNumber } from './style.js'
+import { parseNumber, parseScale } from './style.js'
 import { isTextBoxTag } from './text.js'
 import type { Anchor, Issue } from './types.js'
 
@@ -164,11 +164,11 @@ export function create(node: FvgNode): CreatedLayer {
     const naturalSide = key === 'width' ? natural.width : natural.height
     const target = parseNumber(saved)
     if (naturalSide > 0 && target != null) {
-      const scale = target / naturalSide
+      const factor = target / naturalSide
       const other = key === 'width' ? 'height' : 'width'
-      const otherSize = (key === 'width' ? natural.height : natural.width) * scale
+      const otherSize = (key === 'width' ? natural.height : natural.width) * factor
       node.attrs[other] = String(otherSize)
-      node.attrs.scale = String(scale)
+      node.attrs.scale = multiplyScaleAttr(node.attrs.scale, factor)
       node.attrs.origin = 'top-left'
     }
   }
@@ -192,11 +192,24 @@ export function create(node: FvgNode): CreatedLayer {
   })
 }
 
+/** 只写一个数时仍写回一个数。已经是两个数时，两个都乘上比例，不把 `-1 1` 收成一个数。 */
+function multiplyScaleAttr(existing: string | undefined, factor: number): string {
+  const parts = existing?.trim().split(/[\s,]+/).filter(Boolean) ?? []
+  if (parts.length >= 2) {
+    const x = parseNumber(parts[0]) ?? 1
+    const y = parseNumber(parts[1]) ?? x
+    return `${x * factor} ${y * factor}`
+  }
+  const current = parseNumber(parts[0]) ?? 1
+  return String(current * factor)
+}
+
 /** 绕 origin（默认中心）做 rotate、scale 之后的轴对齐外接矩形。 */
 function rotatedBoxOf(node: FvgNode, box: LayerBox): LayerBox {
   const pivot = originOffset(parseAnchor(node.attrs.origin, 'center'), box.width, box.height)
+  const scale = parseScale(node.attrs.scale)
   const visual = applyToBox(
-    aroundPivot(box.left + pivot.x, box.top + pivot.y, parseNumber(node.attrs.rotate) ?? 0, parseNumber(node.attrs.scale) ?? 1),
+    aroundPivot(box.left + pivot.x, box.top + pivot.y, parseNumber(node.attrs.rotate) ?? 0, scale.x, scale.y),
     { x: box.left, y: box.top, width: box.width, height: box.height },
   )
   return {

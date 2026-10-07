@@ -119,9 +119,9 @@ function tighten(clip: Box | undefined, next: Box): Box {
 }
 
 function nodeMatrix(parent: Matrix, node: LayoutNode): Matrix {
-  if (node.rotate === 0 && node.scale === 1) return parent
+  if (node.rotate === 0 && node.scaleX === 1 && node.scaleY === 1) return parent
   const o = originOffset(node.origin, node.width, node.height)
-  return multiply(parent, aroundPivot(node.x + o.x, node.y + o.y, node.rotate, node.scale))
+  return multiply(parent, aroundPivot(node.x + o.x, node.y + o.y, node.rotate, node.scaleX, node.scaleY))
 }
 
 function cornerList(box: Box): Array<[number, number]> {
@@ -212,7 +212,7 @@ function projectBox(project: Projector, box: Box, cornerRadius = 0): Box {
 
 function placement(plane: PlaneSpace, node: LayoutNode): Matrix {
   const o = originOffset(node.origin, node.width, node.height)
-  return multiply(plane.toPlane, aroundPivot(node.x + o.x, node.y + o.y, node.rotate, node.scale))
+  return multiply(plane.toPlane, aroundPivot(node.x + o.x, node.y + o.y, node.rotate, node.scaleX, node.scaleY))
 }
 
 /** 节点局部盒子变成平面局部的轴对齐范围。平面根的局部坐标就是平面坐标。 */

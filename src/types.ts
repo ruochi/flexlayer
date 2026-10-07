@@ -269,7 +269,8 @@ export type LayoutNodeBase = {
   rotateY?: number
   /** 沿平面法线，像素。正方向朝观众。 */
   z?: number
-  scale: number
+  scaleX: number
+  scaleY: number
   /** 变换支点，缺省为盒子中心。 */
   origin?: Anchor
   background?: string

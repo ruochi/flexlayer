@@ -69,7 +69,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | `anchor` | `(x, y)` 落在盒子的哪个点。九宫格：`top-left`（默认）、`top`、`bottom`、`left`、`right`、`center`、`top-right`、`bottom-left`、`bottom-right` |
 | `opacity` | 0 到 1。嵌套时逐层相乘 |
 | `rotate` | 绕 `origin` 旋转，单位度，顺时针为正。对文字、线条、形状和 layer 都生效；layer 上的旋转作用到整棵子树 |
-| `scale` | 绕 `origin` 缩放，同样作用到整棵子树 |
+| `scale` | 绕 `origin` 缩放，同样作用到整棵子树。一个数时两轴相同。`scale="1.2 0.8"` 分轴，`scale="-1 1"` 是水平镜像。文字写 `style="scale:1.2 0.8"`。分轴时三维的 z 缩放是两轴绝对值乘积的平方根；只写一个数时 z 仍用这个数，负号也保留 |
 | `origin` | 旋转和缩放的支点，取值和 `anchor` 一样，默认 `center` |
 
 `rotate`、`scale` 只影响绘制，不影响布局。报告里的 `box` 是变换前的布局盒子（只累加平移），`ink` 是变换后的外接矩形。有透视时 `ink` 改成投影后的外接矩形，并多一个 `quad`（投影后的四个角）。
@@ -782,7 +782,7 @@ export default canvas.create(
 - 底色用铺满的 `<rect fill>`。`color`、`font-family` 写在 `<layer>` 上。没写 `color` 是 `#111111`，没写 `font-family` 是 `ChillDuanSans`。自定义字体写 `<font family src>`，放在正在 `create` 的那一层里，或先调用 `canvas.font(family, src)`。字体还没注册就 `create`，会抛错，避免用备用字体量出另一套尺寸。`canvas({...})` 已去掉，调用时抛出同样的改法。
 - `<font src>` 和 `<img src>` 的相对路径按源文件所在目录解析，不按当前运行目录。
 - 根上没写 `safe` 时，渲染按短边的 4%。页面不想要这条边距就写 `safe="0"`。`create` 和最终渲染用同一条可用宽度，避免 `measure-mismatch`。
-- 只写 `width` 或只写 `height`，且里面没有会换行的文字：另一边按比例放缩，放大缩小都做。`scale` 写回节点，`origin` 为 `top-left`。返回的宽高是缩放后的。
+- 只写 `width` 或只写 `height`，且里面没有会换行的文字：另一边按比例放缩，放大缩小都做。这个比例乘进已有的 `scale` 再写回：原来只有一个数时仍写回一个数，原来是 `scale="-1 1"` 这种两个数时两个都乘，不会盖掉镜像。`origin` 为 `top-left`。返回的宽高是缩放后的布局盒，`rotatedBox` 按分轴计算。
 - 会换行的文字：`width` 是行宽，高度是排出来的，不缩放。
 - 宽高都写了：就是盒子。子元素按自己的 `x`、`y` 摆，不整层缩放。页面用这个。
 - 都没写：保持量出来的大小。

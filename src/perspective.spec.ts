@@ -15,7 +15,8 @@ function node(partial: Partial<LayoutNode> & Pick<LayoutNode, 'kind'>): LayoutNo
     ink: { x: 0, y: 0, width: 80, height: 40 },
     opacity: 1,
     rotate: 0,
-    scale: 1,
+    scaleX: 1,
+    scaleY: 1,
     padding: { top: 0, right: 0, bottom: 0, left: 0 },
     attr: {},
     style: {},
@@ -34,7 +35,7 @@ describe('perspective', () => {
   })
 
   it('只有 rotate 和 scale 时，中心与角点和二维一致', () => {
-    const box = node({ kind: 'shape', x: 10, y: 20, width: 80, height: 40, rotate: 90, scale: 2 })
+    const box = node({ kind: 'shape', x: 10, y: 20, width: 80, height: 40, rotate: 90, scaleX: 2, scaleY: 2 })
     const center = posePoint(box, 40, 20)
     expect(center.x).toBeCloseTo(50)
     expect(center.y).toBeCloseTo(40)
@@ -46,7 +47,7 @@ describe('perspective', () => {
   })
 
   it('poseMatrix 与 posePoint、poseOffset 一致', () => {
-    const box = node({ kind: 'shape', x: 12, y: 8, width: 80, height: 40, rotate: 25, rotateX: 15, rotateY: -20, z: 30, scale: 1.5, origin: 'top-left' })
+    const box = node({ kind: 'shape', x: 12, y: 8, width: 80, height: 40, rotate: 25, rotateX: 15, rotateY: -20, z: 30, scaleX: 1.5, scaleY: 1.5, origin: 'top-left' })
     const matrix = poseMatrix(box)
     for (const [u, v, z] of [
       [0, 0, 0],
@@ -90,7 +91,8 @@ describe('perspective', () => {
       height: rect!.box.height,
       rotateX: 25,
       z: -200,
-      scale: 1,
+      scaleX: 1,
+      scaleY: 1,
       rotate: 0,
     } as LayoutNode
     const expected = [
@@ -126,7 +128,8 @@ describe('perspective', () => {
       height: layer!.box.height,
       rotateX: 25,
       z: -200,
-      scale: 1,
+      scaleX: 1,
+      scaleY: 1,
       rotate: 0,
     } as LayoutNode
     const corner = project(150, 100, 400, posePoint(host, 20, 10))!
@@ -147,7 +150,8 @@ describe('perspective', () => {
       width: 40,
       height: 30,
       rotateY: 20,
-      scale: 1,
+      scaleX: 1,
+      scaleY: 1,
       rotate: 0,
     } as LayoutNode
     const local = project(100, 60, 300, posePoint(node, 0, 0))!

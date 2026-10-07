@@ -33,6 +33,7 @@ import {
   parseNumber,
   parseOverlay,
   parsePx,
+  parseScale,
   parseShadow,
   parseStyle,
   ZERO_EDGES,
@@ -384,6 +385,11 @@ function readPaint(raw: string, fallback: string, ctx: LayoutContext, label: str
   return fallback
 }
 
+function scalePair(raw: string | undefined): { scaleX: number; scaleY: number } {
+  const scale = parseScale(raw)
+  return { scaleX: scale.x, scaleY: scale.y }
+}
+
 function readHtmlAppearance(style: Record<string, string>) {
   return {
     padding: parseEdges(style.padding) ?? ZERO_EDGES,
@@ -395,7 +401,7 @@ function readHtmlAppearance(style: Record<string, string>) {
     rotateX: parseNumber(style.rotateX) ?? 0,
     rotateY: parseNumber(style.rotateY) ?? 0,
     z: parseNumber(style.z) ?? 0,
-    scale: parseNumber(style.scale) ?? 1,
+    ...scalePair(style.scale),
     origin: parseAnchor(style.origin),
   }
 }
@@ -411,7 +417,7 @@ function readAttrAppearance(attrs: Record<string, string>) {
     rotateX: parseNumber(attrs.rotateX) ?? 0,
     rotateY: parseNumber(attrs.rotateY) ?? 0,
     z: parseNumber(attrs.z) ?? 0,
-    scale: parseNumber(attrs.scale) ?? 1,
+    ...scalePair(attrs.scale),
     origin: parseAnchor(attrs.origin),
   }
 }
@@ -1147,7 +1153,7 @@ function layoutLineNode(node: FvgNode, ctx: LayoutContext, defaultStroke: string
     ink,
     opacity: parseNumber(node.attrs.opacity) ?? 1,
     rotate: parseNumber(node.attrs.rotate) ?? 0,
-    scale: parseNumber(node.attrs.scale) ?? 1,
+    ...scalePair(node.attrs.scale),
     origin: parseAnchor(node.attrs.origin),
     padding: ZERO_EDGES,
     geometry: localGeom,

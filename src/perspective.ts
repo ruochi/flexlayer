@@ -10,7 +10,10 @@ type Pose = {
   y: number
   originX: number
   originY: number
-  scale: number
+  scaleX: number
+  scaleY: number
+  /** 两轴相同时用这个数（含负号）。分轴时取两轴绝对值乘积的平方根。 */
+  scaleZ: number
   rotate: number
   rotateX: number
   rotateY: number
@@ -19,12 +22,16 @@ type Pose = {
 
 function poseOf(node: LayoutNode): Pose {
   const o = originOffset(node.origin, node.width, node.height)
+  const scaleX = node.scaleX || 1
+  const scaleY = node.scaleY || 1
   return {
     x: node.x,
     y: node.y,
     originX: o.x,
     originY: o.y,
-    scale: node.scale || 1,
+    scaleX,
+    scaleY,
+    scaleZ: scaleX === scaleY ? scaleX : Math.sqrt(Math.abs(scaleX * scaleY)),
     rotate: node.rotate || 0,
     rotateX: node.rotateX ?? 0,
     rotateY: node.rotateY ?? 0,
@@ -42,9 +49,9 @@ export function has3dPose(node: LayoutNode): boolean {
  */
 export function poseOffset(node: LayoutNode, du: number, dv: number, dz: number): Vec3 {
   const pose = poseOf(node)
-  let x = du * pose.scale
-  let y = dv * pose.scale
-  let z = pose.z + dz * pose.scale
+  let x = du * pose.scaleX
+  let y = dv * pose.scaleY
+  let z = pose.z + dz * pose.scaleZ
   const rx = (pose.rotateX * Math.PI) / 180
   const ry = (pose.rotateY * Math.PI) / 180
   const rz = (pose.rotate * Math.PI) / 180

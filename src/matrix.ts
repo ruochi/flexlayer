@@ -49,13 +49,13 @@ export function rotated(deg: number): Matrix {
   return { a: cos, b: sin, c: -sin, d: cos, e: 0, f: 0 }
 }
 
-export function scaled(s: number): Matrix {
-  return { a: s, b: 0, c: 0, d: s, e: 0, f: 0 }
+export function scaled(sx: number, sy = sx): Matrix {
+  return { a: sx, b: 0, c: 0, d: sy, e: 0, f: 0 }
 }
 
-/** 绕 (px, py) 旋转再缩放，与绘制时的变换顺序一致。 */
-export function aroundPivot(px: number, py: number, deg: number, s: number): Matrix {
-  return multiply(multiply(translated(px, py), multiply(rotated(deg), scaled(s))), translated(-px, -py))
+/** 绕 (px, py) 旋转再缩放，与绘制时的变换顺序一致。只传一个缩放时两轴相同。 */
+export function aroundPivot(px: number, py: number, deg: number, sx: number, sy = sx): Matrix {
+  return multiply(multiply(translated(px, py), multiply(rotated(deg), scaled(sx, sy))), translated(-px, -py))
 }
 
 export function apply(m: Matrix, x: number, y: number): [number, number] {

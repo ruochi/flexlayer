@@ -92,7 +92,7 @@ describe('paint containers', () => {
       h('Rect', { x: '40', y: '60',  width: '120', height: '80', fill: '#ffffff', rotateY: '32' }),
     )
     const png = (await renderFvg(root)).png
-    const box = { x: 40, y: 60, width: 120, height: 80, rotateY: 32, scale: 1, rotate: 0 } as LayoutNode
+    const box = { x: 40, y: 60, width: 120, height: 80, rotateY: 32, scaleX: 1, scaleY: 1, rotate: 0 } as LayoutNode
     const tl = project(100, 100, 500, posePoint(box, 0, 0))!
     const tr = project(100, 100, 500, posePoint(box, 120, 0))!
     const x = Math.round((tl.x + tr.x) / 2)
@@ -116,7 +116,7 @@ describe('paint containers', () => {
       h('rect', { x: '65', y: '65',  width: '50', height: '50', fill: '#ffffff', rotateX: '14', glow: '16 #00ff00' }),
     )
     const glowPng = (await renderFvg(glow)).png
-    const plane = { x: 65, y: 65, width: 50, height: 50, rotateX: 14, scale: 1, rotate: 0 } as LayoutNode
+    const plane = { x: 65, y: 65, width: 50, height: 50, rotateX: 14, scaleX: 1, scaleY: 1, rotate: 0 } as LayoutNode
     const glowAt = project(90, 90, 400, posePoint(plane, -8, 25))!
     const bodyAt = project(90, 90, 400, posePoint(plane, 25, 25))!
     const glowPx = await pixelAt(glowPng, Math.round(glowAt.x), Math.round(glowAt.y))

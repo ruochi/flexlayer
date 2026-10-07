@@ -376,13 +376,13 @@ function runElementDraw(ctx: CanvasRenderingContext2D, node: LayoutNode, t: numb
 
 /** 绕 origin 旋转、缩放。支点用当前坐标系里的绝对位置，子绘制仍使用 node.x/node.y。 */
 function applyNodeTransform(ctx: CanvasRenderingContext2D, node: LayoutNode) {
-  if (node.rotate === 0 && node.scale === 1) return
+  if (node.rotate === 0 && node.scaleX === 1 && node.scaleY === 1) return
   const o = originOffset(node.origin, node.width, node.height)
   const px = node.x + o.x
   const py = node.y + o.y
   ctx.translate(px, py)
   ctx.rotate((node.rotate * Math.PI) / 180)
-  ctx.scale(node.scale, node.scale)
+  ctx.scale(node.scaleX, node.scaleY)
   ctx.translate(-px, -py)
 }
 

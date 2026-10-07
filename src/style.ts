@@ -26,6 +26,16 @@ export function parseNumber(value: string | undefined): number | undefined {
   return Number.isFinite(n) ? n : undefined
 }
 
+/** `1.2` 两轴相同；`1.2 0.8` 或 `-1 1` 分轴。解析失败时为 1。 */
+export function parseScale(value: string | undefined): { x: number; y: number } {
+  const parts = value?.trim().split(/[\s,]+/).filter(Boolean) ?? []
+  const x = parseNumber(parts[0])
+  if (x == null) return { x: 1, y: 1 }
+  if (parts.length < 2) return { x, y: x }
+  const y = parseNumber(parts[1])
+  return { x, y: y ?? x }
+}
+
 export type Edges = { top: number; right: number; bottom: number; left: number }
 
 export const ZERO_EDGES: Edges = { top: 0, right: 0, bottom: 0, left: 0 }
