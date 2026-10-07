@@ -47,7 +47,7 @@ import {
   isTextBoxTag,
   layoutText,
 } from './text.js'
-import { checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, legacyCenterIssues, rowColumnHint, typoAttrIssues } from './rules.js'
+import { allowsBleed, checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, legacyCenterIssues, rowColumnHint, typoAttrIssues } from './rules.js'
 import { canonicalTag, FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag } from './tags.js'
 import { boundsOf, parseSvgTransform } from './svg-transform.js'
 import type {
@@ -2129,6 +2129,7 @@ export function layoutSync(rootNode: FvgNode, assets: LayoutAssets): FvgDocument
   const color = attrs.color ?? '#111111'
   const fontFamily = attrs['font-family'] ?? 'ChillDuanSans'
   const safe = parseSafe(attrs.safe, width, height)
+  const bleed = allowsBleed(attrs.bleed)
   const maxContentWidth = width - safe.left - safe.right
 
   const issues: Issue[] = []
@@ -2172,7 +2173,7 @@ export function layoutSync(rootNode: FvgNode, assets: LayoutAssets): FvgDocument
   root.height = height
   issues.push(...perspectiveIssues(root))
 
-  return { width, height, background, color, fontFamily, safe, root, issues, sources }
+  return { width, height, background, color, fontFamily, safe, bleed, root, issues, sources }
 }
 
 function canonicalizeTree(node: FvgNode): void {

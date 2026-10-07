@@ -144,6 +144,8 @@ export namespace JSX {
         color?: string
         'font-family'?: string
         safe?: number | string
+        /** 允许着墨超出画布。只在根上生效，overflow-canvas 不再报 */
+        bleed?: boolean | number | string
         opacity?: number | string
         rotate?: number | string
         rotateX?: number | string

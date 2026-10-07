@@ -542,6 +542,53 @@ export default <layer width="48" height="48"><badge /></layer>
     expect(pixel[1]).toBeGreaterThan(200)
   })
 
+  it('canvas.component 的参数用声明的类型，返回数组也能通过检查', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'flexlayer-badge-array-'))
+    const file = join(dir, 'badge.tsx')
+    await writeFile(
+      file,
+      `/** @jsxImportSource flexlayer */
+import { canvas } from 'flexlayer'
+
+declare module 'flexlayer/jsx-runtime' {
+  namespace JSX {
+    interface IntrinsicElements {
+      badge: { r: number }
+    }
+  }
+}
+
+canvas.component('badge', (a) => {
+  const span = a.r * 2
+  return [
+    <circle cx={24 - span} cy="24" r="6" fill="#00ff00" />,
+    <circle cx={24 + span} cy="24" r="6" fill="#00ff00" />,
+  ]
+})
+
+export default (
+  <layer width="80" height="48" background="#000000">
+    <badge r={10} />
+  </layer>
+)
+`,
+    )
+    expect(typecheckLayerFile(file)).toEqual([])
+    const loaded = await loadLayerFile(file)
+    expect(loaded.kind).toBe('node')
+    if (loaded.kind !== 'node') return
+    const { png } = await renderFvg(loaded.node)
+    const { createCanvas, loadImage } = await import('@napi-rs/canvas')
+    const img = await loadImage(png)
+    const canvasEl = createCanvas(img.width, img.height)
+    const ctx = canvasEl.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    const left = ctx.getImageData(8, 24, 1, 1).data
+    const right = ctx.getImageData(40, 24, 1, 1).data
+    expect(left[1]).toBeGreaterThan(200)
+    expect(right[1]).toBeGreaterThan(200)
+  })
+
   it('canvas.create 里的相对字体路径按源文件目录解析', async () => {
     const src = ['/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf', '/usr/share/fonts/truetype/croscore/Cousine-Regular.ttf'].find(
       (path) => existsSync(path),

@@ -594,12 +594,13 @@ export function buildReport(doc: FvgDocument): FvgReport {
     const slack = inkSlack[index] ?? 0
     const edge = 1e-3 + slack
     const inkOutside = el.ink.right > doc.width + edge || el.ink.bottom > doc.height + edge || el.ink.left < -edge || el.ink.top < -edge
-    if (inkOutside) {
+    if (inkOutside && !doc.bleed) {
       issues.push({
         level: 'error',
         code: 'overflow-canvas',
         path: el.path,
         message: '着墨超出画布',
+        hint: '满版出血在根 layer 上写 bleed，这条越界就不报',
       })
     }
     const effectPad = effectPadOf(el)

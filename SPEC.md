@@ -37,6 +37,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | `color` | `#111111` | 全局文字色、线条默认色 |
 | `font-family` | `ChillDuanSans` | 全局字体。目录里的名字直接写，第一次用到时自动下载。见 [docs/RESOURCES.md](docs/RESOURCES.md) |
 | `safe` | 画布短边的 4% | 安全区边距，`上 右 下 左` 或一个数字，只用于检查 |
+| `bleed` | 不出血 | 写在根上（`bleed` 或 `bleed="1"`）表示允许着墨超出画布。`overflow-canvas` 不再报，检查也不会因此 exit 1。`bleed="0"` 关掉。嵌套 layer 上写了会 `warn` 并忽略 |
 
 `<font family="名字" src="路径或网址" />` 注册额外字体，只能写在根元素下。`src` 必须是字体文件。不想自己找文件时，写目录里的名字：`Song` / `宋体`（Noto Serif SC，思源宋体简体子集）、`Kai` / `楷体`（霞鹜文楷）、`Brush` / `书法`（马善政毛笔楷书），以及 `Inter`、`Playfair`、`NotoSans` 等。有 400 和 700 两档的取最近的一档，只登记了一档的字体始终用那一档。
 
@@ -91,7 +92,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | `cx`、`cy`、`x1`、`y1`、`x2`、`y2`、`points`、`d`、`depth`、`fill`、`stroke`、`transform` | 图形属性，坐标是所在 `layer` 的局部坐标 |
 | `src`、`alt` | 只写在 `img` 或 `model` 上。图片宽高仍放进 `style` |
 | `shadow`、`glow`、`inner-shadow`、`inner-glow`、`blur`、`backdrop-blur`、`glass`、`noise`、`filter`、`blend` | 图形和 `layer` 写属性；文字写在 `style`。见第 9 章 |
-| `perspective`、`overlay`、`grade`、`grade-mask` | 只写在 `layer` 上。写在别处或写进 `style` 报 `warn` |
+| `perspective`、`overlay`、`grade`、`grade-mask`、`bleed` | 只写在 `layer` 上。写在别处或写进 `style` 报 `warn` |
 | `data` | 任何元素都可以写。值是 JSON；程序里直接传对象或数组。`draw` 读 `el.data`，不在 `el.attr` |
 | `expect` | 任何元素都可以写。声明预期中的问题码，出现在该节点或子树里时降为 info。没出现报 `unused-expect` |
 <!-- attrs:ownership:end -->
@@ -576,7 +577,7 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 
 | code | 级别 | 含义 |
 | --- | --- | --- |
-| `overflow-canvas` | error | 着墨超出画布 |
+| `overflow-canvas` | error | 着墨超出画布。根 `<layer bleed>` 表示这页允许出血，不再报这条 |
 | `outside-safe` | warn | 文字超出安全区 |
 | `text-overflow` | error | 文字超出了写死的宽度或高度 |
 | `flex-overflow` | warn | 子元素超出了写死尺寸的 flex 容器 |
@@ -812,16 +813,24 @@ export default canvas.create(
 - 宽高都写了：就是盒子。子元素按自己的 `x`、`y` 摆，不整层缩放。页面用这个。
 - 都没写：保持量出来的大小。
 - 手写的 `.layer` 不走这套比例放缩。写了 `width` 仍是盒子。
-- `canvas.component(name, render)` 按标签名注册组件。`render` 收到属性，返回 `<g>`、形状或它们的数组。排版前展开，`.layer` 和 JSX 走同一条路。`--emit` 仍写原来的标签。未注册的标签报 `unknown-tag`。同名再注册会替换。JSX 里大写函数组件在 `jsx()` 里展开，和这个注册表互不替代。内置 `arrow` 用这个注册。自定义标签的类型写在 jsx 运行时上：
+- `canvas.component(name, render)` 按标签名注册组件。`render` 的参数类型来自下面的 `declare module`：声明了 `r: number`，回调里的 `a.r` 就是 `number`，可以直接做算术。返回一个 `<g>` 或形状，也可以返回它们的数组（排版时收成一个 `<g>`）。排版前展开，`.layer` 和 JSX 走同一条路。`--emit` 仍写原来的标签。未注册的标签报 `unknown-tag`。同名再注册会替换。JSX 里大写函数组件在 `jsx()` 里展开，和这个注册表互不替代。内置 `arrow` 用这个注册。自定义标签的类型写在 jsx 运行时上：
 
 ```tsx
 declare module 'flexlayer/jsx-runtime' {
   namespace JSX {
     interface IntrinsicElements {
-      badge: { fill?: string }
+      badge: { r: number; fill?: string }
     }
   }
 }
+
+canvas.component('badge', (a) => {
+  const d = a.r * 2
+  return [
+    <circle cx="0" cy="0" r={a.r} fill={a.fill} />,
+    <circle cx={d} cy="0" r={a.r} fill={a.fill} />,
+  ]
+})
 ```
 
 最终排版和量到的盒子不一致时，报 `measure-mismatch`（warn），消息里带上两个尺寸。常见原因是 `width`、`safe` 或字号和最终画布不一样。

@@ -46,6 +46,7 @@ export const ATTR_ORDER = [
   'color',
   'font-family',
   'safe',
+  'bleed',
   'x',
   'y',
   'cx',
@@ -287,6 +288,14 @@ export const ATTRS: AttrDef[] = [
     issue: 'invalid-attr',
     misplacedHint: '外包一层 layer，例如 <layer grade="lomo" grade-mask="radial-gradient(#fff0 30%, #fff)">',
     styleHint: '不要写进 style；外包 <layer grade="…">',
+  },
+  {
+    name: 'bleed',
+    docGroup: 'layer-only',
+    jsxType: 'boolean | number | string',
+    example: 'bleed',
+    issue: 'invalid-attr',
+    misplacedHint: '只写在根 <layer bleed> 上。写了之后，着墨超出画布不再报 overflow-canvas',
   },
 ]
 
