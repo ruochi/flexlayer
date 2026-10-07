@@ -415,6 +415,10 @@ function walk(
   if (node.blend) entry.blend = node.blend
   if (node.grade) entry.grade = node.grade
   if (node.gradeMask) entry.gradeMask = node.gradeMask
+  if (node.anchorBox === 'ink') {
+    entry.anchorBox = 'ink'
+    entry.inkOffset = node.inkOffset
+  }
   const paintedFilters = filtersInPaintOrder(node.filters)
   if (paintedFilters.length) {
     entry.filters = paintedFilters.map((item) => ({
@@ -428,13 +432,18 @@ function walk(
     const contentY = node.y + node.padding.top + (node.border?.width ?? 0)
     entry.fontSize = node.textLayout.fontSize
     entry.lines = node.textLayout.lines.map((line) => {
-      const local = translateBox(line.ink, node.padding.left + (node.border?.width ?? 0), node.padding.top + (node.border?.width ?? 0))
+      const shift = textAlignShift(node, line.width)
+      const local = translateBox(
+        line.ink,
+        node.padding.left + (node.border?.width ?? 0) + shift,
+        node.padding.top + (node.border?.width ?? 0),
+      )
       const lineBox = plane
         ? finishCanvas(
             projectBox(plane.project, plane.localClip ? intersectBox(toPlaneBox(plane, node, local, planeRoot), plane.localClip) : toPlaneBox(plane, node, local, planeRoot)),
             plane.canvasClip,
           )
-        : clipInk(applyToBox(matrix, translateBox(line.ink, contentX, contentY)), clip)
+        : clipInk(applyToBox(matrix, translateBox(line.ink, contentX + shift, contentY)), clip)
       return { text: line.segments.map((s) => s.text).join(''), box: boxToRect(lineBox) }
     })
   }
@@ -738,6 +747,9 @@ const EXPECT_CODES = new Set([
   'nondeterministic',
   'type-error',
   'measure-mismatch',
+  'ink-inset',
+  'ink-anchor-empty',
+  'ink-anchor-rotate',
 ])
 
 type ExpectDecl = { path: string; code: string; reason?: string; used: boolean }

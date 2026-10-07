@@ -86,7 +86,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 <!-- attrs:ownership:begin -->
 | 属性 | 写在哪 |
 | --- | --- |
-| `width`、`height`、`x`、`y`、`anchor` | `width`、`height` 以及 `x`、`y`、`anchor`。`x`、`y` 是左上角，默认 0；`anchor` 默认 `top-left`。HTML 上写了报 `warn` |
+| `width`、`height`、`x`、`y`、`anchor`、`anchor-box` | `width`、`height` 以及 `x`、`y`、`anchor`。`x`、`y` 是左上角，默认 0；`anchor` 默认 `top-left`。HTML 上写了报 `warn` |
 | `opacity`、`rotate`、`rotateX`、`rotateY`、`z`、`scale`、`origin` | 图形、线条和 `layer` 写属性；文字写在 `style`。HTML 上写成属性报 `warn` |
 | `background`、`padding`、`font-size`、`color`、`flex`、`flex-grow`、`flex-shrink`、`gap`、`border`、`border-radius`、`max-width`、`align-items`、`align-content`、`justify-content`、`flex-wrap`、`row-gap`、`column-gap`、`writing-mode`、`object-fit`、`object-position` | HTML 的 `style`。`layer` 或图形写了 `style` 报 `warn` |
 | `cx`、`cy`、`x1`、`y1`、`x2`、`y2`、`points`、`d`、`depth`、`fill`、`stroke`、`transform` | 图形属性，坐标是所在 `layer` 的局部坐标 |
@@ -112,6 +112,8 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 没写 `x`、`y` 时是 `0, 0`，不再放到父级中心。`layer`、`use`、`rect`、`box`、`extrude` 上的 `cx`、`cy` 已忽略，报 `invalid-attr`，`hint` 给出等价的 `x`、`y`。
 
 `anchor` 示例：`<layer x="60" y="120"><h1>标题</h1></layer>` 表示这一层的左上角在 (60, 120)。要让中心落在这一点，写 `anchor="center"`。
+
+`anchor-box` 默认 `box`，按布局盒子对齐。`anchor-box="ink"` 改为按子树着墨的外接矩形对齐，`x`、`y` 落在这块着墨的九宫格点上。着墨取旋转和缩放之前的范围；同时写了 `rotate` 时报 `ink-anchor-rotate`。没有着墨（空文字或全透明）时退回布局盒子，并报 `ink-anchor-empty`。`overflow="hidden"` 先裁再对齐。没写 `anchor-box`、锚点贴着左边或右边、并且字形比盒子靠里至少 2px、也不小于字号的 4% 时，报 `ink-inset`。只写在 `layer` 和 `use` 上。
 
 ## 4. 容器
 
@@ -644,6 +646,9 @@ registerFilter({
 | `open-curve-fill` | warn | 开口的 `curve` 写了 `fill`，没有填充 |
 | `effect-clipped` | warn | 本体在画布内，阴影、光晕、描边或图层模糊超出画布 |
 | `ink-stroke-fill` | warn | `inside` / `center` 的内侧宽度达到字号的约 8%，容易填死字内空白 |
+| `ink-inset` | info | 锚点贴着左边或右边，字形比布局盒子靠里至少 2px，且不小于字号的 4%。想让笔画贴齐就写 `anchor-box="ink"` |
+| `ink-anchor-empty` | info | `anchor-box="ink"` 的子树没有着墨，已按布局盒子定位 |
+| `ink-anchor-rotate` | info | `anchor-box="ink"` 和 `rotate` 同时存在，对齐点是旋转前的着墨 |
 | `flatten-3d` | warn | `rotateX`、`rotateY`、`z` 没有落在带 `perspective` 的 layer 里，仍按二维绘制。`sphere`、`box`、`extrude`、`model` 同样报这个码，并且不绘制 |
 | `behind-camera` | warn | 平面或网格的 `z` 大于等于所在 layer 的 `perspective`，不绘制 |
 | `emit-draw` | warn | `--emit` 时 `draw` 函数用了外部变量，或读不出函数体。按语法判断：字符串、注释，以及同一条声明里的多个名字，都不算外部变量。这种 `<draw>` 不会写进 `.layer` |

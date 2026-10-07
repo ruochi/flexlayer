@@ -2,8 +2,7 @@ import type { FvgChild, FvgNode } from './parse.js'
 import { applyCanvasFont } from './fonts.js'
 import { getMeasureCtx } from './measureCtx.js'
 import { parseFontWeight, parsePx } from './style.js'
-import type { Box, InlineOwner, TextLayoutResult, TextRunStyle, TextSegment } from './types.js'
-import { emptyBox, unionBoxes } from './types.js'
+import { emptyBox, translateBox, unionBoxes, type Box, type InlineOwner, type TextLayoutResult, type TextRunStyle, type TextSegment } from './types.js'
 
 const INLINE_TAGS = new Set(['span', 'strong', 'b', 'em', 'br'])
 const TEXT_BOX_TAGS = new Set(['h1', 'h2', 'h3', 'p', 'div', 'span'])
@@ -209,16 +208,66 @@ export function splitAdvances(text: string, style: TextRunStyle, total: number):
   return chars.map((ch, i) => ({ text: ch, width: widths[i]! }))
 }
 
-function measureInk(text: string, style: TextRunStyle): { width: number; ascent: number; descent: number } {
+type InkMetrics = {
+  width: number
+  /** 对齐点到墨迹左边的距离。墨迹在起点右侧时为负。 */
+  left: number
+  right: number
+  ascent: number
+  descent: number
+}
+
+function measureInk(text: string, style: TextRunStyle): InkMetrics {
   const ctx = getMeasureCtx()
   applyCanvasFont(ctx, style.fontFamily, style.fontWeight, style.fontSize)
   ctx.letterSpacing = `${style.letterSpacing}px`
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
   const m = ctx.measureText(text)
   return {
     width: m.width,
+    left: m.actualBoundingBoxLeft ?? 0,
+    right: m.actualBoundingBoxRight ?? m.width,
     ascent: m.actualBoundingBoxAscent ?? style.fontSize * 0.85,
     descent: m.actualBoundingBoxDescent ?? style.fontSize * 0.15,
   }
+}
+
+/** 字形着墨。起点 (x, baselineY) 是 fillText 的绘制位置。 */
+function glyphInk(x: number, baselineY: number, m: InkMetrics): Box {
+  return {
+    x: x - m.left,
+    y: baselineY - m.ascent,
+    width: m.left + m.right,
+    height: m.ascent + m.descent,
+  }
+}
+
+function addInk(union: Box | null, box: Box): Box | null {
+  if (box.width <= 1e-3 || box.height <= 1e-3) return union
+  return union ? unionBoxes(union, box) : box
+}
+
+export function alignLineOffset(align: string, innerWidth: number, lineWidth: number): number {
+  if (align === 'center') return (innerWidth - lineWidth) / 2
+  if (align === 'right') return innerWidth - lineWidth
+  return 0
+}
+
+/** 各行着墨按 text-align 平移后的并集，再加上内容区相对盒子的偏移。 */
+export function alignedTextInk(
+  lines: TextLayoutResult['lines'],
+  align: string,
+  innerWidth: number,
+  offsetX: number,
+  offsetY: number,
+): Box {
+  let ink: Box | null = null
+  for (const line of lines) {
+    const dx = alignLineOffset(align, innerWidth, line.width) + offsetX
+    ink = addInk(ink, translateBox(line.ink, dx, offsetY))
+  }
+  return ink ?? emptyBox()
 }
 
 function segmentsToUnits(segments: TextSegment[]): Unit[] {
@@ -420,6 +469,8 @@ function layoutVertical(opts: LayoutTextOptions): TextLayoutResult {
     drawStyle: TextRunStyle
     letterSpacing: number
     width: number
+    left: number
+    right: number
     ascent: number
     descent: number
     breakBefore: boolean
@@ -436,6 +487,8 @@ function layoutVertical(opts: LayoutTextOptions): TextLayoutResult {
         drawStyle,
         letterSpacing: segment.style.letterSpacing,
         width: measured.width,
+        left: measured.left,
+        right: measured.right,
         ascent: measured.ascent,
         descent: measured.descent,
         breakBefore: index === 0 && Boolean(segment.hardBreakBefore),
@@ -471,7 +524,7 @@ function layoutVertical(opts: LayoutTextOptions): TextLayoutResult {
   const contentWidth = columns.length * columnWidth + Math.max(0, columns.length - 1) * columnGap
   let contentHeight = 0
   const laidLines: TextLayoutResult['lines'] = []
-  let ink = emptyBox()
+  let ink: Box | null = null
   columns.forEach((glyphsInColumn, index) => {
     const x0 = contentWidth - columnWidth - index * (columnWidth + columnGap)
     let y = 0
@@ -479,8 +532,10 @@ function layoutVertical(opts: LayoutTextOptions): TextLayoutResult {
       if (glyphIndex > 0) y += glyph.letterSpacing
       const baselineY = y + glyph.ascent + (lineH - (glyph.ascent + glyph.descent)) / 2
       const glyphX = x0 + (columnWidth - glyph.width) / 2
-      const lineInk = { x: glyphX, y: baselineY - glyph.ascent, width: glyph.width, height: glyph.ascent + glyph.descent }
-      ink = unionBoxes(ink, lineInk)
+      const lineInk = /\s/.test(glyph.text)
+        ? { x: glyphX, y: baselineY, width: 0, height: 0 }
+        : glyphInk(glyphX, baselineY, glyph)
+      ink = addInk(ink, lineInk)
       laidLines.push({
         segments: [{ text: glyph.text, style: glyph.drawStyle, x: glyphX, width: glyph.width, owner: glyph.owner }],
         width: contentWidth,
@@ -501,7 +556,7 @@ function layoutVertical(opts: LayoutTextOptions): TextLayoutResult {
     contentWidth,
     contentHeight,
     minWidth: columnWidth,
-    ink,
+    ink: ink ?? emptyBox(),
     fontSize: opts.fontSize,
     autoWrap: opts.fixedHeight == null && opts.maxHeight != null && columns.length > 1,
     overflowFixed,
@@ -545,7 +600,7 @@ export function layoutText(opts: LayoutTextOptions): TextLayoutResult {
   let contentWidth = 0
   let contentHeight = 0
   const laidLines: TextLayoutResult['lines'] = []
-  let ink = emptyBox()
+  let ink: Box | null = null
   let y = 0
 
   for (const lineUnits of allLines) {
@@ -553,11 +608,13 @@ export function layoutText(opts: LayoutTextOptions): TextLayoutResult {
     let maxAsc = 0
     let maxDesc = 0
     const segOut: TextLayoutResult['lines'][0]['segments'] = []
+    const measured: Array<{ unit: Unit; metrics: InkMetrics; x: number }> = []
     let x = 0
     for (const u of lineUnits) {
       const inkM = measureInk(u.text, u.style)
       maxAsc = Math.max(maxAsc, inkM.ascent)
       maxDesc = Math.max(maxDesc, inkM.descent)
+      measured.push({ unit: u, metrics: inkM, x })
       segOut.push({ text: u.text, style: u.style, x, width: u.width, owner: u.owner })
       x += u.width
       lineW = x
@@ -565,19 +622,19 @@ export function layoutText(opts: LayoutTextOptions): TextLayoutResult {
     const lh = opts.lineHeightRatio * opts.fontSize
     const lineH = allLines.length === 1 ? Math.max(lh, maxAsc + maxDesc) : lh
     const baselineY = y + maxAsc + (lineH - (maxAsc + maxDesc)) / 2
-    const lineInk: Box = {
-      x: 0,
-      y: baselineY - maxAsc,
-      width: lineW,
-      height: maxAsc + maxDesc,
+    let lineInk: Box | null = null
+    for (const item of measured) {
+      if (item.unit.isSpace) continue
+      lineInk = addInk(lineInk, glyphInk(item.x, baselineY, item.metrics))
     }
-    ink = unionBoxes(ink, lineInk)
+    const resolvedInk = lineInk ?? { x: 0, y: baselineY, width: 0, height: 0 }
+    ink = addInk(ink, resolvedInk)
     laidLines.push({
       segments: segOut,
       width: lineW,
       height: lineH,
       baselineY,
-      ink: lineInk,
+      ink: resolvedInk,
     })
     contentWidth = Math.max(contentWidth, lineW)
     y += lineH
@@ -593,7 +650,7 @@ export function layoutText(opts: LayoutTextOptions): TextLayoutResult {
     contentWidth,
     contentHeight,
     minWidth: minUnit,
-    ink,
+    ink: ink ?? emptyBox(),
     fontSize: opts.fontSize,
     autoWrap,
     overflowFixed,

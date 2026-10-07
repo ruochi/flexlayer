@@ -33,6 +33,7 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 | 线条放在 `layer` 里，用 `x1`…`d` | 线条直接放进 flex | `<layer><line x1 y1 x2 y2 /></layer>` | `invalid-child` |
 | 文字的位置写在外包的 `layer` 上 | `<h1 x="120">` | `<layer x="120" y="64"><h1>…</h1></layer>` | `invalid-attr` |
 | `layer`、`use`、`rect`、`box` 用 `x`、`y` | `<layer cx="120" cy="64">` | `<layer x="120" y="64">`。圆、椭圆、球仍写 `cx` `cy` | `invalid-attr` |
+| 笔画贴齐定位点用 `anchor-box="ink"` | 用布局盒子当笔画边界 | `<layer x="76" y="40" anchor-box="ink">`。只写在 `layer` 和 `use` 上 | `ink-inset` |
 | 图片是 HTML | `<Image width="320">` | `<img src="cover.png" style="width:320px; height:180px">`。`image` 同样可用 | `invalid-attr` |
 | 作用于整棵子树的效果只写在 `layer` 上 | `<rect grade="lomo">`、`<p style="overlay:#000">` | `<layer grade="lomo" overlay="#00000066">` | `invalid-attr` |
 | 调色先选预设再改一两项 | `grade="contrast 5"` | `<layer grade="lomo 0.8, fade 0.1">` | `invalid-attr` |

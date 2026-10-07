@@ -179,6 +179,14 @@ export type FilterReport = {
   value: unknown
 }
 
+/** 着墨相对布局盒子的四边内缩。伸出盒子时为负。 */
+export type InkOffset = {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
 export type ElementReport = {
   path: string
   id?: string
@@ -188,6 +196,10 @@ export type ElementReport = {
   box: Rect
   /** 变换并裁剪后的着墨外接矩形。有透视时是投影后的范围。 */
   ink: Rect
+  /** anchor-box="ink" 生效时为 ink。 */
+  anchorBox?: 'box' | 'ink'
+  /** 着墨相对布局盒子的四边内缩，取旋转和缩放之前的值。 */
+  inkOffset?: InkOffset
   /** 投影后的四个角，画布坐标，顺序为左上、右上、右下、左下。没有透视投影时不写。 */
   quad?: [{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }, { x: number; y: number }]
   /** 阴影、光晕、图层模糊或玻璃可能占用的范围。没有外扩效果时不写。 */
@@ -288,6 +300,10 @@ export type LayoutNodeBase = {
   width: number
   height: number
   ink: Box
+  /** anchor-box="ink" 生效时为 ink。 */
+  anchorBox?: 'box' | 'ink'
+  /** 着墨相对布局盒子的四边内缩，取旋转和缩放之前的值。 */
+  inkOffset?: InkOffset
   opacity: number
   rotate: number
   /** 绕水平轴，度。正角度让盒子上边远离观众。没有祖先 perspective 时不投影。 */

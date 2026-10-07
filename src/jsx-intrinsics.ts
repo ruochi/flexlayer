@@ -34,6 +34,8 @@ type FvgPositioned = FvgGraphic & {
   x?: number | string
   y?: number | string
   anchor?: string
+  /** ink 时按子树着墨对齐，box 时按布局盒子。 */
+  'anchor-box'?: string
 }
 
 /** circle、ellipse、sphere 的圆心。 */

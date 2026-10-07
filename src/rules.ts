@@ -249,6 +249,18 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
     }
   }
 
+  if (present(attrs, 'anchor-box') && node.tag !== 'layer' && node.tag !== 'use') {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        'anchor-box 只写在 layer 和 use 上',
+        '外包一层 layer，例如 <layer x="76" y="40" anchor="top-left" anchor-box="ink"><h1>标题</h1></layer>',
+      ),
+    )
+  }
+
   if (parent === 'flex' && !html && positioned) {
     out.push(
       flagged(

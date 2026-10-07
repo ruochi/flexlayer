@@ -40,12 +40,14 @@ import {
   type Edges,
 } from './style.js'
 import {
+  alignedTextInk,
   defaultFontSizeForTag,
   defaultFontWeightForTag,
   extractTextSegments,
   isTextBoxTag,
   layoutText,
 } from './text.js'
+import { applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset, translated } from './matrix.js'
 import { allowsBleed, checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, legacyCenterIssues, rowColumnHint, typoAttrIssues } from './rules.js'
 import { canonicalTag, FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag } from './tags.js'
 import { boundsOf, parseSvgTransform } from './svg-transform.js'
@@ -77,7 +79,7 @@ import type {
   ShapeLayoutNode,
   TextLayoutNode,
 } from './types.js'
-import { emptyBox, translateBox, unionBoxes } from './types.js'
+import { emptyBox, unionBoxes } from './types.js'
 import { formatSourceLoc } from './source-loc.js'
 import { getYoga } from './yoga.js'
 
@@ -722,9 +724,10 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
   if (fixedH != null) contentH = Math.max(contentH, fixedH - appearance.padding.top - appearance.padding.bottom - (appearance.border?.width ?? 0) * 2)
 
   const outer = outerFromContent(contentW, contentH, appearance.padding, appearance.border)
-  const ink = translateBox(textLayout.ink, outer.contentOffsetX, outer.contentOffsetY)
-
   const textAlign = (style['text-align'] ?? 'left').trim() as 'left' | 'center' | 'right'
+  const boxW = fixedW ?? outer.width
+  const innerW = boxW - appearance.padding.left - appearance.padding.right - (appearance.border?.width ?? 0) * 2
+  const ink = alignedTextInk(textLayout.lines, textAlign, innerW, outer.contentOffsetX, outer.contentOffsetY)
   ctx.issues.push(...checkTextBoxChildren(node, ctx.pathPrefix))
 
   if (textLayout.overflowFixed) {
@@ -1745,6 +1748,138 @@ function layoutGroup(node: FvgNode, ctx: LayoutContext): GroupLayoutNode {
   }
 }
 
+const VISIBLE_OPACITY = 0.01
+
+function hasInkArea(b: Box): boolean {
+  return b.width > 1e-3 && b.height > 1e-3
+}
+
+function addLocalInk(union: Box | null, box: Box | null): Box | null {
+  if (!box || !hasInkArea(box)) return union
+  return union ? unionBoxes(union, box) : box
+}
+
+/**
+ * 把 node 的着墨变到 matrix 所在的坐标系。
+ * matrix 把 node 的局部原点（自身 rotate / scale 之前）映射过去。
+ * applyOwnTransform 为 false 时，不施加 node 自己的旋转和缩放。
+ */
+function accumulateInk(node: LayoutNode, parentOpacity: number, matrix: typeof IDENTITY, applyOwnTransform: boolean): Box | null {
+  const opacity = parentOpacity * node.opacity
+  if (opacity < VISIBLE_OPACITY) return null
+  const origin = originOffset(node.origin, node.width, node.height)
+  const m =
+    applyOwnTransform && (node.rotate !== 0 || node.scaleX !== 1 || node.scaleY !== 1)
+      ? multiply(matrix, aroundPivot(origin.x, origin.y, node.rotate, node.scaleX, node.scaleY))
+      : matrix
+
+  if (node.kind === 'layer' || node.kind === 'flex') {
+    let union: Box | null = null
+    if ((node.background && node.background !== 'transparent') || (node.border && node.border.width > 0)) {
+      union = addLocalInk(union, applyToBox(m, { x: 0, y: 0, width: node.width, height: node.height }))
+    }
+    const insetX = node.kind === 'flex' ? node.padding.left + (node.border?.width ?? 0) : 0
+    const insetY = node.kind === 'flex' ? node.padding.top + (node.border?.width ?? 0) : 0
+    const childBase = multiply(m, translated(insetX, insetY))
+    for (const child of node.children) {
+      union = addLocalInk(union, accumulateInk(child, opacity, multiply(childBase, translated(child.x, child.y)), true))
+    }
+    if (node.kind === 'layer' && node.overflow === 'hidden' && union) {
+      union = intersectBox(union, applyToBox(m, { x: 0, y: 0, width: node.width, height: node.height }))
+      if (!hasInkArea(union)) return null
+    }
+    return union
+  }
+  return hasInkArea(node.ink) ? applyToBox(m, node.ink) : null
+}
+
+/** 子树着墨，坐标系是 node 自身、且在 node 的 rotate / scale 之前。 */
+function inkInLocal(node: LayoutNode, parentOpacity: number): Box | null {
+  return accumulateInk(node, parentOpacity, IDENTITY, false)
+}
+
+function maxTextFontSize(node: LayoutNode): number {
+  if (node.kind === 'text') return node.textLayout.fontSize
+  if (node.kind !== 'layer' && node.kind !== 'flex') return 0
+  let max = 0
+  for (const child of node.children) max = Math.max(max, maxTextFontSize(child))
+  return max
+}
+
+type AnchorBoxMode = 'ink' | 'box' | 'absent'
+
+function parseAnchorBox(raw: string | undefined, issues: Issue[], path: string): AnchorBoxMode {
+  if (raw == null || raw.trim() === '') return 'absent'
+  const value = raw.trim().toLowerCase()
+  if (value === 'ink' || value === 'box') return value
+  issues.push({
+    level: 'warn',
+    code: 'invalid-attr',
+    path,
+    message: `无法解析 anchor-box: ${raw}`,
+    hint: '写成 anchor-box="ink" 或 anchor-box="box"',
+  })
+  return 'box'
+}
+
+function anchorTouchesSide(anchor: Anchor): 'left' | 'right' | null {
+  if (anchor === 'left' || anchor === 'top-left' || anchor === 'bottom-left') return 'left'
+  if (anchor === 'right' || anchor === 'top-right' || anchor === 'bottom-right') return 'right'
+  return null
+}
+
+function maybeInkInset(node: LayoutNode, anchor: Anchor, ctx: LayoutContext) {
+  const side = anchorTouchesSide(anchor)
+  if (!side || (node.kind !== 'layer' && node.kind !== 'flex')) return
+  const fontSize = maxTextFontSize(node)
+  if (fontSize <= 0) return
+  const ink = inkInLocal(node, 1)
+  if (!ink) return
+  const inset = side === 'left' ? ink.x : node.width - (ink.x + ink.width)
+  if (Math.round(inset) < 2 || inset < fontSize * 0.04) return
+  const where = side === 'left' ? '左' : '右'
+  ctx.issues.push({
+    level: 'info',
+    code: 'ink-inset',
+    path: node.path,
+    message: `字形比盒子靠里 ${Math.round(inset)}px（${where}）`,
+    hint: '想让笔画贴齐 x，写 anchor-box="ink"',
+  })
+}
+
+function applyInkAnchor(node: LayoutNode, x: number, y: number, anchor: Anchor, ctx: LayoutContext) {
+  const ink = inkInLocal(node, 1)
+  if (!ink) {
+    ctx.issues.push({
+      level: 'info',
+      code: 'ink-anchor-empty',
+      path: node.path,
+      message: '子树没有着墨，已按布局盒子定位',
+      hint: '空文字或全透明时 anchor-box="ink" 会退回 box',
+    })
+    return
+  }
+  const topLeft = anchorTopLeft(x, y, ink.width, ink.height, anchor)
+  node.x = topLeft.x - ink.x
+  node.y = topLeft.y - ink.y
+  node.anchorBox = 'ink'
+  node.inkOffset = {
+    left: ink.x,
+    top: ink.y,
+    right: node.width - (ink.x + ink.width),
+    bottom: node.height - (ink.y + ink.height),
+  }
+  if (node.rotate !== 0) {
+    ctx.issues.push({
+      level: 'info',
+      code: 'ink-anchor-rotate',
+      path: node.path,
+      message: '对齐点是旋转前的着墨',
+      hint: 'origin 仍按布局盒子计算，旋转不会改 anchor-box 的对齐点',
+    })
+  }
+}
+
 function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
   const appearance = readAttrAppearance(node.attrs)
   // 根节点的 background 是画布底色，由 paintDocument 绘制。layer 自身不填色。
@@ -1778,6 +1913,7 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
     x: number
     y: number
     anchor: Anchor
+    anchorBox: AnchorBoxMode
     coords: boolean
   }> = []
 
@@ -1819,6 +1955,7 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
       x: html ? 0 : (parseNumber(ch.attrs.x) ?? 0),
       y: html ? 0 : (parseNumber(ch.attrs.y) ?? 0),
       anchor: html ? 'top-left' : parseAnchor(ch.attrs.anchor, 'top-left'),
+      anchorBox: html ? 'absent' : parseAnchorBox(ch.attrs['anchor-box'], ctx.issues, path),
       coords: usesOwnCoords(ch, laid.kind),
     })
   }
@@ -1828,6 +1965,9 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
     const tl = anchorTopLeft(p.x, p.y, p.child.width, p.child.height, p.anchor)
     p.child.x = tl.x
     p.child.y = tl.y
+    if (p.child.kind !== 'layer') return
+    if (p.anchorBox === 'ink') applyInkAnchor(p.child, p.x, p.y, p.anchor, ctx)
+    else if (p.anchorBox === 'absent') maybeInkInset(p.child, p.anchor, ctx)
   }
   for (const p of placed) positionOne(p)
 
@@ -1862,11 +2002,7 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
     }
   }
 
-  let ink = emptyBox()
-  const children = placed.map((p) => {
-    ink = unionBoxes(ink, translateBox(p.child.ink, p.child.x, p.child.y))
-    return p.child
-  })
+  const children = placed.map((p) => p.child)
 
   const overlay = readLayerOverlay(node.attrs, ctx)
   const layerFilters = readLayerFilters(node.attrs, ctx)
@@ -1910,7 +2046,7 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
   }
   const effects = readEffects(node.attrs, ctx, solidPaint(appearance.border?.color, ctx.color))
   const filters = mergeFilters(effects.filters, layerFilters.filters)
-  return {
+  const laid: LayerLayoutNode = {
     kind: 'layer',
     path: ctx.pathPrefix,
     id: node.attrs.id,
@@ -1919,7 +2055,7 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
     y: 0,
     width: layerW,
     height: layerH,
-    ink,
+    ink: emptyBox(),
     ...appearance,
     children,
     overflow: node.attrs.overflow === 'hidden' ? 'hidden' : 'visible',
@@ -1931,6 +2067,8 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
     ...(filters.length ? { filters } : {}),
     ...layoutDrawMeta(node, ctx),
   }
+  laid.ink = inkInLocal(laid, 1) ?? emptyBox()
+  return laid
 }
 
 function noteAttrTypos(node: FvgNode, path: string, issues: Issue[]) {
