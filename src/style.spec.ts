@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   colorFilterToCss,
+  parseOrigin,
+  readOrigin,
   parseBlend,
   parseBlurRadius,
   parseBorder,
@@ -17,6 +19,31 @@ import {
 } from './style.js'
 
 describe('style', () => {
+  it('origin 接受九宫格、像素和百分比', () => {
+    expect(parseOrigin('top-left')).toEqual({
+      x: { unit: 'percent', value: 0 },
+      y: { unit: 'percent', value: 0 },
+    })
+    expect(parseOrigin('120 80')).toEqual({
+      x: { unit: 'px', value: 120 },
+      y: { unit: 'px', value: 80 },
+    })
+    expect(parseOrigin('30%, 40%')).toEqual({
+      x: { unit: 'percent', value: 30 },
+      y: { unit: 'percent', value: 40 },
+    })
+    expect(parseOrigin('top 80')).toEqual(parseOrigin('80 top'))
+    expect(parseOrigin('center left')).toEqual(parseOrigin('left'))
+    expect(parseOrigin('40')).toEqual({
+      x: { unit: 'px', value: 40 },
+      y: { unit: 'percent', value: 50 },
+    })
+    expect(parseOrigin(undefined).x).toEqual({ unit: 'percent', value: 50 })
+    expect(readOrigin('left right').invalid).toBe(true)
+    expect(readOrigin('nope').invalid).toBe(true)
+    expect(readOrigin('').invalid).toBe(false)
+  })
+
   it('parsePx', () => {
     expect(parsePx('12px')).toBe(12)
     expect(parsePx('12')).toBe(12)

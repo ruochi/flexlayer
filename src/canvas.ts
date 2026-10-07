@@ -7,7 +7,7 @@ import { fontFamiliesOf, measureLayer, noteMeasuredSize, parseSafe, prepareAsset
 import type { FvgNode } from './parse.js'
 import { isDisplayFlex } from './rules.js'
 import { placedText, type PlacedText } from './placed-text.js'
-import { parseNumber, parseScale } from './style.js'
+import { parseNumber, parseOrigin, parseScale } from './style.js'
 import { isTextBoxTag } from './text.js'
 import type { Anchor, Issue } from './types.js'
 
@@ -215,7 +215,7 @@ function multiplyScaleAttr(existing: string | undefined, factor: number): string
 
 /** 绕 origin（默认中心）做 rotate、scale 之后的轴对齐外接矩形。 */
 function rotatedBoxOf(node: FvgNode, box: LayerBox): LayerBox {
-  const pivot = originOffset(parseAnchor(node.attrs.origin, 'center'), box.width, box.height)
+  const pivot = originOffset(parseOrigin(node.attrs.origin), box.width, box.height)
   const scale = parseScale(node.attrs.scale)
   const visual = applyToBox(
     aroundPivot(box.left + pivot.x, box.top + pivot.y, parseNumber(node.attrs.rotate) ?? 0, scale.x, scale.y),

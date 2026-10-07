@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { h } from './h.js'
 import { checkFvg } from './render.js'
 import { applyPoseMatrix, poseMatrix, poseOffset, posePoint, project } from './perspective.js'
+import { parseOrigin } from './style.js'
 import type { LayoutNode } from './types.js'
 
 function node(partial: Partial<LayoutNode> & Pick<LayoutNode, 'kind'>): LayoutNode {
@@ -47,7 +48,7 @@ describe('perspective', () => {
   })
 
   it('poseMatrix 与 posePoint、poseOffset 一致', () => {
-    const box = node({ kind: 'shape', x: 12, y: 8, width: 80, height: 40, rotate: 25, rotateX: 15, rotateY: -20, z: 30, scaleX: 1.5, scaleY: 1.5, origin: 'top-left' })
+    const box = node({ kind: 'shape', x: 12, y: 8, width: 80, height: 40, rotate: 25, rotateX: 15, rotateY: -20, z: 30, scaleX: 1.5, scaleY: 1.5, origin: parseOrigin('top-left') })
     const matrix = poseMatrix(box)
     for (const [u, v, z] of [
       [0, 0, 0],

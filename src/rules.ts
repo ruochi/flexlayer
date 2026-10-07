@@ -1,7 +1,7 @@
 import { filterIsLayerOnly, listFilters } from './filter.js'
 import type { FvgNode } from './parse.js'
 import { ATTRS, ATTR_ORDER, HTML_STYLE_ATTRS, attrByName, issueFor } from './schema.js'
-import { parseNumber, parseStyle } from './style.js'
+import { parseNumber, parseStyle, readOrigin } from './style.js'
 import { MATH_TAGS } from './math/rules.js'
 import { isTextBoxTag } from './text.js'
 import type { Issue, IssueLevel } from './types.js'
@@ -201,6 +201,20 @@ export function typoAttrIssues(node: FvgNode, path: string): Issue[] {
     )
   }
   return out
+}
+
+export function originValueIssues(raw: string | undefined, path: string): Issue[] {
+  if (raw == null || raw.trim() === '') return []
+  if (!readOrigin(raw).invalid) return []
+  return [
+    flagged(
+      'warn',
+      'invalid-attr',
+      path,
+      `无法解析 origin: ${raw}`,
+      '九宫格如 center、top-left；或相对盒子左上角写 120 80、30% 40%。只写一个数时另一轴是中心',
+    ),
+  ]
 }
 
 /** 只检查归属表里的已知属性。拼写接近已知属性的名字会 warn，其余留给 draw。 */
@@ -431,6 +445,8 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
     )
   }
   const styleMap = parseStyle(attrs.style)
+  const originRaw = html ? styleMap.origin : attrs.origin
+  out.push(...originValueIssues(originRaw, path))
   const styleKeys = Object.keys(styleMap)
   const registeredOnly = registeredLayerOnlyNames()
   const misplacedRegistered = registeredOnly.filter((key) => present(attrs, key))

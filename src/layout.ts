@@ -33,6 +33,7 @@ import {
   parseNumber,
   parseOverlay,
   parsePx,
+  parseOrigin,
   parseScale,
   parseShadow,
   parseStyle,
@@ -49,7 +50,7 @@ import {
 } from './text.js'
 import { applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset, translated } from './matrix.js'
 import { layoutMath } from './math/lower.js'
-import { allowsBleed, checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, legacyCenterIssues, rowColumnHint, typoAttrIssues } from './rules.js'
+import { allowsBleed, checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, legacyCenterIssues, originValueIssues, rowColumnHint, typoAttrIssues } from './rules.js'
 import { canonicalTag, FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag } from './tags.js'
 import { boundsOf, parseSvgTransform } from './svg-transform.js'
 import type {
@@ -408,7 +409,7 @@ function readHtmlAppearance(style: Record<string, string>) {
     rotateY: parseNumber(style.rotateY) ?? 0,
     z: parseNumber(style.z) ?? 0,
     ...scalePair(style.scale),
-    origin: parseAnchor(style.origin),
+    origin: parseOrigin(style.origin),
   }
 }
 
@@ -424,7 +425,7 @@ function readAttrAppearance(attrs: Record<string, string>) {
     rotateY: parseNumber(attrs.rotateY) ?? 0,
     z: parseNumber(attrs.z) ?? 0,
     ...scalePair(attrs.scale),
-    origin: parseAnchor(attrs.origin),
+    origin: parseOrigin(attrs.origin),
   }
 }
 
@@ -1193,7 +1194,7 @@ function layoutLineNode(node: FvgNode, ctx: LayoutContext, defaultStroke: string
     opacity: parseNumber(node.attrs.opacity) ?? 1,
     rotate: parseNumber(node.attrs.rotate) ?? 0,
     ...scalePair(node.attrs.scale),
-    origin: parseAnchor(node.attrs.origin),
+    origin: parseOrigin(node.attrs.origin),
     padding: ZERO_EDGES,
     geometry: localGeom,
     stroke,
@@ -1893,6 +1894,7 @@ function applyInkAnchor(node: LayoutNode, x: number, y: number, anchor: Anchor, 
 }
 
 function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
+  if (ctx.pathPrefix === 'layer') ctx.issues.push(...originValueIssues(node.attrs.origin, ctx.pathPrefix))
   const appearance = readAttrAppearance(node.attrs)
   // 根节点的 background 是画布底色，由 paintDocument 绘制。layer 自身不填色。
   appearance.background = undefined

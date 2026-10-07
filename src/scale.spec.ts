@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { canvas } from './canvas.js'
 import { h } from './h.js'
 import { poseOffset } from './perspective.js'
+import { parseOrigin } from './style.js'
 import { checkFvg } from './render.js'
 import type { LayoutNode } from './types.js'
 
@@ -52,7 +53,7 @@ describe('分轴 scale', () => {
   it('三维里只有一个 scale 时 z 用这个数，分轴时用几何平均', () => {
     const uniform = { x: 0, y: 0, width: 10, height: 10, rotate: 0, scaleX: -2, scaleY: -2, z: 0 } as LayoutNode
     expect(poseOffset(uniform, 0, 0, 10).z).toBeCloseTo(-20)
-    const split = { x: 0, y: 0, width: 10, height: 10, rotate: 0, scaleX: 4, scaleY: 1, z: 0, origin: 'top-left' } as LayoutNode
+    const split = { x: 0, y: 0, width: 10, height: 10, rotate: 0, scaleX: 4, scaleY: 1, z: 0, origin: parseOrigin('top-left') } as LayoutNode
     expect(poseOffset(split, 2, 3, 10)).toMatchObject({ x: 8, y: 3 })
     expect(poseOffset(split, 0, 0, 10).z).toBeCloseTo(20)
   })

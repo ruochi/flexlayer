@@ -1,4 +1,4 @@
-import type { Anchor, Box } from './types.js'
+import type { Box, Origin, OriginAxis } from './types.js'
 
 /** 画布仿射矩阵：x' = a*x + c*y + e，y' = b*x + d*y + f。 */
 export type Matrix = {
@@ -85,26 +85,13 @@ export function intersectBox(a: Box, b: Box): Box {
   return { x, y, width: Math.max(0, right - x), height: Math.max(0, bottom - y) }
 }
 
-/** origin 在盒子内的偏移，缺省为中心。 */
-export function originOffset(anchor: Anchor | undefined, w: number, h: number): { x: number; y: number } {
-  switch (anchor ?? 'center') {
-    case 'top-left':
-      return { x: 0, y: 0 }
-    case 'top':
-      return { x: w / 2, y: 0 }
-    case 'top-right':
-      return { x: w, y: 0 }
-    case 'left':
-      return { x: 0, y: h / 2 }
-    case 'right':
-      return { x: w, y: h / 2 }
-    case 'bottom-left':
-      return { x: 0, y: h }
-    case 'bottom':
-      return { x: w / 2, y: h }
-    case 'bottom-right':
-      return { x: w, y: h }
-    default:
-      return { x: w / 2, y: h / 2 }
-  }
+function axisOffset(axis: OriginAxis, size: number): number {
+  if (axis.unit === 'px') return axis.value
+  return (axis.value / 100) * size
+}
+
+/** origin 在盒子内的偏移，缺省为中心。百分比按当前宽高算，所以盒子后来变了也仍然贴着那个比例。 */
+export function originOffset(origin: Origin | undefined, w: number, h: number): { x: number; y: number } {
+  if (!origin) return { x: w / 2, y: h / 2 }
+  return { x: axisOffset(origin.x, w), y: axisOffset(origin.y, h) }
 }

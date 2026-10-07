@@ -107,6 +107,12 @@ export type Anchor =
   | 'bottom-left'
   | 'bottom-right'
 
+/** 盒子内的一根轴。px 从左或上起算，percent 是 0 到 100。 */
+export type OriginAxis = { unit: 'px'; value: number } | { unit: 'percent'; value: number }
+
+/** 旋转和缩放的支点，相对布局盒子的左上角。缺省是中心。 */
+export type Origin = { x: OriginAxis; y: OriginAxis }
+
 export type TextLineReport = {
   text: string
   box: Rect
@@ -315,7 +321,7 @@ export type LayoutNodeBase = {
   scaleX: number
   scaleY: number
   /** 变换支点，缺省为盒子中心。 */
-  origin?: Anchor
+  origin?: Origin
   background?: string
   border?: { width: number; color: string }
   borderRadius?: number

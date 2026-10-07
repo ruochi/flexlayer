@@ -159,6 +159,7 @@ export namespace JSX {
         /** 直接子元素的视距，像素 */
         perspective?: number | string
         scale?: number | string
+        /** 支点。九宫格，或 `120 80`、`30% 40%` */
         origin?: string
         overflow?: string
         border?: string

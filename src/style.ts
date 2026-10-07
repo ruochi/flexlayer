@@ -1,3 +1,5 @@
+import type { Origin, OriginAxis } from './types.js'
+
 export type StyleMap = Record<string, string>
 
 export function parseStyle(text: string | undefined): StyleMap {
@@ -24,6 +26,99 @@ export function parseNumber(value: string | undefined): number | undefined {
   if (value == null || value.trim() === '') return undefined
   const n = Number(value)
   return Number.isFinite(n) ? n : undefined
+}
+
+const CENTER_ORIGIN: Origin = {
+  x: { unit: 'percent', value: 50 },
+  y: { unit: 'percent', value: 50 },
+}
+
+const NAMED_ORIGIN: Record<string, Origin> = {
+  center: CENTER_ORIGIN,
+  top: { x: { unit: 'percent', value: 50 }, y: { unit: 'percent', value: 0 } },
+  bottom: { x: { unit: 'percent', value: 50 }, y: { unit: 'percent', value: 100 } },
+  left: { x: { unit: 'percent', value: 0 }, y: { unit: 'percent', value: 50 } },
+  right: { x: { unit: 'percent', value: 100 }, y: { unit: 'percent', value: 50 } },
+  'top-left': { x: { unit: 'percent', value: 0 }, y: { unit: 'percent', value: 0 } },
+  'top-right': { x: { unit: 'percent', value: 100 }, y: { unit: 'percent', value: 0 } },
+  'bottom-left': { x: { unit: 'percent', value: 0 }, y: { unit: 'percent', value: 100 } },
+  'bottom-right': { x: { unit: 'percent', value: 100 }, y: { unit: 'percent', value: 100 } },
+}
+
+function axisLength(token: string, axis: 'x' | 'y'): OriginAxis | null {
+  const t = token.trim().toLowerCase()
+  if (axis === 'x') {
+    if (t === 'left') return { unit: 'percent', value: 0 }
+    if (t === 'center') return { unit: 'percent', value: 50 }
+    if (t === 'right') return { unit: 'percent', value: 100 }
+    if (t === 'top' || t === 'bottom') return null
+  } else {
+    if (t === 'top') return { unit: 'percent', value: 0 }
+    if (t === 'center') return { unit: 'percent', value: 50 }
+    if (t === 'bottom') return { unit: 'percent', value: 100 }
+    if (t === 'left' || t === 'right') return null
+  }
+  if (t.endsWith('%')) {
+    const n = parseNumber(t.slice(0, -1))
+    if (n == null) return null
+    return { unit: 'percent', value: n }
+  }
+  const px = parsePx(t)
+  if (px == null) return null
+  return { unit: 'px', value: px }
+}
+
+/** 词是横轴、纵轴，还是两边都能用。长度和 center 两边都能用。 */
+function axisRole(token: string): 'h' | 'v' | 'either' | 'bad' {
+  const t = token.trim().toLowerCase()
+  if (t === 'left' || t === 'right') return 'h'
+  if (t === 'top' || t === 'bottom') return 'v'
+  if (t === 'center') return 'either'
+  if (t.endsWith('%')) return parseNumber(t.slice(0, -1)) == null ? 'bad' : 'either'
+  return parsePx(t) == null ? 'bad' : 'either'
+}
+
+function assignOriginAxes(a: string, b: string): { x: string; y: string } | null {
+  const ra = axisRole(a)
+  const rb = axisRole(b)
+  if (ra === 'bad' || rb === 'bad') return null
+  if (ra === 'h' && rb === 'h') return null
+  if (ra === 'v' && rb === 'v') return null
+  if (ra === 'v' && rb === 'h') return { x: b, y: a }
+  if (ra === 'h') return { x: a, y: b }
+  if (rb === 'h') return { x: b, y: a }
+  if (ra === 'v') return { x: b, y: a }
+  if (rb === 'v') return { x: a, y: b }
+  return { x: a, y: b }
+}
+
+/**
+ * 旋转和缩放的支点。九宫格仍可用。
+ * 两个数是相对盒子左上角的像素，`30% 40%` 按宽高。词可以换顺序：`top 40` 和 `40 top` 一样。
+ * 只写一个数或百分比时，另一轴是中心。解析失败时退回中心，`invalid` 为 true。
+ */
+export function readOrigin(raw: string | undefined): { origin: Origin; invalid: boolean } {
+  if (raw == null || raw.trim() === '') return { origin: CENTER_ORIGIN, invalid: false }
+  const text = raw.trim().toLowerCase()
+  const named = NAMED_ORIGIN[text]
+  if (named) return { origin: named, invalid: false }
+  const parts = text.split(/[\s,]+/).filter(Boolean)
+  if (parts.length === 1) {
+    const x = axisLength(parts[0]!, 'x')
+    if (!x) return { origin: CENTER_ORIGIN, invalid: true }
+    return { origin: { x, y: { unit: 'percent', value: 50 } }, invalid: false }
+  }
+  if (parts.length !== 2) return { origin: CENTER_ORIGIN, invalid: true }
+  const assigned = assignOriginAxes(parts[0]!, parts[1]!)
+  if (!assigned) return { origin: CENTER_ORIGIN, invalid: true }
+  const x = axisLength(assigned.x, 'x')
+  const y = axisLength(assigned.y, 'y')
+  if (!x || !y) return { origin: CENTER_ORIGIN, invalid: true }
+  return { origin: { x, y }, invalid: false }
+}
+
+export function parseOrigin(raw: string | undefined): Origin {
+  return readOrigin(raw).origin
 }
 
 /** `1.2` 两轴相同；`1.2 0.8` 或 `-1 1` 分轴。解析失败时为 1。 */
