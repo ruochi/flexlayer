@@ -23,6 +23,22 @@ async function pixelAt(png: Buffer, x: number, y: number) {
 }
 
 describe('paint containers', () => {
+  it('没写 background 时 PNG 背景透明，写了颜色才铺底', async () => {
+    const bare = await renderFvg(`<layer width="16" height="16"><rect x="4" y="4" width="8" height="8" fill="#ff0000" /></layer>`)
+    const corner = await pixelAt(bare.png, 1, 1)
+    const center = await pixelAt(bare.png, 8, 8)
+    expect(bare.png[25]).toBe(6)
+    expect(corner[3]).toBe(0)
+    expect(center[0]).toBeGreaterThan(200)
+    expect(center[3]).toBe(255)
+
+    const clear = await renderFvg(`<layer width="16" height="16" background="transparent"></layer>`)
+    expect((await pixelAt(clear.png, 1, 1))[3]).toBe(0)
+
+    const white = await pixelAt((await renderFvg(`<layer width="16" height="16" background="#ffffff"></layer>`)).png, 1, 1)
+    expect([white[0], white[1], white[2], white[3]]).toEqual([255, 255, 255, 255])
+  })
+
   it('竖向 flex 的子元素画在容器中间', async () => {
     const root = h(
       'layer',

@@ -43,7 +43,7 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 | 透视写在父 `layer`，转动和 `z` 写在子元素 | `<rect perspective="900" rotateY="20">` | `<layer perspective="900"><rect rotateY="20" z="40" /></layer>` | `invalid-attr`、`flatten-3d` |
 | 球体、长方体、拉伸和 glb 放在带 `perspective` 的 layer 里 | `<sphere r="40">` 没有视距 | `<layer perspective="700"><sphere cx="80" cy="80" r="40" /></layer>`。`model` 只写 `src`，尺寸写在外包 layer | `flatten-3d`、`missing-model` |
 
-根节点 `<layer width height background>` 上的 `background` 是画布底色，只有这一处可以写。
+根节点 `<layer width height background>` 上的 `background` 是画布底色，只有这一处可以写。没写时不铺底色，PNG 里空出来的像素是透明的。要白底写 `background="#ffffff"`。
 
 带 `perspective` 的 layer 里，没有网格时直接子元素按中心深度从远到近画，深度相同按文档顺序。出现 `sphere`、`box`、`extrude`、`model` 时这一层改用深度缓冲，近的盖住远的。不在透视里时 `z` 不改变顺序，并报 `flatten-3d`。
 
