@@ -717,6 +717,27 @@ const { frames, contactSheet } = await renderComposition(scene)
 
 每一块都是 `canvas.create(<layer>…</layer>)`。参数必须已经是 `<layer>`，传入 `<h1>` 或 `<rect>` 会抛错。返回值就是这棵 `<layer>`，并带上量完之后的 `left`、`top`、`right`、`bottom`、`width`、`height`，供下一块的 `x`、`y` 使用。这六个数是布局盒，不含 `rotate` 和 `scale`。转完之后的外接矩形在 `rotatedBox`（同样有 `left`、`top`、`right`、`bottom`、`width`、`height`）。下一块要避开转过的内容，用 `rotatedBox.bottom`，不要用 `bottom`。位置写在 `<layer>` 的 `x`、`y`、`anchor` 上。`.layer` 仍是渲染器读的格式，`--emit` 把展开结果写回去。
 
+返回值上还有 `text`。没有文字时是空数组。每一项是一个文字节点，坐标相对这一层布局盒的左上角，和 `left`、`top` 同一套。
+
+| 字段 | 含义 |
+| --- | --- |
+| `path` | 相对这一层的路径，如 `h1[0]`、`div[0]/p[0]` |
+| `lines` | 排出来的行。一个字是只有一个字的一行；一行字是一条；换行之后几行就几条 |
+
+每一行：
+
+| 字段 | 含义 |
+| --- | --- |
+| `x`、`y`、`width`、`height` | 这一行的盒子 |
+| `baseline` | 这一行基线的 y。同一行只有一个 |
+| `chars` | 这一行里的字。每个字有 `text`、`x`、`width`。`width` 是到下一笔的距离，最后一个字不加多余字距。基线用所在行的 `baseline` |
+
+竖排时每个字自己占一行，列从右往左。两段文字各有自己的 `lines`，用 `path` 分开。
+
+只写了宽或只写了高、从而整层按比例缩放时，这些坐标已经乘上缩放，落在返回的宽高里面。这一层自己的 `rotate` 不算进去。嵌套层的位置和缩放算在里面。
+
+`glyph()` 的轮廓原点在字身左上角。把一个字摆回去：`x` 用 `chars` 里的 `x`，`y` 用 `line.baseline - glyph.baseline`。
+
 `create` 是同步的。字体、图片和 Yoga 在这一次调用里备好，并在进程里记住。后面再写一帧，或渲染一段视频，已经备过的直接接着用，不会重新下载、重新解码。`composition` 的 `component` 里可以调用。
 
 ```tsx

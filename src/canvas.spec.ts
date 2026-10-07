@@ -173,6 +173,142 @@ describe('canvas.create', () => {
     expect(freshImageLoadsCount()).toBe(images + 1)
   })
 
+  it('没有文字时 text 是空数组', () => {
+    const block = canvas.create(
+      h('layer', { width: '80', height: '40' }, h('rect', { width: '80', height: '40', fill: '#fff' })),
+    )
+    expect(block.text).toEqual([])
+  })
+
+  it('一个字、一行、多行都是 lines，字在行里面', () => {
+    const one = canvas.create(h('layer', {}, h('h1', { style: 'font-size:80px; white-space:nowrap' }, '春')))
+    expect(one.text).toHaveLength(1)
+    expect(one.text[0]!.path).toBe('h1[0]')
+    expect(one.text[0]!.lines).toHaveLength(1)
+    const charLine = one.text[0]!.lines[0]!
+    expect(charLine.chars.map((char) => char.text)).toEqual(['春'])
+    expect(charLine.chars[0]!.x).toBeCloseTo(charLine.x)
+    expect(charLine.chars[0]!.width).toBeCloseTo(charLine.width)
+    expect(charLine.baseline).toBeGreaterThan(charLine.y)
+    expect(charLine.baseline).toBeLessThan(charLine.y + charLine.height)
+
+    const row = canvas.create(h('layer', {}, h('h1', { style: 'font-size:40px; white-space:nowrap' }, '春眠不觉晓')))
+    expect(row.text[0]!.lines).toHaveLength(1)
+    const line = row.text[0]!.lines[0]!
+    expect(line.chars.map((char) => char.text).join('')).toBe('春眠不觉晓')
+    let pen = line.x
+    for (const char of line.chars) {
+      expect(char.x).toBeCloseTo(pen)
+      pen += char.width
+    }
+    expect(pen).toBeCloseTo(line.x + line.width)
+
+    const wrapped = canvas.create(
+      h('layer', { width: '80' }, h('p', { style: 'font-size:40px' }, '春眠不觉晓处处闻啼鸟')),
+    )
+    const lines = wrapped.text[0]!.lines
+    expect(wrapped.text[0]!.path).toBe('p[0]')
+    expect(lines.length).toBeGreaterThan(1)
+    expect(lines[1]!.baseline).toBeGreaterThan(lines[0]!.baseline)
+    expect(lines[1]!.y).toBeGreaterThanOrEqual(lines[0]!.y + lines[0]!.height - 0.5)
+  })
+
+  it('字距算进笔位，居中和内边距挪动行盒', () => {
+    const tight = canvas.create(h('layer', {}, h('p', { style: 'font-size:40px; white-space:nowrap' }, 'AB')))
+    const spaced = canvas.create(
+      h('layer', {}, h('p', { style: 'font-size:40px; white-space:nowrap; letter-spacing:10px' }, 'AB')),
+    )
+    const tightChars = tight.text[0]!.lines[0]!.chars
+    const spacedChars = spaced.text[0]!.lines[0]!.chars
+    expect(spacedChars).toHaveLength(2)
+    expect(spacedChars[1]!.x - spacedChars[0]!.x).toBeGreaterThan(tightChars[1]!.x - tightChars[0]!.x + 5)
+    expect(spacedChars[1]!.x).toBeCloseTo(spacedChars[0]!.x + spacedChars[0]!.width)
+
+    const centered = canvas.create(
+      h(
+        'layer',
+        { width: '300', height: '80', safe: '0' },
+        h('h1', { style: 'font-size:40px; white-space:nowrap; text-align:center; width:300px' }, '春'),
+      ),
+    )
+    const centeredLine = centered.text[0]!.lines[0]!
+    expect(centeredLine.x + centeredLine.width / 2).toBeCloseTo(150, 0)
+
+    const padded = canvas.create(
+      h('layer', {}, h('p', { style: 'font-size:40px; white-space:nowrap; padding:16px' }, '春')),
+    )
+    expect(padded.text[0]!.lines[0]!.x).toBeCloseTo(16)
+    expect(padded.text[0]!.lines[0]!.y).toBeCloseTo(16)
+  })
+
+  it('两段文字用 path 分开，竖排每个字一行', () => {
+    const block = canvas.create(
+      h(
+        'layer',
+        {},
+        h(
+          'div',
+          { style: 'display:flex; flex-direction:column; gap:24px; align-items:flex-start' },
+          h('p', { style: 'font-size:40px; white-space:nowrap' }, '甲'),
+          h('p', { style: 'font-size:40px; white-space:nowrap' }, '乙'),
+        ),
+      ),
+    )
+    expect(block.text.map((item) => item.path)).toEqual(['div[0]/p[0]', 'div[0]/p[1]'])
+    const [first, second] = block.text
+    expect(second!.lines[0]!.y).toBeCloseTo(first!.lines[0]!.y + first!.lines[0]!.height + 24, 0)
+
+    const column = canvas.create(
+      h('layer', {}, h('h1', { style: 'writing-mode:vertical-rl; font-size:40px; letter-spacing:8px' }, '寒露')),
+    )
+    const lines = column.text[0]!.lines
+    expect(lines.map((item) => item.chars.map((char) => char.text).join(''))).toEqual(['寒', '露'])
+    expect(lines[1]!.y).toBeCloseTo(lines[0]!.y + lines[0]!.height + 8, 0)
+    expect(lines[1]!.x).toBeCloseTo(lines[0]!.x, 0)
+    expect(lines[1]!.baseline).toBeGreaterThan(lines[0]!.baseline)
+  })
+
+  it('嵌套层的位置和缩放算进坐标，这一层自己的 rotate 不算', () => {
+    const plain = canvas.create(h('layer', {}, h('p', { style: 'font-size:40px; white-space:nowrap' }, '春')))
+    const turned = canvas.create(
+      h('layer', { rotate: '30' }, h('p', { style: 'font-size:40px; white-space:nowrap' }, '春')),
+    )
+    expect(turned.text[0]!.lines[0]!.baseline).toBeCloseTo(plain.text[0]!.lines[0]!.baseline)
+    expect(turned.text[0]!.lines[0]!.x).toBeCloseTo(plain.text[0]!.lines[0]!.x)
+
+    const nested = canvas.create(
+      h('layer', {}, h('layer', { x: '12', y: '20' }, h('p', { style: 'font-size:40px; white-space:nowrap' }, '春'))),
+    )
+    expect(nested.text[0]!.path).toBe('layer[0]/p[0]')
+    expect(nested.text[0]!.lines[0]!.x).toBeCloseTo(plain.text[0]!.lines[0]!.x + 12)
+    expect(nested.text[0]!.lines[0]!.y).toBeCloseTo(plain.text[0]!.lines[0]!.y + 20)
+
+    const scaled = canvas.create(
+      h(
+        'layer',
+        { width: '400', height: '400', safe: '0' },
+        h(
+          'layer',
+          { width: '200', height: '200', scale: '2', origin: 'top-left' },
+          h('p', { style: 'font-size:40px; white-space:nowrap' }, '春'),
+        ),
+      ),
+    )
+    expect(scaled.text[0]!.lines[0]!.width).toBeCloseTo(plain.text[0]!.lines[0]!.width * 2, 0)
+    expect(scaled.text[0]!.lines[0]!.baseline).toBeCloseTo(plain.text[0]!.lines[0]!.baseline * 2, 0)
+  })
+
+  it('只写宽时文字坐标落在缩放后的盒子里', () => {
+    const block = canvas.create(
+      h('layer', { width: '180' }, h('h1', { style: 'font-size:40px; white-space:nowrap' }, '春眠')),
+    )
+    const line = block.text[0]!.lines[0]!
+    expect(block.width).toBeCloseTo(180)
+    expect(line.x + line.width).toBeCloseTo(180, 0)
+    expect(line.y).toBeGreaterThanOrEqual(-0.5)
+    expect(line.baseline).toBeLessThanOrEqual(block.height + 0.5)
+  })
+
   it('字体还没注册时直接报错，注册后再按真字体量', () => {
     const src = ['/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf', '/usr/share/fonts/truetype/croscore/Cousine-Regular.ttf'].find(
       (path) => existsSync(path),

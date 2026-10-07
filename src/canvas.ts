@@ -7,6 +7,7 @@ import { fontFamiliesOf, measureLayer, noteMeasuredSize, parseSafe, prepareAsset
 import type { FvgNode } from './parse.js'
 import { isDisplayFlex } from './rules.js'
 import { parseNumber } from './style.js'
+import { placedText, type PlacedText } from './placed-text.js'
 import { isTextBoxTag } from './text.js'
 import type { Anchor, Issue } from './types.js'
 
@@ -67,6 +68,8 @@ export type LayerBox = {
   height: number
 }
 
+export type { PlacedChar, PlacedLine, PlacedText } from './placed-text.js'
+
 export type CreatedLayer = FvgNode & LayerBox & {
   issues: Issue[]
   /**
@@ -74,6 +77,11 @@ export type CreatedLayer = FvgNode & LayerBox & {
    * 下一块要避开转过的内容时，用 `rotatedBox.bottom`。
    */
   rotatedBox: LayerBox
+  /**
+   * 这一层里的文字，按节点分组。没有文字时是空数组。
+   * 坐标相对布局盒左上角。一个字是只有一个字的一行，多行是 `lines` 数组。
+   */
+  text: PlacedText[]
 }
 
 function parseAnchor(raw: string | undefined, fallback: Anchor = 'top-left'): Anchor {
@@ -154,6 +162,7 @@ export function create(node: FvgNode): CreatedLayer {
   const widthSet = node.attrs.width != null && node.attrs.width !== ''
   const heightSet = node.attrs.height != null && node.attrs.height !== ''
   const oneSide = widthSet !== heightSet
+  let fitScale = 1
   if (oneSide && !wraps(node)) {
     const key = widthSet ? 'width' : 'height'
     const saved = node.attrs[key]!
@@ -165,6 +174,7 @@ export function create(node: FvgNode): CreatedLayer {
     const target = parseNumber(saved)
     if (naturalSide > 0 && target != null) {
       const scale = target / naturalSide
+      fitScale = scale
       const other = key === 'width' ? 'height' : 'width'
       const otherSize = (key === 'width' ? natural.height : natural.width) * scale
       node.attrs[other] = String(otherSize)
@@ -189,6 +199,7 @@ export function create(node: FvgNode): CreatedLayer {
   return Object.assign(node, box, {
     rotatedBox: rotatedBoxOf(node, box),
     issues,
+    text: placedText(laid, fitScale),
   })
 }
 
