@@ -93,6 +93,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | `shadow`、`glow`、`inner-shadow`、`inner-glow`、`blur`、`backdrop-blur`、`glass`、`noise`、`filter`、`blend` | 图形和 `layer` 写属性；文字写在 `style`。见第 9 章 |
 | `perspective`、`overlay`、`grade`、`grade-mask` | 只写在 `layer` 上。写在别处或写进 `style` 报 `warn` |
 | `data` | 任何元素都可以写。值是 JSON；程序里直接传对象或数组。`draw` 读 `el.data`，不在 `el.attr` |
+| `expect` | 任何元素都可以写。声明预期中的问题码，出现在该节点或子树里时降为 info。没出现报 `unused-expect` |
 <!-- attrs:ownership:end -->
 
 叶子的定位：
@@ -591,11 +592,14 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 | `behind-camera` | warn | 平面或网格的 `z` 大于等于所在 layer 的 `perspective`，不绘制 |
 | `emit-draw` | warn | `--emit` 时 `draw` 函数用了外部变量，或读不出函数体。按语法判断：字符串、注释，以及同一条声明里的多个名字，都不算外部变量。这种 `<draw>` 不会写进 `.layer` |
 | `emit-data` | warn | `--emit` 时 `data` 含函数、`Map`、循环引用或其它不能写成 JSON 的值，没有写回这个属性 |
+| `unused-expect` | warn | 节点写了 `expect`，但该节点和子树里没有这个问题码。多帧检查时，只要有一帧用上就不报。字段 `expect.code` 是没对上的问题码 |
 | `nondeterministic` | warn | `.tsx` 里调用了 `Math.random()`、`Date.now()`、`crypto.randomUUID()` 或 `crypto.getRandomValues()`。字符串、注释和类型里的同名文字不算。同一帧可能得到不同的图 |
 | `type-error` | error | `.tsx` 等源文件的 TypeScript 诊断。`.layer` 不跑类型检查 |
 | `measure-mismatch` | warn | `canvas.create` 量到的宽高和最终排版不一致。消息里带上两个尺寸。常见原因是 `width`、`safe` 或字号和最终画布不一样 |
 
 每条问题都可以带 `hint`，是可以直接照做的改法。从 `.tsx` 来的节点，问题和元素还可以带 `source`，形如 `examples/hello.tsx:18:5`。`.layer` 解析出来的节点没有这个字段。Composition 抽查出来的问题带 `frame`，是这一段第一次出现的帧号，并带 `frames`：含两端的区间，例如 `[[120, 180]]`。抽查序列里连续出现的合成一段；`--step` 大于 1 时，相邻的抽查帧也算连续，所以 120、125、130 合成 `[120, 130]`。中间有一帧抽到了、但这条问题没出现，就另起一段。区间里没被抽到的帧不表示检查过。帧号不写进 `message`。
+
+任何元素可以写 `expect="overflow-canvas: 出血图; text-overlap"`。分号分开，冒号后面是原因，可以不写。问题的 `path` 等于这个节点或在它子树里、并且 `code` 对得上时，级别降成 `info`，并带上 `expected`（原因原文）。没对上的报 `unused-expect`（warn），`expect.code` 是那个问题码。不认识的问题码报 `invalid-attr`。多帧合并时，只要有一帧用上了这句 `expect`，就不报 `unused-expect`。
 
 ## 11. 命令行
 

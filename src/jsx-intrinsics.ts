@@ -17,6 +17,8 @@ type FvgNodeBase = {
   draw?: DrawFn
   /** 结构化数据。`draw` 里读 `el.data`，不要把对象塞进别的属性。 */
   data?: unknown
+  /** 预期中的问题码，例如 `overflow-canvas: 出血图`。 */
+  expect?: string
   children?: JsxChild
   [name: string]: JsxAttr | unknown
 }

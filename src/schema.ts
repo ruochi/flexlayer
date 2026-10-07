@@ -3,7 +3,7 @@
  * 不认识的属性不在表里，留给 draw，不报错。
  */
 
-export type DocGroup = 'layer' | 'transform' | 'html' | 'graphic' | 'image' | 'effect' | 'layer-only' | 'data'
+export type DocGroup = 'layer' | 'transform' | 'html' | 'graphic' | 'image' | 'effect' | 'layer-only' | 'data' | 'expect'
 
 export type AttrDef = {
   name: string
@@ -147,6 +147,7 @@ export const ATTRS: AttrDef[] = [
   { name: 'transform', docGroup: 'graphic' },
   { name: 'src', docGroup: 'image' },
   { name: 'data', docGroup: 'data', jsxType: 'unknown', example: '{"values":[3,5,8]}' },
+  { name: 'expect', docGroup: 'expect', example: 'overflow-canvas: 出血图' },
   { name: 'alt', docGroup: 'image' },
   {
     name: 'shadow',
@@ -303,7 +304,7 @@ export const LAYER_ONLY_ATTRS: string[] = ATTRS.filter((attr) => attr.layerOnlyA
 
 export const EFFECT_ATTRS: string[] = ATTRS.filter((attr) => attr.effect).map((attr) => attr.name)
 
-const DOC_GROUP_ORDER: DocGroup[] = ['layer', 'transform', 'html', 'graphic', 'image', 'effect', 'layer-only', 'data']
+const DOC_GROUP_ORDER: DocGroup[] = ['layer', 'transform', 'html', 'graphic', 'image', 'effect', 'layer-only', 'data', 'expect']
 
 const DOC_GROUP_LABEL: Record<DocGroup, string> = {
   layer: '`width`、`height` 以及 `x`、`y`、`anchor`。`x`、`y` 是左上角，默认 0；`anchor` 默认 `top-left`。HTML 上写了报 `warn`',
@@ -314,6 +315,7 @@ const DOC_GROUP_LABEL: Record<DocGroup, string> = {
   effect: '图形和 `layer` 写属性；文字写在 `style`。见第 9 章',
   'layer-only': '只写在 `layer` 上。写在别处或写进 `style` 报 `warn`',
   data: '任何元素都可以写。值是 JSON；程序里直接传对象或数组。`draw` 读 `el.data`，不在 `el.attr`',
+  expect: '任何元素都可以写。声明预期中的问题码，出现在该节点或子树里时降为 info。没出现报 `unused-expect`',
 }
 
 function namesIn(group: DocGroup): string {

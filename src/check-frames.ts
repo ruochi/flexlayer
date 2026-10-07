@@ -70,8 +70,22 @@ export function mergeFrameIssues(parts: Array<{ frame: number; issues: Issue[] }
   }
   closeMissing(new Set())
 
-  return closed.map(({ issue, frames }) => {
-    issue.frames = frames
-    return issue
-  })
+  return closed
+    .map(({ issue, frames }) => {
+      issue.frames = frames
+      return issue
+    })
+    .filter((issue) => issue.code !== 'unused-expect' || !expectUsedIn(parts, issue))
+}
+
+function expectUsedIn(parts: Array<{ frame: number; issues: Issue[] }>, issue: Issue): boolean {
+  const code = issue.expect?.code
+  if (!code) return false
+  for (const part of parts) {
+    for (const other of part.issues) {
+      if (other.code !== code) continue
+      if (other.path === issue.path || other.path.startsWith(`${issue.path}/`)) return true
+    }
+  }
+  return false
 }

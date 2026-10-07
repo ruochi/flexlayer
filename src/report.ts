@@ -562,6 +562,8 @@ export function buildReport(doc: FvgDocument): FvgReport {
     }
   }
 
+  applyExpects(doc.root, issues)
+
   const sources = doc.sources
   if (sources && sources.size > 0) {
     for (const el of elements) {
@@ -581,6 +583,96 @@ export function buildReport(doc: FvgDocument): FvgReport {
     height: doc.height,
     elements,
     issues,
+  }
+}
+
+/** 可以写进 expect 的问题码。不含 unused-expect 自己。 */
+const EXPECT_CODES = new Set([
+  'overflow-canvas',
+  'outside-safe',
+  'text-overflow',
+  'flex-overflow',
+  'text-overlap',
+  'min-font-size',
+  'auto-wrap',
+  'non-canonical',
+  'unknown-tag',
+  'invalid-attr',
+  'invalid-child',
+  'empty-mask',
+  'invalid-draw',
+  'missing-image',
+  'missing-model',
+  'missing-symbol',
+  'symbol-cycle',
+  'open-curve-fill',
+  'effect-clipped',
+  'flatten-3d',
+  'behind-camera',
+  'emit-draw',
+  'emit-data',
+  'nondeterministic',
+  'type-error',
+  'measure-mismatch',
+])
+
+type ExpectDecl = { path: string; code: string; reason?: string; used: boolean }
+
+function expectCovers(expectPath: string, issuePath: string): boolean {
+  return issuePath === expectPath || issuePath.startsWith(`${expectPath}/`)
+}
+
+function collectExpects(node: LayoutNode, decls: ExpectDecl[], issues: Issue[]) {
+  const raw = node.attr.expect?.trim()
+  if (raw) {
+    for (const part of raw.split(';')) {
+      const piece = part.trim()
+      if (!piece) continue
+      const colon = piece.indexOf(':')
+      const code = (colon < 0 ? piece : piece.slice(0, colon)).trim()
+      const reason = colon < 0 ? '' : piece.slice(colon + 1).trim()
+      if (!EXPECT_CODES.has(code)) {
+        issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: node.path,
+          message: `expect 不认识 ${code}`,
+          hint: '写成报告里已有的问题码，例如 overflow-canvas',
+        })
+        continue
+      }
+      decls.push({ path: node.path, code, reason: reason || undefined, used: false })
+    }
+  }
+  if (node.kind === 'layer' && node.mask) {
+    for (const shape of node.mask) collectExpects(shape, decls, issues)
+  }
+  if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
+    for (const child of node.children) collectExpects(child, decls, issues)
+  }
+}
+
+function applyExpects(root: LayoutNode, issues: Issue[]) {
+  const decls: ExpectDecl[] = []
+  collectExpects(root, decls, issues)
+  for (const issue of issues.slice()) {
+    const hits = decls.filter((decl) => decl.code === issue.code && expectCovers(decl.path, issue.path))
+    if (hits.length === 0) continue
+    for (const hit of hits) hit.used = true
+    const deepest = hits.reduce((best, hit) => (hit.path.length >= best.path.length ? hit : best))
+    issue.level = 'info'
+    if (deepest.reason) issue.expected = deepest.reason
+  }
+  for (const decl of decls) {
+    if (decl.used) continue
+    issues.push({
+      level: 'warn',
+      code: 'unused-expect',
+      path: decl.path,
+      message: `没有出现 ${decl.code}`,
+      hint: '删掉这句 expect，或确认问题码写的是子树里真会出现的那一个',
+      expect: { code: decl.code },
+    })
   }
 }
 

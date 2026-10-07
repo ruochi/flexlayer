@@ -90,6 +90,10 @@ export type Issue = {
   frame?: number
   /** 这条问题出现的帧区间，两端都包含。抽查序列里连续出现的帧合成一段。 */
   frames?: Array<[number, number]>
+  /** `expect` 把这条问题降成 info 时，作者写的原因。 */
+  expected?: string
+  /** `unused-expect` 没有对上的问题码。 */
+  expect?: { code: string }
 }
 
 export type Anchor =

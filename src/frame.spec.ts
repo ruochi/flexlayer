@@ -167,6 +167,34 @@ describe('抽查帧', () => {
     })
     expect(formatIssueLine(merged[0]!)).toContain('第120–130帧、第145帧')
   })
+
+  it('有一帧用上 expect 时，不再报 unused-expect', () => {
+    const unused = {
+      level: 'warn' as const,
+      code: 'unused-expect',
+      path: 'layer',
+      message: '没有出现 overflow-canvas',
+      expect: { code: 'overflow-canvas' },
+    }
+    const hit = {
+      level: 'info' as const,
+      code: 'overflow-canvas',
+      path: 'layer/circle[0]',
+      message: '着墨超出画布',
+      expected: '出血图',
+    }
+    const used = mergeFrameIssues([
+      { frame: 0, issues: [unused] },
+      { frame: 1, issues: [hit] },
+    ])
+    expect(used.map((issue) => issue.code)).toEqual(['overflow-canvas'])
+    const missed = mergeFrameIssues([
+      { frame: 0, issues: [unused] },
+      { frame: 1, issues: [unused] },
+    ])
+    expect(missed.map((issue) => issue.code)).toEqual(['unused-expect'])
+    expect(missed[0]?.frames).toEqual([[0, 1]])
+  })
 })
 
 describe('interpolate / spring / sequence', () => {
