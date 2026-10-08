@@ -252,11 +252,14 @@ export namespace JSX {
     h2: FvgHtml
     h3: FvgHtml
     p: FvgHtml
+    /** 排布容器。可以直接放文字、图片，以及写了宽高的 layer。 */
     div: FvgHtml
     span: FvgHtml
     strong: FvgHtml
     b: FvgHtml
     em: FvgHtml
+    i: FvgHtml
+    u: FvgHtml
     br: FvgHtml
     /** HTML 图片。src、alt 是属性，宽高写 style。`image` 与 `img` 相同。 */
     img: FvgHtml & { src?: string; alt?: string }

@@ -5,7 +5,7 @@ import { registerComponent } from './components.js'
 import { ensureBuiltinFontsSync, fontReady, registerFontPath, resolveFontSrcSync } from './fonts.js'
 import { fontFamiliesOf, measureLayer, noteMeasuredSize, parseSafe, prepareAssetsSync, type MeasureEnv } from './layout.js'
 import type { FvgNode } from './parse.js'
-import { isDisplayFlex } from './rules.js'
+import { divHasFlowBreak, isDisplayFlex } from './rules.js'
 import { placedText, type PlacedText } from './placed-text.js'
 import { parseNumber, parseOrigin, parseScale } from './style.js'
 import { isTextBoxTag } from './text.js'
@@ -115,7 +115,7 @@ function topLeft(x: number, y: number, w: number, h: number, anchor: Anchor): { 
 
 function wraps(node: FvgNode): boolean {
   const flex = isDisplayFlex(node.attrs.style)
-  if (isTextBoxTag(node.tag) && !flex) {
+  if (isTextBoxTag(node.tag) && !flex && !divHasFlowBreak(node)) {
     return !/white-space\s*:\s*nowrap/.test(node.attrs.style ?? '')
   }
   return node.children.some((child) => typeof child !== 'string' && wraps(child))

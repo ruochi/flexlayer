@@ -74,6 +74,139 @@ describe('layoutSource', () => {
     expect(doc.issues.some((issue) => issue.code === 'invalid-attr' && issue.hint?.includes('x、y、width、height'))).toBe(true)
   })
 
+  it('div 里直接放 p 时从上到下靠起点排', async () => {
+    const doc = await layoutSource(
+      `<layer width="800" height="400"><div><p style="font-size:40px">甲</p><p style="font-size:40px">甲乙丙丁</p></div></layer>`,
+      process.cwd(),
+    )
+    expect(doc.issues.filter((issue) => issue.code === 'invalid-child')).toEqual([])
+    const column = doc.root.children[0] as {
+      kind: string
+      direction: string
+      children: Array<{ tag: string; x: number; y: number; width: number; textLayout: { contentWidth: number; lines: Array<{ segments: Array<{ text: string }> }> } }>
+    }
+    expect(column.kind).toBe('flex')
+    expect(column.direction).toBe('column')
+    expect(column.children.map((child) => child.tag)).toEqual(['p', 'p'])
+    expect(column.children.map((child) => child.x)).toEqual([0, 0])
+    expect(column.children[0]!.width).toBeCloseTo(column.children[1]!.width, 0)
+    expect(column.children[0]!.width).toBeGreaterThan(column.children[0]!.textLayout.contentWidth + 5)
+    expect(column.children[1]!.y).toBeGreaterThan(column.children[0]!.y)
+    const textOf = (child: (typeof column.children)[number]) => child.textLayout.lines.map((line) => line.segments.map((seg) => seg.text).join('')).join('')
+    expect(column.children.map(textOf)).toEqual(['甲', '甲乙丙丁'])
+  })
+
+  it('div 里夹在段落旁的文字仍画出来，并用 div 的字号', async () => {
+    const doc = await layoutSource(
+      `<layer width="800" height="400"><div style="font-size:32px">前言<p>正文</p></div></layer>`,
+      process.cwd(),
+    )
+    expect(doc.issues.filter((issue) => issue.code === 'invalid-child')).toEqual([])
+    const column = doc.root.children[0] as {
+      children: Array<{ textLayout: { fontSize: number; lines: Array<{ segments: Array<{ text: string }> }> } }>
+    }
+    const textOf = (child: (typeof column.children)[number]) =>
+      child.textLayout.lines.map((line) => line.segments.map((seg) => seg.text).join('')).join('')
+    expect(column.children.map(textOf)).toEqual(['前言', '正文'])
+    expect(column.children.map((child) => child.textLayout.fontSize)).toEqual([32, 32])
+  })
+
+  it('div 上的字号和颜色传给 p，标题仍用自己的字号', async () => {
+    const doc = await layoutSource(
+      `<layer width="800" height="400" color="#111111"><div style="font-size:22px; color:#abcdef; font-family:Kai"><p>甲</p><h3>标题</h3></div></layer>`,
+      process.cwd(),
+    )
+    const column = doc.root.children[0] as {
+      children: Array<{ tag: string; textLayout: { fontSize: number; lines: Array<{ segments: Array<{ style: { color: string; fontFamily: string } }> }> } }>
+    }
+    const [paragraph, heading] = column.children
+    expect(paragraph?.tag).toBe('p')
+    expect(paragraph?.textLayout.fontSize).toBe(22)
+    expect(paragraph?.textLayout.lines[0]?.segments[0]?.style.color).toBe('#abcdef')
+    expect(paragraph?.textLayout.lines[0]?.segments[0]?.style.fontFamily).toBe('Kai')
+    expect(heading?.tag).toBe('h3')
+    expect(heading?.textLayout.fontSize).toBe(48)
+    expect(heading?.textLayout.lines[0]?.segments[0]?.style.color).toBe('#abcdef')
+    expect(heading?.textLayout.lines[0]?.segments[0]?.style.fontFamily).toBe('Kai')
+  })
+
+  it('写了宽度的 div 里，段落拉满后 text-align 才能居中', async () => {
+    const doc = await layoutSource(
+      `<layer width="800" height="300" safe="0"><div style="width:400px"><p style="text-align:center">甲</p></div></layer>`,
+      process.cwd(),
+    )
+    const column = doc.root.children[0] as { width: number; children: Array<{ width: number; textAlign: string; textLayout: { contentWidth: number } }> }
+    const paragraph = column.children[0]!
+    expect(column.width).toBeCloseTo(400, 0)
+    expect(paragraph.width).toBeCloseTo(400, 0)
+    expect(paragraph.textAlign).toBe('center')
+    expect(paragraph.textLayout.contentWidth).toBeLessThan(paragraph.width)
+  })
+
+  it('em 是斜体，u 带下划线', async () => {
+    const doc = await layoutSource(
+      `<layer width="400" height="200" safe="0"><p style="font-size:40px">甲<em>乙</em><u>丙</u></p></layer>`,
+      process.cwd(),
+    )
+    const paragraph = doc.root.children[0] as {
+      textLayout: { lines: Array<{ segments: Array<{ text: string; style: { fontStyle?: string; underline?: boolean } }> }> }
+    }
+    const segments = paragraph.textLayout.lines.flatMap((line) => line.segments)
+    expect(segments.find((seg) => seg.text === '乙')?.style.fontStyle).toBe('italic')
+    expect(segments.find((seg) => seg.text === '甲')?.style.fontStyle).toBeUndefined()
+    expect(segments.find((seg) => seg.text === '丙')?.style.underline).toBe(true)
+  })
+
+  it('div 里的 layer 占一格，图形用这一层的局部坐标', async () => {
+    const doc = await layoutSource(
+      `<layer width="480" height="200" safe="0"><div style="display:flex; gap:24px; align-items:center"><layer width="80" height="80"><circle cx="40" cy="40" r="20" fill="#e8b04a" /></layer><p style="font-size:32px">标题</p></div></layer>`,
+      process.cwd(),
+    )
+    expect(doc.issues.filter((issue) => issue.code === 'invalid-child' || issue.code === 'invalid-attr')).toEqual([])
+    const row = doc.root.children[0] as {
+      kind: string
+      direction: string
+      children: Array<{ tag: string; kind: string; x: number; y: number; width: number; height: number; children?: Array<{ x: number; y: number; width: number }> }>
+    }
+    expect(row.kind).toBe('flex')
+    expect(row.direction).toBe('row')
+    const [graphic, title] = row.children
+    expect(graphic).toMatchObject({ tag: 'layer', kind: 'layer', x: 0, width: 80, height: 80 })
+    expect(graphic?.children?.[0]).toMatchObject({ x: 20, y: 20, width: 40 })
+    expect(title?.tag).toBe('p')
+    expect(title!.x).toBeGreaterThan(graphic!.x + graphic!.width)
+  })
+
+  it('没写 display:flex 的 div 里，layer 和段落上下排', async () => {
+    const doc = await layoutSource(
+      `<layer width="400" height="240" safe="0"><div><layer width="80" height="40"><rect x="0" y="0" width="80" height="40" fill="#fff" /></layer><p style="font-size:32px">说明</p></div></layer>`,
+      process.cwd(),
+    )
+    expect(doc.issues.filter((issue) => issue.code === 'invalid-child')).toEqual([])
+    const column = doc.root.children[0] as { direction: string; children: Array<{ tag: string; y: number; height: number }> }
+    expect(column.direction).toBe('column')
+    expect(column.children.map((child) => child.tag)).toEqual(['layer', 'p'])
+    expect(column.children[1]!.y).toBeGreaterThanOrEqual(column.children[0]!.height)
+  })
+
+  it('p 里可以直接放图片', async () => {
+    const doc = await layoutSource(
+      `<layer width="400" height="200" safe="0"><p style="font-size:32px">见图<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" style="width:12px; height:12px" /></p></layer>`,
+      process.cwd(),
+    )
+    expect(doc.issues.filter((issue) => issue.code === 'invalid-child')).toEqual([])
+    const row = doc.root.children[0] as { kind: string; direction: string; children: Array<{ kind: string; tag: string }> }
+    expect(row.kind).toBe('flex')
+    expect(row.direction).toBe('row')
+    expect(row.children.map((child) => child.kind)).toEqual(['text', 'image'])
+  })
+
+  it('只放文字的 div 仍是文字盒子', async () => {
+    const doc = await layoutSource(`<layer width="400" height="200"><div style="font-size:40px">甲</div></layer>`, process.cwd())
+    expect(doc.root.children[0]?.kind).toBe('text')
+    expect(doc.issues.filter((issue) => issue.code === 'invalid-child')).toEqual([])
+  })
+
   it('竖排 flex 把文字排成一列', async () => {
     const doc = await layoutSource(
       `<layer width="800" height="400"><div style="display:flex; flex-direction:column; gap:20px"><p style="font-size:40px">甲</p><p style="font-size:40px">乙</p></div></layer>`,

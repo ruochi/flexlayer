@@ -160,6 +160,12 @@ describe('mathml', () => {
     expect(findByTag(doc.root, 'math')[0]!.width).toBeGreaterThan(0)
   })
 
+  it('div 里可以直接放 math', async () => {
+    const doc = await layoutSource(frame('<div><span>因此</span><math><mi>x</mi></math></div>'), process.cwd())
+    expect(doc.issues.some((i) => i.code === 'invalid-child')).toBe(false)
+    expect(findByTag(doc.root, 'math')).toHaveLength(1)
+  })
+
   it('文字盒子里的 math 报 invalid-child', async () => {
     const doc = await layoutSource(frame('<p>因此<math><mi>x</mi></math></p>'), process.cwd())
     expect(doc.issues.some((i) => i.code === 'invalid-child')).toBe(true)

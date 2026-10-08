@@ -45,7 +45,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 | 类别 | 标签 |
 | --- | --- |
-| 容器 | `layer`（嵌套不填背景）。横排竖排用带 `display:flex` 的 `div` |
+| 容器 | `layer`（嵌套不填背景）。`div` 里放 `p` 或标题时从上到下排；横排和间距用 `display:flex` |
 | 绘制 | `draw`（子标签，正文 JS；程序侧也可用 `draw={fn}`） |
 | 文字 | `h1`、`h2`、`h3`、`p`、`div`、`span`；行内：`span`、`strong`、`b`、`em`、`br` |
 | 图片 | `img`（`image` 是同一个标签） |
@@ -151,7 +151,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 `border`、`border-radius`、`overflow` 写在 `layer` 的属性上，不写 `style`。**`layer` 不填背景**：它只合成子元素画出来的内容。色块用 `rect` 的 `fill`、HTML 的 `style="background: …"`，或子标签 `<draw>` 自己画。`layer` / `use` 上写 `background` 会警告并忽略。画布底色只写在根节点 `<layer background>`。根上没写时不铺底色，输出的 PNG 背景是透明的。
 
-一组 HTML 要放到画面上，包一层 `layer`，把 `x`、`y`、`anchor` 写在 `layer` 上。
+一组 HTML 要放到画面上，包一层 `layer`，把 `x`、`y`、`anchor` 写在 `layer` 上。写了宽高的 `layer` 也可以放进 `div`，和文字、图片排在一起，见 4.2。图形用这一层的局部坐标。这一层作为 flex 或块级子项时，位置由排布决定。
 
 `symbol` 定义一块可复用的图，本身不画出来。`use` 按 layer 的方式摆放它：`x`、`y`、`anchor`、`rotate`、`scale`、`opacity` 都写在 `use` 上。`symbol` 里的坐标是它自己的局部坐标。
 
@@ -181,7 +181,20 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 `display:flex` 把 `div`（以及其他文字标签）变成排布容器，不再当文字盒子。默认横向。竖排写 `flex-direction:column`。子元素是文字、图片、flex 容器或 `layer`。
 
-图形要放进 flex，包一层写了宽高的 `layer`，或者改用 `div` 盒子（`width`、`height`、`background`、`border-radius`）。形状直接放进来会照尺寸渲染并报 `info`；线条直接放进来不渲染，报 `warn`。两点坐标写在 flex 里的形状上不渲染，报 `warn`。
+没写 `display:flex` 的 `div`，只要里面有行内标签放不下的子元素（`h1`–`h3`、`p`、`div`、图片、`math`、`layer`、形状等），就按块级从上到下排，等同于补上 `display:flex; flex-direction:column`。没写 `align-items` 时，文字块拉到这一列的内容宽度：写了 `width` 就用这个宽，没写就跟最宽的一块。已经写了 `align-items` 就沿用。这些子元素会画出来，不报 `invalid-child`。夹在旁边的文字单独成段。只放文字和行内标签时，`div` 仍是文字盒子。
+
+`div` 和 `display:flex` 上写的 `font-size`、`font-weight`、`font-family`、`color`、`letter-spacing`、`line-height`、`text-align` 会传给里面没写这些的 `p`、`div`、`span`。`h1`–`h3` 仍用自己的默认字号和字重，颜色和字体照样继承。子元素自己写了的优先。
+
+图形要放进 flex，包一层写了宽高的 `layer`，或者改用 `div` 盒子（`width`、`height`、`background`、`border-radius`）。这一层就是 flex 的一格：宽高用属性，里面的圆、矩形用这一层的局部坐标。位置由 flex 决定，这一层上的 `x`、`y`、`anchor` 会报 `invalid-attr`。`.tsx` 里同样写，见 [examples/html-layer.tsx](examples/html-layer.tsx)。形状直接放进来会照尺寸渲染并报 `info`；线条直接放进来不渲染，报 `warn`。两点坐标写在 flex 里的形状上不渲染，报 `warn`。`p`、`h1`–`h3`、`span` 里放 `layer` 不参与排版，报 `invalid-child`。
+
+```html
+<div style="display:flex; gap:24px; align-items:center">
+  <layer width="120" height="120">
+    <circle cx="60" cy="60" r="50" fill="#e8b04a" />
+  </layer>
+  <p style="font-size:40px">标题</p>
+</div>
+```
 
 `style` 支持的属性：
 
@@ -208,8 +221,10 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 ## 5. 文字
 
-最外层的文字标签是一个**文字盒子**，里面只能放文字和行内标签（`span`、`strong`、`b`、`em`、`br`）。
-要排列多段文字，请用 `<div style="display:flex; flex-direction:column">`，不要在普通文字盒子里嵌套 `div`、`p`。
+最外层的文字标签是一个**文字盒子**，里面只能放文字和行内标签（`span`、`strong`、`b`、`em`、`i`、`u`、`br`），也可以直接放 `<img>`。
+`div` 里有块级子元素时不是文字盒子，见 4.2。
+`p`、`h1`–`h3`、`span` 里不要嵌套 `div`、`p`，也不要放 `layer`。多段上下排写成 `<div><p>…</p></div>`。图形和文字并排时，把写了宽高的 `layer` 放进 `<div style="display:flex">`。
+`em` 和 `i` 是斜体，`strong` 和 `b` 是粗体，`u` 加下划线。没写字号时，它们和 `span` 一样继承外层。
 
 ### 5.1 默认样式
 
@@ -218,7 +233,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | `h1` | 88px | bold |
 | `h2` | 64px | bold |
 | `h3` | 48px | bold |
-| `p`、`div`、`span` | 40px | normal |
+| `p`、`div`、`span`、`em`、`strong` | 40px | `em` / `i` 斜体，`strong` / `b` 粗体；没写时字号继承外层，不写外层就是 40px |
 
 ### 5.2 style 属性
 
@@ -640,7 +655,7 @@ registerFilter({
 | `non-canonical` | info | 含义明确，但不是规范写法。照常渲染，`hint` 里是规范写法 |
 | `unknown-tag` | warn | 不认识的标签 |
 | `invalid-attr` | warn | 属性放错了位置，或两种写法混用。和已知属性编辑距离不超过 2 的名字也记在这里，`hint` 给出正确写法。其余不认识的属性名不报，留给 `draw` |
-| `invalid-child` | warn | 非法子元素：线条或 `g` 放进 flex 容器，文字盒子里放了 `h1`–`h3`、`p`、`div`、`g`、图片或 `math`，`mask` 放错位置或一层写了多个 |
+| `invalid-child` | warn | 非法子元素：线条或 `g` 放进 flex 容器，文字盒子（`h1`–`h3`、`p`、`span`，以及只含文字的 `div`）里放了 `h1`–`h3`、`p`、`div`、`layer`、`g` 或 `math`，`mask` 放错位置或一层写了多个。含这些子元素的 `div` 按块级竖排，不报这条。文字盒子里的 `<img>` 和文字并排，不报这条 |
 | `empty-mask` | warn | `mask` 里没有可用的形状或图片，不生效 |
 | `invalid-draw` | error / warn | `<draw>` 语法错误（error）或内容为空（warn） |
 | `missing-image` | warn | `img` 的 `src` 读不到 |
@@ -860,7 +875,7 @@ export default canvas.create(
 )
 ```
 
-完整例子见 [examples/poster.tsx](examples/poster.tsx)、[examples/hello.tsx](examples/hello.tsx)。
+完整例子见 [examples/poster.tsx](examples/poster.tsx)、[examples/hello.tsx](examples/hello.tsx)。HTML 里并排放图形见 [examples/html-layer.tsx](examples/html-layer.tsx)。
 
 - 底色用铺满的 `<rect fill>`。`color`、`font-family` 写在 `<layer>` 上。没写 `color` 是 `#111111`，没写 `font-family` 是 `ChillDuanSans`。自定义字体写 `<font family src>`，放在正在 `create` 的那一层里，或先调用 `canvas.font(family, src)`。字体还没注册就 `create`，会抛错，避免用备用字体量出另一套尺寸。`canvas({...})` 已去掉，调用时抛出同样的改法。
 - `<font src>` 和 `<img src>` 的相对路径按源文件所在目录解析，不按当前运行目录。

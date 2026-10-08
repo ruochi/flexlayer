@@ -193,10 +193,20 @@ function drawTextNode(ctx: CanvasRenderingContext2D, node: TextLayoutNode, inkCo
     if (node.textAlign === 'center') offsetX = (node.width - node.padding.left - node.padding.right - (node.border?.width ?? 0) * 2 - line.width) / 2
     if (node.textAlign === 'right') offsetX = node.width - node.padding.left - node.padding.right - (node.border?.width ?? 0) * 2 - line.width
     for (const seg of line.segments) {
-      applyCanvasFont(ctx, seg.style.fontFamily, seg.style.fontWeight, seg.style.fontSize)
+      applyCanvasFont(ctx, seg.style.fontFamily, seg.style.fontWeight, seg.style.fontSize, seg.style.fontStyle)
       ctx.fillStyle = inkColor ?? seg.style.color
       ctx.letterSpacing = `${seg.style.letterSpacing}px`
-      ctx.fillText(seg.text, contentX + offsetX + seg.x, contentY + line.baselineY)
+      const x = contentX + offsetX + seg.x
+      ctx.fillText(seg.text, x, contentY + line.baselineY)
+      if (seg.style.underline) {
+        const y = contentY + line.baselineY + Math.max(1, seg.style.fontSize * 0.12)
+        ctx.strokeStyle = inkColor ?? seg.style.color
+        ctx.lineWidth = Math.max(1, seg.style.fontSize / 16)
+        ctx.beginPath()
+        ctx.moveTo(x, y)
+        ctx.lineTo(x + seg.width, y)
+        ctx.stroke()
+      }
     }
   }
 }

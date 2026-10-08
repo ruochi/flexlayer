@@ -1,9 +1,9 @@
 import { filterIsLayerOnly, listFilters } from './filter.js'
-import type { FvgNode } from './parse.js'
+import type { FvgChild, FvgNode } from './parse.js'
 import { ATTRS, ATTR_ORDER, HTML_STYLE_ATTRS, attrByName, issueFor } from './schema.js'
 import { parseNumber, parseStyle, readOrigin } from './style.js'
 import { MATH_TAGS } from './math/rules.js'
-import { isTextBoxTag } from './text.js'
+import { isInlineTag, isTextBoxTag } from './text.js'
 import type { Issue, IssueLevel } from './types.js'
 import { isImageTag, isLineTag, isMeshTag, isShapeTag } from './tags.js'
 
@@ -48,6 +48,136 @@ export function hasTwoPoint(attrs: Record<string, string>): boolean {
 export function isDisplayFlex(style: string | undefined): boolean {
   const display = parseStyle(style).display?.trim().toLowerCase()
   return display === 'flex' || display === 'inline-flex'
+}
+
+const FLOW_TEXT_KEYS = [
+  'font-size',
+  'font-weight',
+  'font-family',
+  'color',
+  'letter-spacing',
+  'line-height',
+  'text-align',
+  'writing-mode',
+  'white-space',
+  'text-wrap',
+  'max-width',
+  'max-height',
+] as const
+
+/** 没写 display:flex 的 div，只要放了行内标签容不下的子元素，就按块级容器排。 */
+export function divHasFlowBreak(node: FvgNode): boolean {
+  if (node.tag.toLowerCase() !== 'div') return false
+  if (isDisplayFlex(node.attrs.style)) return false
+  return node.children.some((child) => typeof child !== 'string' && !isInlineTag(child.tag))
+}
+
+function inheritedTextStyle(style: string | undefined): string {
+  const parsed = parseStyle(style)
+  const parts: string[] = []
+  for (const key of FLOW_TEXT_KEYS) {
+    const value = parsed[key]
+    if (value) parts.push(`${key}:${value}`)
+  }
+  return parts.join(';')
+}
+
+function blockFlowStyle(style: string | undefined): string {
+  const parsed = parseStyle(style)
+  const extra = ['display:flex', 'flex-direction:column']
+  if (!parsed['align-items']) extra.push('align-items:stretch')
+  const base = style?.trim().replace(/;+\s*$/, '')
+  return [base, ...extra].filter((part) => part).join(';')
+}
+
+function anonymousTextBox(run: FvgChild[], style: string): FvgNode {
+  const attrs: Record<string, string> = {}
+  if (style) attrs.style = style
+  return { tag: 'div', attrs, children: run }
+}
+
+function blockFlowChildren(node: FvgNode): FvgChild[] {
+  const textStyle = inheritedTextStyle(node.attrs.style)
+  const out: FvgChild[] = []
+  let run: FvgChild[] = []
+  const flush = () => {
+    if (run.length === 0) return
+    const blank = run.every((child) => typeof child === 'string' && child.trim() === '')
+    if (!blank) out.push(anonymousTextBox(run, textStyle))
+    run = []
+  }
+  for (const child of node.children) {
+    if (typeof child !== 'string' && !isInlineTag(child.tag)) {
+      flush()
+      out.push(child)
+      continue
+    }
+    run.push(child)
+  }
+  flush()
+  return out
+}
+
+/** 文字盒子里直接放了 img 时，改成横向排布，文字和图片并排。 */
+export function textBoxNeedsInlineRow(node: FvgNode): boolean {
+  if (!isTextBoxTag(node.tag) || isDisplayFlex(node.attrs.style)) return false
+  let image = false
+  for (const child of node.children) {
+    if (typeof child === 'string') continue
+    const tag = child.tag.toLowerCase()
+    if (isImageTag(tag)) image = true
+    else if (!isInlineTag(tag)) return false
+  }
+  return image
+}
+
+export function asInlineRow(node: FvgNode): FvgNode {
+  if (!textBoxNeedsInlineRow(node)) return node
+  const textStyle = inheritedTextStyle(node.attrs.style)
+  const children: FvgChild[] = []
+  let run: FvgChild[] = []
+  const flush = () => {
+    if (run.length === 0) return
+    const blank = run.every((child) => typeof child === 'string' && child.trim() === '')
+    if (!blank) {
+      const attrs: Record<string, string> = {}
+      if (textStyle) attrs.style = textStyle
+      children.push({ tag: 'span', attrs, children: run })
+    }
+    run = []
+  }
+  for (const child of node.children) {
+    if (typeof child !== 'string' && isImageTag(child.tag)) {
+      flush()
+      children.push(child)
+      continue
+    }
+    run.push(child)
+  }
+  flush()
+  const parsed = parseStyle(node.attrs.style)
+  const extra = ['display:flex', 'flex-direction:row']
+  if (!parsed['align-items']) extra.push('align-items:center')
+  const base = node.attrs.style?.trim().replace(/;+\s*$/, '')
+  return {
+    ...node,
+    attrs: { ...node.attrs, style: [base, ...extra].filter((part) => part).join(';') },
+    children,
+  }
+}
+
+/**
+ * 把含块级子元素的 div 收成竖排容器。
+ * 等同于补上 display:flex、flex-direction:column，没写 align-items 时把文字块拉到这一列的宽度。
+ * 只含文字和行内标签的 div 原样返回，仍是文字盒子。
+ */
+export function asBlockFlow(node: FvgNode): FvgNode {
+  if (!divHasFlowBreak(node)) return node
+  return {
+    ...node,
+    attrs: { ...node.attrs, style: blockFlowStyle(node.attrs.style) },
+    children: blockFlowChildren(node),
+  }
 }
 
 function styleHasFlex(style: string | undefined): boolean {
@@ -574,6 +704,18 @@ export function checkTextBoxChildren(node: FvgNode, path: string): Issue[] {
       )
       continue
     }
+    if (tag === 'layer') {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-child',
+          path,
+          '文字盒子里不能放 layer',
+          '和文字并排放进 <div>，例如 <div style="display:flex"><layer width="120" height="120">…</layer><p>…</p></div>',
+        ),
+      )
+      continue
+    }
     if (MATH_TAGS.has(tag)) {
       out.push(
         flagged(
@@ -581,7 +723,7 @@ export function checkTextBoxChildren(node: FvgNode, path: string): Issue[] {
           'invalid-child',
           path,
           '文字盒子里不能放 math',
-          '公式写在同级的 <math> 里，和文字一起放进 display:flex',
+          '上下排放进 <div>，和文字并排再写 display:flex',
         ),
       )
       continue
@@ -593,7 +735,7 @@ export function checkTextBoxChildren(node: FvgNode, path: string): Issue[] {
           'invalid-child',
           path,
           '文字盒子里不能放图片',
-          '改成 <div style="display:flex">，把 <img src="…"> 放进去',
+          '把 <img src="…"> 放进 <div>。要并排再写 display:flex',
         ),
       )
       continue
@@ -605,7 +747,7 @@ export function checkTextBoxChildren(node: FvgNode, path: string): Issue[] {
         'invalid-child',
         path,
         `文字盒子里不能放 <${tag}>`,
-        '改成 <div style="display:flex; flex-direction:column">',
+        '改成 <div>。要横排或间距再写 display:flex',
       ),
     )
   }

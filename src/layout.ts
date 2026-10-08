@@ -50,7 +50,7 @@ import {
 } from './text.js'
 import { applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset, translated } from './matrix.js'
 import { layoutMath } from './math/lower.js'
-import { allowsBleed, checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, legacyCenterIssues, originValueIssues, rowColumnHint, typoAttrIssues } from './rules.js'
+import { allowsBleed, asBlockFlow, asInlineRow, checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, legacyCenterIssues, originValueIssues, rowColumnHint, textBoxNeedsInlineRow, typoAttrIssues } from './rules.js'
 import { canonicalTag, FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag } from './tags.js'
 import { boundsOf, parseSvgTransform } from './svg-transform.js'
 import type {
@@ -88,6 +88,12 @@ import { getYoga } from './yoga.js'
 export type LayoutContext = {
   color: string
   fontFamily: string
+  /** 祖先写过才有。没有时文字用标签默认字号。 */
+  fontSize?: number
+  fontWeight?: number
+  letterSpacing?: number
+  textAlign?: 'left' | 'center' | 'right'
+  lineHeight?: number
   maxContentWidth: number
   issues: Issue[]
   pathPrefix: string
@@ -444,12 +450,48 @@ function directTextContent(node: FvgNode): string {
   return parts.join(' ')
 }
 
+function isHeadingTag(tag: string): boolean {
+  return tag === 'h1' || tag === 'h2' || tag === 'h3'
+}
+
+function textAlignOf(raw: string | undefined, fallback: 'left' | 'center' | 'right'): 'left' | 'center' | 'right' {
+  const value = raw?.trim()
+  if (value === 'center' || value === 'right' || value === 'left') return value
+  if (value === 'start') return 'left'
+  if (value === 'end') return 'right'
+  return fallback
+}
+
+/** 容器上写了的文字样式传给子元素。标题自己的默认字号和字重不往下盖。 */
+function inheritTextContext(ctx: LayoutContext, tag: string, style: Record<string, string>): LayoutContext {
+  const next: LayoutContext = { ...ctx }
+  const family = style['font-family']?.trim()
+  if (family) next.fontFamily = family
+  if (style.color?.trim()) next.color = style.color.trim()
+  const fontSize = parsePx(style['font-size'])
+  if (fontSize != null) next.fontSize = fontSize
+  else if (isHeadingTag(tag)) next.fontSize = defaultFontSizeForTag(tag)
+  const fontWeight = parseFontWeight(style['font-weight'])
+  if (fontWeight != null) next.fontWeight = fontWeight
+  else if (isHeadingTag(tag)) next.fontWeight = defaultFontWeightForTag(tag)
+  const letterSpacing = parsePx(style['letter-spacing'])
+  if (letterSpacing != null) next.letterSpacing = letterSpacing
+  if (style['text-align']) next.textAlign = textAlignOf(style['text-align'], ctx.textAlign ?? 'left')
+  const lineHeight = parseNumber(style['line-height'])
+  if (lineHeight != null) next.lineHeight = lineHeight
+  return next
+}
+
 function computeDrawStyle(node: FvgNode, ctx: LayoutContext, style: Record<string, string>): DrawComputedStyle {
   const tag = node.tag.toLowerCase()
   const fontSize =
-    parsePx(style['font-size']) ?? (isTextBoxTag(node.tag) ? defaultFontSizeForTag(tag) : 40)
+    parsePx(style['font-size']) ??
+    (isHeadingTag(tag) ? defaultFontSizeForTag(tag) : ctx.fontSize ?? (isTextBoxTag(node.tag) ? defaultFontSizeForTag(tag) : 40))
   const fontWeight =
-    parseFontWeight(style['font-weight']) ?? (isTextBoxTag(node.tag) ? defaultFontWeightForTag(tag) : 400)
+    parseFontWeight(style['font-weight']) ??
+    (isHeadingTag(tag) || tag === 'strong' || tag === 'b'
+      ? 700
+      : ctx.fontWeight ?? (isTextBoxTag(node.tag) ? defaultFontWeightForTag(tag) : 400))
   const fontFamily = style['font-family']?.trim() || ctx.fontFamily
   const color = style.color ?? ctx.color
   const opacity = isHtmlTag(node.tag) ? parseNumber(style.opacity) ?? 1 : parseNumber(node.attrs.opacity) ?? 1
@@ -668,10 +710,14 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
   warnNestedMasks(node, ctx)
   const style = parseStyle(node.attrs.style)
   const tag = node.tag.toLowerCase()
-  const fontSize = parsePx(style['font-size']) ?? defaultFontSizeForTag(tag)
-  const fontWeight = parseFontWeight(style['font-weight']) ?? defaultFontWeightForTag(tag)
+  const fontSize =
+    parsePx(style['font-size']) ?? (isHeadingTag(tag) ? defaultFontSizeForTag(tag) : ctx.fontSize ?? defaultFontSizeForTag(tag))
+  const fontWeight =
+    parseFontWeight(style['font-weight']) ??
+    (isHeadingTag(tag) || tag === 'strong' || tag === 'b' ? 700 : ctx.fontWeight ?? defaultFontWeightForTag(tag))
   const fontFamily = style['font-family']?.trim() || ctx.fontFamily
   const color = style.color ?? ctx.color
+  const letterSpacing = parsePx(style['letter-spacing']) ?? ctx.letterSpacing ?? 0
   const segments = extractTextSegments(
     node,
     {
@@ -679,8 +725,8 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
       fontSize,
       fontWeight,
       color,
-      letterSpacing: parsePx(style['letter-spacing']) ?? 0,
-      lineHeightRatio: parseNumber(style['line-height']) ?? 1.2,
+      letterSpacing,
+      lineHeightRatio: parseNumber(style['line-height']) ?? ctx.lineHeight ?? 1.2,
     },
     ctx.pathPrefix,
   )
@@ -701,7 +747,7 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
       hint: '竖排用 writing-mode:vertical-rl',
     })
   }
-  const lineHeightRatio = parseNumber(style['line-height']) ?? (segments.length > 1 && !vertical ? 1.4 : 1.2)
+  const lineHeightRatio = parseNumber(style['line-height']) ?? ctx.lineHeight ?? (segments.length > 1 && !vertical ? 1.4 : 1.2)
 
   const appearance = readHtmlAppearance(style)
   const innerPadX = appearance.padding.left + appearance.padding.right + (appearance.border?.width ?? 0) * 2
@@ -726,7 +772,7 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
   if (fixedH != null) contentH = Math.max(contentH, fixedH - appearance.padding.top - appearance.padding.bottom - (appearance.border?.width ?? 0) * 2)
 
   const outer = outerFromContent(contentW, contentH, appearance.padding, appearance.border)
-  const textAlign = (style['text-align'] ?? 'left').trim() as 'left' | 'center' | 'right'
+  const textAlign = textAlignOf(style['text-align'], ctx.textAlign ?? 'left')
   const boxW = fixedW ?? outer.width
   const innerW = boxW - appearance.padding.left - appearance.padding.right - (appearance.border?.width ?? 0) * 2
   const ink = alignedTextInk(textLayout.lines, textAlign, innerW, outer.contentOffsetX, outer.contentOffsetY)
@@ -1230,8 +1276,13 @@ function warnMisplacedFont(ctx: LayoutContext, path: string) {
   })
 }
 
+function prepareHtmlBox(node: FvgNode): FvgNode {
+  const flowed = asBlockFlow(node)
+  return textBoxNeedsInlineRow(flowed) ? asInlineRow(flowed) : flowed
+}
+
 function measureFlexChild(raw: FvgNode, ctx: LayoutContext, direction: 'row' | 'column'): FlexMeasure | null {
-  const node = materialize(raw)
+  const node = prepareHtmlBox(materialize(raw))
   if (node.tag === 'symbol' || node.tag === 'draw') return null
   if (node.tag === 'g') {
     ctx.issues.push({
@@ -1386,6 +1437,7 @@ function measureFlexChild(raw: FvgNode, ctx: LayoutContext, direction: 'row' | '
 
 function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
   const style = parseStyle(node.attrs.style)
+  const childCtx = inheritTextContext(ctx, node.tag, style)
   const direction = flexDirectionOf(style)
   const appearance = readHtmlAppearance(style)
   if (appearance.background) appearance.background = readPaint(appearance.background, 'transparent', ctx, 'background')
@@ -1405,7 +1457,7 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
     const ch = childNodes[i]!
     const path = nodePath(ctx.pathPrefix, ch.tag, i)
     track(ctx, path, ch)
-    const m = measureFlexChild(ch, { ...ctx, pathPrefix: path }, direction)
+    const m = measureFlexChild(ch, { ...childCtx, pathPrefix: path }, direction)
     if (m) measures.push(m)
   }
 
@@ -1457,6 +1509,11 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
     const childFvg = childNodes[i]!
     const chParsed = parseStyle(childFvg.attrs.style)
     const { grow, shrink } = parseFlexGrowShrink(chParsed, m.isText)
+    const stretchColumnText =
+      direction === 'column' &&
+      m.isText &&
+      parsePx(chParsed.width) == null &&
+      mapAlign(chParsed['align-self'] ?? style['align-items']) === Align.Stretch
     const yn = Yoga.Node.createWithConfig(config)
     yn.setFlexGrow(grow)
     yn.setFlexShrink(shrink)
@@ -1466,7 +1523,7 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
       yn.setHeight(m.preferredCross === Infinity ? m.preferredCross : m.preferredCross)
       yn.setMinWidth(m.minMain)
     } else {
-      yn.setWidth(m.preferredCross === Infinity ? crossAvailable : m.preferredCross)
+      yn.setWidth(stretchColumnText || m.preferredCross === Infinity ? crossAvailable : m.preferredCross)
       yn.setHeight(m.preferredMain)
       yn.setMinWidth(m.isText ? m.minMain : 0)
     }
@@ -1493,7 +1550,7 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
           : layout.width
       const styleCh = parseStyle(childNodes[i]!.attrs.style)
       const innerW = assignedW - child.padding.left - child.padding.right - (child.border?.width ?? 0) * 2
-      const re = layoutTextBox(childNodes[i]!, { ...ctx, pathPrefix: child.path }, innerW)
+      const re = layoutTextBox(childNodes[i]!, { ...childCtx, pathPrefix: child.path }, innerW)
       re.x = layout.left
       re.y = layout.top
       if (layout.width > re.width + 0.5) re.width = layout.width
@@ -1949,19 +2006,20 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
     ctx.issues.push(...checkChildAttrs(concrete, 'layer', path))
     const textMax = contentWidthFor(node, fixedW, ctx.maxContentWidth)
     const subCtx = { ...ctx, pathPrefix: path, maxContentWidth: textMax }
+    const laidSource = prepareHtmlBox(concrete)
     let laid: LayoutNode | null = null
-    if (concrete.tag === 'use') laid = layoutUse(concrete, subCtx)
-    else if (concrete.tag === 'g') laid = layoutGroup(concrete, subCtx)
-    else if (isLineTag(concrete.tag)) laid = layoutLineNode(concrete, subCtx, ctx.color)
-    else if (isDisplayFlex(concrete.attrs.style) && isTextBoxTag(concrete.tag)) laid = layoutFlex(concrete, subCtx)
-    else if (isImageTag(concrete.tag)) laid = layoutImage(concrete, subCtx)
-    else if (isTextBoxTag(concrete.tag)) laid = layoutTextBox(concrete, subCtx, textMax)
-    else if (isShapeTag(concrete.tag)) laid = layoutShape(concrete, subCtx, ctx.color)
-    else if (isMeshTag(concrete.tag)) laid = layoutMesh(concrete, subCtx)
-    else if (concrete.tag === 'layer') laid = layoutLayer(concrete, subCtx)
-    else if (concrete.tag === 'math') laid = layoutMath(concrete, subCtx)
+    if (laidSource.tag === 'use') laid = layoutUse(laidSource, subCtx)
+    else if (laidSource.tag === 'g') laid = layoutGroup(laidSource, subCtx)
+    else if (isLineTag(laidSource.tag)) laid = layoutLineNode(laidSource, subCtx, ctx.color)
+    else if (isDisplayFlex(laidSource.attrs.style) && isTextBoxTag(laidSource.tag)) laid = layoutFlex(laidSource, subCtx)
+    else if (isImageTag(laidSource.tag)) laid = layoutImage(laidSource, subCtx)
+    else if (isTextBoxTag(laidSource.tag)) laid = layoutTextBox(laidSource, subCtx, textMax)
+    else if (isShapeTag(laidSource.tag)) laid = layoutShape(laidSource, subCtx, ctx.color)
+    else if (isMeshTag(laidSource.tag)) laid = layoutMesh(laidSource, subCtx)
+    else if (laidSource.tag === 'layer') laid = layoutLayer(laidSource, subCtx)
+    else if (laidSource.tag === 'math') laid = layoutMath(laidSource, subCtx)
     else {
-      laid = layoutUnknownOrCustom(concrete, subCtx)
+      laid = layoutUnknownOrCustom(laidSource, subCtx)
     }
     if (!laid) continue
     const html = isHtmlTag(concrete.tag)

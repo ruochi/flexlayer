@@ -189,14 +189,15 @@ function canvasFontWeight(weight: number): number {
   return Math.min(900, Math.max(100, snapped))
 }
 
-export function buildFontString(family: string, weight: number, sizePx: number): string {
+export function buildFontString(family: string, weight: number, sizePx: number, fontStyle?: 'normal' | 'italic'): string {
+  const slant = fontStyle === 'italic' ? 'italic ' : ''
   const builtin = builtinFont(family)
   if (builtin) {
     const face = nearestFace(builtin, weight)
-    return `400 ${sizePx}px ${face.registeredAs}, ${DEFAULT_FONT_FAMILY}, sans-serif`
+    return `${slant}400 ${sizePx}px ${face.registeredAs}, ${DEFAULT_FONT_FAMILY}, sans-serif`
   }
   const w = canvasFontWeight(effectiveFontWeight(family, weight))
-  return `${w} ${sizePx}px ${family}, ${DEFAULT_FONT_FAMILY}, sans-serif`
+  return `${slant}${w} ${sizePx}px ${family}, ${DEFAULT_FONT_FAMILY}, sans-serif`
 }
 
 const WGHT_TAG = 0x77676874
@@ -229,8 +230,9 @@ export function applyCanvasFont(
   family: string,
   weight: number,
   sizePx: number,
+  fontStyle?: 'normal' | 'italic',
 ): void {
-  ctx.font = buildFontString(family, weight, sizePx)
+  ctx.font = buildFontString(family, weight, sizePx, fontStyle)
   const axis = wghtAxis(family)
   if (!axis) {
     ctx.fontVariationSettings = 'normal'

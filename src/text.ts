@@ -4,8 +4,8 @@ import { getMeasureCtx } from './measureCtx.js'
 import { parseFontWeight, parsePx } from './style.js'
 import { emptyBox, translateBox, unionBoxes, type Box, type InlineOwner, type TextLayoutResult, type TextRunStyle, type TextSegment } from './types.js'
 
-const INLINE_TAGS = new Set(['span', 'strong', 'b', 'em', 'br'])
-const TEXT_BOX_TAGS = new Set(['h1', 'h2', 'h3', 'p', 'div', 'span'])
+const INLINE_TAGS = new Set(['span', 'strong', 'b', 'em', 'i', 'u', 'br'])
+const TEXT_BOX_TAGS = new Set(['h1', 'h2', 'h3', 'p', 'div', 'span', 'strong', 'b', 'em', 'i', 'u'])
 
 const LINE_HEAD_FORBIDDEN = new Set('，。、；：？！）」』》】…'.split(''))
 const LINE_TAIL_FORBIDDEN = new Set('（「『《【'.split(''))
@@ -138,7 +138,8 @@ function walkInline(
     if (!INLINE_TAGS.has(tag)) continue
     let segStyle = style
     if (tag === 'strong' || tag === 'b') segStyle = { ...style, fontWeight: 700 }
-    if (tag === 'em') segStyle = { ...style, fontWeight: Math.min(900, style.fontWeight + 100) }
+    if (tag === 'em' || tag === 'i') segStyle = { ...segStyle, fontStyle: 'italic' }
+    if (tag === 'u') segStyle = { ...segStyle, underline: true }
     segStyle = mergeStyle(segStyle, parseStyleAttr(child.attrs.style))
     const id = child.attrs.id?.trim()
     const owner = id ? { id, path, tag } : inherited
@@ -155,7 +156,11 @@ export function extractTextSegments(node: FvgNode, defaults: TextBoxDefaults, pa
     color: defaults.color,
     letterSpacing: defaults.letterSpacing,
   }
-  const style = mergeStyle(base, parseStyleAttr(node.attrs.style))
+  const tag = node.tag.toLowerCase()
+  let style = mergeStyle(base, parseStyleAttr(node.attrs.style))
+  if (tag === 'strong' || tag === 'b') style = { ...style, fontWeight: 700 }
+  if (tag === 'em' || tag === 'i') style = { ...style, fontStyle: 'italic' }
+  if (tag === 'u') style = { ...style, underline: true }
   const segs: TextSegment[] = []
   walkInline(node.children, style, segs, false, parentPath, undefined)
   return normalizeInlineSegments(segs)
@@ -177,11 +182,11 @@ function sameOwner(a: InlineOwner | undefined, b: InlineOwner | undefined): bool
 
 function measureTextWidth(text: string, style: TextRunStyle): number {
   if (!text) return 0
-  const key = `${style.fontFamily}|${style.fontWeight}|${style.fontSize}|${style.letterSpacing}|${text}`
+  const key = `${style.fontFamily}|${style.fontWeight}|${style.fontStyle ?? ''}|${style.fontSize}|${style.letterSpacing}|${text}`
   const cached = measureCache.get(key)
   if (cached != null) return cached
   const ctx = getMeasureCtx()
-  applyCanvasFont(ctx, style.fontFamily, style.fontWeight, style.fontSize)
+  applyCanvasFont(ctx, style.fontFamily, style.fontWeight, style.fontSize, style.fontStyle)
   ctx.letterSpacing = `${style.letterSpacing}px`
   const m = ctx.measureText(text)
   const w = m.width
@@ -219,7 +224,7 @@ type InkMetrics = {
 
 function measureInk(text: string, style: TextRunStyle): InkMetrics {
   const ctx = getMeasureCtx()
-  applyCanvasFont(ctx, style.fontFamily, style.fontWeight, style.fontSize)
+  applyCanvasFont(ctx, style.fontFamily, style.fontWeight, style.fontSize, style.fontStyle)
   ctx.letterSpacing = `${style.letterSpacing}px`
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
@@ -655,6 +660,10 @@ export function layoutText(opts: LayoutTextOptions): TextLayoutResult {
     autoWrap,
     overflowFixed,
   }
+}
+
+export function isInlineTag(tag: string): boolean {
+  return INLINE_TAGS.has(tag.toLowerCase())
 }
 
 export function isTextBoxTag(tag: string): boolean {
