@@ -82,6 +82,21 @@ describe('mathml', () => {
     expect(findByTag(math, 'mi')[0]!.computed.fontFamily).toBe('STIXTwoMath')
   })
 
+  it('公式忽略普通字体，mtext 仍用外面的字体', async () => {
+    const { doc, math } = await mathOf(
+      '<math style="font-family:Kai"><mi style="font-family:Song">x</mi><mtext style="font-family:Kai">当</mtext></math>',
+    )
+    expect(findByTag(math, 'mi')[0]!.computed.fontFamily).toBe('STIXTwoMath')
+    expect(findByTag(math, 'mi')[0]!.text).toBe('𝑥')
+    expect(findByTag(math, 'mtext')[0]!.computed.fontFamily).toBe('Kai')
+    expect(math.computed.fontFamily).toBe('STIXTwoMath')
+    const issues = doc.issues.filter((i) => i.code === 'invalid-attr')
+    expect(issues.map((i) => i.path)).toEqual(['layer/math[0]', 'layer/math[0]/mi[0]'])
+    const alias = await mathOf('<math style="font-family:\'STIX Two Math\'"><mi>x</mi></math>')
+    expect(alias.doc.issues.filter((i) => i.code === 'invalid-attr')).toEqual([])
+    expect(findByTag(alias.math, 'mi')[0]!.computed.fontFamily).toBe('STIXTwoMath')
+  })
+
   it('等号两侧是粗空，开头的减号当正负号不加空', async () => {
     const { math } = await mathOf('<math><mo>-</mo><mi>a</mi><mo>=</mo><mi>b</mi><mo>+</mo><mi>c</mi></math>')
     const [minus, eq, plus] = findByTag(math, 'mo')

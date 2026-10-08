@@ -15,7 +15,7 @@
 
 每一块排完是一个盒子，记着宽、基线上方高度 `ascent`、基线下方深度 `descent`、斜体修正和 TeX 原子类别。容器把子块按基线摆好，再把子节点的 `x`、`y` 写成相对容器左上角的坐标。绘制和报告不认识公式，只看到普通节点。
 
-- 普通记号用画布按 STIX Two Math 绘制，盒子贴着着墨。
+- 普通记号用画布按 STIX Two Math 绘制，盒子贴着着墨。公式不接受别的字体：间距、斜体修正和伸长字形都从这套字体的 MATH 表来，换普通字体会对不上。写了别的 `font-family` 报 `invalid-attr` 并忽略。`mtext` 仍用外面的文字字体。
 - 大号求和、积分、伸长的括号、根号和宽重音不用画布字形，而是从字体里取对应变体或拼接件的轮廓，画成填充路径。画布只能按码位取字，取不到这些变体。
 - 间距和位移来自 MATH 表：`AxisHeight`、`Fraction*`、`Superscript*`、`Subscript*`、`UpperLimit*`、`LowerLimit*`、`Radical*`、`AccentBaseHeight`、`Overbar*`、`Underbar*`、`DisplayOperatorMinHeight`、`ScriptPercentScaleDown` 等，算法跟 MathML Core 一致。
 - 上标沿用 TeX 的做法：基座是单个记号时不看它的高度，所以 `a²` 和 `b²` 的 2 一样高。

@@ -64,7 +64,7 @@ export type MathLayoutHost = {
 type Ctx = {
   size: number
   color: string
-  /** 公式字母、数字和运算符用的字体。 */
+  /** 公式字母、数字和运算符用的字体，只能是带 MATH 表的字体。 */
   family: string
   /** `mtext` 用的字体，跟外面的文字一样。 */
   textFamily: string
@@ -75,6 +75,7 @@ type Ctx = {
   cramped: boolean
   rootSize: number
   warnings: string[]
+  issues: Issue[]
 }
 
 /** 排好的一块。`node` 的盒子高 ascent + descent，基线在盒子顶下 ascent 处。 */
@@ -154,24 +155,38 @@ function lengthOf(raw: string | undefined, ctx: Ctx, fallback = 0): number {
   return n
 }
 
-function styled(node: FvgNode, ctx: Ctx): Ctx {
-  const style = parseStyle(node.attrs.style)
-  const size = parsePx(style['font-size'])
-  const family = style['font-family']?.trim()
-  const color = style.color ?? node.attrs.mathcolor
-  if (size == null && !family && !color) return ctx
-  return {
-    ...ctx,
-    size: size ?? ctx.size,
-    color: color ?? ctx.color,
-    family: family || ctx.family,
-    mathAlphabet: family ? isMathFamily(family) : ctx.mathAlphabet,
-  }
+/** 写成 STIX Two Math 或其别名时，归到注册名。别的字体不是数学字体。 */
+function canonicalMathFamily(family: string): string | null {
+  const name = family.split(',')[0]!.trim().replace(/^['"]|['"]$/g, '').toLowerCase()
+  return ['stixtwomath', 'stix two math', 'stixmath', 'stix'].includes(name) ? MATH_FONT_FAMILY : null
 }
 
-function isMathFamily(family: string): boolean {
-  const name = family.split(',')[0]!.trim().replace(/^['"]|['"]$/g, '').toLowerCase()
-  return ['stixtwomath', 'stix two math', 'stixmath', 'stix'].includes(name)
+function requestedFamily(node: FvgNode): string | undefined {
+  const style = parseStyle(node.attrs.style)['font-family']?.trim()
+  return style || node.attrs['font-family']?.trim() || node.attrs.fontfamily?.trim() || undefined
+}
+
+/** 字母、数字、运算符不跟普通字体走。写了别的 `font-family` 就报并忽略。`mtext` 除外。 */
+function rejectTextFont(node: FvgNode, path: string, ctx: Ctx): void {
+  if (node.tag.toLowerCase() === 'mtext') return
+  const family = requestedFamily(node)
+  if (!family || canonicalMathFamily(family)) return
+  ctx.issues.push({
+    level: 'warn',
+    code: 'invalid-attr',
+    path,
+    message: `公式只用带 MATH 表的字体，目前是 ${MATH_FONT_FAMILY}`,
+    hint: '删掉 font-family。公式里的说明文字用 <mtext>，它跟外面的文字同一套字体',
+  })
+}
+
+function styled(node: FvgNode, ctx: Ctx, path: string): Ctx {
+  rejectTextFont(node, path, ctx)
+  const style = parseStyle(node.attrs.style)
+  const size = parsePx(style['font-size'])
+  const color = style.color ?? node.attrs.mathcolor
+  if (size == null && !color) return ctx
+  return { ...ctx, size: size ?? ctx.size, color: color ?? ctx.color }
 }
 
 function clampSize(size: number, ctx: Ctx): number {
@@ -341,7 +356,7 @@ function coreText(node: FvgNode | undefined): string {
 }
 
 function layoutToken(node: FvgNode, tag: string, path: string, ctx0: Ctx, position: 'first' | 'last' | 'middle' | 'only'): MBox {
-  const ctx = styled(node, ctx0)
+  const ctx = styled(node, ctx0, path)
   let text = directText(node)
   if (tag === 'mtext') {
     const own = parseStyle(node.attrs.style)['font-family']?.trim()
@@ -387,7 +402,7 @@ function centerOnAxis(box: MBox, ctx: Ctx): MBox {
 }
 
 function stretchedFence(node: FvgNode, path: string, ctx0: Ctx, target: number, atom: Atom): MBox {
-  const ctx = styled(node, ctx0)
+  const ctx = styled(node, ctx0, path)
   const text = normalizeOperator(directText(node))
   const natural = naturalVerticalSize(text, ctx.size)
   const shape = target > natural * 1.02 ? stretchVertical(text, target, ctx.size) : null
@@ -856,7 +871,7 @@ function layoutTable(node: FvgNode, path: string, ctx0: Ctx): MBox {
       const align = td.attrs.columnalign ?? rowAlign[c] ?? rowAlign[rowAlign.length - 1] ?? tableAlign[c] ?? tableAlign[tableAlign.length - 1] ?? 'center'
       const box =
         td.tag.toLowerCase() === 'mtd'
-          ? layoutRow(elements(td), 'mtd', tdPaths[c]!, styled(td, ctx))
+          ? layoutRow(elements(td), 'mtd', tdPaths[c]!, styled(td, ctx, tdPaths[c]!))
           : lowerNode(td, tdPaths[c]!, ctx, 'only')
       cells.push({ box, align, node: td })
     })
@@ -901,7 +916,7 @@ function lowerNode(node: FvgNode, path: string, ctx0: Ctx, position: 'first' | '
     return emptyBox(tag, path, ctx0)
   }
   if (tag === 'mi' || tag === 'mn' || tag === 'mo' || tag === 'mtext') return layoutToken(node, tag, path, ctx0, position)
-  const ctx = styled(node, ctx0)
+  const ctx = styled(node, ctx0, path)
   if (tag === 'mrow' || tag === 'mtd') return layoutRow(elements(node), tag, path, ctx)
   if (tag === 'mstyle') {
     const display = node.attrs.displaystyle
@@ -940,21 +955,22 @@ export function layoutMath(node: FvgNode, host: MathLayoutHost, rowAlign?: strin
   const style = parseStyle(node.attrs.style)
   const fontSize = parsePx(style['font-size']) ?? 40
   const color = style.color ?? node.attrs.mathcolor ?? host.color
-  const own = style['font-family']?.trim()
-  const family = own || MATH_FONT_FAMILY
+  const family = MATH_FONT_FAMILY
   const display = node.attrs.display === 'block' || node.attrs.displaystyle === 'true'
   const ctx: Ctx = {
     size: fontSize,
     color,
     family,
     textFamily: host.fontFamily,
-    mathAlphabet: own ? isMathFamily(own) : true,
+    mathAlphabet: true,
     display,
     level: 0,
     cramped: false,
     rootSize: fontSize,
     warnings: [],
+    issues: host.issues,
   }
+  rejectTextFont(node, host.pathPrefix, ctx)
   const row = layoutRow(elements(node), 'math', host.pathPrefix, ctx)
   for (const message of ctx.warnings) {
     host.issues.push({ level: 'warn', code: 'unknown-tag', path: host.pathPrefix, message })

@@ -161,7 +161,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 公式按 TeX 和 MathML Core 的规矩排，间距取自数学字体 STIX Two Math 的 MATH 表：
 
-- 字体：字母、数字和运算符默认用 `STIXTwoMath`，`mtext` 用外面文字的字体。在 `<math>` 上写 `font-family` 改用别的字体，伸长的括号和根号仍取自 STIX Two Math。
+- 字体：字母、数字和运算符只用带 OpenType MATH 表的字体。目前只有 `STIXTwoMath`，在 `<math>`、`mi`、`mn`、`mo` 上写别的 `font-family` 不生效，报 `invalid-attr`。`mtext` 用外面文字的字体，也可以自己写 `font-family`。
 - 字母：单个字母的 `mi` 是斜体（拉丁字母和小写希腊字母），多个字母的 `mi`（`sin`、`lim`）直立。`mathvariant` 可写 `normal`、`italic`、`bold`、`bold-italic`、`double-struck`、`script`、`fraktur`、`sans-serif`、`monospace`。`mo` 里的 `-` 画成减号 `−`。
 - 基线：一行里的记号按基线对齐。分数线、大运算符和伸长的括号以数学轴为中心。
 - 间距：按 TeX 的原子类别（普通、运算符、二元、关系、开、闭、标点）补空隙：`=` 两侧 5/18em，`+` 两侧 4/18em，`,` 后 3/18em，`sin x` 中间 3/18em。行首或跟在运算符后面的 `-`、`+` 是正负号，不加空。上下标里只留细空。`mo` 写 `lspace`、`rspace` 时用写的值。积分后的 `<mi>d</mi><mi>x</mi>` 前面补一个细空。
