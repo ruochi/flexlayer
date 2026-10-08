@@ -1,6 +1,6 @@
 {
   "name": "flexlayer",
-  "version": "0.2.28",
+  "version": "0.2.29",
   "description": "Flex Layer: AI-friendly 2D frame markup with flex layout, HTML text and SVG-style shapes, rendered to PNG",
   "type": "module",
   "main": "dist/index.js",

@@ -1,24 +1,19 @@
 {
   "name": "flexlayer",
+  "description": "Flex Layer 的 agent skill",
   "owner": {
-    "name": "ruochi"
-  },
-  "metadata": {
-    "description": "Flex Layer 的 agent skill：用标签排一帧画面并导出 PNG"
+    "name": "ruochi",
+    "url": "https://github.com/ruochi/flexlayer"
   },
   "plugins": [
     {
       "name": "flexlayer",
-      "source": "plugins/flexlayer",
+      "source": "./plugins/flexlayer",
       "description": "用标签、flex 和 SVG 形状排一帧画面，检查后渲染成 PNG。",
       "version": "0.2.29",
-      "author": {
-        "name": "ruochi"
-      },
       "homepage": "https://github.com/ruochi/flexlayer",
       "repository": "https://github.com/ruochi/flexlayer",
       "license": "MIT",
-      "logo": "assets/logo.svg",
       "keywords": ["flexlayer", "poster", "layout", "png"],
       "category": "design"
     }

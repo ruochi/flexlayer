@@ -1,0 +1,25 @@
+{
+  "name": "flexlayer",
+  "version": "0.2.29",
+  "description": "用标签、flex 和 SVG 形状排一帧画面，检查后渲染成 PNG。Lay out a frame and render it to PNG.",
+  "author": {
+    "name": "ruochi",
+    "url": "https://github.com/ruochi/flexlayer"
+  },
+  "homepage": "https://github.com/ruochi/flexlayer",
+  "repository": "https://github.com/ruochi/flexlayer",
+  "license": "MIT",
+  "keywords": ["flexlayer", "poster", "layout", "png"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Flex Layer",
+    "shortDescription": "用标签排一帧画面，检查后渲染成 PNG。",
+    "developerName": "ruochi",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Read", "Write"],
+    "websiteURL": "https://github.com/ruochi/flexlayer",
+    "brandColor": "#0c1424",
+    "composerIcon": "./plugins/flexlayer/assets/logo.png",
+    "logo": "./plugins/flexlayer/assets/logo.png"
+  }
+}

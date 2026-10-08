@@ -1,0 +1,25 @@
+{
+  "name": "flexlayer",
+  "displayName": "Flex Layer",
+  "description": "用 Flex Layer 排一帧画面并导出 PNG。",
+  "version": "0.2.29",
+  "maintainer": {
+    "name": "ruochi",
+    "url": "https://github.com/ruochi/flexlayer"
+  },
+  "plugins": [
+    {
+      "name": "flexlayer",
+      "version": "0.2.29",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/ruochi/flexlayer.git",
+        "subdir": "plugins/flexlayer"
+      },
+      "description": "用标签、flex 和 SVG 形状排一帧画面，检查后渲染成 PNG。",
+      "tags": ["flexlayer", "poster", "layout", "png"],
+      "homepage": "https://github.com/ruochi/flexlayer",
+      "repository": "https://github.com/ruochi/flexlayer"
+    }
+  ]
+}
