@@ -85,7 +85,7 @@ function inheritedTextStyle(style: string | undefined): string {
 function blockFlowStyle(style: string | undefined): string {
   const parsed = parseStyle(style)
   const extra = ['display:flex', 'flex-direction:column']
-  if (!parsed['align-items']) extra.push('align-items:flex-start')
+  if (!parsed['align-items']) extra.push('align-items:stretch')
   const base = style?.trim().replace(/;+\s*$/, '')
   return [base, ...extra].filter((part) => part).join(';')
 }
@@ -118,9 +118,57 @@ function blockFlowChildren(node: FvgNode): FvgChild[] {
   return out
 }
 
+/** 文字盒子里直接放了 img 时，改成横向排布，文字和图片并排。 */
+export function textBoxNeedsInlineRow(node: FvgNode): boolean {
+  if (!isTextBoxTag(node.tag) || isDisplayFlex(node.attrs.style)) return false
+  let image = false
+  for (const child of node.children) {
+    if (typeof child === 'string') continue
+    const tag = child.tag.toLowerCase()
+    if (isImageTag(tag)) image = true
+    else if (!isInlineTag(tag)) return false
+  }
+  return image
+}
+
+export function asInlineRow(node: FvgNode): FvgNode {
+  if (!textBoxNeedsInlineRow(node)) return node
+  const textStyle = inheritedTextStyle(node.attrs.style)
+  const children: FvgChild[] = []
+  let run: FvgChild[] = []
+  const flush = () => {
+    if (run.length === 0) return
+    const blank = run.every((child) => typeof child === 'string' && child.trim() === '')
+    if (!blank) {
+      const attrs: Record<string, string> = {}
+      if (textStyle) attrs.style = textStyle
+      children.push({ tag: 'span', attrs, children: run })
+    }
+    run = []
+  }
+  for (const child of node.children) {
+    if (typeof child !== 'string' && isImageTag(child.tag)) {
+      flush()
+      children.push(child)
+      continue
+    }
+    run.push(child)
+  }
+  flush()
+  const parsed = parseStyle(node.attrs.style)
+  const extra = ['display:flex', 'flex-direction:row']
+  if (!parsed['align-items']) extra.push('align-items:center')
+  const base = node.attrs.style?.trim().replace(/;+\s*$/, '')
+  return {
+    ...node,
+    attrs: { ...node.attrs, style: [base, ...extra].filter((part) => part).join(';') },
+    children,
+  }
+}
+
 /**
  * 把含块级子元素的 div 收成竖排容器。
- * 等同于补上 display:flex、flex-direction:column，没写 align-items 时靠起点。
+ * 等同于补上 display:flex、flex-direction:column，没写 align-items 时把文字块拉到这一列的宽度。
  * 只含文字和行内标签的 div 原样返回，仍是文字盒子。
  */
 export function asBlockFlow(node: FvgNode): FvgNode {

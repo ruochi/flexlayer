@@ -254,6 +254,10 @@ export type TextRunStyle = {
   fontWeight: number
   color: string
   letterSpacing: number
+  /** 省略是 normal。em / i 为 italic。 */
+  fontStyle?: 'normal' | 'italic'
+  /** u 加下划线。 */
+  underline?: boolean
 }
 
 /** 带 id 的行内标签。最内层有 id 的那段拥有这些字；里面没写 id 的行内标签沿用外层。 */

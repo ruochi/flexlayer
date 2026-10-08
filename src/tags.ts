@@ -25,6 +25,8 @@ const KNOWN_TAGS = new Set([
   'strong',
   'b',
   'em',
+  'i',
+  'u',
   'br',
   'img',
   'image',

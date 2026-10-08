@@ -52,7 +52,7 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 
 flex 的 `align-items` 默认 `center`（CSS 里是 `stretch`）。**column 忘写 `align-items` 会全部居中**：较窄的子项在交叉轴居中，和容器同宽的子项看起来仍贴着起点。左对齐写 `align-items:flex-start`。`justify-content` 只管本层主轴，写在子项上改不了它在父级交叉轴上的位置。`align-content` 默认 `flex-start`，管的是 `flex-wrap` 之后的多行，不是一行里的子项。`flex-wrap` 可以写 `wrap` 或 `wrap-reverse`。
 
-没写 `display:flex` 的 `div` 里直接放 `p`、`h1`–`h3`、`div` 或其他非行内标签时，按块级从上到下、靠起点排，不报 `invalid-child`。只放文字和行内标签时，`div` 仍是文字盒子。`p`、`h1`–`h3`、`span` 里嵌套这些标签仍然报 `invalid-child`。
+没写 `display:flex` 的 `div` 里直接放 `p`、`h1`–`h3`、`div` 或其他非行内标签时，按块级从上到下排，文字块拉到这一列的宽度，不报 `invalid-child`。只放文字和行内标签时，`div` 仍是文字盒子。`p`、`h1`–`h3`、`span` 里嵌套块级标签仍然报 `invalid-child`，但可以直接放 `<img>`。容器上的字号、字重、字体、颜色、字距和 `text-align` 会传给没写这些的 `p`、`div`、`span`；`h1`–`h3` 仍用自己的默认字号和字重。`em` / `i` 是斜体，`u` 加下划线。
 
 ## 3. 生成
 
