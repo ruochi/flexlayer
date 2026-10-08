@@ -296,15 +296,15 @@ function segmentsToUnits(segments: TextSegment[]): Unit[] {
     let i = 0
     const s = seg.text
     while (i < s.length) {
-      const ch = s[i]!
+      const ch = String.fromCodePoint(s.codePointAt(i)!)
       if (isCollapsibleSpaceChar(ch)) {
         push(' ', measureTextWidth(' ', seg.style), true, true, true)
-        i++
+        i += ch.length
         continue
       }
       if (isCjk(ch)) {
         push(ch, measureTextWidth(ch, seg.style), false, false, false)
-        i++
+        i += ch.length
         continue
       }
       if (isWordChar(ch)) {
@@ -316,7 +316,7 @@ function segmentsToUnits(segments: TextSegment[]): Unit[] {
         continue
       }
       push(ch, measureTextWidth(ch, seg.style), false, false, false)
-      i++
+      i += ch.length
     }
   }
   return units.filter((u) => u.text !== '\u0000' || u.width === 0)
