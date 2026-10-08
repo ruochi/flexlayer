@@ -158,9 +158,25 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 `symbol` 定义一块可复用的图，本身不画出来。`use` 按 layer 的方式摆放它：`x`、`y`、`anchor`、`rotate`、`scale`、`opacity` 都写在 `use` 上。`symbol` 里的坐标是它自己的局部坐标。
 
-`<math>` 排 MathML 子集，可以放在 `layer` 里，也可以和文字一起放进 `display:flex`。不能放进文字盒子。字号默认 40px，可用 `style="font-size:…"`。公式不换行。
+`<math>` 排 MathML 子集，可以放在 `layer` 里，也可以和文字一起放进 `display:flex`。不能放进文字盒子。字号默认 40px，可用 `style="font-size:…"`。公式不换行。单独成行的公式写 `display="block"`：分数不缩小，求和、积分换成大号字形。
 
-支持 `math`、`mrow`、`mi`、`mn`、`mo`、`mtext`、`mfrac`、`msub`、`msup`、`msubsup`、`msqrt`、`mroot`、`munder`、`mover`、`munderover`、`mtable`、`mtr`、`mtd`。`mfrac` 的分子分母是 0.85 倍字号，线上下各留 0.28em。上下标是 0.7 倍；求和、连乘和 `lim` 的限在基座上下，积分号放大 1.35 倍、限在右侧。`msqrt` 左侧是随内容变高的根号。`mtable` 行距 0.2em，单元格间距 0.45em。单独写这些标签、不包在 `math` 里，报 `unknown-tag`。
+支持 `math`、`mrow`、`mi`、`mn`、`mo`、`mtext`、`mspace`、`mfrac`、`msub`、`msup`、`msubsup`、`msqrt`、`mroot`、`munder`、`mover`、`munderover`、`mtable`、`mtr`、`mtd`、`mstyle`、`mphantom`、`semantics`。`annotation` 不画。单独写这些标签、不包在 `math` 里，报 `unknown-tag`。
+
+公式按 TeX 和 MathML Core 的规矩排，间距取自数学字体 STIX Two Math 的 MATH 表：
+
+- 字体：字母、数字和运算符只用带 OpenType MATH 表的字体。目前只有 `STIXTwoMath`，在 `<math>`、`mi`、`mn`、`mo` 上写别的 `font-family` 不生效，报 `invalid-attr`。`mtext` 用外面文字的字体，也可以自己写 `font-family`。
+- 字母：单个字母的 `mi` 是斜体（拉丁字母和小写希腊字母），多个字母的 `mi`（`sin`、`lim`）直立。`mathvariant` 可写 `normal`、`italic`、`bold`、`bold-italic`、`double-struck`、`script`、`fraktur`、`sans-serif`、`monospace`。`mo` 里的 `-` 画成减号 `−`。
+- 基线：一行里的记号按基线对齐。分数线、大运算符和伸长的括号以数学轴为中心。
+- 间距：按 TeX 的原子类别（普通、运算符、二元、关系、开、闭、标点）补空隙：`=` 两侧 5/18em，`+` 两侧 4/18em，`,` 后 3/18em，`sin x` 中间 3/18em。行首或跟在运算符后面的 `-`、`+` 是正负号，不加空。上下标里只留细空。`mo` 写 `lspace`、`rspace` 时用写的值。积分后的 `<mi>d</mi><mi>x</mi>` 前面补一个细空。
+- 分数：行内公式分子分母 0.85 倍字号，`display="block"` 的最外层分数不缩小。`linethickness="0"` 去掉分数线（二项式）。
+- 上下标：0.7 倍字号，第二层 0.55 倍。同一行里的上标高度一致；上下标同时出现时叠在同一列，中间留缝。斜体字母的上标往右让出斜体修正，积分的下标往左收。`′` 写成上标时按原字号、不再抬高。
+- 上下限：`display="block"` 时求和、连乘、`lim`、`max` 等的限在基座正上方、正下方（`msub`、`msup` 也一样）。行内公式里这些限放到右侧，`munder`、`mover`、`munderover` 也一样；`mo` 写 `movablelimits="false"` 时始终在上下方。积分的限在右侧。
+- 重音：`mover` 的 `^`、`~`、`→`、`˙` 等默认是重音，贴着基座；底下是多个字母时加宽。`¯`、`‾`、`_` 画成和基座一样宽的线。`⏞`、`⏟` 和箭头横向伸长。
+- 括号：`( ) [ ] { } | ‖ ⟨ ⟩ ⌈ ⌉ ⌊ ⌋` 按配对伸长到中间内容的高度，没配对的跟整行一样高。`stretchy="false"` 不伸长。
+- 根号：`msqrt` 的根号随内容变高，`mroot` 的指数是 0.55 倍字号，放在根号左上的勾里。
+- 矩阵：同一列对齐，列间距 0.8em，每行至少 1.2em 高、行间再留 0.2em，整张表以数学轴居中。`columnalign`（`left`、`center`、`right`）写在 `mtable`、`mtr` 或 `mtd` 上，`rowspacing`、`columnspacing` 写在 `mtable` 上。
+
+`<math>` 的盒子至少有一行文字高（基线上方 0.95em，下方 0.25em）。放进横排 flex 且交叉轴居中（`align-items` 默认 `center`）时，盒子上下补齐，基线落在盒子中心下方 0.35em，和居中放着的同字号文字基线对齐。公式很高时，补齐会在一侧留出空白。例子见 [examples/math.layer](examples/math.layer)。
 
 ```html
 <symbol id="dew" width="28" height="28">

@@ -433,14 +433,6 @@ export type CustomLayoutNode = LayoutNodeBase & {
   kind: 'custom'
 }
 
-export type SqrtLayoutNode = LayoutNodeBase & {
-  kind: 'sqrt'
-  surdWidth: number
-  color: string
-  thickness: number
-  child: LayoutNode
-}
-
 export type MeshSpec =
   | { type: 'sphere'; r: number }
   | { type: 'box'; depth: number }
@@ -463,7 +455,6 @@ export type LayoutNode =
   | LineLayoutNode
   | CustomLayoutNode
   | MeshLayoutNode
-  | SqrtLayoutNode
 
 /** `view="x y w h"`。x y 是舞台坐标，w h 是被取的宽高。 */
 export type ViewRect = { x: number; y: number; width: number; height: number }
