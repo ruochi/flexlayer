@@ -389,6 +389,8 @@ export type FlexLayoutNode = LayoutNodeBase & {
   kind: 'flex'
   direction: 'row' | 'column'
   children: LayoutNode[]
+  /** 边框盒顶部到基线的距离。公式用来参加横排的 baseline 对齐。 */
+  baseline?: number
 }
 
 export type GroupLayoutNode = LayoutNodeBase & {

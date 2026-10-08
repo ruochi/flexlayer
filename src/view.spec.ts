@@ -70,9 +70,44 @@ describe('view', () => {
     expect(fitted.issues.some((issue) => issue.message.includes('宽高比'))).toBe(true)
   })
 
+  it('转过的矩形盖不住镜头时报 view-outside，放大后的矩形盖住就不报', async () => {
+    const turned = await checkFvg(
+      page(
+        `<layer width="100" height="100" view="0 0 100 100"><rect x="0" y="0" width="100" height="100" rotate="45" fill="#fff" /></layer>`,
+        'width="120" height="120" safe="0"',
+      ),
+    )
+    expect(turned.issues.some((issue) => issue.code === 'view-outside' && issue.level === 'error')).toBe(true)
+
+    const grown = await checkFvg(
+      page(
+        `<layer width="100" height="100" view="0 0 100 100"><rect x="0" y="0" width="50" height="50" scale="2" origin="top-left" fill="#fff" /></layer>`,
+        'width="100" height="100" safe="0"',
+      ),
+    )
+    expect(grown.issues.some((issue) => issue.code === 'view-outside')).toBe(false)
+
+    const bare = await checkFvg(
+      page(
+        `<layer width="100" height="100" view="0 0 100 100"><rect x="0" y="0" width="50" height="50" fill="#fff" /></layer>`,
+        'width="100" height="100" safe="0"',
+      ),
+    )
+    expect(bare.issues.some((issue) => issue.code === 'view-outside')).toBe(true)
+  })
+
+  it('最小字号按短边，横竖屏同一档', async () => {
+    const wide = await checkFvg(`<layer width="1920" height="1080" safe="0"><p style="font-size:28px; white-space:nowrap">正文</p></layer>`)
+    expect(wide.issues.some((issue) => issue.code === 'min-font-size')).toBe(false)
+    const wideSmall = await checkFvg(`<layer width="1920" height="1080" safe="0"><p style="font-size:20px; white-space:nowrap">正文</p></layer>`)
+    expect(wideSmall.issues.find((issue) => issue.code === 'min-font-size')?.message).toContain('24.0px')
+    const tall = await checkFvg(`<layer width="1080" height="1920" safe="0"><p style="font-size:20px; white-space:nowrap">正文</p></layer>`)
+    expect(tall.issues.find((issue) => issue.code === 'min-font-size')?.message).toContain('24.0px')
+  })
+
   it('最小字号和模糊外扩按屏幕尺寸', async () => {
     const shrunk = await checkFvg(
-      `<layer width="1080" height="200" safe="0"><p style="font-size:30px; white-space:nowrap; scale:0.5">字</p></layer>`,
+      `<layer width="1080" height="1080" safe="0"><p style="font-size:30px; white-space:nowrap; scale:0.5">字</p></layer>`,
     )
     const small = shrunk.issues.find((issue) => issue.code === 'min-font-size')
     expect(small?.message).toContain('屏幕上的字号 15.0px')

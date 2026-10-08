@@ -51,7 +51,7 @@ describe('行内标签进报告', () => {
     expect(outside.every((issue) => !issue.path.includes('/span'))).toBe(true)
 
     const tiny = await checkFvg(
-      `<layer width="1080" height="200" safe="0" background="#fff"><p style="font-size:12px">小<span id="mark">字</span></p></layer>`,
+      `<layer width="1080" height="1080" safe="0" background="#fff"><p style="font-size:12px">小<span id="mark">字</span></p></layer>`,
     )
     const small = tiny.issues.filter((issue) => issue.code === 'min-font-size')
     expect(small.length).toBeGreaterThan(0)

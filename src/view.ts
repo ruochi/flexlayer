@@ -1,6 +1,6 @@
-import { matrixScale, multiply, scaled, translated, type Matrix } from './matrix.js'
+import { apply, aroundPivot, matrixScale, multiply, originOffset, scaled, translated, type Matrix } from './matrix.js'
 import { parseNumber } from './style.js'
-import { unionBoxes, type Box, type LayoutNode, type ViewRect } from './types.js'
+import type { LayoutNode, ViewRect } from './types.js'
 
 /** 四个数 `x y w h`。宽高必须大于 0。 */
 export function parseView(raw: string): ViewRect | null {
@@ -50,22 +50,59 @@ export function layoutScale(node: LayoutNode): number {
   return k || 1
 }
 
-/** view 有没有被直接子元素的布局盒盖住。没盖住的部分出图会露底。 */
-export function viewExceeds(view: ViewRect, children: LayoutNode[]): boolean {
-  let union: Box | null = null
-  for (const child of children) {
-    if (child.width <= 1e-3 || child.height <= 1e-3) continue
-    const box: Box = { x: child.x, y: child.y, width: child.width, height: child.height }
-    union = union ? unionBoxes(union, box) : box
+const VIEW_SLACK = 0.51
+
+/** 布局盒子绕 origin 做完 rotate、scale 之后的四个角，顺序是左上、右上、右下、左下。 */
+function childQuad(child: LayoutNode): Array<[number, number]> | null {
+  if (child.width <= 1e-3 || child.height <= 1e-3) return null
+  const pivot = originOffset(child.origin, child.width, child.height)
+  const pose = aroundPivot(child.x + pivot.x, child.y + pivot.y, child.rotate, child.scaleX, child.scaleY)
+  return [
+    apply(pose, child.x, child.y),
+    apply(pose, child.x + child.width, child.y),
+    apply(pose, child.x + child.width, child.y + child.height),
+    apply(pose, child.x, child.y + child.height),
+  ]
+}
+
+/** 凸多边形，边向内或向外绕一圈都可以。点落在边上算在里面。 */
+function pointInConvex(point: [number, number], corners: Array<[number, number]>): boolean {
+  let sign = 0
+  for (let i = 0; i < corners.length; i++) {
+    const a = corners[i]!
+    const b = corners[(i + 1) % corners.length]!
+    const cross = (b[0] - a[0]) * (point[1] - a[1]) - (b[1] - a[1]) * (point[0] - a[0])
+    if (Math.abs(cross) <= 1e-3) continue
+    const next = cross > 0 ? 1 : -1
+    if (sign === 0) sign = next
+    else if (next !== sign) return false
   }
-  if (!union) return true
-  const eps = 0.51
-  return (
-    view.x < union.x - eps ||
-    view.y < union.y - eps ||
-    view.x + view.width > union.x + union.width + eps ||
-    view.y + view.height > union.y + union.height + eps
-  )
+  return true
+}
+
+/**
+ * view 有没有被直接子元素转完、缩完的四边形盖住。没盖住的部分出图会露底。
+ * 镜头四角各向内收 0.51px 再测，贴边的取景不算超出。多个子元素时，每个角落在其中一块里即可。
+ */
+export function viewExceeds(view: ViewRect, children: LayoutNode[]): boolean {
+  const quads = children.flatMap((child) => {
+    const quad = childQuad(child)
+    return quad ? [quad] : []
+  })
+  if (quads.length === 0) return true
+  const dx = Math.min(VIEW_SLACK, view.width / 2)
+  const dy = Math.min(VIEW_SLACK, view.height / 2)
+  const x = view.x + dx
+  const y = view.y + dy
+  const right = view.x + view.width - dx
+  const bottom = view.y + view.height - dy
+  const corners: Array<[number, number]> = [
+    [x, y],
+    [right, y],
+    [right, bottom],
+    [x, bottom],
+  ]
+  return corners.some((corner) => !quads.some((quad) => pointInConvex(corner, quad)))
 }
 
 function trimNum(n: number): string {

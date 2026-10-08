@@ -213,6 +213,52 @@ describe('canvas.create', () => {
     expect(lines[1]!.y).toBeGreaterThanOrEqual(lines[0]!.y + lines[0]!.height - 0.5)
   })
 
+  it('字带上所属 span 的 id', () => {
+    const block = canvas.create(
+      h(
+        'layer',
+        {},
+        h('p', { style: 'font-size:40px; white-space:nowrap' }, '前面', h('span', { id: 'here' }, '就是这里'), '后面'),
+      ),
+    )
+    const chars = block.text[0]!.lines[0]!.chars
+    expect(chars.map((char) => char.text).join('')).toBe('前面就是这里后面')
+    expect(chars.filter((char) => char.id === 'here').map((char) => char.text).join('')).toBe('就是这里')
+    expect(chars.filter((char) => char.id == null).map((char) => char.text).join('')).toBe('前面后面')
+
+    const nested = canvas.create(
+      h(
+        'layer',
+        {},
+        h('p', { style: 'font-size:40px; white-space:nowrap' }, h('span', { id: 'outer' }, '甲', h('em', { id: 'inner' }, '乙'))),
+      ),
+    )
+    const nestedChars = nested.text[0]!.lines[0]!.chars
+    expect(nestedChars.find((char) => char.text === '甲')?.id).toBe('outer')
+    expect(nestedChars.find((char) => char.text === '乙')?.id).toBe('inner')
+  })
+
+  it('letter-spacing 的 em 按声明处的字号换算，继承的是像素', () => {
+    const gap = (node: ReturnType<typeof canvas.create>) => {
+      const chars = node.text[0]!.lines[0]!.chars
+      return chars[1]!.x - chars[0]!.x
+    }
+    const em = canvas.create(h('layer', {}, h('p', { style: 'font-size:40px; white-space:nowrap; letter-spacing:0.5em' }, 'AB')))
+    const px = canvas.create(h('layer', {}, h('p', { style: 'font-size:40px; white-space:nowrap; letter-spacing:20px' }, 'AB')))
+    expect(em.issues.filter((issue) => issue.code === 'invalid-attr')).toEqual([])
+    expect(gap(em)).toBeCloseTo(gap(px), 0)
+
+    const inherited = canvas.create(
+      h(
+        'layer',
+        {},
+        h('div', { style: 'font-size:40px; letter-spacing:0.5em' }, h('p', { style: 'font-size:80px; white-space:nowrap' }, 'AB')),
+      ),
+    )
+    const fixed = canvas.create(h('layer', {}, h('p', { style: 'font-size:80px; white-space:nowrap; letter-spacing:20px' }, 'AB')))
+    expect(gap(inherited)).toBeCloseTo(gap(fixed), 0)
+  })
+
   it('字距算进笔位，居中和内边距挪动行盒', () => {
     const tight = canvas.create(h('layer', {}, h('p', { style: 'font-size:40px; white-space:nowrap' }, 'AB')))
     const spaced = canvas.create(

@@ -31,6 +31,7 @@ import {
   parseInkStroke,
   parseNoise,
   parseLineHeight,
+  parseLetterSpacing,
   parseNumber,
   parseOverlay,
   parsePx,
@@ -478,7 +479,7 @@ function inheritTextContext(ctx: LayoutContext, tag: string, style: Record<strin
   const fontWeight = parseFontWeight(style['font-weight'])
   if (fontWeight != null) next.fontWeight = fontWeight
   else if (isHeadingTag(tag)) next.fontWeight = defaultFontWeightForTag(tag)
-  const letterSpacing = parsePx(style['letter-spacing'])
+  const letterSpacing = parseLetterSpacing(style['letter-spacing'], next.fontSize ?? 40)
   if (letterSpacing != null) next.letterSpacing = letterSpacing
   if (style['text-align']) next.textAlign = textAlignOf(style['text-align'], ctx.textAlign ?? 'left')
   const lineHeight = parseLineHeight(style['line-height'])
@@ -497,7 +498,7 @@ function withLayerText(ctx: LayoutContext, node: FvgNode): LayoutContext {
   if (fontSize != null) next.fontSize = fontSize
   const fontWeight = parseFontWeight(node.attrs['font-weight'])
   if (fontWeight != null) next.fontWeight = fontWeight
-  const letterSpacing = parsePx(node.attrs['letter-spacing'])
+  const letterSpacing = parseLetterSpacing(node.attrs['letter-spacing'], next.fontSize ?? 40)
   if (letterSpacing != null) next.letterSpacing = letterSpacing
   const lineHeight = parseLineHeight(node.attrs['line-height'])
   if (lineHeight) next.lineHeight = lineHeight
@@ -620,7 +621,7 @@ function mapJustify(v: string | undefined): Justify {
 }
 
 function mapAlign(v: string | undefined): Align {
-  switch ((v ?? 'center').trim()) {
+  switch ((v ?? 'center').trim().toLowerCase()) {
     case 'start':
     case 'flex-start':
       return Align.FlexStart
@@ -629,9 +630,16 @@ function mapAlign(v: string | undefined): Align {
       return Align.FlexEnd
     case 'stretch':
       return Align.Stretch
+    case 'baseline':
+      // 竖排没有文字基线，横排也先按起点排，再在后面把基线对齐。
+      return Align.FlexStart
     default:
       return Align.Center
   }
+}
+
+function isBaselineAlign(v: string | undefined): boolean {
+  return (v ?? '').trim().toLowerCase() === 'baseline'
 }
 
 function mapWrap(v: string | undefined): Wrap {
@@ -735,7 +743,7 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
     (isHeadingTag(tag) || tag === 'strong' || tag === 'b' ? 700 : ctx.fontWeight ?? defaultFontWeightForTag(tag))
   const fontFamily = style['font-family']?.trim() || ctx.fontFamily
   const color = style.color ?? ctx.color
-  const letterSpacing = parsePx(style['letter-spacing']) ?? ctx.letterSpacing ?? 0
+  const letterSpacing = parseLetterSpacing(style['letter-spacing'], fontSize) ?? ctx.letterSpacing ?? 0
   const images: ImageLayoutNode[] = []
   const segments = extractTextSegments(
     node,
@@ -1310,6 +1318,8 @@ type FlexMeasure = {
   isText: boolean
   /** 最终按分配宽度重排时用的源节点。 */
   source?: FvgNode
+  /** `align-self`，没写就用这一层的 `align-items`。量的时候还没有，排进去之后才写上。 */
+  crossAlign?: string
 }
 
 function fontDecl(node: FvgNode): { family: string; src: string } | null {
@@ -1486,6 +1496,63 @@ function measureFlexChild(raw: FvgNode, ctx: LayoutContext, direction: 'row' | '
   return null
 }
 
+/** 边框盒顶部到对齐用的基线。文字用第一行，公式用自己的基线，其余用下边缘。 */
+function contentBaseline(node: LayoutNode): number {
+  if (node.kind === 'flex' && node.baseline != null) return node.baseline
+  const edge = node.padding.top + (node.border?.width ?? 0)
+  if (node.kind === 'text') {
+    const line = node.textLayout.lines[0]
+    return line ? edge + line.baselineY : node.height
+  }
+  if (node.kind === 'flex' && node.children.length > 0) {
+    const first = node.children[0]!
+    return edge + first.y + contentBaseline(first)
+  }
+  return node.height
+}
+
+/**
+ * 横排里写了 baseline 的子项，按第一行基线对齐。
+ * Yoga 先把它们排在行的起点，这里再挪。行被撑高时，后面的行一起下移。
+ */
+function alignFlexBaselines(children: LayoutNode[], baseline: boolean[]) {
+  const originY = children.map((child) => child.y)
+  const groups: number[][] = []
+  for (let i = 0; i < children.length; i++) {
+    if (!baseline[i]) continue
+    const y = originY[i]!
+    const group = groups.find((indices) => Math.abs(originY[indices[0]!]! - y) < 1)
+    if (group) group.push(i)
+    else groups.push([i])
+  }
+  groups.sort((a, b) => originY[a[0]!]! - originY[b[0]!]!)
+
+  const growths: Array<{ bottom: number; extra: number }> = []
+  let carried = 0
+  for (const group of groups) {
+    const top = Math.min(...group.map((i) => originY[i]!)) + carried
+    const lineAscent = Math.max(...group.map((i) => contentBaseline(children[i]!)))
+    const originBottom = Math.max(...group.map((i) => originY[i]! + children[i]!.height))
+    for (const i of group) {
+      const ascent = contentBaseline(children[i]!)
+      children[i]!.y = top + (lineAscent - ascent)
+    }
+    const newBottom = Math.max(...group.map((i) => children[i]!.y + children[i]!.height))
+    const extra = Math.max(0, newBottom - (originBottom + carried))
+    growths.push({ bottom: originBottom, extra })
+    carried += extra
+  }
+
+  for (let i = 0; i < children.length; i++) {
+    if (baseline[i]) continue
+    let push = 0
+    for (const growth of growths) {
+      if (originY[i]! >= growth.bottom - 1) push += growth.extra
+    }
+    children[i]!.y = originY[i]! + push
+  }
+}
+
 function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
   const style = parseStyle(node.attrs.style)
   const childCtx = inheritTextContext(ctx, node.tag, style)
@@ -1508,9 +1575,10 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
     const ch = childNodes[i]!
     const path = nodePath(ctx.pathPrefix, ch.tag, i)
     track(ctx, path, ch)
-    const crossAlign = parseStyle(ch.attrs.style)['align-self'] ?? style['align-items'] ?? 'center'
+    const selfAlign = parseStyle(ch.attrs.style)['align-self']?.trim().toLowerCase()
+    const crossAlign = !selfAlign || selfAlign === 'auto' ? (style['align-items'] ?? 'center') : selfAlign
     const m = measureFlexChild(ch, { ...childCtx, pathPrefix: path }, direction, crossAlign)
-    if (m) measures.push(m)
+    if (m) measures.push({ ...m, crossAlign })
   }
 
   let crossAvailable =
@@ -1565,6 +1633,7 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
     yn.setFlexGrow(grow)
     yn.setFlexShrink(shrink)
     yn.setFlexBasisAuto()
+    yn.setAlignSelf(mapAlign(m.crossAlign ?? 'center'))
     const textSource = m.source
     const columnText = direction === 'column' && m.isText && textSource != null && m.node.kind === 'text'
     if (columnText) {
@@ -1638,6 +1707,11 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
       const extra = child.height - slots[i]!.height
       if (extra > 0.5) shift += extra
     }
+  } else if (measures.some((m) => isBaselineAlign(m.crossAlign))) {
+    alignFlexBaselines(
+      laidChildren,
+      measures.map((m) => isBaselineAlign(m.crossAlign)),
+    )
   }
 
   let contentW = 0
@@ -2253,7 +2327,7 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
       code: 'view-outside',
       path: ctx.pathPrefix,
       message: 'view 超出了舞台',
-      hint: '把 view 收到子元素的范围内，或把舞台 layer 加大。取景窗没被盖住时，成片会露底',
+      hint: '把 view 收到子元素转完、缩完的范围内，或把舞台加大。取景窗没被盖住时，成片会露底',
     })
   }
   const laid: LayerLayoutNode = {

@@ -677,7 +677,7 @@ export function buildReport(doc: FvgDocument): FvgReport {
           message: '文字超出安全区',
         })
       }
-      const minFs = (doc.width / 1080) * 24
+      const minFs = (Math.min(doc.width, doc.height) / 1080) * 24
       const shownSize = (el.fontSize ?? 0) * (el.screenScale ?? 1)
       if (shownSize < minFs - 1e-3) {
         const sized = el.screenScale != null ? `屏幕上的字号 ${shownSize.toFixed(1)}px` : `字号 ${el.fontSize}px`

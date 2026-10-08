@@ -22,6 +22,19 @@ export function parsePx(value: string | undefined): number | undefined {
   return m ? Number.parseFloat(m[1]) : undefined
 }
 
+/**
+ * 字距。数字、`px`、`em` 或 `normal`。`em` 按传入的字号换算成像素。
+ * 无法解析返回 undefined。
+ */
+export function parseLetterSpacing(value: string | undefined, fontSize: number): number | undefined {
+  if (value == null) return undefined
+  if (value.trim().toLowerCase() === 'normal') return 0
+  const m = /^\s*(-?\d*\.?\d+)\s*(px|em)?\s*$/i.exec(value)
+  if (!m) return undefined
+  const n = Number.parseFloat(m[1]!)
+  return m[2]?.toLowerCase() === 'em' ? n * fontSize : n
+}
+
 export function parseNumber(value: string | undefined): number | undefined {
   if (value == null || value.trim() === '') return undefined
   const n = Number(value)
@@ -688,7 +701,7 @@ const STYLE_CHECKS: Record<string, (value: string) => StyleDiagnostic | null> = 
   'font-weight': (value) => (parseFontWeight(value) == null ? { hint: '写成 400、700，或 normal、bold' } : null),
   'font-family': () => null,
   color: () => null,
-  'letter-spacing': (value) => lengthHint(value, '写成 0 或 2px'),
+  'letter-spacing': (value) => (parseLetterSpacing(value, 16) == null ? { hint: '写成 0、2px 或 0.05em' } : null),
   'line-height': (value) => (parseLineHeight(value) == null ? { hint: '写成倍数 1.4，或像素 24px' } : null),
   'text-align': (value) => keywordHint(value, ['left', 'center', 'right', 'start', 'end'], '写成 left、center 或 right'),
   'white-space': (value) => keywordHint(value, ['normal', 'nowrap'], '写成 normal 或 nowrap'),
@@ -700,12 +713,16 @@ const STYLE_CHECKS: Record<string, (value: string) => StyleDiagnostic | null> = 
   display: (value) => keywordHint(value, ['flex', 'inline-flex', 'block'], '写成 flex、inline-flex 或 block'),
   'flex-direction': (value) => keywordHint(value, ['row', 'column'], '写成 row 或 column'),
   'align-items': (value) =>
-    keywordHint(value, ['flex-start', 'flex-end', 'center', 'stretch', 'start', 'end'], '写成 flex-start、center、flex-end 或 stretch'),
+    keywordHint(
+      value,
+      ['flex-start', 'flex-end', 'center', 'stretch', 'start', 'end', 'baseline'],
+      '写成 flex-start、center、flex-end、stretch 或 baseline',
+    ),
   'align-self': (value) =>
     keywordHint(
       value,
-      ['auto', 'flex-start', 'flex-end', 'center', 'stretch', 'start', 'end'],
-      '写成 auto、flex-start、center、flex-end 或 stretch',
+      ['auto', 'flex-start', 'flex-end', 'center', 'stretch', 'start', 'end', 'baseline'],
+      '写成 auto、flex-start、center、flex-end、stretch 或 baseline',
     ),
   'align-content': (value) =>
     keywordHint(

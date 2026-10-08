@@ -125,9 +125,9 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 `overflow="hidden"` 按 layer 的盒子裁剪子元素。默认 `visible`。被裁掉的是子元素；这一层自己的阴影、模糊仍可以画到盒子外面。祖先的 `overflow="hidden"` 会把子元素的阴影和光晕一起裁掉。已经被这样裁掉、画布上看不见的部分不报 `effect-clipped`。
 
-`view="x y w h"` 把这一层变成镜头。`width` `height` 是屏幕上的取景窗，`x` `y` 是窗口在父层里的位置。`view` 是舞台坐标里被取的矩形，铺满取景窗：窗口上的一点是舞台上对应点乘 `取景窗 / view` 的宽高。窗口外的内容裁掉，和 `overflow="hidden"` 一样，不报 `overflow-canvas`。`view` 没被直接子元素的布局盒盖住时报 `view-outside`（error），成片会露底。宽高比和取景窗差超过 1% 时不拉伸，按宽度保持中心重算高度，并 `warn`。要写 `width` 和 `height`。不要和 `perspective` 写在同一层。屏幕上不跟着镜头放大的章节、字幕、标注，写在这一层外面，用成片像素。`zoomView(center, zoom, size)` 用来算推到某一点的 `view`。`bleed` 已不再使用，写了会 `warn`。
+`view="x y w h"` 把这一层变成镜头。`width` `height` 是屏幕上的取景窗，`x` `y` 是窗口在父层里的位置。`view` 是舞台坐标里被取的矩形，铺满取景窗：窗口上的一点是舞台上对应点乘 `取景窗 / view` 的宽高。窗口外的内容裁掉，和 `overflow="hidden"` 一样，不报 `overflow-canvas`。`view` 没被直接子元素转完、缩完的四边形盖住时报 `view-outside`（error），成片会露底。四边形是这一层直接子元素的布局盒子，绕它自己的 `origin` 做了 `rotate` 和 `scale`。镜头四个角都落在这些四边形里才算盖住；多个子元素时，每个角落在其中一块里即可，角都盖住但中间有缝时可能不报。宽高比和取景窗差超过 1% 时不拉伸，按宽度保持中心重算高度，并 `warn`。要写 `width` 和 `height`。不要和 `perspective` 写在同一层。屏幕上不跟着镜头放大的章节、字幕、标注，写在这一层外面，用成片像素。`zoomView(center, zoom, size)` 用来算推到某一点的 `view`。`bleed` 已不再使用，写了会 `warn`。
 
-检查和绘制都按屏幕上的实际大小。`scale` 和 `view` 叠出来的倍数写在报告的 `screenScale`（两轴绝对值的几何平均，等于 1 不写）。最小字号拿 `font-size × screenScale` 和 `画布宽度 / 1080 × 24` 比。阴影、光晕、模糊的外扩同样乘这个倍数。`--debug` 的布局框和着墨框保持 1 屏幕像素，不跟着放大。网格光栅按这个倍数提高分辨率，推近后笔画仍然清楚。
+检查和绘制都按屏幕上的实际大小。`scale` 和 `view` 叠出来的倍数写在报告的 `screenScale`（两轴绝对值的几何平均，等于 1 不写）。最小字号拿 `font-size × screenScale` 和 `min(画布宽, 画布高) / 1080 × 24` 比。1080p 横屏和竖屏都是 24px。阴影、光晕、模糊的外扩同样乘这个倍数。`--debug` 的布局框和着墨框保持 1 屏幕像素，不跟着放大。网格光栅按这个倍数提高分辨率，推近后笔画仍然清楚。
 
 `<mask>` 裁的是这一层合成完的画面，包括阴影、模糊、调色和颗粒。它写在 `layer` 里面，和要裁的内容并列。自己不画出来，不占布局，不把层撑大，不出现在报告里，也不触发 `overflow-canvas`。被它挡住的内容同样不报 `overflow-canvas` 或 `effect-clipped`：报告里的 `ink` 先和 mask 形状的外接范围求交。一层最多一个，多出来的 `warn` 并忽略。坐标和同层的图形一样，原点在 layer 左上角。
 
@@ -176,7 +176,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 - 根号：`msqrt` 的根号随内容变高，`mroot` 的指数是 0.55 倍字号，放在根号左上的勾里。
 - 矩阵：同一列对齐，列间距 0.8em，每行至少 1.2em 高、行间再留 0.2em，整张表以数学轴居中。`columnalign`（`left`、`center`、`right`）写在 `mtable`、`mtr` 或 `mtd` 上，`rowspacing`、`columnspacing` 写在 `mtable` 上。
 
-`<math>` 的盒子至少有一行文字高（基线上方 0.95em，下方 0.25em）。放进横排 flex 且交叉轴居中（`align-items` 默认 `center`）时，盒子上下补齐，基线落在盒子中心下方 0.35em，和居中放着的同字号文字基线对齐。公式很高时，补齐会在一侧留出空白。例子见 [examples/math.layer](examples/math.layer)。
+`<math>` 的盒子至少有一行文字高（基线上方 0.95em，下方 0.25em）。放进横排 flex 且交叉轴居中（`align-items` 默认 `center`）时，盒子上下补齐，基线落在盒子中心下方 0.35em，和居中放着的同字号文字基线对齐。公式很高时，补齐会在一侧留出空白。横排写了 `align-items:baseline` 时不再补白，公式自己的基线和旁边文字的第一行基线对齐。例子见 [examples/math.layer](examples/math.layer)。
 
 ```html
 <symbol id="dew" width="28" height="28">
@@ -223,7 +223,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | `gap` | `0` | 子元素间距。`row-gap`、`column-gap` 可以分开写，没写的那边沿用 `gap` |
 | `flex-wrap` | `nowrap` | `nowrap`、`wrap`、`wrap-reverse`。主轴放不下时换行 |
 | `padding` | `0` | 1 到 4 个值，同 CSS |
-| `align-items` | `center` | `start`、`center`、`end`、`stretch`。默认 `center`，CSS 里是 `stretch`。管一行里的交叉轴 |
+| `align-items` | `center` | `start`、`center`、`end`、`stretch`、`baseline`。默认 `center`，CSS 里是 `stretch`。管一行里的交叉轴。`baseline` 在横排把第一行文字基线对齐；图片、`layer`、形状对齐到下边缘。竖排没有这条基线，按 `flex-start` |
 | `align-content` | `flex-start` | `start`、`center`、`end`、`stretch`、`space-between`、`space-around`、`space-evenly`。多行在交叉轴上怎么排。默认贴起点，不是 `align-items` 的 `center` |
 | `justify-content` | `start` | `start`、`center`、`end`、`space-between`、`space-around`、`space-evenly` |
 | `background`、`border`、`border-radius` | 无 | 同 CSS，border 只支持实线 |
@@ -232,7 +232,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 - 文字默认 `flex-shrink:1`，空间不够时会换行变窄，但不会窄过最长的一个不可断开的词。
 - 形状和图片默认 `flex-shrink:0`，不会被压扁。
-- `align-items` 默认 `center`，CSS 里是 `stretch`。竖排 column 没写时，较窄的子项在交叉轴居中；和容器同宽的子项看起来仍贴着起点。左对齐写 `align-items:flex-start` 或 `start`。交叉轴位置由这一层自己的 `align-items` 决定，在子项上写 `justify-content` 改不了。
+- `align-items` 默认 `center`，CSS 里是 `stretch`。竖排 column 没写时，较窄的子项在交叉轴居中；和容器同宽的子项看起来仍贴着起点。左对齐写 `align-items:flex-start` 或 `start`。交叉轴位置由这一层自己的 `align-items` 决定，在子项上写 `justify-content` 改不了。横排要按文字基线对齐写 `align-items:baseline`，`align-self` 同样可以写 `baseline`。竖排写了 `baseline` 按 `flex-start`。
 - `align-content` 默认 `flex-start`。它排的是换行以后的多行，不是一行里面的子项。容器写死了高度、行又没占满时，行贴着起点；要居中写 `align-content:center`。
 - `flex-wrap:wrap` 之后，`flex-overflow` 看的是换行后的子元素有没有超出写死的宽高。换行能放下就不报；容器高度不够、下一行仍探出去，才报。
 
@@ -258,7 +258,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 | 属性 | 说明 |
 | --- | --- |
-| `font-size`、`font-weight`、`font-family`、`color`、`letter-spacing` | 同 CSS，行内标签也可以写 |
+| `font-size`、`font-weight`、`font-family`、`color`、`letter-spacing` | 同 CSS，行内标签也可以写。`letter-spacing` 可以写 `0`、`2px` 或 `0.05em`。`em` 按写这条声明的元素自己的字号换算，再按像素继承；子元素改了字号不会把父级的 `em` 重算 |
 | （字重规则） | `ChillDuanSans` 按可变字重绘制，字重轴约 300 到 800，中间的字重不会收成 400 和 700 两档。登记了多档文件的字体取最近的一档。只登记了一档的字体，例如 `Brush`、`Bebas`，请求别的字重仍用这一档。自带 `<font>` 且文件没有字重轴的，按 400 |
 | `writing-mode` | `horizontal-tb`（默认）或 `vertical-rl`。竖排时字从上到下，列从右到左，`letter-spacing` 是字与字之间的额外间距 |
 | `line-height` | 倍数（`1.4`）或像素（`24px`）。`normal` 按 1.2。单行默认 1.2，多行默认 1.4。`%`、`em` 等报 `invalid-attr`。像素行高按像素继承，不跟子元素的字号再乘一次 |
@@ -669,7 +669,7 @@ registerFilter({
 | `text-overflow` | error | 文字超出了写死的宽度或高度 |
 | `flex-overflow` | warn | 子元素超出了写死尺寸的 flex 容器 |
 | `text-overlap` | warn | 两段文字的着墨区域重叠 |
-| `min-font-size` | warn | 屏幕上的字号小于 `画布宽度 / 1080 × 24`。屏幕字号是 `font-size × screenScale` |
+| `min-font-size` | warn | 屏幕上的字号小于 `min(画布宽, 画布高) / 1080 × 24`。屏幕字号是 `font-size × screenScale`。1080p 横屏和竖屏都是 24px |
 | `auto-wrap` | info | 文字超出可用宽度，被自动换行 |
 | `non-canonical` | info | 含义明确，但不是规范写法。照常渲染，`hint` 里是规范写法 |
 | `unknown-tag` | warn | 不认识的标签 |
@@ -683,7 +683,7 @@ registerFilter({
 | `symbol-cycle` | warn | `symbol` 通过 `use` 引用了自己 |
 | `open-curve-fill` | warn | 开口的 `curve` 写了 `fill`，没有填充 |
 | `effect-clipped` | warn | 本体在画布内，阴影、光晕、描边或图层模糊超出画布。外扩按屏幕像素，乘 `screenScale` |
-| `view-outside` | error | `view` 没有被这一层直接子元素的布局盒盖住，成片会露底 |
+| `view-outside` | error | `view` 没有被这一层直接子元素转完、缩完的四边形盖住，成片会露底 |
 | `ink-stroke-fill` | warn | `inside` / `center` 的内侧宽度达到字号的约 8%，容易填死字内空白 |
 | `ink-inset` | info | 锚点贴着左边或右边，字形比布局盒子靠里至少 2px，且不小于字号的 4%。想让笔画贴齐就写 `anchor-box="ink"` |
 | `ink-anchor-empty` | info | `anchor-box="ink"` 的子树没有着墨，已按布局盒子定位 |
@@ -859,7 +859,7 @@ for await (const { frame, png, report } of renderFrames(scene, { from: 0, to: 30
 | --- | --- |
 | `x`、`y`、`width`、`height` | 这一行的盒子 |
 | `baseline` | 这一行基线的 y。同一行只有一个 |
-| `chars` | 这一行里的字。每个字有 `text`、`x`、`width`。`width` 是到下一笔的距离，最后一个字不加多余字距。基线用所在行的 `baseline` |
+| `chars` | 这一行里的字。每个字有 `text`、`x`、`width`。`width` 是到下一笔的距离，最后一个字不加多余字距。基线用所在行的 `baseline`。最内层写了 `id` 的行内标签拥有这些字时，字上还有 `id`；没写 `id` 的字没有这个字段 |
 
 竖排时每个字自己占一行，列从右往左。两段文字各有自己的 `lines`，用 `path` 分开。
 

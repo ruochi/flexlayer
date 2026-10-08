@@ -266,6 +266,23 @@ describe('mathml', () => {
     expect(line!.y + line!.height).toBeLessThanOrEqual(base!.y + 0.5)
   })
 
+  it('align-items baseline 时公式基线和文字基线对齐', async () => {
+    const doc = await layoutSource(
+      frame(
+        '<div style="display:flex; gap:8px; align-items:baseline"><span style="font-size:40px">因此</span><math><mi>x</mi><mo>=</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mn>1</mn><mo>+</mo><mfrac><mn>1</mn><mi>x</mi></mfrac></mrow></mfrac></math></div>',
+      ),
+      process.cwd(),
+    )
+    const row = doc.root.children[0]!
+    const span = flex(row).children[0]!
+    const math = findByTag(doc.root, 'math')[0]!
+    if (span.kind !== 'text') throw new Error('span')
+    const spanBaseline = span.y + span.padding.top + span.textLayout.lines[0]!.baselineY
+    const x = textNode(math, '𝑥')
+    const mathBaseline = math.y + baseline(math, x)
+    expect(Math.abs(spanBaseline - mathBaseline)).toBeLessThan(1.5)
+  })
+
   it('和文字并排居中时，公式基线和同字号文字的基线对齐', async () => {
     const doc = await layoutSource(
       frame(

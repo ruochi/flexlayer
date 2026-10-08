@@ -14,6 +14,7 @@ import {
   parseInkStroke,
   parseNoise,
   parseOverlay,
+  parseLetterSpacing,
   parsePx,
   parseShadow,
 } from './style.js'
@@ -47,6 +48,14 @@ describe('style', () => {
   it('parsePx', () => {
     expect(parsePx('12px')).toBe(12)
     expect(parsePx('12')).toBe(12)
+  })
+
+  it('parseLetterSpacing 接受 em，并按字号换算', () => {
+    expect(parseLetterSpacing('0.5em', 40)).toBe(20)
+    expect(parseLetterSpacing('2px', 40)).toBe(2)
+    expect(parseLetterSpacing('normal', 40)).toBe(0)
+    expect(parseLetterSpacing('-0.05em', 40)).toBeCloseTo(-2)
+    expect(parseLetterSpacing('2%', 40)).toBeUndefined()
   })
 
   it('parseEdges', () => {

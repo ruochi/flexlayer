@@ -1019,5 +1019,6 @@ export function layoutMath(node: FvgNode, host: MathLayoutHost, rowAlign?: strin
   laid.draw = node.draw
   laid.data = node.data
   laid.text = ''
+  laid.baseline = oy + ascent
   return laid
 }

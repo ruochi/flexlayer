@@ -329,6 +329,44 @@ describe('layoutSource', () => {
     expect(rect.blend).toBe('screen')
   })
 
+  it('align-items baseline 对齐第一行基线，竖排则按起点', async () => {
+    const doc = await layoutSource(
+      `<layer width="800" height="400" safe="0"><div style="display:flex; align-items:baseline; gap:16px"><p style="font-size:80px; white-space:nowrap">甲</p><p style="font-size:32px; white-space:nowrap">乙</p><div style="width:24px; height:24px; background:#e8b04a"></div></div></layer>`,
+      process.cwd(),
+    )
+    expect(doc.issues.some((issue) => issue.code === 'invalid-attr')).toBe(false)
+    const row = doc.root.children[0] as {
+      children: Array<{
+        y: number
+        height: number
+        padding: { top: number }
+        border?: { width: number }
+        textLayout?: { lines: Array<{ baselineY: number }> }
+      }>
+    }
+    const [big, small, box] = row.children
+    const base = (node: NonNullable<typeof big>) =>
+      node.y + node.padding.top + (node.border?.width ?? 0) + node.textLayout!.lines[0]!.baselineY
+    expect(base(big!)).toBeCloseTo(base(small!), 0)
+    expect(box!.y + box!.height).toBeCloseTo(base(big!), 0)
+
+    const column = await layoutSource(
+      `<layer width="400" height="300" safe="0"><div style="display:flex; flex-direction:column; width:300px; align-items:baseline"><p style="font-size:40px">甲</p><p style="font-size:40px">甲乙丙丁</p></div></layer>`,
+      process.cwd(),
+    )
+    const kids = (column.root.children[0] as { children: Array<{ x: number }> }).children
+    expect(kids.map((child) => child.x)).toEqual([0, 0])
+
+    const selves = await layoutSource(
+      `<layer width="800" height="300" safe="0"><div style="display:flex; align-items:center; height:240px"><p style="font-size:80px; white-space:nowrap; align-self:baseline">甲</p><p style="font-size:32px; white-space:nowrap; align-self:baseline">乙</p></div></layer>`,
+      process.cwd(),
+    )
+    const selfRow = selves.root.children[0] as { children: typeof row.children }
+    const [selfBig, selfSmall] = selfRow.children
+    expect(base(selfBig!)).toBeCloseTo(base(selfSmall!), 0)
+    expect(selfBig!.y).toBeLessThan(40)
+  })
+
   it('align-items 的 flex-start 和 flex-end 按起止对齐', async () => {
     const place = async (align: string) => {
       const doc = await layoutSource(

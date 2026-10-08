@@ -9,6 +9,8 @@ export type PlacedChar = {
   x: number
   /** 到下一笔的距离。最后一个字不加多余字距。 */
   width: number
+  /** 最内层写了 id 的行内标签。没写 id 的字没有这个字段。 */
+  id?: string
 }
 
 /** 排出来的一行。一个字就是只有一个字的一行。 */
@@ -76,7 +78,8 @@ function pushText(node: TextLayoutNode, space: Matrix, found: PlacedText[]) {
         const start = contentX + offsetX + segment.x + pen
         const [cx] = apply(space, start, localBaseline)
         const [cx2] = apply(space, start + advance.width, localBaseline)
-        chars.push({ text: advance.text, x: cx, width: cx2 - cx })
+        const id = segment.owner?.id
+        chars.push({ text: advance.text, x: cx, width: cx2 - cx, ...(id ? { id } : {}) })
         pen += advance.width
       }
     }

@@ -2,7 +2,7 @@ import { createRequire } from 'node:module'
 import type { FvgChild, FvgNode } from './parse.js'
 import { applyCanvasFont } from './fonts.js'
 import { getMeasureCtx } from './measureCtx.js'
-import { parseFontWeight, parsePx } from './style.js'
+import { parseFontWeight, parseLetterSpacing, parsePx } from './style.js'
 import { emptyBox, translateBox, unionBoxes, type Box, type InlineOwner, type TextLayoutResult, type TextRunStyle, type TextSegment } from './types.js'
 
 const require = createRequire(import.meta.url)
@@ -66,7 +66,7 @@ function mergeStyle(base: TextRunStyle, styleMap: Record<string, string>): TextR
   if (fw != null) next.fontWeight = fw
   if (styleMap['font-family']) next.fontFamily = styleMap['font-family'].trim()
   if (styleMap.color) next.color = styleMap.color.trim()
-  const ls = parsePx(styleMap['letter-spacing'])
+  const ls = parseLetterSpacing(styleMap['letter-spacing'], next.fontSize)
   if (ls != null) next.letterSpacing = ls
   return next
 }
