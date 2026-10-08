@@ -41,6 +41,7 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 | 结构化数据只放 `data` | `values={[1, 2]}` 会变成字符串 | `data={{ values: [1, 2] }}`。`.layer` 写 `data='{"values":[1,2]}'`，`draw` 读 `el.data` | `invalid-attr`、`emit-data` |
 | 故意出现的问题写 `expect` | 出血图仍报 error | `expect="overflow-canvas: 出血图"`。出现在该节点或子树里时降为 info；没出现报 `unused-expect` | `unused-expect` |
 | 文字盒子里不要嵌套块级标签 | `<p><div>…</div></p>`、`<h1><p>…</p></h1>` | `<div><p>…</p></div>`。要横排、间距或交叉轴对齐再写 `display:flex` | `invalid-child` |
+| 写了宽高的 `layer` 和文字并排放进 `div` | `<p><layer>…</layer></p>`、`<div><layer x="10" y="10" width="120" height="120">` | `<div style="display:flex"><layer width="120" height="120"><circle cx="60" cy="60" r="50" /></layer><p>…</p></div>`。图形用这一层的局部坐标。`.tsx` 同样写 | `invalid-child`、`invalid-attr` |
 | 公式用 `<math>`，不要写进文字盒子 | `<p>因此<math><mi>x</mi></math></p>` | `<div style="display:flex"><span>因此</span><math><mi>x</mi></math></div>` | `invalid-child` |
 | 整层裁切用 `<mask>`，里面直接写形状或 `<img>` | 把 mask 写成属性，或放进 flex | `<layer><mask><circle cx="160" cy="90" r="90" /></mask>…</layer>`。省略 `fill` 为不透明白 | `invalid-child` |
 | 透视写在父 `layer`，转动和 `z` 写在子元素 | `<rect perspective="900" rotateY="20">` | `<layer perspective="900"><rect rotateY="20" z="40" /></layer>` | `invalid-attr`、`flatten-3d` |
@@ -52,7 +53,7 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 
 flex 的 `align-items` 默认 `center`（CSS 里是 `stretch`）。**column 忘写 `align-items` 会全部居中**：较窄的子项在交叉轴居中，和容器同宽的子项看起来仍贴着起点。左对齐写 `align-items:flex-start`。`justify-content` 只管本层主轴，写在子项上改不了它在父级交叉轴上的位置。`align-content` 默认 `flex-start`，管的是 `flex-wrap` 之后的多行，不是一行里的子项。`flex-wrap` 可以写 `wrap` 或 `wrap-reverse`。
 
-没写 `display:flex` 的 `div` 里直接放 `p`、`h1`–`h3`、`div` 或其他非行内标签时，按块级从上到下排，文字块拉到这一列的宽度，不报 `invalid-child`。只放文字和行内标签时，`div` 仍是文字盒子。`p`、`h1`–`h3`、`span` 里嵌套块级标签仍然报 `invalid-child`，但可以直接放 `<img>`。容器上的字号、字重、字体、颜色、字距和 `text-align` 会传给没写这些的 `p`、`div`、`span`；`h1`–`h3` 仍用自己的默认字号和字重。`em` / `i` 是斜体，`u` 加下划线。
+没写 `display:flex` 的 `div` 里直接放 `p`、`h1`–`h3`、`div`、写了宽高的 `layer` 或其他非行内标签时，按块级从上到下排，文字块拉到这一列的宽度，不报 `invalid-child`。只放文字和行内标签时，`div` 仍是文字盒子。`p`、`h1`–`h3`、`span` 里嵌套块级标签或 `layer` 仍然报 `invalid-child`，但可以直接放 `<img>`。放进 `div` 的 `layer` 写 `width`、`height`，位置由排布决定，这一层上不写 `x`、`y`。容器上的字号、字重、字体、颜色、字距和 `text-align` 会传给没写这些的 `p`、`div`、`span`；`h1`–`h3` 仍用自己的默认字号和字重。`em` / `i` 是斜体，`u` 加下划线。
 
 ## 3. 生成
 
@@ -83,7 +84,7 @@ export default canvas.create(
 )
 ```
 
-只写宽或只写高、且没有会换行的文字时，另一边按比例放缩，这个比例乘进已有的 `scale`。`scale` 可以写两个数，例如 `scale="1.2 0.8"` 或 `scale="-1 1"`；原来只有一个数时仍写回一个数。宽高都写了就是盒子。返回的节点带 `left`、`top`、`right`、`bottom`，这是没转之前的布局盒。转完之后的外接矩形在 `rotatedBox`，接着摆下一块用 `rotatedBox.bottom`。文字在 `text` 里，按节点分组，每一行有盒子和 `baseline`，字在 `lines[].chars`。一个字是只有一个字的一行。底色用铺满的 `<rect fill>`。形状用 SVG 的 `x y width height` 或 `cx cy rx ry`。`<g transform>` 把几笔收成一组。`<arrow>` 是内置组件。自定义标签用 `canvas.component` 注册，类型写在 `declare module 'flexlayer/jsx-runtime'` 里。声明的属性就是回调参数的类型，返回值可以是一个元素或数组。自定义字体先 `canvas.font(family, src)`，或把 `<font>` 写进正在量的那一层；相对路径按源文件目录解析。量到的盒子和最终排版不一致时报 `measure-mismatch`。例子：`examples/poster.tsx`、`examples/hello.tsx`。规范见 SPEC 第 15 章。
+只写宽或只写高、且没有会换行的文字时，另一边按比例放缩，这个比例乘进已有的 `scale`。`scale` 可以写两个数，例如 `scale="1.2 0.8"` 或 `scale="-1 1"`；原来只有一个数时仍写回一个数。宽高都写了就是盒子。返回的节点带 `left`、`top`、`right`、`bottom`，这是没转之前的布局盒。转完之后的外接矩形在 `rotatedBox`，接着摆下一块用 `rotatedBox.bottom`。文字在 `text` 里，按节点分组，每一行有盒子和 `baseline`，字在 `lines[].chars`。一个字是只有一个字的一行。底色用铺满的 `<rect fill>`。形状用 SVG 的 `x y width height` 或 `cx cy rx ry`。`<g transform>` 把几笔收成一组。`<arrow>` 是内置组件。自定义标签用 `canvas.component` 注册，类型写在 `declare module 'flexlayer/jsx-runtime'` 里。声明的属性就是回调参数的类型，返回值可以是一个元素或数组。自定义字体先 `canvas.font(family, src)`，或把 `<font>` 写进正在量的那一层；相对路径按源文件目录解析。量到的盒子和最终排版不一致时报 `measure-mismatch`。例子：`examples/poster.tsx`、`examples/hello.tsx`、`examples/html-layer.tsx`。规范见 SPEC 第 15 章。
 
 字体、图片、配色和效果名用 [docs/RESOURCES.md](docs/RESOURCES.md)。`font-family="Song"` 这种目录里的名字会自己下载，不要编造字体文件地址，也不要把 `fonts.googleapis.com` 的 CSS 地址写进 `<font src>`。
 

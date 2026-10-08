@@ -65,7 +65,7 @@ export default canvas.create(
 )
 ```
 
-文件头写 `/** @jsxImportSource flexlayer */`。例子见 `examples/poster.tsx`。也可以直接把节点交给渲染器：
+文件头写 `/** @jsxImportSource flexlayer */`。先量再摆见 `examples/poster.tsx`。HTML 里并排放图形见 `examples/html-layer.tsx`：`div` 里放写了宽高的 `layer`，圆和矩形用这一层的局部坐标。也可以直接把节点交给渲染器：
 
 ```ts
 import { renderLayer } from 'flexlayer'

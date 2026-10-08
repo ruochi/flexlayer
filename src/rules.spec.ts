@@ -169,4 +169,17 @@ describe('属性归属', () => {
     const report = await issues(`<layer width="400" height="200"><div><h3>标题</h3><p>正文</p></div></layer>`)
     expect(report.issues.filter((issue) => issue.code === 'invalid-child')).toEqual([])
   })
+
+  it('文字盒子里的 layer 报 invalid-child', async () => {
+    const report = await issues(`<layer width="400" height="200"><p>标题<layer width="40" height="40"><circle cx="20" cy="20" r="10" fill="#fff" /></layer></p></layer>`)
+    const hit = report.issues.find((issue) => issue.code === 'invalid-child' && issue.message.includes('layer'))
+    expect(hit?.hint).toContain('<div')
+  })
+
+  it('flex 里的 layer 不要再写 x y', async () => {
+    const report = await issues(
+      `<layer width="400" height="200"><div style="display:flex"><layer x="10" y="10" width="40" height="40"><circle cx="20" cy="20" r="10" fill="#fff" /></layer></div></layer>`,
+    )
+    expect(report.issues.some((issue) => issue.code === 'invalid-attr' && issue.message.includes('定位'))).toBe(true)
+  })
 })

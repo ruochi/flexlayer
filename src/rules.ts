@@ -704,6 +704,18 @@ export function checkTextBoxChildren(node: FvgNode, path: string): Issue[] {
       )
       continue
     }
+    if (tag === 'layer') {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-child',
+          path,
+          '文字盒子里不能放 layer',
+          '和文字并排放进 <div>，例如 <div style="display:flex"><layer width="120" height="120">…</layer><p>…</p></div>',
+        ),
+      )
+      continue
+    }
     if (MATH_TAGS.has(tag)) {
       out.push(
         flagged(

@@ -157,6 +157,38 @@ describe('layoutSource', () => {
     expect(segments.find((seg) => seg.text === '丙')?.style.underline).toBe(true)
   })
 
+  it('div 里的 layer 占一格，图形用这一层的局部坐标', async () => {
+    const doc = await layoutSource(
+      `<layer width="480" height="200" safe="0"><div style="display:flex; gap:24px; align-items:center"><layer width="80" height="80"><circle cx="40" cy="40" r="20" fill="#e8b04a" /></layer><p style="font-size:32px">标题</p></div></layer>`,
+      process.cwd(),
+    )
+    expect(doc.issues.filter((issue) => issue.code === 'invalid-child' || issue.code === 'invalid-attr')).toEqual([])
+    const row = doc.root.children[0] as {
+      kind: string
+      direction: string
+      children: Array<{ tag: string; kind: string; x: number; y: number; width: number; height: number; children?: Array<{ x: number; y: number; width: number }> }>
+    }
+    expect(row.kind).toBe('flex')
+    expect(row.direction).toBe('row')
+    const [graphic, title] = row.children
+    expect(graphic).toMatchObject({ tag: 'layer', kind: 'layer', x: 0, width: 80, height: 80 })
+    expect(graphic?.children?.[0]).toMatchObject({ x: 20, y: 20, width: 40 })
+    expect(title?.tag).toBe('p')
+    expect(title!.x).toBeGreaterThan(graphic!.x + graphic!.width)
+  })
+
+  it('没写 display:flex 的 div 里，layer 和段落上下排', async () => {
+    const doc = await layoutSource(
+      `<layer width="400" height="240" safe="0"><div><layer width="80" height="40"><rect x="0" y="0" width="80" height="40" fill="#fff" /></layer><p style="font-size:32px">说明</p></div></layer>`,
+      process.cwd(),
+    )
+    expect(doc.issues.filter((issue) => issue.code === 'invalid-child')).toEqual([])
+    const column = doc.root.children[0] as { direction: string; children: Array<{ tag: string; y: number; height: number }> }
+    expect(column.direction).toBe('column')
+    expect(column.children.map((child) => child.tag)).toEqual(['layer', 'p'])
+    expect(column.children[1]!.y).toBeGreaterThanOrEqual(column.children[0]!.height)
+  })
+
   it('p 里可以直接放图片', async () => {
     const doc = await layoutSource(
       `<layer width="400" height="200" safe="0"><p style="font-size:32px">见图<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" style="width:12px; height:12px" /></p></layer>`,
