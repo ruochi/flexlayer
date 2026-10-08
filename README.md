@@ -4,9 +4,19 @@
 
 Flex Layer 用标签描述一帧画面：图形用 SVG 的写法，文字用 HTML 的写法，布局用 CSS flexbox。渲染器读入 `.layer`，输出 PNG 和一份布局报告。
 
-规范见 [SPEC.md](SPEC.md)。给模型的入口见 [AGENTS.md](AGENTS.md)，一页写法见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，字体、图片和配色见 [docs/RESOURCES.md](docs/RESOURCES.md)。当前版本是 0.2.21。
+规范见 [SPEC.md](SPEC.md)。给模型的入口见 [AGENTS.md](AGENTS.md)，一页写法见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，字体、图片和配色见 [docs/RESOURCES.md](docs/RESOURCES.md)。当前版本是 0.2.27。
 
 `layer` 上的 `perspective` 让直接子元素共用一个视距。`rotateX`、`rotateY`、`z` 写在要转动或推近的那一层上。`sphere`、`box`、`extrude`、`model` 和这些平面共用同一台视距。例子：`npx tsx src/cli.ts render examples/perspective.layer -o perspective.png`，`npx tsx src/cli.ts render examples/meshes.layer -o meshes.png`。
+
+## 给别的项目里的 agent
+
+Skill 正文在 [plugins/flexlayer/skills/flexlayer/SKILL.md](plugins/flexlayer/skills/flexlayer/SKILL.md)。公开的 `main` 包含它之后可以安装：
+
+```bash
+npx skills add ruochi/flexlayer
+```
+
+Claude Code 用 `/plugin marketplace add ruochi/flexlayer`，再 `/plugin install flexlayer@flexlayer`。Codex 用 `codex plugin marketplace add ruochi/flexlayer`。Cursor 在 Customize 里从 GitHub 仓库导入这个仓库。在本仓库里写画面仍看 [AGENTS.md](AGENTS.md)。
 
 ## 安装
 

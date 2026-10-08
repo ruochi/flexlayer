@@ -1,0 +1,20 @@
+{
+  "name": "flexlayer",
+  "interface": {
+    "displayName": "Flex Layer"
+  },
+  "plugins": [
+    {
+      "name": "flexlayer",
+      "source": {
+        "source": "local",
+        "path": "./plugins/flexlayer"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

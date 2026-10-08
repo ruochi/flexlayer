@@ -195,6 +195,7 @@ flowchart TD
 | [docs/EFFECTS.md](docs/EFFECTS.md) | 算法与实现备注 |
 | [docs/proposals/3D.md](docs/proposals/3D.md) | 3D 讨论。平面透视和 `sphere` / `box` / `extrude` / `model` 已接上，网格用自带三角形光栅；作者灯光还没有 |
 | [README.md](README.md) | 安装与命令 |
+| [plugins/flexlayer/skills/flexlayer/SKILL.md](plugins/flexlayer/skills/flexlayer/SKILL.md) | 给别的项目里的 agent 安装的 skill。本仓库仍以本文为准 |
 | **本文** | 硬性约定和验证闭环 |
 
 自动化测试：`npm test`（渲染器，含效果图与示例的检测）。`npm run gallery` 检测 gallery 与 examples，有 error 则失败，并重渲染说明里的图。

@@ -1,0 +1,14 @@
+{
+  "name": "flexlayer",
+  "displayName": "Flex Layer",
+  "version": "0.2.27",
+  "description": "用标签、flex 和 SVG 形状排一帧画面，检查后渲染成 PNG。Lay out a frame and render it to PNG.",
+  "author": {
+    "name": "ruochi",
+    "url": "https://github.com/ruochi/flexlayer"
+  },
+  "homepage": "https://github.com/ruochi/flexlayer",
+  "repository": "https://github.com/ruochi/flexlayer",
+  "license": "MIT",
+  "keywords": ["flexlayer", "poster", "layout", "png"]
+}
