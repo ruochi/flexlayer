@@ -133,10 +133,9 @@ describe('样式、换行和运行时', () => {
     const pathReport = await checkFvg(`<layer width="80" height="80"><path d="not a path" fill="#fff" /></layer>`)
     expect(pathReport.issues.some((issue) => issue.code === 'invalid-attr' && issue.message.includes('路径'))).toBe(true)
     const source = `<layer width="40" height="40" background="#000">\n  <rect width="20" height="20" fill="#fff">\n    <draw>\nctx.notAMethod()\n    </draw>\n  </rect>\n</layer>`
-    const report = await checkFvg(source)
+    const { png, report } = await renderFvg(source)
     const hit = report.issues.find((issue) => issue.code === 'invalid-draw' && issue.message.includes('运行出错'))
     expect(hit?.source).toBe('3:5')
-    const { png } = await renderFvg(source)
     expect(png[0]).toBe(0x89)
   })
 

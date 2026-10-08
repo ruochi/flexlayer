@@ -8,7 +8,7 @@ import {
   Wrap,
   type Node as YogaNode,
 } from 'yoga-layout/load'
-import { attachDrawTags, exerciseDraws } from './draw-tag.js'
+import { attachDrawTags } from './draw-tag.js'
 import { collectFilters, mergeFilters, type FilterIssue } from './filter.js'
 import { imageInk, peekLayerImage, preloadLayerImagesSync, parseObjectFit, parseObjectPosition } from './image.js'
 import type { FvgNode } from './parse.js'
@@ -2354,7 +2354,6 @@ export function measureLayer(node: FvgNode, env: MeasureEnv): { laid: LayerLayou
   }
   track(ctx, 'layer', node)
   const laid = layoutLayer(node, ctx)
-  exerciseDraws(laid, issues)
   return { laid, issues }
 }
 
@@ -2467,7 +2466,6 @@ export function layoutSync(rootNode: FvgNode, assets: LayoutAssets): FvgDocument
   const rawBackground = attrs.background?.trim() ?? ''
   const background = rawBackground ? readPaint(rawBackground, '#ffffff', paintCtx, 'background') : 'transparent'
   const root = layoutLayer(rootNode, paintCtx)
-  exerciseDraws(root, issues)
 
   root.width = width
   root.height = height

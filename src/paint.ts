@@ -27,6 +27,7 @@ import { fitImageRect } from './image.js'
 import { canvasPaint, isGradient } from './gradient.js'
 import { gradientStyle, isGradientPaint, type GradientBox } from './gradientField.js'
 import { applyToBox, aroundPivot, invert, multiply, originOffset } from './matrix.js'
+import { invalidDrawIssue } from './draw-tag.js'
 import { openSvgPath } from './path.js'
 import { ownsMeshScene, renderMeshLayer, type MeshFrame } from './mesh.js'
 import { drawTexturedPlane, has3dPose, PERSPECTIVE_AA, planeDepth, posePoint, project } from './perspective.js'
@@ -44,6 +45,7 @@ import { unionBoxes, type AppliedFilter, type Box,
   ShadowSpec,
   ShapeLayoutNode,
   TextLayoutNode,
+  type Issue,
 } from './types.js'
 import type { DrawElSnapshot } from './types.js'
 
@@ -56,6 +58,8 @@ export type PaintOptions = {
   t: number
   frame?: number
   fps?: number
+  /** 绘制时 `<draw>` 抛错写到这里，不中断其余内容。 */
+  issues?: Issue[]
 }
 
 type PaintState = {
@@ -64,6 +68,7 @@ type PaintState = {
   meshFrames?: Map<LayerLayoutNode, MeshFrame>
   frame: number
   fps: number
+  issues: Issue[]
 }
 
 const SILHOUETTE = '#000000'
@@ -383,8 +388,8 @@ function runElementDraw(ctx: CanvasRenderingContext2D, node: LayoutNode, t: numb
   ctx.translate(node.x, node.y)
   try {
     node.draw(ctx, buildDrawEl(node, t, state))
-  } catch {
-    // 运行错误已经在排版时写入 invalid-draw。这里再抛出会让整张图没有报告。
+  } catch (err) {
+    state.issues.push(invalidDrawIssue(node, err))
   }
   ctx.restore()
 }
@@ -1782,9 +1787,10 @@ async function prepareMeshFrames(
   scale: number,
   t: number,
   clock: { frame: number; fps: number },
+  issues: Issue[],
 ): Promise<Map<LayerLayoutNode, MeshFrame>> {
   const frames = new Map<LayerLayoutNode, MeshFrame>()
-  const state: PaintState = { canvasWidth: 0, canvasHeight: 0, frame: clock.frame, fps: clock.fps, meshFrames: frames }
+  const state: PaintState = { canvasWidth: 0, canvasHeight: 0, frame: clock.frame, fps: clock.fps, issues, meshFrames: frames }
   const visit = async (node: LayoutNode) => {
     if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
       for (const child of node.children) await visit(child)
@@ -1811,12 +1817,14 @@ export async function paintDocument(
   const h = Math.round(opts.height * opts.scale)
   const canvas = createCanvas(w, h)
   const ctx = canvas.getContext('2d')
+  const issues = opts.issues ?? []
   const state: PaintState = {
     canvasWidth: w,
     canvasHeight: h,
     frame: opts.frame ?? 0,
     fps: opts.fps ?? 0,
-    meshFrames: await prepareMeshFrames(root, opts.scale, opts.t, { frame: opts.frame ?? 0, fps: opts.fps ?? 0 }),
+    issues,
+    meshFrames: await prepareMeshFrames(root, opts.scale, opts.t, { frame: opts.frame ?? 0, fps: opts.fps ?? 0 }, issues),
   }
   const rootPaintsBackground =
     root.background != null &&

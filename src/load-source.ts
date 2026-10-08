@@ -10,7 +10,7 @@ import type { FvgNode } from './parse.js'
 import { setLayerBaseDir } from './canvas.js'
 import { formatSourceLoc } from './source-loc.js'
 import { registerFontsFromDocument } from './fonts.js'
-import { nondeterministicCalls, staticLayerFonts } from './syntax.js'
+import { moduleSpecifiers, nondeterministicCalls, staticLayerFonts } from './syntax.js'
 import type { Issue } from './types.js'
 
 const CODE_EXT = new Set(['.tsx', '.jsx', '.ts', '.js'])
@@ -101,6 +101,10 @@ function resolveExport(mod: Record<string, unknown>, file: string): ExecutedLaye
   throw new Error(`${shown} 需要默认导出 <layer> 节点、返回该节点的函数，或 Composition（也可以命名导出 composition）`)
 }
 
+function legacyPackage(specifier: string): boolean {
+  return specifier === LEGACY_PACKAGE || specifier.startsWith(`${LEGACY_PACKAGE}/`)
+}
+
 function flexlayerEntry(specifier: string): string {
   if (specifier === 'flexlayer') return siblingModule('index')
   const sub = specifier.slice('flexlayer/'.length).replace(/\.js$/, '')
@@ -138,7 +142,8 @@ async function importCode(file: string): Promise<Record<string, unknown>> {
           name: 'flexlayer-jsx',
           setup(build) {
             const legacy = new RegExp(`^${escapeRegExp(LEGACY_PACKAGE)}(/|$)`)
-            build.onResolve({ filter: legacy }, () => ({
+            build.onResolve({ filter: legacy }, (args) => ({
+              path: args.path,
               errors: [{ text: '包名已改为 flexlayer。请把导入改成 flexlayer' }],
             }))
             build.onResolve({ filter: /^flexlayer(\/.*)?$/ }, (args) => ({
@@ -149,6 +154,29 @@ async function importCode(file: string): Promise<Record<string, unknown>> {
             build.onLoad({ filter: /\.[cm]?[jt]sx?$/ }, async (args) => {
               if (args.path.includes(`${sep}node_modules${sep}`)) return null
               const contents = await readFile(args.path, 'utf8')
+              // esbuild 会在解析前丢掉没用到的 import，改名提示要在读源码时给出。
+              const legacyHit = moduleSpecifiers(contents, args.path).find((spec) => legacyPackage(spec.specifier))
+              if (legacyHit) {
+                const ext = extname(args.path).toLowerCase()
+                const loader = ext === '.tsx' ? 'tsx' : ext === '.ts' ? 'ts' : ext === '.jsx' ? 'jsx' : 'js'
+                const lineText = contents.split(/\r?\n/)[legacyHit.line - 1] ?? ''
+                return {
+                  contents,
+                  loader,
+                  errors: [
+                    {
+                      text: '包名已改为 flexlayer。请把导入改成 flexlayer',
+                      location: {
+                        file: args.path,
+                        line: legacyHit.line,
+                        column: Math.max(0, legacyHit.column - 1),
+                        length: legacyHit.specifier.length,
+                        lineText,
+                      },
+                    },
+                  ],
+                }
+              }
               if (!contents.includes('import.meta.url')) return null
               const ext = extname(args.path).toLowerCase()
               const loader = ext === '.tsx' ? 'tsx' : ext === '.ts' ? 'ts' : ext === '.jsx' ? 'jsx' : 'js'

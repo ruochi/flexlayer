@@ -409,6 +409,26 @@ function prebindLexical(statement: ts.Statement, scope: AliasScope): void {
   for (const decl of statement.declarationList.declarations) shadowBindingName(decl.name, scope)
 }
 
+export type ModuleSpecifier = { specifier: string; line: number; column: number }
+
+/** 静态 import / export from，以及 `import()` 的字符串参数。注释和普通字符串不算。 */
+export function moduleSpecifiers(source: string, fileName: string): ModuleSpecifier[] {
+  const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.ES2022, true, scriptKind(fileName))
+  const found: ModuleSpecifier[] = []
+  const push = (spec: ts.Expression | undefined): void => {
+    if (!spec || !ts.isStringLiteralLike(spec)) return
+    const pos = sf.getLineAndCharacterOfPosition(spec.getStart(sf))
+    found.push({ specifier: spec.text, line: pos.line + 1, column: pos.character + 1 })
+  }
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) push(node.moduleSpecifier)
+    else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) push(node.arguments[0])
+    ts.forEachChild(node, visit)
+  }
+  visit(sf)
+  return found
+}
+
 /** 源码里真正调用了 `Math.random()` 这一类函数的位置。字符串、注释和类型位置不算。别名和 `Math['random']()` 也算。 */
 export function nondeterministicCalls(source: string, fileName: string): CallSite[] {
   const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.ES2022, true, scriptKind(fileName))

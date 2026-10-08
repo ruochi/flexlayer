@@ -352,12 +352,18 @@ export function typoAttrIssues(node: FvgNode, path: string): Issue[] {
   return out
 }
 
-/** 样式表里不认识或写错的声明。布局仍按默认值排，这里只负责报出来。 */
+/**
+ * 样式表里不认识或写错的声明。布局仍按默认值排，这里只负责报出来。
+ * 属性表已经规定「不能写进 style」的名字由归属检查报，这里不再报第二次。
+ */
 export function styleIssues(node: FvgNode, path: string): Issue[] {
   if (!present(node.attrs, 'style')) return []
   const style = parseStyle(node.attrs.style)
+  const owned = new Set<string>([...FORBID_IN_STYLE, ...registeredLayerOnlyNames()])
+  if (isHtmlTag(node.tag)) for (const key of FORBID_IN_HTML_STYLE) owned.add(key)
   const out: Issue[] = []
   for (const [key, value] of Object.entries(style)) {
+    if (owned.has(key)) continue
     const diag = diagnoseStyle(key, value)
     if (diag == null) continue
     if (diag === 'unknown') {
