@@ -1,4 +1,16 @@
+import { Path2D } from '@napi-rs/canvas'
+
 type PathCommand = { op: string; args: number[] }
+
+/** 打开一条 SVG 路径。非法的 `d` 不会抛出，调用方改报 invalid-attr 并跳过这一笔。 */
+export function openSvgPath(d: string): { path: Path2D } | { error: string } {
+  try {
+    return { path: new Path2D(d) }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { error: message || '路径无法解析' }
+  }
+}
 
 const ARITY: Record<string, number> = {
   M: 2,

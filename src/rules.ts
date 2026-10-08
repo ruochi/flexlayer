@@ -1,7 +1,7 @@
 import { filterIsLayerOnly, listFilters } from './filter.js'
 import type { FvgChild, FvgNode } from './parse.js'
 import { ATTRS, ATTR_ORDER, HTML_STYLE_ATTRS, attrByName, issueFor } from './schema.js'
-import { parseNumber, parseStyle, readOrigin } from './style.js'
+import { cssPropertyNames, diagnoseStyle, parseNumber, parseStyle, readOrigin } from './style.js'
 import { MATH_TAGS } from './math/rules.js'
 import { isInlineTag, isTextBoxTag } from './text.js'
 import type { Issue, IssueLevel } from './types.js'
@@ -294,16 +294,24 @@ function editDistance(a: string, b: string): number {
   return prev[n]! > 2 ? 3 : prev[n]!
 }
 
-/** 和某个已知属性编辑距离不超过 2 时，返回最近的名字。并列超过 3 个就不当成拼写。 */
-export function suggestAttrs(raw: string): string[] {
+function sharesPrefix(a: string, b: string): boolean {
+  return a.length >= 2 && b.length >= 2 && a.startsWith(b.slice(0, 2))
+}
+
+/** 在给定名字里找编辑距离不超过 2 的候选。比较前都转成小写，过短或没有共同开头的不推荐。 */
+export function suggestNames(raw: string, candidates: Iterable<string>): string[] {
   const name = raw.trim().toLowerCase()
-  if (!name || KNOWN_ATTRS.has(raw)) return []
+  if (!name) return []
   let best = 3
   let hits: string[] = []
-  for (const known of KNOWN_ATTRS) {
-    const dist = editDistance(name, known)
-    if (dist === 0) return [known]
-    if (dist > 2) continue
+  for (const known of candidates) {
+    const folded = known.toLowerCase()
+    if (folded === name) return []
+    const dist = editDistance(name, folded)
+    if (dist === 0 || dist > 2) continue
+    if (known.length <= 2) continue
+    if (dist === 2 && (name.length < 4 || !sharesPrefix(name, folded))) continue
+    if (dist === 1 && name.length < 4 && !sharesPrefix(name, folded)) continue
     if (dist < best) {
       best = dist
       hits = [known]
@@ -313,12 +321,23 @@ export function suggestAttrs(raw: string): string[] {
   return hits
 }
 
+function attrCandidates(node: FvgNode): Iterable<string> {
+  if (isHtmlTag(node.tag) || isTextBoxTag(node.tag)) return [...HTML_STYLE_ATTRS, 'style', 'id', 'src', 'alt']
+  return KNOWN_ATTRS
+}
+
+/** 和这个标签上可能出现的属性编辑距离不超过 2 时，返回最近的名字。并列超过 3 个就不当成拼写。 */
+export function suggestAttrs(raw: string, node?: FvgNode): string[] {
+  if (!raw.trim() || KNOWN_ATTRS.has(raw)) return []
+  return suggestNames(raw, node ? attrCandidates(node) : KNOWN_ATTRS)
+}
+
 /** 拼写接近已知属性时报 warn。完全对不上的名字仍留给 draw。 */
 export function typoAttrIssues(node: FvgNode, path: string): Issue[] {
   const out: Issue[] = []
   for (const key of Object.keys(node.attrs)) {
     if (!present(node.attrs, key)) continue
-    const suggestions = suggestAttrs(key)
+    const suggestions = suggestAttrs(key, node)
     if (suggestions.length === 0) continue
     out.push(
       flagged(
@@ -329,6 +348,32 @@ export function typoAttrIssues(node: FvgNode, path: string): Issue[] {
         `是不是想写 ${suggestions.join('、')}？`,
       ),
     )
+  }
+  return out
+}
+
+/** 样式表里不认识或写错的声明。布局仍按默认值排，这里只负责报出来。 */
+export function styleIssues(node: FvgNode, path: string): Issue[] {
+  if (!present(node.attrs, 'style')) return []
+  const style = parseStyle(node.attrs.style)
+  const out: Issue[] = []
+  for (const [key, value] of Object.entries(style)) {
+    const diag = diagnoseStyle(key, value)
+    if (diag == null) continue
+    if (diag === 'unknown') {
+      const suggestions = suggestNames(key, cssPropertyNames())
+      out.push(
+        flagged(
+          'warn',
+          'invalid-attr',
+          path,
+          `不支持的样式 ${key}`,
+          suggestions.length > 0 ? `是不是想写 ${suggestions.join('、')}？` : '这个样式不会生效',
+        ),
+      )
+      continue
+    }
+    out.push(flagged('warn', 'invalid-attr', path, `无法解析 ${key}: ${value}`, diag.hint))
   }
   return out
 }
@@ -728,18 +773,7 @@ export function checkTextBoxChildren(node: FvgNode, path: string): Issue[] {
       )
       continue
     }
-    if (isImageTag(tag)) {
-      out.push(
-        flagged(
-          'warn',
-          'invalid-child',
-          path,
-          '文字盒子里不能放图片',
-          '把 <img src="…"> 放进 <div>。要并排再写 display:flex',
-        ),
-      )
-      continue
-    }
+    if (isImageTag(tag)) continue
     if (!BLOCK_IN_TEXT.has(tag)) continue
     out.push(
       flagged(

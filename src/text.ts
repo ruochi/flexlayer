@@ -1,8 +1,14 @@
+import { createRequire } from 'node:module'
 import type { FvgChild, FvgNode } from './parse.js'
 import { applyCanvasFont } from './fonts.js'
 import { getMeasureCtx } from './measureCtx.js'
 import { parseFontWeight, parsePx } from './style.js'
 import { emptyBox, translateBox, unionBoxes, type Box, type InlineOwner, type TextLayoutResult, type TextRunStyle, type TextSegment } from './types.js'
+
+const require = createRequire(import.meta.url)
+const LineBreaker = require('linebreak') as new (text: string) => {
+  nextBreak(): { position: number; required: boolean } | null
+}
 
 const INLINE_TAGS = new Set(['span', 'strong', 'b', 'em', 'i', 'u', 'br'])
 const TEXT_BOX_TAGS = new Set(['h1', 'h2', 'h3', 'p', 'div', 'span', 'strong', 'b', 'em', 'i', 'u'])
@@ -119,6 +125,7 @@ function walkInline(
   hardBreakNext: boolean,
   parentPath: string,
   inherited: InlineOwner | undefined,
+  imageSize?: (node: FvgNode, path: string) => TextSegment['atom'],
 ): void {
   let breakNext = hardBreakNext
   let elementIndex = 0
@@ -135,6 +142,14 @@ function walkInline(
       breakNext = true
       continue
     }
+    if (tag === 'img' || tag === 'image') {
+      const atom = imageSize?.(child, path)
+      if (atom) {
+        out.push({ text: '\uFFFC', style, hardBreakBefore: breakNext, owner: inherited, atom })
+      }
+      breakNext = false
+      continue
+    }
     if (!INLINE_TAGS.has(tag)) continue
     let segStyle = style
     if (tag === 'strong' || tag === 'b') segStyle = { ...style, fontWeight: 700 }
@@ -143,12 +158,17 @@ function walkInline(
     segStyle = mergeStyle(segStyle, parseStyleAttr(child.attrs.style))
     const id = child.attrs.id?.trim()
     const owner = id ? { id, path, tag } : inherited
-    walkInline(child.children, segStyle, out, breakNext, path, owner)
+    walkInline(child.children, segStyle, out, breakNext, path, owner, imageSize)
     breakNext = false
   }
 }
 
-export function extractTextSegments(node: FvgNode, defaults: TextBoxDefaults, parentPath = ''): TextSegment[] {
+export function extractTextSegments(
+  node: FvgNode,
+  defaults: TextBoxDefaults,
+  parentPath = '',
+  imageSize?: (node: FvgNode, path: string) => TextSegment['atom'],
+): TextSegment[] {
   const base: TextRunStyle = {
     fontFamily: defaults.fontFamily,
     fontSize: defaults.fontSize,
@@ -162,7 +182,7 @@ export function extractTextSegments(node: FvgNode, defaults: TextBoxDefaults, pa
   if (tag === 'em' || tag === 'i') style = { ...style, fontStyle: 'italic' }
   if (tag === 'u') style = { ...style, underline: true }
   const segs: TextSegment[] = []
-  walkInline(node.children, style, segs, false, parentPath, undefined)
+  walkInline(node.children, style, segs, false, parentPath, undefined, imageSize)
   return normalizeInlineSegments(segs)
 }
 
@@ -174,6 +194,9 @@ type Unit = {
   glueRight: boolean
   isSpace: boolean
   owner?: InlineOwner
+  atom?: NonNullable<TextSegment['atom']>
+  /** 这一单元可以放到新行的行首。避头尾和换行机会都写在这里。 */
+  canBreakBefore: boolean
 }
 
 function sameOwner(a: InlineOwner | undefined, b: InlineOwner | undefined): boolean {
@@ -286,12 +309,27 @@ function segmentsToUnits(segments: TextSegment[]): Unit[] {
         glueLeft: false,
         glueRight: false,
         isSpace: false,
+        canBreakBefore: false,
       })
     } else if (seg.hardBreakBefore && units.length === 0) {
       // 段首硬换行忽略
     }
+    if (seg.atom) {
+      units.push({
+        text: '\uFFFC',
+        style: seg.style,
+        width: seg.atom.width,
+        glueLeft: false,
+        glueRight: false,
+        isSpace: false,
+        owner: seg.owner,
+        atom: seg.atom,
+        canBreakBefore: false,
+      })
+      continue
+    }
     const push = (text: string, width: number, glueLeft: boolean, glueRight: boolean, isSpace: boolean) => {
-      units.push({ text, style: seg.style, width, glueLeft, glueRight, isSpace, owner: seg.owner })
+      units.push({ text, style: seg.style, width, glueLeft, glueRight, isSpace, owner: seg.owner, canBreakBefore: false })
     }
     let i = 0
     const s = seg.text
@@ -337,7 +375,7 @@ function bindLineBreakUnits(units: Unit[]): Unit[][] {
   return groups
 }
 
-/** 去掉行首行尾的空格，行内连续空格只留一个。 */
+/** 去掉行首行尾的空格，行内连续空格只留一个。标点和图片不并进相邻单元，断行时已经避开行首行尾。 */
 function glueUnits(lineUnits: Unit[]): Unit[] {
   let start = 0
   let end = lineUnits.length
@@ -352,16 +390,16 @@ function glueUnits(lineUnits: Unit[]): Unit[] {
     }
     let text = u.text
     let style = u.style
-    if (i + 1 < end) {
+    if (!u.atom && i + 1 < end) {
       const next = lineUnits[i + 1]!
-      if (LINE_TAIL_FORBIDDEN.has(u.text.slice(-1)!) && !next.isSpace && sameOwner(u.owner, next.owner)) {
+      if (!next.atom && LINE_TAIL_FORBIDDEN.has(u.text.slice(-1)!) && !next.isSpace && sameOwner(u.owner, next.owner)) {
         text += next.text
         i++
       }
     }
-    if (out.length > 0) {
+    if (!u.atom && out.length > 0) {
       const prev = out[out.length - 1]!
-      if (LINE_HEAD_FORBIDDEN.has(text[0]!) && !prev.isSpace && sameOwner(prev.owner, u.owner)) {
+      if (!prev.atom && LINE_HEAD_FORBIDDEN.has(text[0]!) && !prev.isSpace && sameOwner(prev.owner, u.owner)) {
         out[out.length - 1] = {
           ...prev,
           text: prev.text + text,
@@ -370,9 +408,51 @@ function glueUnits(lineUnits: Unit[]): Unit[] {
         continue
       }
     }
-    out.push({ ...u, text, width: measureTextWidth(text, style) })
+    const width = u.atom ? u.width : measureTextWidth(text, style)
+    out.push({ ...u, text, width })
   }
   return out
+}
+
+/**
+ * 单元边界上的断行机会。
+ * `linebreak` 给出 Unicode 换行点；规范里的避头尾即使库允许，也不放到行首或行尾。
+ */
+function markOpportunities(units: Unit[]): void {
+  let text = ''
+  const starts: number[] = []
+  for (const unit of units) {
+    if (unit.text === '\u0000') {
+      starts.push(-1)
+      continue
+    }
+    starts.push(text.length)
+    text += unit.text
+  }
+  const opportunity = new Set<number>()
+  if (text.length > 0) {
+    const breaker = new LineBreaker(text)
+    let point = breaker.nextBreak()
+    while (point) {
+      opportunity.add(point.position)
+      point = breaker.nextBreak()
+    }
+  }
+  for (let i = 0; i < units.length; i++) {
+    const unit = units[i]!
+    const start = starts[i]!
+    if (start <= 0) {
+      unit.canBreakBefore = false
+      continue
+    }
+    const prev = units[i - 1]!
+    const head = unit.text[0] ?? ''
+    const tail = prev.text.slice(-1)
+    const sticks =
+      (LINE_HEAD_FORBIDDEN.has(head) && !prev.isSpace && sameOwner(prev.owner, unit.owner)) ||
+      (LINE_TAIL_FORBIDDEN.has(tail) && !unit.isSpace && !prev.isSpace && sameOwner(prev.owner, unit.owner))
+    unit.canBreakBefore = !sticks && (opportunity.has(start) || prev.isSpace || Boolean(unit.atom) || Boolean(prev.atom))
+  }
 }
 
 function lineWidth(units: Unit[]): number {
@@ -387,6 +467,7 @@ function lineWidth(units: Unit[]): number {
 }
 
 function wrapParagraph(units: Unit[], maxWidth: number): Unit[][] {
+  markOpportunities(units)
   const lines: Unit[][] = []
   let line: Unit[] = []
   let curW = 0
@@ -399,6 +480,11 @@ function wrapParagraph(units: Unit[], maxWidth: number): Unit[][] {
     }
   }
 
+  const pushUnit = (u: Unit) => {
+    line.push(u)
+    curW += u.width
+  }
+
   for (const u of units) {
     if (u.text === '\u0000') {
       flush()
@@ -407,15 +493,25 @@ function wrapParagraph(units: Unit[], maxWidth: number): Unit[][] {
     if (u.isSpace && line.length === 0) continue
     const w = u.width
     if (line.length > 0 && curW + w > maxWidth + 1e-3) {
-      flush()
-      if (u.isSpace) continue
+      if (u.isSpace || u.canBreakBefore) {
+        flush()
+        if (u.isSpace) continue
+      } else {
+        let split = line.length - 1
+        while (split > 0 && !line[split]!.canBreakBefore) split--
+        if (split > 0 && line[split]!.canBreakBefore) {
+          const carry = line.splice(split)
+          flush()
+          for (const carried of carry) pushUnit(carried)
+        }
+      }
     }
     if (!u.isSpace && w > maxWidth + 1e-3 && line.length === 0) {
       lines.push([u])
       continue
     }
-    line.push(u)
-    curW += w
+    if (u.isSpace && line.length === 0) continue
+    pushUnit(u)
   }
   flush()
   return lines.length ? lines : [[]]
@@ -450,6 +546,8 @@ export type LayoutTextOptions = {
   nowrap?: boolean
   textWrap?: 'balance' | 'wrap'
   lineHeightRatio: number
+  /** 绝对行高。写了就不再乘字号。 */
+  lineHeightPx?: number
   fontSize: number
   writingMode?: 'horizontal-tb' | 'vertical-rl'
 }
@@ -503,7 +601,7 @@ function layoutVertical(opts: LayoutTextOptions): TextLayoutResult {
   }
   if (glyphs.length === 0) return emptyTextLayout(opts.fontSize)
 
-  const lineH = opts.lineHeightRatio * opts.fontSize
+  const lineH = opts.lineHeightPx ?? opts.lineHeightRatio * opts.fontSize
   const columnGap = opts.fontSize
   const limit = opts.fixedHeight ?? opts.maxHeight ?? Number.POSITIVE_INFINITY
   const columns: Glyph[][] = []
@@ -616,30 +714,49 @@ export function layoutText(opts: LayoutTextOptions): TextLayoutResult {
     const measured: Array<{ unit: Unit; metrics: InkMetrics; x: number }> = []
     let x = 0
     for (const u of lineUnits) {
-      const inkM = measureInk(u.text, u.style)
-      maxAsc = Math.max(maxAsc, inkM.ascent)
-      maxDesc = Math.max(maxDesc, inkM.descent)
+      const inkM = u.atom
+        ? { width: u.width, left: 0, right: u.width, ascent: 0, descent: 0 }
+        : measureInk(u.text, u.style)
+      if (!u.atom) {
+        maxAsc = Math.max(maxAsc, inkM.ascent)
+        maxDesc = Math.max(maxDesc, inkM.descent)
+      }
       measured.push({ unit: u, metrics: inkM, x })
       segOut.push({ text: u.text, style: u.style, x, width: u.width, owner: u.owner })
       x += u.width
       lineW = x
     }
-    const lh = opts.lineHeightRatio * opts.fontSize
-    const lineH = allLines.length === 1 ? Math.max(lh, maxAsc + maxDesc) : lh
-    const baselineY = y + maxAsc + (lineH - (maxAsc + maxDesc)) / 2
-    let lineInk: Box | null = null
+    const lh = opts.lineHeightPx ?? opts.lineHeightRatio * opts.fontSize
+    let atomAbove = 0
     for (const item of measured) {
-      if (item.unit.isSpace) continue
+      if (item.unit.atom) atomAbove = Math.max(atomAbove, item.unit.atom.height)
+    }
+    const above = Math.max(maxAsc, atomAbove)
+    const below = maxDesc
+    const textH = allLines.length === 1 ? Math.max(lh, above + below) : lh
+    const lineH = Math.max(textH, above + below)
+    const baselineY = y + above + (lineH - (above + below)) / 2
+    let lineInk: Box | null = null
+    const atoms: NonNullable<TextLayoutResult['lines'][0]['atoms']> = []
+    for (const item of measured) {
+      if (item.unit.atom) {
+        const top = baselineY - item.unit.atom.height
+        atoms.push({ x: item.x, y: top, width: item.unit.atom.width, height: item.unit.atom.height, key: item.unit.atom.key })
+        lineInk = addInk(lineInk, { x: item.x, y: top, width: item.unit.atom.width, height: item.unit.atom.height })
+        continue
+      }
+      if (item.unit.isSpace || item.unit.text === '\uFFFC') continue
       lineInk = addInk(lineInk, glyphInk(item.x, baselineY, item.metrics))
     }
     const resolvedInk = lineInk ?? { x: 0, y: baselineY, width: 0, height: 0 }
     ink = addInk(ink, resolvedInk)
     laidLines.push({
-      segments: segOut,
+      segments: segOut.filter((seg) => seg.text !== '\uFFFC'),
       width: lineW,
       height: lineH,
       baselineY,
       ink: resolvedInk,
+      ...(atoms.length ? { atoms } : {}),
     })
     contentWidth = Math.max(contentWidth, lineW)
     y += lineH

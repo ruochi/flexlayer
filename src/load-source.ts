@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { mkdtemp, rm, readFile } from 'node:fs/promises'
 import { builtinModules, createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { dirname, extname, join, relative, isAbsolute, resolve } from 'node:path'
+import { dirname, extname, join, relative, isAbsolute, resolve, sep } from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import * as esbuild from 'esbuild'
 import type { Composition } from './frame.js'
@@ -16,6 +16,12 @@ import type { Issue } from './types.js'
 const CODE_EXT = new Set(['.tsx', '.jsx', '.ts', '.js'])
 const require = createRequire(import.meta.url)
 const BUILTINS = new Set(builtinModules)
+const LEGACY_PACKAGE = '@' + 'dc/' + 'flexlayer'
+let tsxHooked = false
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
 
 export type LoadedLayer =
   | { kind: 'markup'; source: string }
@@ -95,6 +101,21 @@ function resolveExport(mod: Record<string, unknown>, file: string): ExecutedLaye
   throw new Error(`${shown} 需要默认导出 <layer> 节点、返回该节点的函数，或 Composition（也可以命名导出 composition）`)
 }
 
+function flexlayerEntry(specifier: string): string {
+  if (specifier === 'flexlayer') return siblingModule('index')
+  const sub = specifier.slice('flexlayer/'.length).replace(/\.js$/, '')
+  return siblingModule(sub)
+}
+
+async function importBundled(outfile: string): Promise<Record<string, unknown>> {
+  if (!tsxHooked && siblingModule('index').endsWith('.ts')) {
+    const { register: registerTsx } = await import('tsx/esm/api')
+    registerTsx()
+    tsxHooked = true
+  }
+  return (await import(pathToFileURL(outfile).href)) as Record<string, unknown>
+}
+
 async function importCode(file: string): Promise<Record<string, unknown>> {
   const dir = await mkdtemp(join(tmpdir(), 'flexlayer-'))
   const outfile = join(dir, 'entry.mjs')
@@ -116,12 +137,31 @@ async function importCode(file: string): Promise<Record<string, unknown>> {
         {
           name: 'flexlayer-jsx',
           setup(build) {
-            build.onResolve({ filter: /^flexlayer$/ }, () => ({ path: siblingModule('index') }))
-            build.onResolve({ filter: /^flexlayer\/jsx-runtime$/ }, () => ({ path: siblingModule('jsx-runtime') }))
-            build.onResolve({ filter: /^flexlayer\/jsx-dev-runtime$/ }, () => ({ path: siblingModule('jsx-dev-runtime') }))
+            const legacy = new RegExp(`^${escapeRegExp(LEGACY_PACKAGE)}(/|$)`)
+            build.onResolve({ filter: legacy }, () => ({
+              errors: [{ text: '包名已改为 flexlayer。请把导入改成 flexlayer' }],
+            }))
+            build.onResolve({ filter: /^flexlayer(\/.*)?$/ }, (args) => ({
+              path: flexlayerEntry(args.path),
+              external: true,
+            }))
+            // 用户文件里的 import.meta.url 保持指向源文件，而不是打包出来的临时文件。
+            build.onLoad({ filter: /\.[cm]?[jt]sx?$/ }, async (args) => {
+              if (args.path.includes(`${sep}node_modules${sep}`)) return null
+              const contents = await readFile(args.path, 'utf8')
+              if (!contents.includes('import.meta.url')) return null
+              const ext = extname(args.path).toLowerCase()
+              const loader = ext === '.tsx' ? 'tsx' : ext === '.ts' ? 'ts' : ext === '.jsx' ? 'jsx' : 'js'
+              return {
+                contents: contents.replace(/\bimport\.meta\.url\b/g, JSON.stringify(pathToFileURL(args.path).href)),
+                loader,
+              }
+            })
             // 打包进临时文件后，裸包名从 /tmp 解析不到。改成绝对路径再标成外部依赖。
             build.onResolve({ filter: /^[^./]/ }, (args) => {
-              if (args.path === 'flexlayer' || args.path.startsWith('flexlayer/')) return null
+              if (args.path === 'flexlayer' || args.path.startsWith('flexlayer/') || args.path === LEGACY_PACKAGE || args.path.startsWith(`${LEGACY_PACKAGE}/`)) {
+                return null
+              }
               if (args.path.startsWith('node:') || BUILTINS.has(args.path)) return { path: args.path, external: true }
               return { path: require.resolve(args.path), external: true }
             })
@@ -129,7 +169,7 @@ async function importCode(file: string): Promise<Record<string, unknown>> {
         },
       ],
     })
-    return (await import(pathToFileURL(outfile).href)) as Record<string, unknown>
+    return await importBundled(outfile)
   } catch (err) {
     const failure = err as { errors?: Array<{ text?: string; location?: { file?: string; line?: number; column?: number } }> }
     const first = failure.errors?.[0]

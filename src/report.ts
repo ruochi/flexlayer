@@ -470,6 +470,12 @@ function walk(
       inkSlack.push(0)
       effects.push(plane ? { plane: true, box: null } : { plane: false, clip: effectClip })
     }
+    if (node.inlines) {
+      const base = multiply(matrix, translated(node.x, node.y))
+      for (const image of node.inlines) {
+        walk(image, base, opacity, absX, absY, clip, elements, effects, plane, false, meshView, inkSlack)
+      }
+    }
   }
 
   if (node.kind === 'group') {
@@ -580,7 +586,8 @@ function walk(
   }
 
   if (node.kind === 'sqrt') {
-    walk(node.child, matrix, opacity, absX, absY, clip, elements, effects, plane, false, meshView, inkSlack)
+    const childMatrix = multiply(matrix, translated(node.x, node.y))
+    walk(node.child, childMatrix, opacity, absX, absY, clip, elements, effects, plane, false, meshView, inkSlack)
   }
 }
 

@@ -1,7 +1,8 @@
+import { createCanvas } from '@napi-rs/canvas'
 import type { FvgChild, FvgNode, SourceLoc } from './parse.js'
 import { formatSourceLoc } from './source-loc.js'
 import { readDrawFunction } from './syntax.js'
-import type { DrawFn, Issue } from './types.js'
+import type { DrawFn, Issue, LayoutNode } from './types.js'
 
 export const DRAW_TAG = 'draw'
 
@@ -105,6 +106,7 @@ export function attachDrawTags(node: FvgNode, issues: Issue[], path: string): vo
 
   try {
     node.draw = compileDrawBody(last.body)
+    node.drawLoc = last.loc
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err)
     issues.push(
@@ -120,4 +122,55 @@ export function attachDrawTags(node: FvgNode, issues: Issue[], path: string): vo
       ),
     )
   }
+}
+
+function drawFailure(node: LayoutNode, err: unknown): Issue {
+  const detail = err instanceof Error ? err.message : String(err)
+  return {
+    level: 'error',
+    code: 'invalid-draw',
+    path: node.path,
+    message: `<draw> 运行出错: ${detail}`,
+    hint: '检查 <draw> 里的代码。其余内容仍会绘制',
+    ...(node.source ? { source: node.source } : {}),
+  }
+}
+
+function visitDraw(node: LayoutNode, run: (node: LayoutNode) => void): void {
+  run(node)
+  if (node.kind === 'layer') {
+    for (const child of node.children) visitDraw(child, run)
+    if (node.mask) for (const child of node.mask) visitDraw(child, run)
+  } else if (node.kind === 'flex' || node.kind === 'group') {
+    for (const child of node.children) visitDraw(child, run)
+  } else if (node.kind === 'sqrt') {
+    visitDraw(node.child, run)
+  }
+}
+
+/** 把每个 draw 跑一遍。出错写入 issues，不让整张图退出。check 和 render 都走这里。 */
+export function exerciseDraws(root: LayoutNode, issues: Issue[]): void {
+  const canvas = createCanvas(1, 1)
+  const ctx = canvas.getContext('2d')
+  visitDraw(root, (node) => {
+    if (!node.draw) return
+    try {
+      node.draw(ctx, {
+        tag: node.tag,
+        id: node.id,
+        text: node.text,
+        attr: node.attr,
+        style: node.style,
+        computed: node.computed,
+        w: node.width,
+        h: node.height,
+        data: node.data,
+        t: 0,
+        frame: 0,
+        fps: 0,
+      })
+    } catch (err) {
+      issues.push(drawFailure(node, err))
+    }
+  })
 }

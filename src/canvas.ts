@@ -7,7 +7,7 @@ import { fontFamiliesOf, measureLayer, noteMeasuredSize, parseSafe, prepareAsset
 import type { FvgNode } from './parse.js'
 import { divHasFlowBreak, isDisplayFlex } from './rules.js'
 import { placedText, type PlacedText } from './placed-text.js'
-import { parseNumber, parseOrigin, parseScale } from './style.js'
+import { parseNumber, parseOrigin, parseScale, readAnchor } from './style.js'
 import { isTextBoxTag } from './text.js'
 import type { Anchor, Issue } from './types.js'
 
@@ -47,18 +47,6 @@ export function layerBaseDir(): string {
 
 const UNLIMITED = 1_000_000
 
-const ANCHORS = new Set<Anchor>([
-  'center',
-  'top',
-  'bottom',
-  'left',
-  'right',
-  'top-left',
-  'top-right',
-  'bottom-left',
-  'bottom-right',
-])
-
 export type LayerBox = {
   left: number
   top: number
@@ -85,8 +73,7 @@ export type CreatedLayer = FvgNode & LayerBox & {
 }
 
 function parseAnchor(raw: string | undefined, fallback: Anchor = 'top-left'): Anchor {
-  const value = (raw ?? fallback).trim().toLowerCase() as Anchor
-  return ANCHORS.has(value) ? value : fallback
+  return readAnchor(raw, fallback).anchor
 }
 
 /** (x, y) 是盒子上 anchor 那一点，返回盒子左上角。 */

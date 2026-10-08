@@ -598,3 +598,166 @@ export function parseFontWeight(value: string | undefined): number | undefined {
   const n = Number(v)
   return Number.isFinite(n) && n >= 1 && n <= 1000 ? n : undefined
 }
+
+/** 行高：无单位是字号的倍数，`px` 是绝对行高，`normal` 按 1.2。`%`、`em` 等不接受。 */
+export type LineHeight = { unit: 'ratio'; value: number } | { unit: 'px'; value: number }
+
+export function parseLineHeight(value: string | undefined): LineHeight | undefined {
+  if (value == null) return undefined
+  const text = value.trim().toLowerCase()
+  if (!text) return undefined
+  if (text === 'normal') return { unit: 'ratio', value: 1.2 }
+  if (text.endsWith('px')) {
+    const n = parsePx(text)
+    if (n == null || n < 0) return undefined
+    return { unit: 'px', value: n }
+  }
+  if (/[a-z%]/.test(text)) return undefined
+  const n = parseNumber(text)
+  if (n == null || n < 0) return undefined
+  return { unit: 'ratio', value: n }
+}
+
+const ANCHOR_NAMES = [
+  'center',
+  'top',
+  'bottom',
+  'left',
+  'right',
+  'top-left',
+  'top-right',
+  'bottom-left',
+  'bottom-right',
+] as const
+
+/** 九宫格锚点。空值用 fallback 且不算写错；认不出的值也退回 fallback，并标 invalid。 */
+export function readAnchor(
+  raw: string | undefined,
+  fallback: 'center' | 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' = 'top-left',
+): {
+  anchor: (typeof ANCHOR_NAMES)[number]
+  invalid: boolean
+} {
+  if (raw == null || raw.trim() === '') return { anchor: fallback, invalid: false }
+  const value = raw.trim().toLowerCase()
+  if ((ANCHOR_NAMES as readonly string[]).includes(value)) {
+    return { anchor: value as (typeof ANCHOR_NAMES)[number], invalid: false }
+  }
+  return { anchor: fallback, invalid: true }
+}
+
+export type StyleDiagnostic = { hint: string }
+
+/**
+ * 布局已经单独报过的样式。这里只把它们算作认识，避免同一处报两次。
+ * 滤镜名也走这条：不认识的名字另由滤镜表处理。
+ */
+const QUIET_STYLE = new Set([
+  'writing-mode',
+  'object-fit',
+  'object-position',
+  'shadow',
+  'glow',
+  'inner-shadow',
+  'inner-glow',
+  'ink-stroke',
+  'blur',
+  'backdrop-blur',
+  'noise',
+  'blend',
+  'glass',
+  'filter',
+])
+
+function keywordHint(value: string, allowed: readonly string[], hint: string): StyleDiagnostic | null {
+  const token = value.trim().toLowerCase()
+  return allowed.includes(token) ? null : { hint }
+}
+
+function lengthHint(value: string, hint: string): StyleDiagnostic | null {
+  return parsePx(value) == null ? { hint } : null
+}
+
+function numberHint(value: string, hint: string): StyleDiagnostic | null {
+  return parseNumber(value) == null ? { hint } : null
+}
+
+/** 认识的 CSS 属性。返回 null 表示值可用；不在表里的名字由调用方当成不支持。 */
+const STYLE_CHECKS: Record<string, (value: string) => StyleDiagnostic | null> = {
+  'font-size': (value) => lengthHint(value, '写成 40 或 40px'),
+  'font-weight': (value) => (parseFontWeight(value) == null ? { hint: '写成 400、700，或 normal、bold' } : null),
+  'font-family': () => null,
+  color: () => null,
+  'letter-spacing': (value) => lengthHint(value, '写成 0 或 2px'),
+  'line-height': (value) => (parseLineHeight(value) == null ? { hint: '写成倍数 1.4，或像素 24px' } : null),
+  'text-align': (value) => keywordHint(value, ['left', 'center', 'right', 'start', 'end'], '写成 left、center 或 right'),
+  'white-space': (value) => keywordHint(value, ['normal', 'nowrap'], '写成 normal 或 nowrap'),
+  'text-wrap': (value) => keywordHint(value, ['wrap', 'balance'], '写成 wrap 或 balance'),
+  'max-width': (value) => lengthHint(value, '写成 320 或 320px'),
+  'max-height': (value) => lengthHint(value, '写成 180 或 180px'),
+  width: (value) => lengthHint(value, '写成 320 或 320px'),
+  height: (value) => lengthHint(value, '写成 180 或 180px'),
+  display: (value) => keywordHint(value, ['flex', 'inline-flex', 'block'], '写成 flex、inline-flex 或 block'),
+  'flex-direction': (value) => keywordHint(value, ['row', 'column'], '写成 row 或 column'),
+  'align-items': (value) =>
+    keywordHint(value, ['flex-start', 'flex-end', 'center', 'stretch', 'start', 'end'], '写成 flex-start、center、flex-end 或 stretch'),
+  'align-self': (value) =>
+    keywordHint(
+      value,
+      ['auto', 'flex-start', 'flex-end', 'center', 'stretch', 'start', 'end'],
+      '写成 auto、flex-start、center、flex-end 或 stretch',
+    ),
+  'align-content': (value) =>
+    keywordHint(
+      value,
+      ['flex-start', 'flex-end', 'center', 'stretch', 'space-between', 'space-around', 'space-evenly', 'start', 'end'],
+      '写成 flex-start、center、stretch 或 space-between',
+    ),
+  'justify-content': (value) =>
+    keywordHint(
+      value,
+      ['flex-start', 'flex-end', 'center', 'space-between', 'space-around', 'space-evenly', 'start', 'end'],
+      '写成 flex-start、center、flex-end 或 space-between',
+    ),
+  'flex-wrap': (value) => keywordHint(value, ['nowrap', 'wrap', 'wrap-reverse'], '写成 nowrap、wrap 或 wrap-reverse'),
+  flex: (value) => (value.trim() === '1' ? null : { hint: '写成 flex:1。需要分开控制时用 flex-grow 和 flex-shrink' }),
+  'flex-grow': (value) => numberHint(value, '写成数字，例如 1'),
+  'flex-shrink': (value) => numberHint(value, '写成数字，例如 1'),
+  gap: (value) => lengthHint(value, '写成 16 或 16px'),
+  'row-gap': (value) => lengthHint(value, '写成 16 或 16px'),
+  'column-gap': (value) => lengthHint(value, '写成 16 或 16px'),
+  padding: (value) => (parseEdges(value) == null ? { hint: '写成 12、12 16，或带 px 的 1 到 4 个长度' } : null),
+  border: (value) => (value.trim().toLowerCase() === 'none' || parseBorder(value) != null ? null : { hint: '写成 2px solid #fff' }),
+  'border-radius': (value) => lengthHint(value, '写成 12 或 12px'),
+  background: () => null,
+  'background-color': () => null,
+  opacity: (value) => numberHint(value, '写成 0 到 1 的数字，例如 0.5'),
+  rotate: (value) => numberHint(value, '写成角度，例如 12'),
+  rotateX: (value) => numberHint(value, '写成角度，例如 20'),
+  rotateY: (value) => numberHint(value, '写成角度，例如 20'),
+  z: (value) => numberHint(value, '写成像素，例如 40'),
+  scale: (value) => {
+    const parts = value.trim().split(/[\s,]+/).filter(Boolean)
+    if (parts.length === 0 || parts.length > 2) return { hint: '写成 1.2 或 1.2 0.8' }
+    if (parts.some((part) => parseNumber(part) == null)) return { hint: '写成 1.2 或 1.2 0.8' }
+    return null
+  },
+  origin: (value) => (readOrigin(value).invalid ? { hint: '写成 center、top-left，或 120 80、30% 40%' } : null),
+}
+
+/** 拼写提示用的样式名。包含会生效、以及别处单独校验的名字。 */
+export function cssPropertyNames(): string[] {
+  return [...Object.keys(STYLE_CHECKS), ...QUIET_STYLE]
+}
+
+/**
+ * 一条样式声明的诊断。
+ * null：值可用，或这条已经由布局单独报告。
+ * `unknown`：名字不在样式表里。
+ */
+export function diagnoseStyle(key: string, value: string): StyleDiagnostic | 'unknown' | null {
+  if (QUIET_STYLE.has(key)) return null
+  const check = STYLE_CHECKS[key]
+  if (!check) return 'unknown'
+  return check(value)
+}

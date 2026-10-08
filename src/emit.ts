@@ -90,11 +90,35 @@ function emitData(node: FvgNode, path: string, issues: Issue[]): string {
   return ` data='${quoted}'`
 }
 
-function emitNode(node: FvgNode, indent: string, path: string, issues: Issue[]): string {
-  const attrs =
+function attrText(node: FvgNode, path: string, issues: Issue[]): string {
+  return (
     Object.entries(node.attrs)
       .map(([key, value]) => ` ${key}="${escapeAttr(value)}"`)
       .join('') + emitData(node, path, issues)
+  )
+}
+
+/** 有文本子节点时按源码顺序拼回去，不在标签交界处另加空格或换行。 */
+function emitInline(node: FvgNode, path: string, issues: Issue[]): string {
+  const attrs = attrText(node, path, issues)
+  let elementIndex = 0
+  let inner = ''
+  for (const child of node.children) {
+    if (typeof child === 'string') {
+      inner += escapeText(child)
+      continue
+    }
+    inner += emitInline(child, `${path}/${child.tag}[${elementIndex}]`, issues)
+    elementIndex++
+  }
+  if (inner.length === 0) return `<${node.tag}${attrs} />`
+  return `<${node.tag}${attrs}>${inner}</${node.tag}>`
+}
+
+function emitNode(node: FvgNode, indent: string, path: string, issues: Issue[]): string {
+  const attrs = attrText(node, path, issues)
+  const hasText = node.children.some((child) => typeof child === 'string')
+  if (hasText && node.tag !== 'draw' && !node.draw) return `${indent}${emitInline(node, path, issues)}\n`
   const childIndent = `${indent}  `
   const parts: string[] = []
   let elementIndex = 0

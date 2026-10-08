@@ -273,6 +273,8 @@ export type TextSegment = {
   style: TextRunStyle
   hardBreakBefore?: boolean
   owner?: InlineOwner
+  /** 行内替换元素（图片）。宽度参与断行，不参与 fillText。 */
+  atom?: { width: number; height: number; key: number }
 }
 
 export type LaidTextLine = {
@@ -281,6 +283,8 @@ export type LaidTextLine = {
   height: number
   baselineY: number
   ink: Box
+  /** 这一行里的图片，坐标相对文字内容区左上角。 */
+  atoms?: Array<{ x: number; y: number; width: number; height: number; key: number }>
 }
 
 export type TextLayoutResult = {
@@ -354,6 +358,8 @@ export type LayoutNodeBase = {
   gradeMask?: string
   /** grade、filter 以及 registerFilter 登记的滤镜。 */
   filters?: AppliedFilter[]
+  /** 报告里的源码位置。draw 运行出错时用它，优先于元素标签本身的位置。 */
+  source?: string
 }
 
 export type LayerLayoutNode = LayoutNodeBase & {
@@ -387,6 +393,8 @@ export type TextLayoutNode = LayoutNodeBase & {
   kind: 'text'
   textLayout: TextLayoutResult
   textAlign: 'left' | 'center' | 'right'
+  /** 跟文字排在同一段里的图片。坐标相对这个文字盒子。 */
+  inlines?: ImageLayoutNode[]
 }
 
 export type ImageLayoutNode = LayoutNodeBase & {

@@ -195,10 +195,15 @@ describe('layoutSource', () => {
       process.cwd(),
     )
     expect(doc.issues.filter((issue) => issue.code === 'invalid-child')).toEqual([])
-    const row = doc.root.children[0] as { kind: string; direction: string; children: Array<{ kind: string; tag: string }> }
-    expect(row.kind).toBe('flex')
-    expect(row.direction).toBe('row')
-    expect(row.children.map((child) => child.kind)).toEqual(['text', 'image'])
+    const text = doc.root.children[0] as {
+      kind: string
+      inlines?: Array<{ x: number; y: number; width: number }>
+      textLayout: { lines: Array<{ width: number }> }
+    }
+    expect(text.kind).toBe('text')
+    expect(text.inlines).toHaveLength(1)
+    expect(text.textLayout.lines.length).toBeGreaterThan(0)
+    expect(text.inlines![0]!.x).toBeGreaterThan(0)
   })
 
   it('只放文字的 div 仍是文字盒子', async () => {

@@ -111,7 +111,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 没写 `x`、`y` 时是 `0, 0`，不再放到父级中心。`layer`、`use`、`rect`、`box`、`extrude` 上的 `cx`、`cy` 已忽略，报 `invalid-attr`，`hint` 给出等价的 `x`、`y`。
 
-`anchor` 示例：`<layer x="60" y="120"><h1>标题</h1></layer>` 表示这一层的左上角在 (60, 120)。要让中心落在这一点，写 `anchor="center"`。
+`anchor` 示例：`<layer x="60" y="120"><h1>标题</h1></layer>` 表示这一层的左上角在 (60, 120)。要让中心落在这一点，写 `anchor="center"`。写错的值按 `top-left` 摆，并报 `invalid-attr`。
 
 `anchor-box` 默认 `box`，按布局盒子对齐。`anchor-box="ink"` 改为按子树着墨的外接矩形对齐，`x`、`y` 落在这块着墨的九宫格点上。着墨取旋转和缩放之前的范围；同时写了 `rotate` 时报 `ink-anchor-rotate`。没有着墨（空文字或全透明）时退回布局盒子，并报 `ink-anchor-empty`。`overflow="hidden"` 先裁再对齐。没写 `anchor-box`、锚点贴着左边或右边、并且字形比盒子靠里至少 2px、也不小于字号的 4% 时，报 `ink-inset`。只写在 `layer` 和 `use` 上。
 
@@ -119,7 +119,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 ### 4.1 layer：自由摆放，也可以当分组
 
-原点是 layer 的左上角。嵌套 `layer`、`use`、`box`、`extrude` 和带尺寸的自定义元素用 `x`、`y` 定位；圆、椭圆和球用圆心。HTML 不写 `x`、`y`，要单独摆放就再包一层 layer。layer 可以嵌套。外层的 `opacity`、`rotate`、`scale` 会作用到里面的全部子元素，所以一组要一起移动、旋转或缩放时，包一层 layer 即可。
+原点是 layer 的左上角。嵌套 `layer`、`use`、`box`、`extrude` 和带尺寸的自定义元素用 `x`、`y` 定位；圆、椭圆和球用圆心。HTML 不写 `x`、`y`，要单独摆放就再包一层 layer。layer 可以嵌套。外层的 `opacity`、`rotate`、`scale` 会作用到里面的全部子元素，所以一组要一起移动、旋转或缩放时，包一层 layer 即可。嵌套 layer 写了 `width` 时，里面的文字按这个宽度换行；宽高都写了再减去这一层的 `safe`。这一层上的 `color`、`font-family` 会传给里面没写这些的文字，和根 layer 一样。
 
 - 写了 `width`、`height`：layer 就是这么大，原点固定。内容可以画出盒子。做动画的分组建议写上宽高，这样坐标不会跟着内容变。
 - 没写：宽高等于从原点到子元素右下角的距离。坐标在负方向的子元素会画到盒子外面，但不会把其他子元素一起平移。
@@ -181,7 +181,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 `display:flex` 把 `div`（以及其他文字标签）变成排布容器，不再当文字盒子。默认横向。竖排写 `flex-direction:column`。子元素是文字、图片、flex 容器或 `layer`。
 
-没写 `display:flex` 的 `div`，只要里面有行内标签放不下的子元素（`h1`–`h3`、`p`、`div`、图片、`math`、`layer`、形状等），就按块级从上到下排，等同于补上 `display:flex; flex-direction:column`。没写 `align-items` 时，文字块拉到这一列的内容宽度：写了 `width` 就用这个宽，没写就跟最宽的一块。已经写了 `align-items` 就沿用。这些子元素会画出来，不报 `invalid-child`。夹在旁边的文字单独成段。只放文字和行内标签时，`div` 仍是文字盒子。
+没写 `display:flex` 的 `div`，只要里面有行内标签放不下的子元素（`h1`–`h3`、`p`、`div`、图片、`math`、`layer`、形状等），就按块级从上到下排，等同于补上 `display:flex; flex-direction:column`。没写 `align-items` 时，文字块拉到这一列的内容宽度：写了 `width` 就用这个宽，没写就跟最宽的一块。文字的高度按这个宽度换行后再往下排，下一块从换行后的底边开始。已经写了 `align-items` 就沿用。这些子元素会画出来，不报 `invalid-child`。夹在旁边的文字单独成段。只放文字和行内标签时，`div` 仍是文字盒子。
 
 `div` 和 `display:flex` 上写的 `font-size`、`font-weight`、`font-family`、`color`、`letter-spacing`、`line-height`、`text-align` 会传给里面没写这些的 `p`、`div`、`span`。`h1`–`h3` 仍用自己的默认字号和字重，颜色和字体照样继承。子元素自己写了的优先。
 
@@ -196,7 +196,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 </div>
 ```
 
-`style` 支持的属性：
+`style` 里不认识的属性，或认识但写错的值，报 `invalid-attr`。布局仍用该项的默认值。支持的属性：
 
 | 属性 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -221,7 +221,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 ## 5. 文字
 
-最外层的文字标签是一个**文字盒子**，里面只能放文字和行内标签（`span`、`strong`、`b`、`em`、`i`、`u`、`br`），也可以直接放 `<img>`。
+最外层的文字标签是一个**文字盒子**，里面只能放文字和行内标签（`span`、`strong`、`b`、`em`、`i`、`u`、`br`），也可以直接放 `<img>`。图片和文字排在同一段里，宽度不够时跟着一起换行。
 `div` 里有块级子元素时不是文字盒子，见 4.2。
 `p`、`h1`–`h3`、`span` 里不要嵌套 `div`、`p`，也不要放 `layer`。多段上下排写成 `<div><p>…</p></div>`。图形和文字并排时，把写了宽高的 `layer` 放进 `<div style="display:flex">`。
 `em` 和 `i` 是斜体，`strong` 和 `b` 是粗体，`u` 加下划线。没写字号时，它们和 `span` 一样继承外层。
@@ -242,7 +242,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | `font-size`、`font-weight`、`font-family`、`color`、`letter-spacing` | 同 CSS，行内标签也可以写 |
 | （字重规则） | `ChillDuanSans` 按可变字重绘制，字重轴约 300 到 800，中间的字重不会收成 400 和 700 两档。登记了多档文件的字体取最近的一档。只登记了一档的字体，例如 `Brush`、`Bebas`，请求别的字重仍用这一档。自带 `<font>` 且文件没有字重轴的，按 400 |
 | `writing-mode` | `horizontal-tb`（默认）或 `vertical-rl`。竖排时字从上到下，列从右到左，`letter-spacing` 是字与字之间的额外间距 |
-| `line-height` | 倍数，单行默认 1.2，多行默认 1.4 |
+| `line-height` | 倍数（`1.4`）或像素（`24px`）。`normal` 按 1.2。单行默认 1.2，多行默认 1.4。`%`、`em` 等报 `invalid-attr`。像素行高按像素继承，不跟子元素的字号再乘一次 |
 | `text-align` | `left`（默认）、`center`、`right` |
 | `width`、`height` | 外框尺寸（含 padding 和 border） |
 | `max-width` | 最大外框宽度，超出就换行，盒子贴合最长的一行 |
@@ -255,8 +255,8 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 1. 写了 `width`：按内容宽度换行。
 2. 写了 `max-width`：超出才换行。
 3. 都没写：默认一行；如果一行超出可用宽度，自动换行，报告里记为 `auto-wrap`。
-4. 中文可以在任意两个字之间断行；英文单词和连续数字不会被拆开。
-5. 避头尾：`，。、；：？！）」』》】…` 等不会出现在行首，`（「『《【` 等不会出现在行尾。
+4. 断行机会按 Unicode 换行规则取。中文可以在任意两个字之间断行；英文单词和连续数字不会被拆开。
+5. 避头尾：`，。、；：？！）」』》】…` 等不会出现在行首，`（「『《【` 等不会出现在行尾。库允许、但这条禁止的断点仍然禁止。
 6. 硬换行只用 `<br>`。源码里的换行和连续空格折成一个空格，每一行的行首行尾空格去掉。行内标签交界处的空格保留，`A <span>B</span> C` 是 `A B C`。`&nbsp;` 不折叠，也不当行首行尾空格去掉。
 
 带 `id` 的行内标签（`span`、`strong`、`b`、`em`）会在报告的元素表里多一条，`inline` 为 true。`path` 像 `layer/p[0]/span[0]`，序号按元素子节点计，和布局路径一样，`<br>` 也占一个序号。`lines` 是每一行里属于它的那一段。`box` 和 `ink` 都是这些段合起来、再乘上父文字元素的变换（含祖先的 `rotate`、`scale` 和透视）之后的外接矩形；行内标签没有单独的布局盒。最内层写了 `id` 的那段拥有这些字，里面没写 `id` 的行内标签沿用外层。没写 `id` 的行内标签不进元素表。这些 `inline` 元素不参与 `outside-safe`、`min-font-size` 和 `text-overlap`，避免和父段落各报一次。
@@ -654,10 +654,10 @@ registerFilter({
 | `auto-wrap` | info | 文字超出可用宽度，被自动换行 |
 | `non-canonical` | info | 含义明确，但不是规范写法。照常渲染，`hint` 里是规范写法 |
 | `unknown-tag` | warn | 不认识的标签 |
-| `invalid-attr` | warn | 属性放错了位置，或两种写法混用。和已知属性编辑距离不超过 2 的名字也记在这里，`hint` 给出正确写法。其余不认识的属性名不报，留给 `draw` |
-| `invalid-child` | warn | 非法子元素：线条或 `g` 放进 flex 容器，文字盒子（`h1`–`h3`、`p`、`span`，以及只含文字的 `div`）里放了 `h1`–`h3`、`p`、`div`、`layer`、`g` 或 `math`，`mask` 放错位置或一层写了多个。含这些子元素的 `div` 按块级竖排，不报这条。文字盒子里的 `<img>` 和文字并排，不报这条 |
+| `invalid-attr` | warn | 属性放错了位置，或两种写法混用。和已知属性编辑距离不超过 2 的名字也记在这里，`hint` 给出正确写法；候选按标签收窄，过短或没有共同开头的不推荐。其余不认识的属性名不报，留给 `draw`。`style` 里不支持或写错的声明也记在这里。`anchor` 写错、路径 `d` 无法解析同样是这个码；路径失败时跳过这一笔，不中断整张图 |
+| `invalid-child` | warn | 非法子元素：线条或 `g` 放进 flex 容器，文字盒子（`h1`–`h3`、`p`、`span`，以及只含文字的 `div`）里放了 `h1`–`h3`、`p`、`div`、`layer`、`g` 或 `math`，`mask` 放错位置或一层写了多个。含这些子元素的 `div` 按块级竖排，不报这条。文字盒子里的 `<img>` 跟文字排在同一段里，不报这条 |
 | `empty-mask` | warn | `mask` 里没有可用的形状或图片，不生效 |
-| `invalid-draw` | error / warn | `<draw>` 语法错误（error）或内容为空（warn） |
+| `invalid-draw` | error / warn | `<draw>` 语法错误或运行出错（error），或内容为空（warn）。运行出错带上源码位置，其余内容照常绘制 |
 | `missing-image` | warn | `img` 的 `src` 读不到 |
 | `missing-model` | warn | `model` 的 `src` 缺失、不是 `.glb`，或文件读不到；没有可放入的宽高时也是这个码 |
 | `missing-symbol` | warn | `use` 的 `href` 没有对应的 `symbol` |
@@ -704,7 +704,7 @@ flexlayer check scene.tsx --frames all                           # 检查每一�
 
 程序调用（`.tsx` 或 `h()`）时，任意元素可挂 `draw={(ctx, el) => { ... }}`。
 
-在 `.layer` 文件里用子标签 `<draw>…</draw>`，正文是 JavaScript，可用变量只有 `ctx` 与 `el`（与回调参数相同）。`<draw>` 不参与布局，画在父元素默认内容之后；同一个元素只能有一个 `<draw>`。程序侧已挂 `draw` 回调时，忽略标签并警告。
+在 `.layer` 文件里用子标签 `<draw>…</draw>`，正文是 JavaScript，可用变量只有 `ctx` 与 `el`（与回调参数相同）。`<draw>` 不参与布局，画在父元素默认内容之后；同一个元素只能有一个 `<draw>`。程序侧已挂 `draw` 回调时，忽略标签并警告。运行时抛错记为 `invalid-draw`，带上 `<draw>` 的位置，不让整张图退出。
 
 ```html
 <layer width="200" height="120" x="0" y="0">

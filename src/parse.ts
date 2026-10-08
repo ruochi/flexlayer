@@ -23,6 +23,8 @@ export type FvgNode = {
   writtenTag?: string
   /** `.tsx` 里这个标签所在的位置。`.layer` 解析出来的节点没有。 */
   loc?: SourceLoc
+  /** `<draw>` 正文所在的位置。运行出错时报告用它，而不是父标签的位置。 */
+  drawLoc?: SourceLoc
 }
 
 export type FvgChild = string | FvgNode

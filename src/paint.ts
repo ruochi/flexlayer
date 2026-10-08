@@ -1,6 +1,5 @@
 import {
   createCanvas,
-  Path2D,
   type Canvas,
   type CanvasRenderingContext2D,
   type ImageData,
@@ -28,6 +27,7 @@ import { fitImageRect } from './image.js'
 import { canvasPaint, isGradient } from './gradient.js'
 import { gradientStyle, isGradientPaint, type GradientBox } from './gradientField.js'
 import { applyToBox, aroundPivot, invert, multiply, originOffset } from './matrix.js'
+import { openSvgPath } from './path.js'
 import { ownsMeshScene, renderMeshLayer, type MeshFrame } from './mesh.js'
 import { drawTexturedPlane, has3dPose, PERSPECTIVE_AA, planeDepth, posePoint, project } from './perspective.js'
 import { outerInkStrokeReach } from './style.js'
@@ -96,36 +96,31 @@ function linePad(node: LineLayoutNode): number {
 }
 
 function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, rx: number, ry = rx) {
-  // 只写一个半径（border-radius、或 rect 的 rx）时两角一样，收成圆角胶囊。
-  // 分别写了 rx、ry 才按椭圆角各自钳制。
+  // 只写一个半径时两角一样，收成圆角胶囊。分别写了 rx、ry 才按椭圆角各自钳制。
+  // 圆弧用平台的 arc / ellipse。二次贝塞尔在半径等于半边时画不成正圆。
   const same = Math.abs(rx - ry) < 0.01
   const rrx = same ? Math.min(Math.max(rx, 0), w / 2, h / 2) : Math.min(Math.max(rx, 0), w / 2)
   const rry = same ? rrx : Math.min(Math.max(ry, 0), h / 2)
-  if (rrx === rry) {
-    const rad = rrx
+  if (rrx <= 0.01 && rry <= 0.01) {
     ctx.beginPath()
-    ctx.moveTo(x + rad, y)
-    ctx.lineTo(x + w - rad, y)
-    ctx.quadraticCurveTo(x + w, y, x + w, y + rad)
-    ctx.lineTo(x + w, y + h - rad)
-    ctx.quadraticCurveTo(x + w, y + h, x + w - rad, y + h)
-    ctx.lineTo(x + rad, y + h)
-    ctx.quadraticCurveTo(x, y + h, x, y + h - rad)
-    ctx.lineTo(x, y + rad)
-    ctx.quadraticCurveTo(x, y, x + rad, y)
-    ctx.closePath()
+    ctx.rect(x, y, w, h)
+    return
+  }
+  if (Math.abs(w - h) < 0.05 && Math.abs(rrx * 2 - w) < 0.05 && Math.abs(rry * 2 - h) < 0.05) {
+    ctx.beginPath()
+    ctx.arc(x + w / 2, y + h / 2, Math.min(w, h) / 2, 0, Math.PI * 2)
     return
   }
   ctx.beginPath()
   ctx.moveTo(x + rrx, y)
   ctx.lineTo(x + w - rrx, y)
-  ctx.ellipse(x + w - rrx, y + rry, rrx, rry, 0, -Math.PI / 2, 0)
+  ctx.ellipse(x + w - rrx, y + rry, Math.max(rrx, 0.01), Math.max(rry, 0.01), 0, -Math.PI / 2, 0)
   ctx.lineTo(x + w, y + h - rry)
-  ctx.ellipse(x + w - rrx, y + h - rry, rrx, rry, 0, 0, Math.PI / 2)
+  ctx.ellipse(x + w - rrx, y + h - rry, Math.max(rrx, 0.01), Math.max(rry, 0.01), 0, 0, Math.PI / 2)
   ctx.lineTo(x + rrx, y + h)
-  ctx.ellipse(x + rrx, y + h - rry, rrx, rry, 0, Math.PI / 2, Math.PI)
+  ctx.ellipse(x + rrx, y + h - rry, Math.max(rrx, 0.01), Math.max(rry, 0.01), 0, Math.PI / 2, Math.PI)
   ctx.lineTo(x, y + rry)
-  ctx.ellipse(x + rrx, y + rry, rrx, rry, 0, Math.PI, Math.PI * 1.5)
+  ctx.ellipse(x + rrx, y + rry, Math.max(rrx, 0.01), Math.max(rry, 0.01), 0, Math.PI, Math.PI * 1.5)
   ctx.closePath()
 }
 
@@ -208,6 +203,11 @@ function drawTextNode(ctx: CanvasRenderingContext2D, node: TextLayoutNode, inkCo
         ctx.stroke()
       }
     }
+  }
+  for (const image of node.inlines ?? []) {
+    const placed = { ...image, x: node.x + image.x, y: node.y + image.y }
+    drawBoxChrome(ctx, placed)
+    drawImageNode(ctx, placed)
   }
 }
 
@@ -333,7 +333,12 @@ function drawLine(ctx: CanvasRenderingContext2D, node: LineLayoutNode, silhouett
     }
     if (stroked) ctx.stroke()
   } else if (g.kind === 'path') {
-    const p = new Path2D(g.d)
+    const opened = openSvgPath(g.d)
+    if ('error' in opened) {
+      ctx.restore()
+      return
+    }
+    const p = opened.path
     if (node.fill !== 'none') {
       if (!silhouette) ctx.fillStyle = paintOf(ctx, node.fill, 0, 0, node.width, node.height, pad)
       ctx.fill(p)
@@ -378,9 +383,8 @@ function runElementDraw(ctx: CanvasRenderingContext2D, node: LayoutNode, t: numb
   ctx.translate(node.x, node.y)
   try {
     node.draw(ctx, buildDrawEl(node, t, state))
-  } catch (err) {
-    // 布局已经把缺名字报成 invalid-draw。这里再抛出会让整张图以 "X is not defined" 退出。
-    if (!(err instanceof ReferenceError)) throw err
+  } catch {
+    // 运行错误已经在排版时写入 invalid-draw。这里再抛出会让整张图没有报告。
   }
   ctx.restore()
 }
