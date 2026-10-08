@@ -85,7 +85,7 @@ export default canvas.create(
 )
 ```
 
-只写宽或只写高、且没有会换行的文字时，另一边按比例放缩，这个比例乘进已有的 `scale`。`scale` 可以写两个数，例如 `scale="1.2 0.8"` 或 `scale="-1 1"`；原来只有一个数时仍写回一个数。宽高都写了就是盒子。返回的节点带 `left`、`top`、`right`、`bottom`，这是没转之前的布局盒。转完之后的外接矩形在 `rotatedBox`，接着摆下一块用 `rotatedBox.bottom`。文字在 `text` 里，按节点分组，每一行有盒子和 `baseline`，字在 `lines[].chars`。一个字是只有一个字的一行。底色用铺满的 `<rect fill>`。形状用 SVG 的 `x y width height` 或 `cx cy rx ry`。`<g transform>` 把几笔收成一组。`<arrow>` 是内置组件。自定义标签用 `canvas.component` 注册，类型写在 `declare module 'flexlayer/jsx-runtime'` 里。声明的属性就是回调参数的类型，返回值可以是一个元素或数组。自定义字体先 `canvas.font(family, src)`，或把 `<font>` 写进正在量的那一层；相对路径按源文件目录解析。量到的盒子和最终排版不一致时报 `measure-mismatch`。例子：`examples/poster.tsx`、`examples/hello.tsx`、`examples/html-layer.tsx`。规范见 SPEC 第 15 章。
+只写宽或只写高、且没有会换行的文字时，另一边按比例放缩，这个比例乘进已有的 `scale`。`scale` 可以写两个数，例如 `scale="1.2 0.8"` 或 `scale="-1 1"`；原来只有一个数时仍写回一个数。宽高都写了就是盒子。返回的节点带 `left`、`top`、`right`、`bottom`，这是没转之前的布局盒。转完之后的外接矩形在 `rotatedBox`，接着摆下一块用 `rotatedBox.bottom`。文字在 `text` 里，按节点分组，每一行有盒子和 `baseline`，字在 `lines[].chars`。一个字是只有一个字的一行。每个排进去的元素在 `elements` 里，带 `path`、`tag`、布局盒 `box` 和转完之后的 `ink`，坐标和 `text` 同一套；贴着某个圆或矩形摆下一块时用 `box`，躲开转过的图形用 `ink`。底色用铺满的 `<rect fill>`。形状用 SVG 的 `x y width height` 或 `cx cy rx ry`。`<g transform>` 把几笔收成一组。`<arrow>` 是内置组件。自定义标签用 `canvas.component` 注册，类型写在 `declare module 'flexlayer/jsx-runtime'` 里。声明的属性就是回调参数的类型，返回值可以是一个元素或数组。自定义字体先 `canvas.font(family, src)`，或把 `<font>` 写进正在量的那一层；相对路径按源文件目录解析。量到的盒子和最终排版不一致时报 `measure-mismatch`。例子：`examples/poster.tsx`、`examples/hello.tsx`、`examples/html-layer.tsx`。规范见 SPEC 第 15 章。
 
 字体、图片、配色和效果名用 [docs/RESOURCES.md](docs/RESOURCES.md)。`font-family="Song"` 这种目录里的名字会自己下载，不要编造字体文件地址，也不要把 `fonts.googleapis.com` 的 CSS 地址写进 `<font src>`。
 
@@ -104,7 +104,7 @@ const { png, report } = await renderLayer(source, { baseDir: process.cwd() })
 
 | 导出 | 做什么 |
 | --- | --- |
-| `canvas.create` / `create` | 同步量一个 `<layer>`。`left` `top` `right` `bottom` 是没转之前的布局盒，`rotatedBox` 是转完之后的外接矩形。文字在 `text` 里，按行给出盒子和 `baseline` |
+| `canvas.create` / `create` | 同步量一个 `<layer>`。`left` `top` `right` `bottom` 是没转之前的布局盒，`rotatedBox` 是转完之后的外接矩形。文字在 `text` 里，按行给出盒子和 `baseline`。每个元素的位置在 `elements` 里 |
 | `canvas.font` | 先注册自定义字体，再 `create`。也可以把 `<font family src>` 写进正在量的那一层 |
 | `canvas.component` / `registerComponent` | 按标签名注册组件。内置 `arrow` 也从这里来，`arrowComponent` 是它的函数 |
 | `renderLayer` / `checkLayer` | 渲染 PNG，或只排版并出报告 |

@@ -46,7 +46,7 @@ node dist/cli.js render examples/hello.layer -o hello.png
 
 ## 代码调用
 
-推荐先量再摆。`canvas.create` 同步准备字体和图片，并在进程里记住。参数是一棵 `<layer>`，返回量好的盒子：
+推荐先量再摆。`canvas.create` 同步准备字体和图片，并在进程里记住。参数是一棵 `<layer>`，返回量好的盒子。子元素的位置在 `elements` 里，和 `text` 用同一套坐标：
 
 ```tsx
 import { canvas } from 'flexlayer'

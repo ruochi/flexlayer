@@ -309,6 +309,146 @@ describe('canvas.create', () => {
     expect(line.baseline).toBeLessThanOrEqual(block.height + 0.5)
   })
 
+  it('每个元素都有布局盒，和文字用同一套坐标', () => {
+    const block = canvas.create(
+      h(
+        'layer',
+        { x: '20', y: '30', width: '200', height: '120' },
+        h('rect', { id: 'card', x: '10', y: '16', width: '80', height: '40', fill: '#fff' }),
+        h('circle', { cx: '140', cy: '36', r: '16', fill: '#fff' }),
+      ),
+    )
+    expect(block.elements.map((element) => element.path)).toEqual(['rect[0]', 'circle[1]'])
+    const card = block.elements[0]!
+    const dot = block.elements[1]!
+    expect(card.id).toBe('card')
+    expect(card.tag).toBe('rect')
+    expect(card.box).toMatchObject({ left: 10, top: 16, width: 80, height: 40, right: 90, bottom: 56 })
+    expect(card.ink).toEqual(card.box)
+    expect(dot.id).toBeUndefined()
+    expect(dot.box).toMatchObject({ left: 124, top: 20, width: 32, height: 32 })
+    expect(dot.box.left + dot.box.width / 2).toBeCloseTo(140)
+    expect(dot.box.top + dot.box.height / 2).toBeCloseTo(36)
+
+    const column = canvas.create(
+      h(
+        'layer',
+        {},
+        h(
+          'div',
+          { style: 'display:flex; flex-direction:column; gap:24px; align-items:flex-start' },
+          h('p', { style: 'font-size:40px; white-space:nowrap' }, '甲'),
+          h('p', { style: 'font-size:40px; white-space:nowrap' }, '乙'),
+        ),
+      ),
+    )
+    const paragraphs = column.elements.filter((element) => element.tag === 'p')
+    expect(paragraphs.map((element) => element.path)).toEqual(['div[0]/p[0]', 'div[0]/p[1]'])
+    expect(paragraphs[1]!.box.top).toBeCloseTo(paragraphs[0]!.box.bottom + 24, 0)
+    const line = column.text[0]!.lines[0]!
+    expect(line.y).toBeGreaterThanOrEqual(paragraphs[0]!.box.top - 0.5)
+    expect(line.y + line.height).toBeLessThanOrEqual(paragraphs[0]!.box.bottom + 0.5)
+    expect(line.x).toBeGreaterThanOrEqual(paragraphs[0]!.box.left - 0.5)
+  })
+
+  it('元素坐标计入嵌套层的位置和缩放，不计这一层自己的旋转', () => {
+    const plain = canvas.create(h('layer', {}, h('rect', { x: '10', y: '20', width: '30', height: '40', fill: '#fff' })))
+    const turned = canvas.create(
+      h('layer', { rotate: '30' }, h('rect', { x: '10', y: '20', width: '30', height: '40', fill: '#fff' })),
+    )
+    expect(turned.elements[0]!.box.left).toBeCloseTo(plain.elements[0]!.box.left)
+    expect(turned.elements[0]!.box.top).toBeCloseTo(plain.elements[0]!.box.top)
+    expect(turned.elements[0]!.ink.left).toBeCloseTo(plain.elements[0]!.ink.left)
+
+    const nested = canvas.create(
+      h(
+        'layer',
+        { width: '240', height: '160' },
+        h(
+          'layer',
+          { x: '100', y: '80', anchor: 'center', width: '80', height: '40' },
+          h('rect', { width: '80', height: '40', fill: '#fff' }),
+        ),
+      ),
+    )
+    const inner = nested.elements.find((element) => element.path === 'layer[0]')!
+    const rect = nested.elements.find((element) => element.path === 'layer[0]/rect[0]')!
+    expect(inner.box).toMatchObject({ left: 60, top: 60, width: 80, height: 40 })
+    expect(rect.box.left).toBeCloseTo(inner.box.left)
+    expect(rect.box.top).toBeCloseTo(inner.box.top)
+
+    const scaled = canvas.create(
+      h(
+        'layer',
+        { width: '400', height: '400', safe: '0' },
+        h(
+          'layer',
+          { x: '10', y: '20', width: '100', height: '50', scale: '2', origin: 'top-left' },
+          h('rect', { width: '100', height: '50', fill: '#fff' }),
+        ),
+      ),
+    )
+    const grown = scaled.elements.find((element) => element.path === 'layer[0]')!
+    expect(grown.box).toMatchObject({ left: 10, top: 20, width: 200, height: 100 })
+    expect(grown.ink.width).toBeCloseTo(200)
+    const fitted = canvas.create(
+      h('layer', { width: '90' }, h('rect', { x: '0', y: '0', width: '180', height: '60', fill: '#fff' })),
+    )
+    expect(fitted.elements[0]!.box.width).toBeCloseTo(90)
+    expect(fitted.elements[0]!.box.height).toBeCloseTo(30)
+  })
+
+  it('转过的图形用 ink 躲开，线条含描边，g 的平移算进盒子', () => {
+    const spun = canvas.create(
+      h(
+        'layer',
+        { width: '200', height: '200' },
+        h('rect', { x: '50', y: '50', width: '100', height: '40', rotate: '90', fill: '#fff' }),
+      ),
+    )
+    const shape = spun.elements[0]!
+    expect(shape.box).toMatchObject({ left: 50, top: 50, width: 100, height: 40 })
+    expect(shape.ink.left).toBeCloseTo(80)
+    expect(shape.ink.top).toBeCloseTo(20)
+    expect(shape.ink.width).toBeCloseTo(40)
+    expect(shape.ink.height).toBeCloseTo(100)
+
+    const rule = canvas.create(
+      h(
+        'layer',
+        { width: '80', height: '40' },
+        h('line', { x1: '10', y1: '20', x2: '50', y2: '20', stroke: '#fff', 'stroke-width': '4' }),
+      ),
+    )
+    expect(rule.elements[0]!.box).toMatchObject({ left: 10, top: 20, width: 40, height: 0 })
+    expect(rule.elements[0]!.ink.left).toBeCloseTo(8)
+    expect(rule.elements[0]!.ink.top).toBeCloseTo(18)
+    expect(rule.elements[0]!.ink.width).toBeCloseTo(44)
+    expect(rule.elements[0]!.ink.height).toBeCloseTo(4)
+
+    const grouped = canvas.create(
+      h(
+        'layer',
+        { width: '120', height: '80' },
+        h('g', { transform: 'translate(20,10)' }, h('rect', { x: '0', y: '0', width: '40', height: '30', fill: '#0f0' })),
+      ),
+    )
+    expect(grouped.elements.map((element) => element.path)).toEqual(['g[0]', 'g[0]/rect[0]'])
+    expect(grouped.elements[0]!.box).toMatchObject({ left: 20, top: 10, width: 40, height: 30 })
+    expect(grouped.elements[1]!.box).toMatchObject({ left: 20, top: 10, width: 40, height: 30 })
+
+    const masked = canvas.create(
+      h(
+        'layer',
+        { width: '80', height: '80' },
+        h('mask', {}, h('circle', { cx: '40', cy: '40', r: '40' })),
+        h('rect', { width: '80', height: '80', fill: '#fff' }),
+      ),
+    )
+    expect(masked.elements.map((element) => element.tag)).toEqual(['rect'])
+    expect(canvas.create(h('layer', { width: '10', height: '10' })).elements).toEqual([])
+  })
+
   it('字体还没注册时直接报错，注册后再按真字体量', () => {
     const src = ['/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf', '/usr/share/fonts/truetype/croscore/Cousine-Regular.ttf'].find(
       (path) => existsSync(path),

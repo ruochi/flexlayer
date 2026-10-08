@@ -6,6 +6,7 @@ import { ensureBuiltinFontsSync, fontReady, registerFontPath, resolveFontSrcSync
 import { fontFamiliesOf, measureLayer, noteMeasuredSize, parseSafe, prepareAssetsSync, type MeasureEnv } from './layout.js'
 import type { FvgNode } from './parse.js'
 import { divHasFlowBreak, isDisplayFlex } from './rules.js'
+import { placedElements, type PlacedElement } from './placed-elements.js'
 import { placedText, type PlacedText } from './placed-text.js'
 import { parseNumber, parseOrigin, parseScale, readAnchor } from './style.js'
 import { isTextBoxTag } from './text.js'
@@ -56,6 +57,7 @@ export type LayerBox = {
   height: number
 }
 
+export type { PlacedElement } from './placed-elements.js'
 export type { PlacedChar, PlacedLine, PlacedText } from './placed-text.js'
 
 export type CreatedLayer = FvgNode & LayerBox & {
@@ -70,6 +72,11 @@ export type CreatedLayer = FvgNode & LayerBox & {
    * 坐标相对布局盒左上角。一个字是只有一个字的一行，多行是 `lines` 数组。
    */
   text: PlacedText[]
+  /**
+   * 这一层里每个排进去的元素。没有子元素时是空数组。根层自己不在里面。
+   * 坐标和 `text` 同一套，相对布局盒左上角。
+   */
+  elements: PlacedElement[]
 }
 
 function parseAnchor(raw: string | undefined, fallback: Anchor = 'top-left'): Anchor {
@@ -185,6 +192,7 @@ export function create(node: FvgNode): CreatedLayer {
     rotatedBox: rotatedBoxOf(node, box),
     issues,
     text: placedText(laid),
+    elements: placedElements(laid),
   })
 }
 
