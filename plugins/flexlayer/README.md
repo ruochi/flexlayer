@@ -1,6 +1,6 @@
 # Flex Layer skill
 
-给别的项目里的 agent 用的安装包。正文在 `skills/flexlayer/SKILL.md`。在本仓库里写画面仍看根目录的 `AGENTS.md`。
+给别的项目里的 agent 用的安装包。正文在 `skills/flexlayer/SKILL.md`。仓库根的 `skills/flexlayer/SKILL.md` 是同一份，给只扫描 `skills/` 的目录用，两处要一起改。在本仓库里写画面仍看根目录的 `AGENTS.md`。
 
 公开仓库的 `main` 包含这些文件之后，各家才能安装。
 

@@ -10,7 +10,7 @@ Flex Layer 用标签描述一帧画面：图形用 SVG 的写法，文字用 HTM
 
 ## 给别的项目里的 agent
 
-Skill 正文在 [plugins/flexlayer/skills/flexlayer/SKILL.md](plugins/flexlayer/skills/flexlayer/SKILL.md)。公开的 `main` 包含它之后可以安装：
+Skill 正文在 [skills/flexlayer/SKILL.md](skills/flexlayer/SKILL.md)，插件包里有同一份。公开的 `main` 包含它之后可以安装：
 
 ```bash
 npx skills add ruochi/flexlayer
