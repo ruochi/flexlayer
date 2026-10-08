@@ -46,7 +46,7 @@ export const ATTR_ORDER = [
   'color',
   'font-family',
   'safe',
-  'bleed',
+  'view',
   'x',
   'y',
   'cx',
@@ -310,13 +310,17 @@ export const ATTRS: AttrDef[] = [
     styleHint: '不要写进 style；外包 <layer grade="…">',
   },
   {
-    name: 'bleed',
+    name: 'view',
+    layerOnlyAttr: true,
+    forbidInStyle: true,
     docGroup: 'layer-only',
-    jsxType: 'boolean | number | string',
-    example: 'bleed',
+    example: '200 80 960 540',
     issue: 'invalid-attr',
-    misplacedHint: '只写在根 <layer bleed> 上。写了之后，着墨超出画布不再报 overflow-canvas',
+    misplacedHint: '只写在 layer 上，例如 <layer width="1920" height="1080" view="200 80 960 540">',
+    styleHint: '不要写进 style；写在 layer 的属性上',
   },
+  // 不再改变检查。留在表里，避免被当成 blend 的笔误。
+  { name: 'bleed' },
 ]
 
 export function attrByName(name: string): AttrDef | undefined {

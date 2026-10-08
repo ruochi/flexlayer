@@ -37,7 +37,6 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | `color` | `#111111` | 全局文字色、线条默认色 |
 | `font-family` | `ChillDuanSans` | 全局字体。目录里的名字直接写，第一次用到时自动下载。见 [docs/RESOURCES.md](docs/RESOURCES.md) |
 | `safe` | 画布短边的 4% | 安全区边距，`上 右 下 左` 或一个数字，只用于检查 |
-| `bleed` | 不出血 | 写在根上（`bleed` 或 `bleed="1"`）表示允许着墨超出画布。`overflow-canvas` 不再报，检查也不会因此 exit 1。`bleed="0"` 关掉。嵌套 layer 上写了会 `warn` 并忽略 |
 
 `<font family="名字" src="路径或网址" />` 注册额外字体，只能写在根元素下。`src` 必须是字体文件。不想自己找文件时，写目录里的名字：`Song` / `宋体`（Noto Serif SC，思源宋体简体子集）、`Kai` / `楷体`（霞鹜文楷）、`Brush` / `书法`（马善政毛笔楷书），以及 `Inter`、`Playfair`、`NotoSans` 等。有 400 和 700 两档的取最近的一档，只登记了一档的字体始终用那一档。
 
@@ -73,7 +72,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | `scale` | 绕 `origin` 缩放，同样作用到整棵子树。一个数时两轴相同。`scale="1.2 0.8"` 分轴，`scale="-1 1"` 是水平镜像。文字写 `style="scale:1.2 0.8"`。分轴时三维的 z 缩放是两轴绝对值乘积的平方根；只写一个数时 z 仍用这个数，负号也保留 |
 | `origin` | 旋转和缩放的支点，默认 `center`。九宫格和 `anchor` 相同。也可以写成相对盒子左上角的 `120 80`、`30% 40%`，或混用 `120 40%`、`top 80`。只写一个数或百分比时，另一轴是中心。支点可以落在盒子外面 |
 
-`rotate`、`scale` 只影响绘制，不影响布局。支点是 `origin`，绕这一点缩放或旋转，这一点在画面上不动。镜头推到任意一点时，直接把那一点写成 `origin`，例如 `<layer width="1920" height="1080" scale="1.4" origin="640 420">`。百分比按这一层的布局盒子，`<layer scale="1.4" origin="33% 39%">`。`top 80` 和 `80 top` 相同。解析失败报 `invalid-attr`，并退回中心。报告里的 `box` 是变换前的布局盒子（只累加平移），`ink` 是变换后的外接矩形。有透视时 `ink` 改成投影后的外接矩形，并多一个 `quad`（投影后的四个角）。`rotateX`、`rotateY` 和分轴 `scale` 的三维支点也是这个 `origin`。
+`rotate`、`scale` 只影响绘制，不影响布局。支点是 `origin`，绕这一点缩放或旋转，这一点在画面上不动。百分比按这一层的布局盒子，`<layer scale="1.4" origin="33% 39%">`。`top 80` 和 `80 top` 相同。解析失败报 `invalid-attr`，并退回中心。要从舞台上取一块出图，写 `view`，不要靠 `scale` 把整页推近，见第 4.1 节。报告里的 `box` 是变换前的布局盒子（只累加平移），`ink` 是变换后的外接矩形。有透视时 `ink` 改成投影后的外接矩形，并多一个 `quad`（投影后的四个角）。`rotateX`、`rotateY` 和分轴 `scale` 的三维支点也是这个 `origin`。`screenScale` 是这一层落到屏幕上的倍数，见第 4.1 节。
 
 `perspective` 只写在 `layer` 上，单位是像素，是直接子元素共用的视距。灭点是这一层盒子的中心，`z` 正方向朝观众，数值越大看起来越大。`rotateX`、`rotateY`、`z` 的归属和 `rotate` 相同，写在要转动或推近的那一层上，不改变布局。没有祖先写 `perspective` 时仍按二维绘制，并报 `flatten-3d`；这时 `z` 不改变绘制顺序。子元素的 `z` 大于等于视距时报 `behind-camera`，该元素不绘制。带三维姿态的平面先按 4 倍分辨率绘制，再平均缩回逻辑像素，斜边因此抗锯齿。平面上的 `shadow` 和 `glow` 画在这张位图的外侧，再一起投影，不会被裁在平面自己的框里。没有三维姿态、也没有网格的内容仍走原来的二维绘制。
 
@@ -92,7 +91,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | `cx`、`cy`、`x1`、`y1`、`x2`、`y2`、`points`、`d`、`depth`、`fill`、`stroke`、`transform` | 图形属性，坐标是所在 `layer` 的局部坐标 |
 | `src`、`alt` | 只写在 `img` 或 `model` 上。图片宽高仍放进 `style` |
 | `shadow`、`glow`、`inner-shadow`、`inner-glow`、`ink-stroke`、`blur`、`backdrop-blur`、`glass`、`noise`、`filter`、`blend` | 图形和 `layer` 写属性；文字写在 `style`。见第 9 章 |
-| `perspective`、`overlay`、`grade`、`grade-mask`、`bleed` | 只写在 `layer` 上。写在别处或写进 `style` 报 `warn` |
+| `perspective`、`overlay`、`grade`、`grade-mask`、`view` | 只写在 `layer` 上。写在别处或写进 `style` 报 `warn` |
 | `data` | 任何元素都可以写。值是 JSON；程序里直接传对象或数组。`draw` 读 `el.data`，不在 `el.attr` |
 | `expect` | 任何元素都可以写。声明预期中的问题码，出现在该节点或子树里时降为 info。没出现报 `unused-expect` |
 <!-- attrs:ownership:end -->
@@ -125,6 +124,10 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 - 没写：宽高等于从原点到子元素右下角的距离。坐标在负方向的子元素会画到盒子外面，但不会把其他子元素一起平移。
 
 `overflow="hidden"` 按 layer 的盒子裁剪子元素。默认 `visible`。被裁掉的是子元素；这一层自己的阴影、模糊仍可以画到盒子外面。祖先的 `overflow="hidden"` 会把子元素的阴影和光晕一起裁掉。已经被这样裁掉、画布上看不见的部分不报 `effect-clipped`。
+
+`view="x y w h"` 把这一层变成镜头。`width` `height` 是屏幕上的取景窗，`x` `y` 是窗口在父层里的位置。`view` 是舞台坐标里被取的矩形，铺满取景窗：窗口上的一点是舞台上对应点乘 `取景窗 / view` 的宽高。窗口外的内容裁掉，和 `overflow="hidden"` 一样，不报 `overflow-canvas`。`view` 没被直接子元素的布局盒盖住时报 `view-outside`（error），成片会露底。宽高比和取景窗差超过 1% 时不拉伸，按宽度保持中心重算高度，并 `warn`。要写 `width` 和 `height`。不要和 `perspective` 写在同一层。屏幕上不跟着镜头放大的章节、字幕、标注，写在这一层外面，用成片像素。`zoomView(center, zoom, size)` 用来算推到某一点的 `view`。`bleed` 已不再使用，写了会 `warn`。
+
+检查和绘制都按屏幕上的实际大小。`scale` 和 `view` 叠出来的倍数写在报告的 `screenScale`（两轴绝对值的几何平均，等于 1 不写）。最小字号拿 `font-size × screenScale` 和 `画布宽度 / 1080 × 24` 比。阴影、光晕、模糊的外扩同样乘这个倍数。`--debug` 的布局框和着墨框保持 1 屏幕像素，不跟着放大。网格光栅按这个倍数提高分辨率，推近后笔画仍然清楚。
 
 `<mask>` 裁的是这一层合成完的画面，包括阴影、模糊、调色和颗粒。它写在 `layer` 里面，和要裁的内容并列。自己不画出来，不占布局，不把层撑大，不出现在报告里，也不触发 `overflow-canvas`。被它挡住的内容同样不报 `overflow-canvas` 或 `effect-clipped`：报告里的 `ink` 先和 mask 形状的外接范围求交。一层最多一个，多出来的 `warn` 并忽略。坐标和同层的图形一样，原点在 layer 左上角。
 
@@ -639,18 +642,18 @@ registerFilter({
 - `opacity`：从根到该元素逐层相乘后的透明度。
 - `inline`：带 `id` 的行内标签才有，为 true。`box` 和 `ink` 都是这段文字变换后的外接矩形，见第 5 章。不参与安全区、最小字号和文字重叠检查。
 
-`opacity` 小于 0.01 的元素仍会出现在 `elements` 里，但不参与下面的越界、安全区、重叠和最小字号检查。最小字号按声明的 `font-size` 判断，不乘 `scale`。
+`opacity` 小于 0.01 的元素仍会出现在 `elements` 里，但不参与下面的越界、安全区、重叠和最小字号检查。最小字号按屏幕上的字号判断，也就是声明的 `font-size` 乘 `screenScale`。
 
 检查项：
 
 | code | 级别 | 含义 |
 | --- | --- | --- |
-| `overflow-canvas` | error | 着墨超出画布。根 `<layer bleed>` 表示这页允许出血，不再报这条 |
+| `overflow-canvas` | error | 着墨超出画布。镜头用 `view` 裁在取景窗里的部分不算。`bleed` 不再关掉这条 |
 | `outside-safe` | warn | 文字超出安全区 |
 | `text-overflow` | error | 文字超出了写死的宽度或高度 |
 | `flex-overflow` | warn | 子元素超出了写死尺寸的 flex 容器 |
 | `text-overlap` | warn | 两段文字的着墨区域重叠 |
-| `min-font-size` | warn | 字号小于 `画布宽度 / 1080 × 24` |
+| `min-font-size` | warn | 屏幕上的字号小于 `画布宽度 / 1080 × 24`。屏幕字号是 `font-size × screenScale` |
 | `auto-wrap` | info | 文字超出可用宽度，被自动换行 |
 | `non-canonical` | info | 含义明确，但不是规范写法。照常渲染，`hint` 里是规范写法 |
 | `unknown-tag` | warn | 不认识的标签 |
@@ -663,7 +666,8 @@ registerFilter({
 | `missing-symbol` | warn | `use` 的 `href` 没有对应的 `symbol` |
 | `symbol-cycle` | warn | `symbol` 通过 `use` 引用了自己 |
 | `open-curve-fill` | warn | 开口的 `curve` 写了 `fill`，没有填充 |
-| `effect-clipped` | warn | 本体在画布内，阴影、光晕、描边或图层模糊超出画布 |
+| `effect-clipped` | warn | 本体在画布内，阴影、光晕、描边或图层模糊超出画布。外扩按屏幕像素，乘 `screenScale` |
+| `view-outside` | error | `view` 没有被这一层直接子元素的布局盒盖住，成片会露底 |
 | `ink-stroke-fill` | warn | `inside` / `center` 的内侧宽度达到字号的约 8%，容易填死字内空白 |
 | `ink-inset` | info | 锚点贴着左边或右边，字形比布局盒子靠里至少 2px，且不小于字号的 4%。想让笔画贴齐就写 `anchor-box="ink"` |
 | `ink-anchor-empty` | info | `anchor-box="ink"` 的子树没有着墨，已按布局盒子定位 |

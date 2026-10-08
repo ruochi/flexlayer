@@ -6,7 +6,7 @@
 
 | 标签 | 做什么 |
 | --- | --- |
-| `layer` | 根画布兼定位容器。根上写 `width` `height` `background`（画布底色，省略则 PNG 透明）`color` `safe`；满版出血写 `bleed`，着墨超出画布不再报 `overflow-canvas`。定位用 `x` `y` `anchor`（默认左上角，没写是 0），还有 `opacity` `rotate` `rotateX` `rotateY` `z` `scale` `origin`。`perspective` 只写在这一层，是直接子元素共用的视距。可嵌套 |
+| `layer` | 根画布兼定位容器。根上写 `width` `height` `background`（画布底色，省略则 PNG 透明）`color` `safe`。定位用 `x` `y` `anchor`（默认左上角，没写是 0），还有 `opacity` `rotate` `rotateX` `rotateY` `z` `scale` `origin`。`view="x y w h"` 是镜头：这一层的宽高是屏幕上的取景窗，四个数是舞台上被取的矩形，窗口外裁掉。`perspective` 只写在这一层，是直接子元素共用的视距。可嵌套 |
 | `draw` | 子标签。正文是 JS（`ctx`、`el`），画在父元素内容之后 |
 | `div` 写 `display:flex` | 排布。默认横向；竖排加 `flex-direction:column`。`gap` `row-gap` `column-gap` `align-items` `align-content` `justify-content` `flex-wrap` `padding` 都在 `style` 里。**`align-items` 默认 `center`（CSS 里是 `stretch`）：column 忘写 `align-items` 会全部居中**。左对齐写 `align-items:flex-start`。`align-content` 默认 `flex-start`，管换行后的多行。`justify-content` 只管主轴，改不了这一层在父级交叉轴上的位置 |
 
@@ -87,7 +87,7 @@
 
 结构化数据：`data={{ values: [1, 2] }}`，`.layer` 里 `data='{"values":[1,2]}'`。`draw` 读 `el.data`。别的属性不要传对象或数组。
 
-故意出血或叠字：`expect="overflow-canvas: 出血图; text-overlap"`。对得上的问题降为 info。没出现报 `unused-expect`。
+故意越界或叠字：`expect="overflow-canvas: 出血图; text-overlap"`。对得上的问题降为 info。没出现报 `unused-expect`。镜头用 `view`，被取景窗裁掉的不报 `overflow-canvas`。
 
 ## 帧
 

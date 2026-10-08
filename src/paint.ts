@@ -31,6 +31,7 @@ import { applyToBox, aroundPivot, invert, multiply, originOffset } from './matri
 import { ownsMeshScene, renderMeshLayer, type MeshFrame } from './mesh.js'
 import { drawTexturedPlane, has3dPose, PERSPECTIVE_AA, planeDepth, posePoint, project } from './perspective.js'
 import { outerInkStrokeReach } from './style.js'
+import { layoutScale, viewMatrix } from './view.js'
 import { unionBoxes, type AppliedFilter, type Box,
   GlassSpec,
   GlowSpec,
@@ -347,11 +348,12 @@ function drawLine(ctx: CanvasRenderingContext2D, node: LineLayoutNode, silhouett
 
 function drawDebugOverlay(ctx: CanvasRenderingContext2D, node: LayoutNode) {
   ctx.save()
+  const k = transformScale(ctx)
   ctx.strokeStyle = 'rgba(0, 120, 255, 0.85)'
-  ctx.lineWidth = 1
-  ctx.strokeRect(node.x + 0.5, node.y + 0.5, node.width, node.height)
+  ctx.lineWidth = 1 / k
+  ctx.strokeRect(node.x + 0.5 / k, node.y + 0.5 / k, node.width, node.height)
   ctx.strokeStyle = 'rgba(255, 40, 40, 0.85)'
-  ctx.strokeRect(node.x + node.ink.x + 0.5, node.y + node.ink.y + 0.5, node.ink.width, node.ink.height)
+  ctx.strokeRect(node.x + node.ink.x + 0.5 / k, node.y + node.ink.y + 0.5 / k, node.ink.width, node.ink.height)
   ctx.restore()
 }
 
@@ -1499,7 +1501,7 @@ function strokeProjectedQuad(
   }
   ctx.save()
   ctx.strokeStyle = 'rgba(0, 210, 90, 0.95)'
-  ctx.lineWidth = 1.5
+  ctx.lineWidth = 1.5 / transformScale(ctx)
   ctx.beginPath()
   ctx.moveTo(pts[0]!.x, pts[0]!.y)
   for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y)
@@ -1543,10 +1545,14 @@ function paintBody(ctx: PaintCtx, node: LayoutNode, debug: boolean, t: number, s
     const inset = node.kind === 'flex' ? node.padding.left + (node.border?.width ?? 0) : 0
     const insetY = node.kind === 'flex' ? node.padding.top + (node.border?.width ?? 0) : 0
     ctx.translate(node.x + inset, node.y + insetY)
-    if (node.kind === 'layer' && node.overflow === 'hidden') {
+    if (node.kind === 'layer' && (node.overflow === 'hidden' || node.view)) {
       ctx.beginPath()
       ctx.rect(0, 0, node.width, node.height)
       ctx.clip()
+    }
+    if (node.kind === 'layer' && node.view) {
+      const mapping = viewMatrix(node.width, node.height, node.view)
+      ctx.transform(mapping.a, mapping.b, mapping.c, mapping.d, mapping.e, mapping.f)
     }
     const meshFrame = node.kind === 'layer' ? state.meshFrames?.get(node) : undefined
     if (meshFrame) {
@@ -1781,21 +1787,22 @@ async function prepareMeshFrames(
 ): Promise<Map<LayerLayoutNode, MeshFrame>> {
   const frames = new Map<LayerLayoutNode, MeshFrame>()
   const state: PaintState = { canvasWidth: 0, canvasHeight: 0, frame: clock.frame, fps: clock.fps, meshFrames: frames }
-  const visit = async (node: LayoutNode) => {
+  const visit = async (node: LayoutNode, parentK: number) => {
+    const k = parentK * layoutScale(node)
     if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
-      for (const child of node.children) await visit(child)
+      for (const child of node.children) await visit(child, k)
     } else if (node.kind === 'sqrt') {
-      await visit(node.child)
+      await visit(node.child, k)
     }
     if (node.kind !== 'layer' || !ownsMeshScene(node)) return
     const frame = renderMeshLayer(
       node,
-      scale,
-      (peeled) => paintChildBitmap(peeled, Math.max(scale, 1e-3) * 2, t, state),
+      k,
+      (peeled) => paintChildBitmap(peeled, Math.max(k, 1e-3) * 2, t, state),
     )
     if (frame) frames.set(node, frame)
   }
-  await visit(root)
+  await visit(root, scale)
   return frames
 }
 

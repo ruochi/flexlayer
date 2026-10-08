@@ -53,6 +53,11 @@ export function scaled(sx: number, sy = sx): Matrix {
   return { a: sx, b: 0, c: 0, d: sy, e: 0, f: 0 }
 }
 
+/** 两轴缩放绝对值的几何平均。旋转不改变它。用来把局部像素换算成屏幕像素。 */
+export function matrixScale(m: Matrix): number {
+  return Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)) || 1
+}
+
 /** 绕 (px, py) 旋转再缩放，与绘制时的变换顺序一致。只传一个缩放时两轴相同。 */
 export function aroundPivot(px: number, py: number, deg: number, sx: number, sy = sx): Matrix {
   return multiply(multiply(translated(px, py), multiply(rotated(deg), scaled(sx, sy))), translated(-px, -py))
