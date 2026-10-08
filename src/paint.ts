@@ -1074,8 +1074,35 @@ function leafInkBounds(node: LayoutNode): Box {
   return { x: b.x - slop, y: b.y - slop, width: b.width + slop * 2, height: b.height + slop * 2 }
 }
 
+/** 子元素在父级内容坐标里的墨迹。旋转和缩放绕它自己的 origin，不含父级的平移。 */
+function placedChildInk(node: LayoutNode): Box | null {
+  const local = groupInkBounds(node)
+  if (!local) return null
+  if (node.rotate === 0 && node.scaleX === 1 && node.scaleY === 1) return local
+  const origin = originOffset(node.origin, node.width, node.height)
+  return applyToBox(aroundPivot(node.x + origin.x, node.y + origin.y, node.rotate, node.scaleX, node.scaleY), local)
+}
+
+/**
+ * `<g>` 不另画一圈效果。这里把子路径变到父级内容坐标，供外层 layer 的描边和阴影用。
+ * SVG `transform` 已经含在结果里，不再加 `g` 自己的布局原点。
+ */
+function groupContentInk(node: LayoutNode & { kind: 'group' }): Box | null {
+  const parts: Box[] = []
+  for (const ch of node.children) {
+    const local = placedChildInk(ch)
+    if (!local) continue
+    parts.push(applyToBox(node.svg, local))
+  }
+  if (parts.length === 0) return null
+  let acc = parts[0]!
+  for (let i = 1; i < parts.length; i++) acc = unionBoxes(acc, parts[i]!)
+  return { x: acc.x - 2, y: acc.y - 2, width: acc.width + 4, height: acc.height + 4 }
+}
+
 /** 子树墨迹外框，坐标系与 drawInkMask 一致（含本节点的 x/y，不含本节点自己的旋转）。 */
 function groupInkBounds(node: LayoutNode): Box | null {
+  if (node.kind === 'group') return groupContentInk(node)
   if (node.kind !== 'layer' && node.kind !== 'flex') return leafInkBounds(node)
   const parts: Box[] = []
   const add = (b: Box | null) => {
@@ -1088,21 +1115,8 @@ function groupInkBounds(node: LayoutNode): Box | null {
   const insetX = node.kind === 'flex' ? node.padding.left + (node.border?.width ?? 0) : 0
   const insetY = node.kind === 'flex' ? node.padding.top + (node.border?.width ?? 0) : 0
   for (const ch of node.children) {
-    const local = groupInkBounds(ch)
-    if (!local) continue
-    const transformed =
-      ch.rotate === 0 && ch.scaleX === 1 && ch.scaleY === 1
-        ? local
-        : applyToBox(
-            aroundPivot(
-              ch.x + originOffset(ch.origin, ch.width, ch.height).x,
-              ch.y + originOffset(ch.origin, ch.width, ch.height).y,
-              ch.rotate,
-              ch.scaleX,
-              ch.scaleY,
-            ),
-            local,
-          )
+    const transformed = placedChildInk(ch)
+    if (!transformed) continue
     add({
       x: transformed.x + node.x + insetX,
       y: transformed.y + node.y + insetY,
@@ -1116,14 +1130,17 @@ function groupInkBounds(node: LayoutNode): Box | null {
   return { x: acc.x - 2, y: acc.y - 2, width: acc.width + 4, height: acc.height + 4 }
 }
 
-/** 画本节点墨迹。Layer / flex 合并子树，子元素带上自身的旋转和透明度。 */
+/** 画本节点墨迹。Layer / flex 合并子树；`<g>` 只把子路径变进这棵子树，不单独描边。 */
 function drawInkMask(ctx: PaintCtx, node: LayoutNode, isTop: boolean) {
   ctx.save()
   if (!isTop) {
     applyNodeTransform(ctx, node)
     ctx.globalAlpha *= node.opacity
   }
-  if (node.kind === 'layer' || node.kind === 'flex') {
+  if (node.kind === 'group') {
+    ctx.transform(node.svg.a, node.svg.b, node.svg.c, node.svg.d, node.svg.e, node.svg.f)
+    for (const ch of node.children) drawInkMask(ctx, ch, false)
+  } else if (node.kind === 'layer' || node.kind === 'flex') {
     drawNodeInk(ctx, node, 0, '#ffffff')
     const insetX = node.kind === 'flex' ? node.padding.left + (node.border?.width ?? 0) : 0
     const insetY = node.kind === 'flex' ? node.padding.top + (node.border?.width ?? 0) : 0
@@ -1222,6 +1239,13 @@ function eraseInnerStrokes(ctx: PaintCtx, node: LayoutNode) {
     ctx.globalCompositeOperation = 'destination-out'
     paintInkStrokes(ctx, node, 'inner')
     ctx.restore()
+  }
+  if (node.kind === 'group') {
+    ctx.save()
+    ctx.transform(node.svg.a, node.svg.b, node.svg.c, node.svg.d, node.svg.e, node.svg.f)
+    for (const ch of node.children) eraseInnerStrokes(ctx, ch)
+    ctx.restore()
+    return
   }
   if (node.kind !== 'layer' && node.kind !== 'flex') return
   const insetX = node.kind === 'flex' ? node.padding.left + (node.border?.width ?? 0) : 0

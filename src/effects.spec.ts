@@ -708,4 +708,40 @@ describe('墨迹 spread 与 ink-stroke', () => {
     const info = alias.report.issues.find((item) => item.code === 'non-canonical' && item.hint?.includes('ink-stroke'))
     expect(info).toBeTruthy()
   })
+
+  it('layer 的描边和阴影罩住 g 里的路径，效果仍只记在 layer 上', async () => {
+    const { png, report } = await renderFvg(
+      `<layer width="160" height="160" background="#ffffff" ink-stroke="8 #0000ff" shadow="16 0 0 0 #00ff00">
+        <g transform="translate(10,0)">
+          <g>
+            <rect x="30" y="40" width="40" height="40" fill="#ff0000" />
+          </g>
+        </g>
+      </layer>`,
+    )
+    const { at } = await pixels(png)
+    // 平移后矩形在 x=40..80。外侧描边落在 x=32，阴影再往右偏 16。
+    expect(at(60, 60)[0]!).toBeGreaterThan(200)
+    expect(isBlue(at(36, 60))).toBe(true)
+    expect(isGreen(at(90, 60))).toBe(true)
+    expect(report.elements.find((el) => el.tag === 'rect')?.inkStroke).toBeUndefined()
+    expect(report.elements.find((el) => el.tag === 'g')?.inkStroke).toBeUndefined()
+    expect(report.elements.find((el) => el.tag === 'layer')?.inkStroke?.[0]).toEqual({
+      width: 8,
+      color: '#0000ff',
+      position: 'outside',
+    })
+  })
+
+  it('layer 的内侧描边切进 g 里的路径', async () => {
+    const { png } = await renderFvg(
+      `<layer width="160" height="160" background="#ffffff" ink-stroke="6 #0000ff inside">
+        <g><path d="M40 40 H80 V80 H40 Z" fill="#ff0000" /></g>
+      </layer>`,
+    )
+    const { at } = await pixels(png)
+    expect(isBlue(at(40, 60))).toBe(true)
+    expect(at(60, 60)[0]!).toBeGreaterThan(200)
+    expect(at(32, 60)).toEqual([255, 255, 255, 255])
+  })
 })
