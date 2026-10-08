@@ -1,0 +1,11 @@
+<layer width="640" height="360" background="#0c1424" color="#f4ecdf" safe="24">
+  <layer width="640" height="360" view="200 80 320 180">
+    <layer width="960" height="540">
+      <rect x="0" y="0" width="960" height="540" fill="#1c3148" />
+      <circle cx="360" cy="170" r="70" fill="#e8b04a" />
+      <layer x="300" y="250"><p style="font-size:28px; white-space:nowrap">这里</p></layer>
+    </layer>
+  </layer>
+  <layer x="40" y="24"><p style="font-size:28px; white-space:nowrap">第三章 · 着墨</p></layer>
+  <rect x="520" y="300" width="80" height="36" fill="none" stroke="#f4ecdf" stroke-width="3" />
+</layer>

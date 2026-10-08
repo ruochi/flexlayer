@@ -19,6 +19,7 @@ export type {
 export { mergeFrameIssues, sampleFrames } from './check-frames.js'
 export type { SampleSpec } from './check-frames.js'
 export { parseFvg } from './parse.js'
+export { zoomView } from './view.js'
 export { h } from './h.js'
 export { emitLayer } from './emit.js'
 export { formatSourceLoc } from './source-loc.js'

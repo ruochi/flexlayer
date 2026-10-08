@@ -85,24 +85,21 @@ describe('buildReport', () => {
     expect(hit?.level).toBe('error')
   })
 
-  it('根上写 bleed 后，着墨超出画布不再报 overflow-canvas', async () => {
+  it('bleed 不再关掉 overflow-canvas', async () => {
     const source = `<layer width="100" height="100"><circle cx="0" cy="50" r="40" fill="#fff" /></layer>`
     const blocked = await checkFvg(source)
     const hit = blocked.issues.find((issue) => issue.code === 'overflow-canvas')
     expect(hit?.level).toBe('error')
-    expect(hit?.hint).toContain('bleed')
+    expect(hit?.hint).toContain('view')
 
-    const bled = await checkFvg(`<layer width="100" height="100" bleed><circle cx="0" cy="50" r="40" fill="#fff" /></layer>`)
-    expect(bled.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
-
-    const off = await checkFvg(`<layer width="100" height="100" bleed="0"><circle cx="0" cy="50" r="40" fill="#fff" /></layer>`)
-    expect(off.issues.some((issue) => issue.code === 'overflow-canvas' && issue.level === 'error')).toBe(true)
+    const retired = await checkFvg(`<layer width="100" height="100" bleed><circle cx="0" cy="50" r="40" fill="#fff" /></layer>`)
+    expect(retired.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(true)
+    expect(retired.issues.some((issue) => issue.message.includes('bleed 已不再使用'))).toBe(true)
 
     const nested = await checkFvg(
-      `<layer width="100" height="100"><layer bleed><circle cx="0" cy="50" r="40" fill="#fff" /></layer></layer>`,
+      `<layer width="100" height="100"><layer bleed><circle cx="40" cy="40" r="10" fill="#fff" /></layer></layer>`,
     )
-    expect(nested.issues.some((issue) => issue.code === 'overflow-canvas' && issue.level === 'error')).toBe(true)
-    expect(nested.issues.some((issue) => issue.message.includes('bleed 只写在根'))).toBe(true)
+    expect(nested.issues.some((issue) => issue.message.includes('bleed 已不再使用'))).toBe(true)
   })
 
   it('outside-safe', () => {

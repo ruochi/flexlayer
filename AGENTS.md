@@ -34,7 +34,7 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 | 文字的位置写在外包的 `layer` 上 | `<h1 x="120">` | `<layer x="120" y="64"><h1>…</h1></layer>` | `invalid-attr` |
 | `layer`、`use`、`rect`、`box` 用 `x`、`y` | `<layer cx="120" cy="64">` | `<layer x="120" y="64">`。圆、椭圆、球仍写 `cx` `cy` | `invalid-attr` |
 | 笔画贴齐定位点用 `anchor-box="ink"` | 用布局盒子当笔画边界 | `<layer x="76" y="40" anchor-box="ink">`。只写在 `layer` 和 `use` 上 | `ink-inset` |
-| 镜头推到任意一点写在 `origin` 上 | 外包两层 `layer`，把目标点挪到九宫格上再缩放 | `<layer scale="1.4" origin="640 420">` 或 `origin="33% 39%"`。九宫格仍然可用 | `invalid-attr` |
+| 镜头取舞台的一块，用 `view` | 用 `scale` 把整页放大，越界就报 `overflow-canvas` | `<layer width="1920" height="1080" view="200 80 960 540">` 包住舞台。章节和标注写在这层外面，用成片像素。`scale` 的支点仍是 `origin` | `view-outside` |
 | 图片是 HTML | `<Image width="320">` | `<img src="cover.png" style="width:320px; height:180px">`。`image` 同样可用 | `invalid-attr` |
 | 作用于整棵子树的效果只写在 `layer` 上 | `<rect grade="lomo">`、`<p style="overlay:#000">` | `<layer grade="lomo" overlay="#00000066">` | `invalid-attr` |
 | 调色先选预设再改一两项 | `grade="contrast 5"` | `<layer grade="lomo 0.8, fade 0.1">` | `invalid-attr` |
@@ -110,7 +110,7 @@ const { png, report } = await renderLayer(source, { baseDir: process.cwd() })
 | `glyph` | 按码位取轮廓 |
 | `registerFilter` / `unregisterFilter` / `getFilter` / `listFilters` | 登记像素或画布滤镜。内置 `grade` 和 `filter` 也在这张表上 |
 | `h` | 不用 JSX 时建节点 |
-| `renderFrames` / `renderComposition` / `interpolate` / `spring` / `sequence` / `random` / `noise` | 逐帧产出，或一次拿回全部 PNG。`interpolate` 可写多点区间和 `Easing`。`random`、`noise` 由 seed 决定 |
+| `renderFrames` / `renderComposition` / `interpolate` / `spring` / `sequence` / `random` / `noise` / `zoomView` | 逐帧产出，或一次拿回全部 PNG。`interpolate` 可写多点区间和 `Easing`。`random`、`noise` 由 seed 决定。`zoomView(center, zoom, size)` 返回镜头的 `view` |
 | `parseFvg` / `emitLayer` | 解析 `.layer` 文本，或把节点写回文本 |
 | `buildReport` / `formatIssueLine` / `formatSourceLoc` | 报告、终端里的一行问题、源码位置 |
 | `resources` | 字体、图片、配色、`grade` / `glass` / `blend` 的可用名字 |
@@ -174,7 +174,7 @@ flowchart TD
 
 | 现象 | 建议 |
 | --- | --- |
-| 元素跑出画布 | `overflow-canvas`（error）；看 `ink` 与画布尺寸。满版出血在根上写 `bleed`，这条就不报。透视平面先看 `quad`，`box` 仍是没投影的布局盒 |
+| 元素跑出画布 | `overflow-canvas`（error）；看 `ink` 与画布尺寸。镜头写 `view`，取景窗外的不算。`view` 没被舞台盖住报 `view-outside`。透视平面先看 `quad`，`box` 仍是没投影的布局盒 |
 | 光晕被裁切 | `effect-clipped`；缩小 glow 或移动元素 |
 | 字距和 `gap` 不一致 | 看 debug 里的 ink 间距 |
 | flex 子项被挤爆 | 加宽 flex 容器或缩小子项 |

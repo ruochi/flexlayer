@@ -50,7 +50,8 @@ import {
 } from './text.js'
 import { applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset, translated } from './matrix.js'
 import { layoutMath } from './math/lower.js'
-import { allowsBleed, asBlockFlow, asInlineRow, checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, legacyCenterIssues, originValueIssues, rowColumnHint, textBoxNeedsInlineRow, typoAttrIssues } from './rules.js'
+import { asBlockFlow, asInlineRow, checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, legacyCenterIssues, originValueIssues, rowColumnHint, textBoxNeedsInlineRow, typoAttrIssues } from './rules.js'
+import { fitViewAspect, parseView, viewExceeds } from './view.js'
 import { canonicalTag, FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag } from './tags.js'
 import { boundsOf, parseSvgTransform } from './svg-transform.js'
 import type {
@@ -1950,6 +1951,45 @@ function applyInkAnchor(node: LayoutNode, x: number, y: number, anchor: Anchor, 
   }
 }
 
+function readLayerView(node: FvgNode, layerW: number, layerH: number, ctx: LayoutContext) {
+  const raw = node.attrs.view
+  if (raw == null || raw.trim() === '') return undefined
+  const widthSet = node.attrs.width != null && node.attrs.width.trim() !== ''
+  const heightSet = node.attrs.height != null && node.attrs.height.trim() !== ''
+  if (!widthSet || !heightSet || !(layerW > 0) || !(layerH > 0)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: 'view 需要这一层写 width 和 height',
+      hint: 'width 和 height 是屏幕上的取景窗，view="x y w h" 是舞台上被取的那一块',
+    })
+    return undefined
+  }
+  const parsed = parseView(raw)
+  if (!parsed) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 view: ${raw}`,
+      hint: '写成四个数 view="x y w h"，宽和高要大于 0',
+    })
+    return undefined
+  }
+  const fitted = fitViewAspect(parsed, layerW, layerH)
+  if (fitted.adjusted) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: 'view 的宽高比和取景窗不一致，已按宽度保持中心重算高度',
+      hint: `取景窗是 ${formatSize(layerW)}×${formatSize(layerH)}，view 现为 ${formatSize(fitted.view.x)} ${formatSize(fitted.view.y)} ${formatSize(fitted.view.width)} ${formatSize(fitted.view.height)}`,
+    })
+  }
+  return fitted.view
+}
+
 function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
   if (ctx.pathPrefix === 'layer') ctx.issues.push(...originValueIssues(node.attrs.origin, ctx.pathPrefix))
   const appearance = readAttrAppearance(node.attrs)
@@ -2119,6 +2159,26 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
   }
   const effects = readEffects(node.attrs, ctx, solidPaint(appearance.border?.color, ctx.color))
   const filters = mergeFilters(effects.filters, layerFilters.filters)
+  let view = readLayerView(node, layerW, layerH, ctx)
+  if (view && perspective != null) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: 'view 和 perspective 不要写在同一层',
+      hint: '镜头写在外层 <layer view="x y w h">，perspective 写在里面的舞台上',
+    })
+    view = undefined
+  }
+  if (view && viewExceeds(view, children)) {
+    ctx.issues.push({
+      level: 'error',
+      code: 'view-outside',
+      path: ctx.pathPrefix,
+      message: 'view 超出了舞台',
+      hint: '把 view 收到子元素的范围内，或把舞台 layer 加大。取景窗没被盖住时，成片会露底',
+    })
+  }
   const laid: LayerLayoutNode = {
     kind: 'layer',
     path: ctx.pathPrefix,
@@ -2132,6 +2192,7 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
     ...appearance,
     children,
     overflow: node.attrs.overflow === 'hidden' ? 'hidden' : 'visible',
+    ...(view ? { view } : {}),
     ...(perspective != null ? { perspective } : {}),
     ...(mask ? { mask } : {}),
     ...effects,
@@ -2348,7 +2409,6 @@ export function layoutSync(rootNode: FvgNode, assets: LayoutAssets): FvgDocument
   const color = attrs.color ?? '#111111'
   const fontFamily = attrs['font-family'] ?? 'ChillDuanSans'
   const safe = parseSafe(attrs.safe, width, height)
-  const bleed = allowsBleed(attrs.bleed)
   const maxContentWidth = width - safe.left - safe.right
 
   const issues: Issue[] = []
@@ -2393,7 +2453,17 @@ export function layoutSync(rootNode: FvgNode, assets: LayoutAssets): FvgDocument
   root.height = height
   issues.push(...perspectiveIssues(root))
 
-  return { width, height, background, color, fontFamily, safe, bleed, root, issues, sources }
+  if (attrs.bleed != null) {
+    issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: 'layer',
+      message: 'bleed 已不再使用',
+      hint: '舞台写得比成片大，用 view="x y w h" 取出要出的那一块',
+    })
+  }
+
+  return { width, height, background, color, fontFamily, safe, root, issues, sources }
 }
 
 function canonicalizeTree(node: FvgNode): void {
