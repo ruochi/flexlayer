@@ -12,7 +12,7 @@
 
 没写 `display:flex` 的 `div` 可以直接放 `p`、`h1`–`h3`、另一个 `div`，以及写了宽高的 `layer`，它们从上到下排，文字块拉到这一列的宽度。只写文字时 `div` 仍是一段文字。容器上的字号、颜色和 `text-align` 会传给里面的段落；`h1`–`h3` 仍用自己的默认字号。`em` / `i` 是斜体，`u` 加下划线。`p` 里可以直接放 `<img>`。`p`、`h1`–`h3`、`span` 里不要放 `layer`。
 
-要定位一组 HTML，包一层 `layer`，把 `x` `y` `anchor` 写在 `layer` 上。没写坐标时落在 `(0, 0)`。写了宽高的 `layer` 也可以直接放进 `div`，和文字并排；图形用这一层的局部坐标，这一层上不写 `x` `y`。例子见 [examples/html-layer.tsx](../examples/html-layer.tsx)。`anchor-box="ink"` 让 `x` `y` 对准子树着墨，而不是布局盒子。公式用 `<math>`，和文字并排时放进 `display:flex`，不要写进 `<p>`。`scale` 可以写两个数：`scale="1.2 0.8"` 或 `scale="-1 1"`。文字写 `style="scale:1.2 0.8"`。只写一个数时两轴相同。`origin` 默认 `center`。九宫格之外可以写 `origin="640 420"` 或 `origin="33% 39%"`，镜头绕这一点推近，这一点不动。
+要定位一组 HTML，包一层 `layer`，把 `x` `y` `anchor` 写在 `layer` 上。没写坐标时落在 `(0, 0)`。写了宽高的 `layer` 也可以直接放进 `div`，和文字并排；图形用这一层的局部坐标，这一层上不写 `x` `y`。例子见 [examples/html-layer.tsx](../examples/html-layer.tsx)。`anchor-box="ink"` 让 `x` `y` 对准子树着墨，而不是布局盒子。公式用 `<math>`，和文字并排时放进 `display:flex`，不要写进 `<p>`。单独成行的公式写 `display="block"`，`∑`、`∫` 用大号，上下限放到正上方和正下方。`scale` 可以写两个数：`scale="1.2 0.8"` 或 `scale="-1 1"`。文字写 `style="scale:1.2 0.8"`。只写一个数时两轴相同。`origin` 默认 `center`。九宫格之外可以写 `origin="640 420"` 或 `origin="33% 39%"`，镜头绕这一点推近，这一点不动。
 
 ## 叶子怎么定位
 
