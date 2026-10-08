@@ -74,6 +74,47 @@ describe('layoutSource', () => {
     expect(doc.issues.some((issue) => issue.code === 'invalid-attr' && issue.hint?.includes('x、y、width、height'))).toBe(true)
   })
 
+  it('div 里直接放 p 时从上到下靠起点排', async () => {
+    const doc = await layoutSource(
+      `<layer width="800" height="400"><div><p style="font-size:40px">甲</p><p style="font-size:40px">甲乙丙丁</p></div></layer>`,
+      process.cwd(),
+    )
+    expect(doc.issues.filter((issue) => issue.code === 'invalid-child')).toEqual([])
+    const column = doc.root.children[0] as {
+      kind: string
+      direction: string
+      children: Array<{ tag: string; x: number; y: number; textLayout: { lines: Array<{ segments: Array<{ text: string }> }> } }>
+    }
+    expect(column.kind).toBe('flex')
+    expect(column.direction).toBe('column')
+    expect(column.children.map((child) => child.tag)).toEqual(['p', 'p'])
+    expect(column.children.map((child) => child.x)).toEqual([0, 0])
+    expect(column.children[1]!.y).toBeGreaterThan(column.children[0]!.y)
+    const textOf = (child: (typeof column.children)[number]) => child.textLayout.lines.map((line) => line.segments.map((seg) => seg.text).join('')).join('')
+    expect(column.children.map(textOf)).toEqual(['甲', '甲乙丙丁'])
+  })
+
+  it('div 里夹在段落旁的文字仍画出来，并用 div 的字号', async () => {
+    const doc = await layoutSource(
+      `<layer width="800" height="400"><div style="font-size:32px">前言<p>正文</p></div></layer>`,
+      process.cwd(),
+    )
+    expect(doc.issues.filter((issue) => issue.code === 'invalid-child')).toEqual([])
+    const column = doc.root.children[0] as {
+      children: Array<{ textLayout: { fontSize: number; lines: Array<{ segments: Array<{ text: string }> }> } }>
+    }
+    const textOf = (child: (typeof column.children)[number]) =>
+      child.textLayout.lines.map((line) => line.segments.map((seg) => seg.text).join('')).join('')
+    expect(column.children.map(textOf)).toEqual(['前言', '正文'])
+    expect(column.children[0]!.textLayout.fontSize).toBe(32)
+  })
+
+  it('只放文字的 div 仍是文字盒子', async () => {
+    const doc = await layoutSource(`<layer width="400" height="200"><div style="font-size:40px">甲</div></layer>`, process.cwd())
+    expect(doc.root.children[0]?.kind).toBe('text')
+    expect(doc.issues.filter((issue) => issue.code === 'invalid-child')).toEqual([])
+  })
+
   it('竖排 flex 把文字排成一列', async () => {
     const doc = await layoutSource(
       `<layer width="800" height="400"><div style="display:flex; flex-direction:column; gap:20px"><p style="font-size:40px">甲</p><p style="font-size:40px">乙</p></div></layer>`,

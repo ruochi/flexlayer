@@ -657,6 +657,10 @@ export function layoutText(opts: LayoutTextOptions): TextLayoutResult {
   }
 }
 
+export function isInlineTag(tag: string): boolean {
+  return INLINE_TAGS.has(tag.toLowerCase())
+}
+
 export function isTextBoxTag(tag: string): boolean {
   return TEXT_BOX_TAGS.has(tag.toLowerCase())
 }

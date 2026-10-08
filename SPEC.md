@@ -45,7 +45,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 | 类别 | 标签 |
 | --- | --- |
-| 容器 | `layer`（嵌套不填背景）。横排竖排用带 `display:flex` 的 `div` |
+| 容器 | `layer`（嵌套不填背景）。`div` 里放 `p` 或标题时从上到下排；横排和间距用 `display:flex` |
 | 绘制 | `draw`（子标签，正文 JS；程序侧也可用 `draw={fn}`） |
 | 文字 | `h1`、`h2`、`h3`、`p`、`div`、`span`；行内：`span`、`strong`、`b`、`em`、`br` |
 | 图片 | `img`（`image` 是同一个标签） |
@@ -181,6 +181,8 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 `display:flex` 把 `div`（以及其他文字标签）变成排布容器，不再当文字盒子。默认横向。竖排写 `flex-direction:column`。子元素是文字、图片、flex 容器或 `layer`。
 
+没写 `display:flex` 的 `div`，只要里面有行内标签放不下的子元素（`h1`–`h3`、`p`、`div`、图片、`math`、`layer`、形状等），就按块级从上到下排，等同于补上 `display:flex; flex-direction:column`。没写 `align-items` 时靠起点，已经写了就沿用。这些子元素会画出来，不报 `invalid-child`。夹在旁边的文字单独成段，用这层 `div` 上的字号和颜色。块级子元素仍用自己的字号，不继承这层的 `font-size`。只放文字和行内标签时，`div` 仍是文字盒子。
+
 图形要放进 flex，包一层写了宽高的 `layer`，或者改用 `div` 盒子（`width`、`height`、`background`、`border-radius`）。形状直接放进来会照尺寸渲染并报 `info`；线条直接放进来不渲染，报 `warn`。两点坐标写在 flex 里的形状上不渲染，报 `warn`。
 
 `style` 支持的属性：
@@ -209,7 +211,8 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 ## 5. 文字
 
 最外层的文字标签是一个**文字盒子**，里面只能放文字和行内标签（`span`、`strong`、`b`、`em`、`br`）。
-要排列多段文字，请用 `<div style="display:flex; flex-direction:column">`，不要在普通文字盒子里嵌套 `div`、`p`。
+`div` 里有块级子元素时不是文字盒子，见 4.2。
+`p`、`h1`–`h3`、`span` 里不要嵌套 `div`、`p`。多段上下排写成 `<div><p>…</p></div>`。要并排或间距时，用 `<div style="display:flex">`。
 
 ### 5.1 默认样式
 
@@ -640,7 +643,7 @@ registerFilter({
 | `non-canonical` | info | 含义明确，但不是规范写法。照常渲染，`hint` 里是规范写法 |
 | `unknown-tag` | warn | 不认识的标签 |
 | `invalid-attr` | warn | 属性放错了位置，或两种写法混用。和已知属性编辑距离不超过 2 的名字也记在这里，`hint` 给出正确写法。其余不认识的属性名不报，留给 `draw` |
-| `invalid-child` | warn | 非法子元素：线条或 `g` 放进 flex 容器，文字盒子里放了 `h1`–`h3`、`p`、`div`、`g`、图片或 `math`，`mask` 放错位置或一层写了多个 |
+| `invalid-child` | warn | 非法子元素：线条或 `g` 放进 flex 容器，文字盒子（`h1`–`h3`、`p`、`span`，以及只含文字的 `div`）里放了 `h1`–`h3`、`p`、`div`、`g`、图片或 `math`，`mask` 放错位置或一层写了多个。含这些子元素的 `div` 按块级竖排，不报这条 |
 | `empty-mask` | warn | `mask` 里没有可用的形状或图片，不生效 |
 | `invalid-draw` | error / warn | `<draw>` 语法错误（error）或内容为空（warn） |
 | `missing-image` | warn | `img` 的 `src` 读不到 |

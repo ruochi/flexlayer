@@ -50,7 +50,7 @@ import {
 } from './text.js'
 import { applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset, translated } from './matrix.js'
 import { layoutMath } from './math/lower.js'
-import { allowsBleed, checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, legacyCenterIssues, originValueIssues, rowColumnHint, typoAttrIssues } from './rules.js'
+import { allowsBleed, asBlockFlow, checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, legacyCenterIssues, originValueIssues, rowColumnHint, typoAttrIssues } from './rules.js'
 import { canonicalTag, FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag } from './tags.js'
 import { boundsOf, parseSvgTransform } from './svg-transform.js'
 import type {
@@ -1231,7 +1231,7 @@ function warnMisplacedFont(ctx: LayoutContext, path: string) {
 }
 
 function measureFlexChild(raw: FvgNode, ctx: LayoutContext, direction: 'row' | 'column'): FlexMeasure | null {
-  const node = materialize(raw)
+  const node = asBlockFlow(materialize(raw))
   if (node.tag === 'symbol' || node.tag === 'draw') return null
   if (node.tag === 'g') {
     ctx.issues.push({
@@ -1949,19 +1949,20 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
     ctx.issues.push(...checkChildAttrs(concrete, 'layer', path))
     const textMax = contentWidthFor(node, fixedW, ctx.maxContentWidth)
     const subCtx = { ...ctx, pathPrefix: path, maxContentWidth: textMax }
+    const laidSource = asBlockFlow(concrete)
     let laid: LayoutNode | null = null
-    if (concrete.tag === 'use') laid = layoutUse(concrete, subCtx)
-    else if (concrete.tag === 'g') laid = layoutGroup(concrete, subCtx)
-    else if (isLineTag(concrete.tag)) laid = layoutLineNode(concrete, subCtx, ctx.color)
-    else if (isDisplayFlex(concrete.attrs.style) && isTextBoxTag(concrete.tag)) laid = layoutFlex(concrete, subCtx)
-    else if (isImageTag(concrete.tag)) laid = layoutImage(concrete, subCtx)
-    else if (isTextBoxTag(concrete.tag)) laid = layoutTextBox(concrete, subCtx, textMax)
-    else if (isShapeTag(concrete.tag)) laid = layoutShape(concrete, subCtx, ctx.color)
-    else if (isMeshTag(concrete.tag)) laid = layoutMesh(concrete, subCtx)
-    else if (concrete.tag === 'layer') laid = layoutLayer(concrete, subCtx)
-    else if (concrete.tag === 'math') laid = layoutMath(concrete, subCtx)
+    if (laidSource.tag === 'use') laid = layoutUse(laidSource, subCtx)
+    else if (laidSource.tag === 'g') laid = layoutGroup(laidSource, subCtx)
+    else if (isLineTag(laidSource.tag)) laid = layoutLineNode(laidSource, subCtx, ctx.color)
+    else if (isDisplayFlex(laidSource.attrs.style) && isTextBoxTag(laidSource.tag)) laid = layoutFlex(laidSource, subCtx)
+    else if (isImageTag(laidSource.tag)) laid = layoutImage(laidSource, subCtx)
+    else if (isTextBoxTag(laidSource.tag)) laid = layoutTextBox(laidSource, subCtx, textMax)
+    else if (isShapeTag(laidSource.tag)) laid = layoutShape(laidSource, subCtx, ctx.color)
+    else if (isMeshTag(laidSource.tag)) laid = layoutMesh(laidSource, subCtx)
+    else if (laidSource.tag === 'layer') laid = layoutLayer(laidSource, subCtx)
+    else if (laidSource.tag === 'math') laid = layoutMath(laidSource, subCtx)
     else {
-      laid = layoutUnknownOrCustom(concrete, subCtx)
+      laid = layoutUnknownOrCustom(laidSource, subCtx)
     }
     if (!laid) continue
     const html = isHtmlTag(concrete.tag)

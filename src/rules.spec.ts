@@ -159,8 +159,14 @@ describe('属性归属', () => {
   })
 
   it('文字盒子里的块级标签报 invalid-child', async () => {
-    const report = await issues(`<layer width="400" height="200"><div cx="40" cy="40"><h3>标题</h3></div></layer>`)
+    const report = await issues(`<layer width="400" height="200"><p><h3>标题</h3></p></layer>`)
     const hit = report.issues.find((issue) => issue.code === 'invalid-child')
+    expect(hit?.message).toContain('<h3>')
     expect(hit?.hint).toContain('display:flex')
+  })
+
+  it('div 里可以直接放 p 和标题', async () => {
+    const report = await issues(`<layer width="400" height="200"><div><h3>标题</h3><p>正文</p></div></layer>`)
+    expect(report.issues.filter((issue) => issue.code === 'invalid-child')).toEqual([])
   })
 })
