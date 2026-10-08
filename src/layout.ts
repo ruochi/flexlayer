@@ -49,7 +49,7 @@ import {
   layoutText,
 } from './text.js'
 import { applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset, translated } from './matrix.js'
-import { layoutMath } from './math/lower.js'
+import { layoutMath } from './math/layout.js'
 import { allowsBleed, asBlockFlow, asInlineRow, checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, legacyCenterIssues, originValueIssues, rowColumnHint, textBoxNeedsInlineRow, typoAttrIssues } from './rules.js'
 import { canonicalTag, FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag } from './tags.js'
 import { boundsOf, parseSvgTransform } from './svg-transform.js'
@@ -1281,7 +1281,7 @@ function prepareHtmlBox(node: FvgNode): FvgNode {
   return textBoxNeedsInlineRow(flowed) ? asInlineRow(flowed) : flowed
 }
 
-function measureFlexChild(raw: FvgNode, ctx: LayoutContext, direction: 'row' | 'column'): FlexMeasure | null {
+function measureFlexChild(raw: FvgNode, ctx: LayoutContext, direction: 'row' | 'column', crossAlign?: string): FlexMeasure | null {
   const node = prepareHtmlBox(materialize(raw))
   if (node.tag === 'symbol' || node.tag === 'draw') return null
   if (node.tag === 'g') {
@@ -1399,7 +1399,7 @@ function measureFlexChild(raw: FvgNode, ctx: LayoutContext, direction: 'row' | '
     }
   }
   if (node.tag === 'math') {
-    const laid = layoutMath(node, ctx)
+    const laid = layoutMath(node, ctx, direction === 'row' ? crossAlign : undefined)
     return {
       node: laid,
       minMain: direction === 'row' ? laid.width : laid.height,
@@ -1457,7 +1457,8 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
     const ch = childNodes[i]!
     const path = nodePath(ctx.pathPrefix, ch.tag, i)
     track(ctx, path, ch)
-    const m = measureFlexChild(ch, { ...childCtx, pathPrefix: path }, direction)
+    const crossAlign = parseStyle(ch.attrs.style)['align-self'] ?? style['align-items'] ?? 'center'
+    const m = measureFlexChild(ch, { ...childCtx, pathPrefix: path }, direction, crossAlign)
     if (m) measures.push(m)
   }
 

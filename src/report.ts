@@ -108,6 +108,12 @@ function inkOverlap(a: Box, b: Box): boolean {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
 }
 
+/** 同一个公式里的记号是按数学排版规则摆的，着墨盒相交（积分下限、开方指数）不算重叠。 */
+function mathRootPath(path: string): string | null {
+  const m = path.match(/^(.*?\/math\[\d+\])(\/|$)/)
+  return m ? m[1]! : null
+}
+
 function hasArea(b: Box): boolean {
   return b.width > 1e-3 && b.height > 1e-3
 }
@@ -578,10 +584,6 @@ function walk(
     if (union && !plane && ownMask) union = intersectBox(union, applyToBox(childMatrix, ownMask))
     if (union) entry.ink = boxToRect(union)
   }
-
-  if (node.kind === 'sqrt') {
-    walk(node.child, matrix, opacity, absX, absY, clip, elements, effects, plane, false, meshView, inkSlack)
-  }
 }
 
 function layoutQuad(node: LayoutNode, plane: PlaneSpace, planeRoot: boolean): Quad | undefined {
@@ -688,6 +690,8 @@ export function buildReport(doc: FvgDocument): FvgReport {
     for (let j = i + 1; j < textInks.length; j++) {
       const a = textInks[i]!
       const b = textInks[j]!
+      const formula = mathRootPath(a.path)
+      if (formula && formula === mathRootPath(b.path)) continue
       if (inkOverlap(a.ink, b.ink)) {
         issues.push({
           level: 'warn',
@@ -789,8 +793,6 @@ function collectExpects(node: LayoutNode, decls: ExpectDecl[], issues: Issue[]) 
   }
   if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
     for (const child of node.children) collectExpects(child, decls, issues)
-  } else if (node.kind === 'sqrt') {
-    collectExpects(node.child, decls, issues)
   }
 }
 
