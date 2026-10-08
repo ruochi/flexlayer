@@ -847,6 +847,18 @@ for await (const { frame, png, report } of renderFrames(scene, { from: 0, to: 30
 
 `glyph()` 的轮廓原点在字身左上角。把一个字摆回去：`x` 用 `chars` 里的 `x`，`y` 用 `line.baseline - glyph.baseline`。
 
+返回值上还有 `elements`。这一层里每个排进去的元素一条，按文档顺序，父元素在子元素前面。根层自己不在里面，它的盒子就是 `left`、`top`、`right`、`bottom`。`mask`、`symbol`、`draw` 不进这张表。没有子元素时是空数组。坐标和 `text` 同一套：相对这一层布局盒的左上角，嵌套层的位置和缩放已经算进去，这一层和祖先的旋转不算。下一块要贴着某个圆或矩形，用这里的 `box`，再加上这一层的 `left`、`top`。
+
+| 字段 | 含义 |
+| --- | --- |
+| `path` | 相对这一层的路径，如 `rect[0]`、`div[0]/p[0]`、`layer[0]/circle[0]` |
+| `tag` | 标签名 |
+| `id` | 写了 `id` 才有 |
+| `box` | 布局盒，字段是 `left`、`top`、`right`、`bottom`、`width`、`height`。不含这一元素自己的 `rotate` |
+| `ink` | 这一元素自己的 `rotate`、`scale` 之后的外接矩形，字段和 `box` 相同。线条含描边。没有旋转、缩放和描边外扩时与 `box` 重合。`layer` 的 `ink` 是子树着墨。`flex` 的 `ink` 是 padding 里面的内容区 |
+
+要躲开转过的图形，用 `ink`，不要用 `box`。圆的圆心是 `box` 的中心。只写了宽或只写了高、从而整层按比例缩放时，这些坐标已经乘上缩放，落在返回的宽高里面。
+
 `create` 是同步的。字体、图片和 Yoga 在这一次调用里备好，并在进程里记住。后面再写一帧，或渲染一段视频，已经备过的直接接着用，不会重新下载、重新解码。`composition` 的 `component` 里可以调用。
 
 ```tsx
