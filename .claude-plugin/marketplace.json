@@ -9,7 +9,7 @@
       "name": "flexlayer",
       "source": "./plugins/flexlayer",
       "description": "用标签、flex 和 SVG 形状排一帧画面，检查后渲染成 PNG。",
-      "version": "0.2.27",
+      "version": "0.2.28",
       "homepage": "https://github.com/ruochi/flexlayer",
       "repository": "https://github.com/ruochi/flexlayer",
       "license": "MIT",

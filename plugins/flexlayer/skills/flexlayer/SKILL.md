@@ -5,7 +5,7 @@ license: MIT
 compatibility: Node.js 20 或更高。目录里的字体第一次用到时需要联网，下载到 ~/.cache/flexlayer/fonts。
 metadata:
   author: ruochi
-  version: "0.2.27"
+  version: "0.2.28"
 ---
 
 # Flex Layer
