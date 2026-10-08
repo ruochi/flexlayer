@@ -109,9 +109,6 @@ function visit(node: LayoutNode, space: Matrix, isRoot: boolean, found: PlacedTe
     for (const child of node.children) visit(child, next, false, found)
     return
   }
-  if (node.kind === 'sqrt') {
-    visit(node.child, multiply(space, nodePose(node, node.x, node.y)), false, found)
-  }
 }
 
 /**

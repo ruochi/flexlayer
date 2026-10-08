@@ -28,6 +28,7 @@
 | `Newsreader` | | 400、700 | 拉丁 | 阅读衬线 | Newsreader |
 | `Fraunces` | | 400、700 | 拉丁 | 软衬线标题 | Fraunces |
 | `Instrument` | Instrument Serif | 400 | 拉丁 | 展示衬线 | Instrument Serif |
+| `STIXTwoMath` | STIX Two Math | 400 | 拉丁、希腊、数学符号 | 公式只用它。带 MATH 表，别的字体排不了公式 | STIX Two Math |
 | `NotoSans` | 思源黑体 | 400、700 | 简体 | 黑体正文 | Noto Sans SC |
 | `XiaoWei` | 站酷小薇 | 400 | 简体 | 宋意标题 | ZCOOL XiaoWei |
 | `KuaiLe` | 站酷快乐体 | 400 | 简体 | 活泼标题 | ZCOOL KuaiLe |

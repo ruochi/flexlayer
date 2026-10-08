@@ -21,7 +21,6 @@ type PaintCtx = CanvasRenderingContext2D & {
   getTransform(): { a: number; b: number; c: number; d: number; e: number; f: number }
 }
 import { applyCanvasFont } from './fonts.js'
-import { paintMathSqrtPath } from './math/sqrt.js'
 import { backdropFilters, filtersPad, getFilter, orderedFilters } from './filter.js'
 import { fitImageRect } from './image.js'
 import { canvasPaint, isGradient } from './gradient.js'
@@ -32,6 +31,7 @@ import { openSvgPath } from './path.js'
 import { ownsMeshScene, renderMeshLayer, type MeshFrame } from './mesh.js'
 import { drawTexturedPlane, has3dPose, PERSPECTIVE_AA, planeDepth, posePoint, project } from './perspective.js'
 import { outerInkStrokeReach } from './style.js'
+import { layoutScale, viewMatrix } from './view.js'
 import { unionBoxes, type AppliedFilter, type Box,
   GlassSpec,
   GlowSpec,
@@ -357,11 +357,12 @@ function drawLine(ctx: CanvasRenderingContext2D, node: LineLayoutNode, silhouett
 
 function drawDebugOverlay(ctx: CanvasRenderingContext2D, node: LayoutNode) {
   ctx.save()
+  const k = transformScale(ctx)
   ctx.strokeStyle = 'rgba(0, 120, 255, 0.85)'
-  ctx.lineWidth = 1
-  ctx.strokeRect(node.x + 0.5, node.y + 0.5, node.width, node.height)
+  ctx.lineWidth = 1 / k
+  ctx.strokeRect(node.x + 0.5 / k, node.y + 0.5 / k, node.width, node.height)
   ctx.strokeStyle = 'rgba(255, 40, 40, 0.85)'
-  ctx.strokeRect(node.x + node.ink.x + 0.5, node.y + node.ink.y + 0.5, node.ink.width, node.ink.height)
+  ctx.strokeRect(node.x + node.ink.x + 0.5 / k, node.y + node.ink.y + 0.5 / k, node.ink.width, node.ink.height)
   ctx.restore()
 }
 
@@ -591,13 +592,6 @@ function drawNodeInk(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: nu
 
 /** layer overlay：自身 chrome + 子树着墨（子元素局部坐标）。 */
 function drawSubtreeInk(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: number, ink = SILHOUETTE) {
-  if (node.kind === 'sqrt') {
-    ctx.save()
-    ctx.translate(node.x, node.y)
-    drawSubtreeInk(ctx, node.child, spread, ink)
-    ctx.restore()
-    return
-  }
   if (node.kind === 'group') {
     ctx.save()
     ctx.transform(node.svg.a, node.svg.b, node.svg.c, node.svg.d, node.svg.e, node.svg.f)
@@ -1508,7 +1502,7 @@ function strokeProjectedQuad(
   }
   ctx.save()
   ctx.strokeStyle = 'rgba(0, 210, 90, 0.95)'
-  ctx.lineWidth = 1.5
+  ctx.lineWidth = 1.5 / transformScale(ctx)
   ctx.beginPath()
   ctx.moveTo(pts[0]!.x, pts[0]!.y)
   for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y)
@@ -1530,17 +1524,6 @@ function paintBody(ctx: PaintCtx, node: LayoutNode, debug: boolean, t: number, s
     drawLine(ctx, node)
   } else if (node.kind === 'custom') {
     drawBoxChrome(ctx, node)
-  } else if (node.kind === 'sqrt') {
-    ctx.save()
-    ctx.translate(node.x, node.y)
-    ctx.strokeStyle = node.color
-    ctx.lineWidth = node.thickness
-    ctx.lineCap = 'round'
-    ctx.lineJoin = 'round'
-    paintMathSqrtPath(ctx, node.width, node.height, node.surdWidth, node.thickness)
-    ctx.stroke()
-    paintNode(ctx, node.child, debug, t, state)
-    ctx.restore()
   } else if (node.kind === 'group') {
     ctx.save()
     ctx.transform(node.svg.a, node.svg.b, node.svg.c, node.svg.d, node.svg.e, node.svg.f)
@@ -1552,10 +1535,14 @@ function paintBody(ctx: PaintCtx, node: LayoutNode, debug: boolean, t: number, s
     const inset = node.kind === 'flex' ? node.padding.left + (node.border?.width ?? 0) : 0
     const insetY = node.kind === 'flex' ? node.padding.top + (node.border?.width ?? 0) : 0
     ctx.translate(node.x + inset, node.y + insetY)
-    if (node.kind === 'layer' && node.overflow === 'hidden') {
+    if (node.kind === 'layer' && (node.overflow === 'hidden' || node.view)) {
       ctx.beginPath()
       ctx.rect(0, 0, node.width, node.height)
       ctx.clip()
+    }
+    if (node.kind === 'layer' && node.view) {
+      const mapping = viewMatrix(node.width, node.height, node.view)
+      ctx.transform(mapping.a, mapping.b, mapping.c, mapping.d, mapping.e, mapping.f)
     }
     const meshFrame = node.kind === 'layer' ? state.meshFrames?.get(node) : undefined
     if (meshFrame) {
@@ -1791,21 +1778,20 @@ async function prepareMeshFrames(
 ): Promise<Map<LayerLayoutNode, MeshFrame>> {
   const frames = new Map<LayerLayoutNode, MeshFrame>()
   const state: PaintState = { canvasWidth: 0, canvasHeight: 0, frame: clock.frame, fps: clock.fps, issues, meshFrames: frames }
-  const visit = async (node: LayoutNode) => {
+  const visit = async (node: LayoutNode, parentK: number) => {
+    const k = parentK * layoutScale(node)
     if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
-      for (const child of node.children) await visit(child)
-    } else if (node.kind === 'sqrt') {
-      await visit(node.child)
+      for (const child of node.children) await visit(child, k)
     }
     if (node.kind !== 'layer' || !ownsMeshScene(node)) return
     const frame = renderMeshLayer(
       node,
-      scale,
-      (peeled) => paintChildBitmap(peeled, Math.max(scale, 1e-3) * 2, t, state),
+      k,
+      (peeled) => paintChildBitmap(peeled, Math.max(k, 1e-3) * 2, t, state),
     )
     if (frame) frames.set(node, frame)
   }
-  await visit(root)
+  await visit(root, scale)
   return frames
 }
 

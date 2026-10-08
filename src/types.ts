@@ -208,6 +208,13 @@ export type ElementReport = {
   inkOffset?: InkOffset
   /** 投影后的四个角，画布坐标，顺序为左上、右上、右下、左下。没有透视投影时不写。 */
   quad?: [{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }, { x: number; y: number }]
+  /** 这一层是镜头时，舞台坐标里被取的矩形。 */
+  view?: ViewRect
+  /**
+   * 声明尺寸到屏幕尺寸的倍数，两轴缩放绝对值的几何平均。
+   * 含祖先的 `scale` 和 `view`。等于 1 时不写。最小字号和效果外扩乘这个数。
+   */
+  screenScale?: number
   /** 阴影、光晕、图层模糊或玻璃可能占用的范围。没有外扩效果时不写。 */
   effect?: Rect
   /** 逐层相乘后的有效透明度。 */
@@ -374,6 +381,8 @@ export type LayerLayoutNode = LayoutNodeBase & {
    * 绘制时只取 alpha，不进入 children，不参与布局。
    */
   mask?: LayoutNode[]
+  /** 舞台坐标里被取的矩形。这一层的宽高是屏幕上的取景窗。 */
+  view?: ViewRect
 }
 
 export type FlexLayoutNode = LayoutNodeBase & {
@@ -432,14 +441,6 @@ export type CustomLayoutNode = LayoutNodeBase & {
   kind: 'custom'
 }
 
-export type SqrtLayoutNode = LayoutNodeBase & {
-  kind: 'sqrt'
-  surdWidth: number
-  color: string
-  thickness: number
-  child: LayoutNode
-}
-
 export type MeshSpec =
   | { type: 'sphere'; r: number }
   | { type: 'box'; depth: number }
@@ -462,7 +463,9 @@ export type LayoutNode =
   | LineLayoutNode
   | CustomLayoutNode
   | MeshLayoutNode
-  | SqrtLayoutNode
+
+/** `view="x y w h"`。x y 是舞台坐标，w h 是被取的宽高。 */
+export type ViewRect = { x: number; y: number; width: number; height: number }
 
 export type FvgDocument = {
   width: number
@@ -471,8 +474,6 @@ export type FvgDocument = {
   color: string
   fontFamily: string
   safe: { top: number; right: number; bottom: number; left: number }
-  /** 根 layer 写了 bleed。着墨超出画布不报 overflow-canvas。 */
-  bleed?: boolean
   root: LayerLayoutNode
   issues: Issue[]
   /** path → `file:line:column`。只有从 JSX 进来的树才有。 */

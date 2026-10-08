@@ -1,65 +1,27 @@
-# MathML 接入说明（未实现）
+# MathML 实现备注
 
-本文是草案，渲染器还没有公式。不要把 `<math>` 写进当前的 `.layer`：它会被当成不认识的标签丢掉（`unknown-tag`）。
+写法和规则以 [SPEC.md](../../SPEC.md) 为准。本文只记实现在哪、怎么排的。
 
-实现时请按 dc 里已经画对的行为来做，不要另写一套间距。文字标签只有 `h1`、`h2`、`h3`、`p`、`div`、`span`，行内只有 `span`、`strong`、`b`、`em`、`br`。图片用 HTML 的 `img`（`image` 同样可用）。
+## 代码在哪
 
-## 参考代码在哪
-
-dc 仓库 `packages/douchart-core/src/htmlBox/math/`：
-
-| 文件 | 用途 |
+| 文件 | 内容 |
 | --- | --- |
-| `tags.ts` | 支持的标签名单 |
-| `operatorDict.ts` | 运算符左右空距、求和改上下限、积分号放大、分数线粗细、根号钩宽 |
-| `map.ts` | 每种标签变成什么结构。只参考结构，不要引用它的类型 |
-| `stretch.ts` | 根号随内容变高 |
-| `../paint.ts` 里的 `paintMathSqrtPath` | 根号笔画形状 |
+| `src/math/layout.ts` | 每种标签怎么排。输出普通的 `flex`、`text`、`shape`（分数线、横线）和 `line`（伸长的字形路径）节点 |
+| `src/math/rules.ts` | 标签名单、运算符分类、TeX 原子间距表、`mathvariant` 字母表、重音和撇号 |
+| `src/math/font.ts` | 载入 STIX Two Math，MATH 常量换算成像素，挑字形变体，拼接件拼长括号和根号 |
+| `src/math/opentype.ts` | 读 woff / sfnt：`cmap`、`hmtx`、`glyf` 轮廓和 MATH 表 |
 
-对照用例：
+## 排法
 
-- `packages/douchart-core/src/htmlBox/math/map.spec.ts`
-- `packages/client/src/utils/addHtmlBoxTestCases.ts` 里的 math 段
+每一块排完是一个盒子，记着宽、基线上方高度 `ascent`、基线下方深度 `descent`、斜体修正和 TeX 原子类别。容器把子块按基线摆好，再把子节点的 `x`、`y` 写成相对容器左上角的坐标。绘制和报告不认识公式，只看到普通节点。
 
-## 不要整个引进 htmlBox
+- 普通记号用画布按 STIX Two Math 绘制，盒子贴着着墨。公式不接受别的字体：间距、斜体修正和伸长字形都从这套字体的 MATH 表来，换普通字体会对不上。写了别的 `font-family` 报 `invalid-attr` 并忽略。`mtext` 仍用外面的文字字体。
+- 大号求和、积分、伸长的括号、根号和宽重音不用画布字形，而是从字体里取对应变体或拼接件的轮廓，画成填充路径。画布只能按码位取字，取不到这些变体。
+- 间距和位移来自 MATH 表：`AxisHeight`、`Fraction*`、`Superscript*`、`Subscript*`、`UpperLimit*`、`LowerLimit*`、`Radical*`、`AccentBaseHeight`、`Overbar*`、`Underbar*`、`DisplayOperatorMinHeight`、`ScriptPercentScaleDown` 等，算法跟 MathML Core 一致。
+- 上标沿用 TeX 的做法：基座是单个记号时不看它的高度，所以 `a²` 和 `b²` 的 2 一样高。
+- 原子间距用 TeX 的 8×8 表。二元运算符在行首或跟在运算符、关系符、左括号、标点后面时改成普通原子。
+- 括号先按栈配对，每对按中间内容的高度伸长。这样 `f(x) = { …表格… }` 里的 `( )` 不会被大括号拉高。
 
-`map.ts` 输出的是 htmlBox 自己的盒子树 `HtmlBoxNode`，不是 Flex Layer 节点。根号拉高和分数线笔画绑着 htmlBox 的测量，以及旧管线的全局间距。
+## 还没做
 
-Flex Layer 只复用规则，自己画。建议抽一个两边都能用的小模块：输入 MathML，输出中性结构（横向组、纵向组、文字、分数线、根号）。dc 再把它转成 `HtmlBoxNode`，Flex Layer 把它画成 `layer` 里的 flex、文字和线条。规则只留一份。`.layer` 里不要出现 `row`、`column` 标签。
-
-## 标签子集
-
-`math`、`mrow`、`mi`、`mn`、`mo`、`mtext`、`mfrac`、`msub`、`msup`、`msubsup`、`msqrt`、`mroot`、`munder`、`mover`、`munderover`、`mtable`、`mtr`、`mtd`。
-
-## 映射规则
-
-- `math`、`mrow` 是横向排布，子项居中，间距 0。运算符的空隙由 `mo` 的左右空距决定，不靠 `gap`。空距查 `operatorDict.ts` 的 `moSpacingEm`。
-- `mi`、`mn`、`mtext` 是文字。`mo` 是运算符。
-- `mfrac` 是纵向排布：分子、分数线、分母。分子分母字号乘 `MFRAC_SCRIPT_SCALE`（0.85）。线上下缝是 `MFRAC_GAP_EM`（0.28em）。线厚用 `mathRuleThicknessPx`，颜色跟公式文字色。
-- `msub`、`msup`、`msubsup` 默认是基座旁边的上下标。上下标字号用 htmlBox 的 `SUP_SUB_SIZE_RATIO`，叠在同一列，不是先写上标再写下标。
-- 基座是 `∑ ∏ ∐ ⋀ ⋁ ⋂ ⋃` 或 `lim max min sup inf` 时，上下标改到正下方、正上方（`isMovableLimitsOp`）。
-- 基座是 `∫ ∬ ∭ ∮ ∯ ∰` 时，限在符号右侧上下，不要和被积式收成同一段文字。积分号字号乘 `INTEGRAL_SIZE_RATIO`（1.35）。
-- `msqrt` 左侧是一条随内容变高的根号笔画，不是一个大对勾字符。钩宽见 `MSQRT_SURD_WIDTH_EM`、`MSQRT_SURD_WIDTH_RATIO`。笔画形状抄 `paintMathSqrtPath`：小钩在左下，斜笔收到勾的中部，横线盖住被开方内容。
-- `mroot` 是指数（缩小字号）加一个 `msqrt`，指数在左上。
-- `munder`、`mover`、`munderover` 是纵向叠放。
-- `mtable` 是纵向套若干横向行，行距 `0.2em`，单元格间距 `0.45em`。
-
-## 在 Flex Layer 里怎么写
-
-Flex Layer 的文字盒子里不能再套布局。公式实现之后，`<math>` 是布局节点，放在 `layer` 里，或放进 `display:flex` 的 `div`。和正文同一行时：
-
-```html
-<layer x="80" y="120">
-  <div style="display:flex; gap:8px; align-items:center">
-    <span>因此</span>
-    <math>
-      <mi>π</mi><mo>≈</mo><mn>4</mn><mo>·</mo>
-      <mfrac><mi>N</mi><mi>M</mi></mfrac>
-    </math>
-  </div>
-</layer>
-```
-
-## 至少要覆盖的用例
-
-分数、上下标、`msubsup` 叠在同一列、求和改上下限、积分限在右侧、根号、开方指数、极限、矩阵。
+`menclose`、`mpadded`、`mmultiscripts`、`mfenced`、换行、`maligngroup`，以及 MATH 表里的数学字距（`MathKernInfo`）和重音锚点（`MathTopAccentAttachment`）。

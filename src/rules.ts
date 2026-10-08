@@ -34,13 +34,6 @@ function present(attrs: Record<string, string>, key: string): boolean {
   return attrs[key] != null && attrs[key] !== ''
 }
 
-/** 根上的出血声明。空值、`1`、`true` 都算打开；`0`、`false`、`no`、`off` 算关掉。 */
-export function allowsBleed(raw: string | undefined): boolean {
-  if (raw == null) return false
-  const value = raw.trim().toLowerCase()
-  return value !== '0' && value !== 'false' && value !== 'no' && value !== 'off'
-}
-
 export function hasTwoPoint(attrs: Record<string, string>): boolean {
   return ['x1', 'y1', 'x2', 'y2'].every((key) => present(attrs, key))
 }
@@ -588,14 +581,14 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
     )
   }
 
-  if (attrs.bleed != null && allowsBleed(attrs.bleed)) {
+  if (attrs.bleed != null) {
     out.push(
       flagged(
         'warn',
         'invalid-attr',
         path,
-        'bleed 只写在根 layer 上',
-        '满版出血写 <layer bleed>。写了之后，着墨超出画布不再报 overflow-canvas',
+        'bleed 已不再使用',
+        '舞台写得比成片大，用 view="x y w h" 取出要出的那一块',
       ),
     )
   }

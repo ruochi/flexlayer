@@ -1,9 +1,10 @@
 import { filtersInPaintOrder, getFilter } from './filter.js'
-import { apply, applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset, translated, type Matrix } from './matrix.js'
+import { apply, applyToBox, aroundPivot, IDENTITY, intersectBox, matrixScale, multiply, originOffset, translated, type Matrix } from './matrix.js'
 import { applyPoseMatrix, has3dPose, planeDepth, poseMatrix, posePoint, project as projectPoint } from './perspective.js'
 import { innerInkStrokeReach, outerInkStrokeReach } from './style.js'
 import type { Box, ElementReport, FvgDocument, FvgReport, InlineOwner, Issue, LayoutNode, MeshLayoutNode, TextLayoutNode } from './types.js'
 import { boxToRect, emptyBox, translateBox, unionBoxes } from './types.js'
+import { viewMatrix } from './view.js'
 
 const VISIBLE_OPACITY = 0.01
 
@@ -106,6 +107,12 @@ const MESH_TAGS = new Set(['sphere', 'box', 'extrude', 'model'])
 
 function inkOverlap(a: Box, b: Box): boolean {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
+}
+
+/** 同一个公式里的记号是按数学排版规则摆的，着墨盒相交（积分下限、开方指数）不算重叠。 */
+function mathRootPath(path: string): string | null {
+  const m = path.match(/^(.*?\/math\[\d+\])(\/|$)/)
+  return m ? m[1]! : null
 }
 
 function hasArea(b: Box): boolean {
@@ -449,9 +456,12 @@ function walk(
   }
   elements.push(entry)
   // 线条贴边时，描边半径不算超出。layer / flex 的 ink 只是子元素的并集，超出与否由子元素自己报。
+  const shown = matrixScale(matrix)
+  if (Math.abs(shown - 1) > 1e-3) entry.screenScale = shown
+  if (node.kind === 'layer' && node.view) entry.view = node.view
   const slack =
     node.kind === 'line' && node.stroke !== 'none' && node.strokeWidth > 0
-      ? node.strokeWidth / 2
+      ? (node.strokeWidth / 2) * shown
       : node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group'
         ? Number.POSITIVE_INFINITY
         : 0
@@ -489,16 +499,21 @@ function walk(
   if (node.kind === 'layer' || node.kind === 'flex') {
     let childClip = clip
     let childPlane = plane
+    const mapping = node.kind === 'layer' && node.view ? viewMatrix(node.width, node.height, node.view) : null
+    const contentMatrix = mapping ? multiply(childMatrix, mapping) : childMatrix
     if (plane) {
-      const toPlane = contentToPlane(plane, node, planeRoot, inset, insetY)
+      let toPlane = contentToPlane(plane, node, planeRoot, inset, insetY)
       let localClip = plane.localClip
-      if (node.kind === 'layer' && node.overflow === 'hidden') {
-        localClip = tighten(localClip, planeRoot ? { x: 0, y: 0, width: node.width, height: node.height } : applyToBox(toPlane, { x: 0, y: 0, width: node.width, height: node.height }))
+      const clipsChildren = node.kind === 'layer' && (node.overflow === 'hidden' || node.view != null)
+      if (clipsChildren) {
+        const viewport = { x: 0, y: 0, width: node.width, height: node.height }
+        localClip = tighten(localClip, planeRoot ? viewport : applyToBox(toPlane, viewport))
       }
       if (ownMask) localClip = tighten(localClip, planeRoot ? ownMask : applyToBox(toPlane, ownMask))
+      if (mapping) toPlane = multiply(toPlane, mapping)
       childPlane = { ...plane, toPlane, localClip }
     } else {
-      if (node.kind === 'layer' && node.overflow === 'hidden') {
+      if (node.kind === 'layer' && (node.overflow === 'hidden' || node.view != null)) {
         const layerClip = applyToBox(matrix, { x: node.x, y: node.y, width: node.width, height: node.height })
         childClip = tighten(childClip, layerClip)
       }
@@ -512,7 +527,7 @@ function walk(
         const [u, v] = apply(childPlane.toPlane, x, y)
         return childPlane.project(u, v)
       }
-      const [cx, cy] = apply(childMatrix, x, y)
+      const [cx, cy] = apply(contentMatrix, x, y)
       return { x: cx, y: cy }
     }
 
@@ -534,7 +549,7 @@ function walk(
       if (opens && has3dPose(ch)) {
         walk(
           ch,
-          childMatrix,
+          contentMatrix,
           opacity,
           absX + inset,
           absY + insetY,
@@ -552,9 +567,9 @@ function walk(
           inkSlack,
         )
       } else if (childPlane) {
-        walk(ch, childMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, childPlane, false, childMesh, inkSlack)
+        walk(ch, contentMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, childPlane, false, childMesh, inkSlack)
       } else {
-        walk(ch, childMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, undefined, false, childMesh, inkSlack)
+        walk(ch, contentMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, undefined, false, childMesh, inkSlack)
       }
     }
     let union: Box | null = null
@@ -577,17 +592,12 @@ function walk(
       add(chrome)
     }
     for (let i = start; i < elements.length; i++) add(elements[i]!.ink)
-    if (union && !plane && node.kind === 'layer' && node.overflow === 'hidden') {
+    if (union && !plane && node.kind === 'layer' && (node.overflow === 'hidden' || node.view != null)) {
       const selfClip = applyToBox(matrix, { x: node.x, y: node.y, width: node.width, height: node.height })
       union = intersectBox(union, clip ? intersectBox(selfClip, clip) : selfClip)
     }
     if (union && !plane && ownMask) union = intersectBox(union, applyToBox(childMatrix, ownMask))
     if (union) entry.ink = boxToRect(union)
-  }
-
-  if (node.kind === 'sqrt') {
-    const childMatrix = multiply(matrix, translated(node.x, node.y))
-    walk(node.child, childMatrix, opacity, absX, absY, clip, elements, effects, plane, false, meshView, inkSlack)
   }
 }
 
@@ -633,20 +643,21 @@ export function buildReport(doc: FvgDocument): FvgReport {
     const slack = inkSlack[index] ?? 0
     const edge = 1e-3 + slack
     const inkOutside = el.ink.right > doc.width + edge || el.ink.bottom > doc.height + edge || el.ink.left < -edge || el.ink.top < -edge
-    if (inkOutside && !doc.bleed) {
+    if (inkOutside) {
       issues.push({
         level: 'error',
         code: 'overflow-canvas',
         path: el.path,
         message: '着墨超出画布',
-        hint: '满版出血在根 layer 上写 bleed，这条越界就不报',
+        hint: '舞台比成片大时，用 view="x y w h" 只取要出的那一块。被取景窗裁掉的不算超出',
       })
     }
     const effectPad = effectPadOf(el)
     const recorded = effects[index]
+    const screen = el.screenScale ?? 1
     let effectBox: Box | null = null
     if (recorded?.plane) effectBox = recorded.box
-    else if (effectPad > 0) effectBox = clipInk(expandBox(el.ink, effectPad), recorded?.clip)
+    else if (effectPad > 0) effectBox = clipInk(expandBox(el.ink, effectPad * screen), recorded?.clip)
     if (!MESH_TAGS.has(el.tag) && effectBox && hasArea(effectBox)) el.effect = boxToRect(effectBox)
     if (!MESH_TAGS.has(el.tag) && !inkOutside && effectBox && hasArea(effectBox) && effectOutside(effectBox, doc)) {
       issues.push({
@@ -667,12 +678,14 @@ export function buildReport(doc: FvgDocument): FvgReport {
         })
       }
       const minFs = (doc.width / 1080) * 24
-      if ((el.fontSize ?? 0) < minFs - 1e-3) {
+      const shownSize = (el.fontSize ?? 0) * (el.screenScale ?? 1)
+      if (shownSize < minFs - 1e-3) {
+        const sized = el.screenScale != null ? `屏幕上的字号 ${shownSize.toFixed(1)}px` : `字号 ${el.fontSize}px`
         issues.push({
           level: 'warn',
           code: 'min-font-size',
           path: el.path,
-          message: `字号 ${el.fontSize}px 小于建议最小 ${minFs.toFixed(1)}px`,
+          message: `${sized} 小于建议最小 ${minFs.toFixed(1)}px`,
         })
       }
     }
@@ -695,6 +708,8 @@ export function buildReport(doc: FvgDocument): FvgReport {
     for (let j = i + 1; j < textInks.length; j++) {
       const a = textInks[i]!
       const b = textInks[j]!
+      const formula = mathRootPath(a.path)
+      if (formula && formula === mathRootPath(b.path)) continue
       if (inkOverlap(a.ink, b.ink)) {
         issues.push({
           level: 'warn',
@@ -751,6 +766,7 @@ const EXPECT_CODES = new Set([
   'symbol-cycle',
   'open-curve-fill',
   'effect-clipped',
+  'view-outside',
   'flatten-3d',
   'behind-camera',
   'emit-draw',
@@ -796,8 +812,6 @@ function collectExpects(node: LayoutNode, decls: ExpectDecl[], issues: Issue[]) 
   }
   if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
     for (const child of node.children) collectExpects(child, decls, issues)
-  } else if (node.kind === 'sqrt') {
-    collectExpects(node.child, decls, issues)
   }
 }
 

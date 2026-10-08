@@ -34,6 +34,12 @@ describe('layoutText', () => {
     expect(r.lines.some((l) => l.segments.some((s) => s.text === 'Bitcoin'))).toBe(true)
   })
 
+  it('补充平面的字不从中间拆开', () => {
+    if (!hasFont) return
+    const r = layoutText({ segments: [{ text: '𝑥𝑦', style: baseStyle }], nowrap: true, lineHeightRatio: 1.2, fontSize: 40 })
+    expect(r.lines[0]!.segments.map((s) => s.text)).toEqual(['𝑥', '𝑦'])
+  })
+
   it('行内保留空格，行首行尾去掉', () => {
     if (!hasFont) return
     const oneLine = layoutText({
