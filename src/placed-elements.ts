@@ -89,11 +89,6 @@ function visit(node: LayoutNode, space: Matrix, isRoot: boolean, found: PlacedEl
   if (node.kind === 'group') {
     const next = multiply(multiply(space, nodePose(node, node.x, node.y)), node.svg)
     for (const child of node.children) visit(child, next, false, found)
-    return
-  }
-  if (node.kind === 'sqrt') {
-    const next = multiply(space, multiply(nodePose(node, node.x, node.y), translated(node.x, node.y)))
-    visit(node.child, next, false, found)
   }
 }
 
