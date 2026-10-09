@@ -325,6 +325,21 @@ export function suggestAttrs(raw: string, node?: FvgNode): string[] {
   return suggestNames(raw, node ? attrCandidates(node) : KNOWN_ATTRS)
 }
 
+/** `hidden` 是网格被挡住的棱，不写在平面、线条或文字上。 */
+export function hiddenAttrIssues(node: FvgNode, path: string): Issue[] {
+  if (!present(node.attrs, 'hidden')) return []
+  if (isMeshTag(node.tag)) return []
+  return [
+    flagged(
+      'warn',
+      'invalid-attr',
+      path,
+      'hidden 只写在网格上',
+      'sphere、box、extrude、model 用它表示被挡住的棱，例如 hidden="#8a8175"',
+    ),
+  ]
+}
+
 /** 拼写接近已知属性时报 warn。完全对不上的名字仍留给 draw。 */
 export function typoAttrIssues(node: FvgNode, path: string): Issue[] {
   const out: Issue[] = []

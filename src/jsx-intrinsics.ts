@@ -213,6 +213,11 @@ export namespace JSX {
       FvgEffects & {
         r?: number | string
         fill?: string
+        /** 可见折棱和轮廓。球只画轮廓圆 */
+        stroke?: string
+        'stroke-width'?: number | string
+        /** 被这只球自己挡住的棱。要和 stroke 一起写 */
+        hidden?: string
         rotate?: number | string
         rotateX?: number | string
         rotateY?: number | string
@@ -226,6 +231,10 @@ export namespace JSX {
         height?: number | string
         depth?: number | string
         fill?: string
+        stroke?: string
+        'stroke-width'?: number | string
+        /** 被挡住的棱。要和 stroke 一起写 */
+        hidden?: string
         rotate?: number | string
         rotateX?: number | string
         rotateY?: number | string
@@ -238,6 +247,9 @@ export namespace JSX {
         d?: string
         depth?: number | string
         fill?: string
+        stroke?: string
+        'stroke-width'?: number | string
+        hidden?: string
         rotate?: number | string
         rotateX?: number | string
         rotateY?: number | string
@@ -245,8 +257,14 @@ export namespace JSX {
         scale?: number | string
         opacity?: number | string
       }
-    /** 外部 glb。位置和宽高写在外包的 layer 上，src 只写在这里。 */
-    model: FvgGraphic & { src?: string }
+    /** 外部 glb。位置和宽高写在外包的 layer 上，src 只写在这里。面色来自文件。 */
+    model: FvgGraphic & {
+      src?: string
+      fill?: string
+      stroke?: string
+      'stroke-width'?: number | string
+      hidden?: string
+    }
     curve: FvgGraphic & FvgLinePaint & { points?: string; closed?: boolean | string }
     h1: FvgHtml
     h2: FvgHtml

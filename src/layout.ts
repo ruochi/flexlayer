@@ -55,7 +55,7 @@ import {
 } from './text.js'
 import { applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset, translated } from './matrix.js'
 import { layoutMath } from './math/layout.js'
-import { asBlockFlow, checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, legacyCenterIssues, originValueIssues, rowColumnHint, styleIssues, typoAttrIssues } from './rules.js'
+import { asBlockFlow, checkChildAttrs, checkTextBoxChildren, hasTwoPoint, hiddenAttrIssues, isDisplayFlex, isHtmlTag, legacyCenterIssues, originValueIssues, rowColumnHint, styleIssues, typoAttrIssues } from './rules.js'
 import { fitViewAspect, parseView, viewExceeds } from './view.js'
 import { canonicalTag, FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag } from './tags.js'
 import { boundsOf, parseSvgTransform } from './svg-transform.js'
@@ -1114,6 +1114,75 @@ function readDepth(raw: string | undefined, fallback: number, ctx: LayoutContext
   return parsed
 }
 
+function readMeshLines(node: FvgNode, ctx: LayoutContext): { stroke: string; strokeWidth: number; hidden: string } {
+  const rawStroke = node.attrs.stroke
+  const rawHidden = node.attrs.hidden
+  const rawWidth = node.attrs['stroke-width']
+  const strokeWritten = rawStroke != null && rawStroke.trim() !== '' && rawStroke.trim() !== 'none'
+  let stroke = 'none'
+  if (strokeWritten) {
+    if (isGradient(rawStroke)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${node.tag} 的 stroke 不支持渐变，只使用第一个颜色`,
+        hint: '改成纯色，例如 stroke="#1c1915"',
+      })
+    }
+    stroke = solidPaint(readPaint(rawStroke, '#000000', ctx, 'stroke'), '#000000')
+  }
+  const hiddenWritten = rawHidden != null && rawHidden.trim() !== '' && rawHidden.trim() !== 'none'
+  let hidden = 'none'
+  if (hiddenWritten) {
+    if (!strokeWritten) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${node.tag} 的 hidden 要和 stroke 一起写`,
+        hint: '例如 stroke="#1c1915" hidden="#8a8175"',
+      })
+    } else {
+      if (isGradient(rawHidden)) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: ctx.pathPrefix,
+          message: `${node.tag} 的 hidden 不支持渐变，只使用第一个颜色`,
+          hint: '改成纯色，例如 hidden="#8a8175"',
+        })
+      }
+      hidden = solidPaint(readPaint(rawHidden!, '#000000', ctx, 'hidden'), '#000000')
+    }
+  }
+  let strokeWidth = 2
+  if (rawWidth != null && rawWidth.trim() !== '') {
+    const parsed = parseNumber(rawWidth)
+    if (parsed == null || parsed < 0) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${node.tag} 的 stroke-width 需要非负像素`,
+        hint: '例如 stroke-width="2"',
+      })
+    } else {
+      strokeWidth = parsed
+    }
+    if (!strokeWritten) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${node.tag} 的 stroke-width 要和 stroke 一起写`,
+        hint: '例如 stroke="#1c1915" stroke-width="2"',
+      })
+    }
+  }
+  return { stroke, strokeWidth, hidden }
+}
+
 function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
   warnNestedMasks(node, ctx)
   const appearance = readAttrAppearance(node.attrs)
@@ -1204,7 +1273,7 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
       code: 'invalid-attr',
       path: ctx.pathPrefix,
       message: `${node.tag} 不支持 shadow`,
-      hint: 'shadow 写在平面上；网格只使用 fill',
+      hint: 'shadow 写在平面上；网格用 fill 和 stroke',
     })
   }
   if (effects.glow) {
@@ -1213,7 +1282,7 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
       code: 'invalid-attr',
       path: ctx.pathPrefix,
       message: `${node.tag} 不支持 glow`,
-      hint: 'glow 写在平面上；网格只使用 fill',
+      hint: 'glow 写在平面上；网格用 fill 和 stroke',
     })
   }
   return {
@@ -1229,6 +1298,7 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
     ...appearance,
     mesh,
     fill,
+    ...readMeshLines(node, ctx),
     ...effects,
     ...layoutDrawMeta(node, ctx),
   }
@@ -2359,6 +2429,7 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
 function noteAttrTypos(node: FvgNode, path: string, issues: Issue[]) {
   const concrete = materialize(node)
   issues.push(...typoAttrIssues(concrete, path))
+  issues.push(...hiddenAttrIssues(concrete, path))
   if (isHtmlTag(concrete.tag) || isTextBoxTag(concrete.tag)) issues.push(...styleIssues(concrete, path))
   let index = 0
   for (const child of concrete.children) {

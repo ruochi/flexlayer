@@ -453,6 +453,12 @@ export type MeshLayoutNode = LayoutNodeBase & {
   kind: 'mesh'
   mesh: MeshSpec
   fill: string
+  /** 可见折棱和轮廓。`none` 不描。 */
+  stroke: string
+  /** 屏幕像素。写了 stroke 没写宽度时是 2。 */
+  strokeWidth: number
+  /** 被这只网格自己挡住的棱。`none` 不画。 */
+  hidden: string
 }
 
 export type LayoutNode =

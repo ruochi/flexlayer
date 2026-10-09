@@ -1,0 +1,8 @@
+<layer width="960" height="540" background="#f3efe6" perspective="980">
+  <box x="48" y="150" width="170" height="120" depth="90" fill="#f7f4ee" stroke="#1c1915" stroke-width="2" hidden="#9a8f80" rotateY="-28" />
+  <box x="280" y="160" width="150" height="130" depth="110" fill="none" stroke="#1c1915" stroke-width="2" hidden="#9a8f80" rotateY="36" rotateX="16" />
+  <sphere cx="620" cy="200" r="72" fill="none" stroke="#1c1915" stroke-width="2" />
+  <sphere cx="800" cy="190" r="64" fill="#d7c4a3" stroke="#1c1915" stroke-width="2" />
+  <extrude x="70" y="340" d="M0 0 H150 V40 H90 V100 H0 Z" depth="36" fill="#f7f4ee" stroke="#1c1915" stroke-width="2" hidden="#9a8f80" rotateX="58" />
+  <extrude x="420" y="360" d="M40 80 A 40 40 0 1 1 120 80 A 40 40 0 1 1 40 80 Z" depth="48" fill="none" stroke="#1c1915" stroke-width="2" hidden="#9a8f80" rotateX="62" />
+</layer>

@@ -249,4 +249,148 @@ describe('软件光栅', () => {
     expect(soft).toBeGreaterThan(80)
     expect(hard).toBeLessThan(8)
   })
+
+  it('盒子描可见棱，对角线不画，被自己挡住的棱是虚线', async () => {
+    const { png } = await render(`
+      <layer width="200" height="200" background="#ffffff" perspective="500">
+        <box x="50" y="60" width="100" height="80" depth="70" fill="#c8c8c8" stroke="#000000" stroke-width="4" hidden="#ff00ff" />
+      </layer>
+    `)
+    const img = await loadImage(png)
+    const canvas = createCanvas(img.width, img.height)
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    const data = ctx.getImageData(0, 0, img.width, img.height).data
+    const at = (x: number, y: number) => {
+      const i = (y * img.width + x) * 4
+      return [data[i] ?? 0, data[i + 1] ?? 0, data[i + 2] ?? 0]
+    }
+    const face = at(100, 100)
+    expect(face[0]).toBeGreaterThan(140)
+    expect(face[0]).toBeLessThan(230)
+    expect(Math.abs(face[0] - face[1])).toBeLessThan(30)
+    expect(Math.abs(face[1] - face[2])).toBeLessThan(30)
+    let black = 0
+    let magenta = 0
+    for (let y = 0; y < img.height; y++) {
+      for (let x = 0; x < img.width; x++) {
+        const [r, g, b] = at(x, y)
+        if (r < 30 && g < 30 && b < 30) black++
+        if (r > 200 && b > 200 && g < 80) magenta++
+      }
+    }
+    expect(black).toBeGreaterThan(40)
+    expect(magenta).toBeGreaterThan(10)
+  })
+
+  it('fill=none 的盒子不填面，轮廓仍在', async () => {
+    const { png } = await render(`
+      <layer width="200" height="200" background="#ffffff" perspective="500">
+        <box x="50" y="60" width="100" height="80" depth="70" fill="none" stroke="#000000" stroke-width="4" />
+      </layer>
+    `)
+    const face = await pixelAt(png, 100, 100)
+    const corner = await pixelAt(png, 4, 4)
+    expect(face[0]).toBeGreaterThan(240)
+    expect(face[1]).toBeGreaterThan(240)
+    expect(face[2]).toBeGreaterThan(240)
+    expect(corner[0]).toBeGreaterThan(240)
+    const img = await loadImage(png)
+    const canvas = createCanvas(img.width, img.height)
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    const data = ctx.getImageData(0, 0, img.width, img.height).data
+    let black = 0
+    for (let i = 0; i < data.length; i += 4) {
+      if ((data[i] ?? 255) < 30 && (data[i + 1] ?? 255) < 30 && (data[i + 2] ?? 255) < 30) black++
+    }
+    expect(black).toBeGreaterThan(40)
+  })
+
+  it('球的 stroke 只画轮廓圆', async () => {
+    const { png } = await render(`
+      <layer width="200" height="200" background="#ffffff" perspective="600">
+        <sphere cx="100" cy="100" r="50" fill="none" stroke="#000000" stroke-width="4" hidden="#ff00ff" />
+      </layer>
+    `)
+    const center = await pixelAt(png, 100, 100)
+    expect(center[0]).toBeGreaterThan(240)
+    expect(center[1]).toBeGreaterThan(240)
+    const img = await loadImage(png)
+    const canvas = createCanvas(img.width, img.height)
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    const data = ctx.getImageData(0, 0, img.width, img.height).data
+    let black = 0
+    let magenta = 0
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i] ?? 0
+      const g = data[i + 1] ?? 0
+      const b = data[i + 2] ?? 0
+      if (r < 30 && g < 30 && b < 30) black++
+      if (r > 200 && b > 200 && g < 80) magenta++
+    }
+    expect(black).toBeGreaterThan(40)
+    expect(magenta).toBe(0)
+  })
+
+  it('挤出体只描折棱，盖上的对角线不画', async () => {
+    const { png } = await render(`
+      <layer width="220" height="160" background="#ffffff" perspective="800">
+        <extrude x="40" y="40" d="M0 0 H140 V36 H90 V80 H0 Z" depth="40" fill="#f4f1ea" stroke="#000000" stroke-width="3" hidden="#ff00ff" />
+      </layer>
+    `)
+    const inside = await pixelAt(png, 70, 55)
+    expect(inside[0]).toBeGreaterThan(200)
+    expect(inside[1]).toBeGreaterThan(200)
+    expect(inside[2]).toBeGreaterThan(180)
+    const img = await loadImage(png)
+    const canvas = createCanvas(img.width, img.height)
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    const data = ctx.getImageData(0, 0, img.width, img.height).data
+    let black = 0
+    let magenta = 0
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i] ?? 0
+      const g = data[i + 1] ?? 0
+      const b = data[i + 2] ?? 0
+      if (r < 30 && g < 30 && b < 30) black++
+      if (r > 200 && b > 200 && g < 80) magenta++
+    }
+    expect(black).toBeGreaterThan(20)
+    expect(magenta).toBeGreaterThan(5)
+  })
+
+  it('glb 的 stroke 描在文件颜色外面', async () => {
+    const { png } = await render(
+      `<layer width="180" height="180" background="#000000" perspective="700"><layer x="55" y="55" width="70" height="70"><model src="box.glb" stroke="#ffffff" stroke-width="3" /></layer></layer>`,
+      { baseDir: dir },
+    )
+    const center = await pixelAt(png, 90, 90)
+    expect(center[1]).toBeGreaterThan(center[0] + 20)
+    const img = await loadImage(png)
+    const canvas = createCanvas(img.width, img.height)
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    const data = ctx.getImageData(0, 0, img.width, img.height).data
+    let white = 0
+    for (let i = 0; i < data.length; i += 4) {
+      if ((data[i] ?? 0) > 220 && (data[i + 1] ?? 0) > 220 && (data[i + 2] ?? 0) > 220) white++
+    }
+    expect(white).toBeGreaterThan(10)
+  })
+
+  it('前面的球体盖住后面盒子的棱', async () => {
+    const { png } = await render(`
+      <layer width="200" height="200" background="#ffffff" perspective="600">
+        <box x="30" y="40" width="140" height="120" depth="40" fill="#dddddd" stroke="#000000" stroke-width="4" hidden="#ff00ff" />
+        <sphere cx="100" cy="100" r="28" z="40" fill="#ff2244" />
+      </layer>
+    `)
+    const center = await pixelAt(png, 100, 100)
+    expect(center[0]).toBeGreaterThan(center[1] + 40)
+    expect(center[0]).toBeGreaterThan(center[2] + 20)
+    expect(center[0]).toBeGreaterThan(180)
+  })
 })

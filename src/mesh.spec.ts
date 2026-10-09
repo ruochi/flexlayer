@@ -238,6 +238,20 @@ describe('网格绘制', () => {
     expect(clipped.issues.some((issue) => issue.code === 'overflow-canvas' && issue.path.includes('sphere'))).toBe(true)
   }, 30000)
 
+  it('hidden 没和 stroke 一起写，以及写在平面上，会警告', async () => {
+    const report = await checkFvg(`
+      <layer width="180" height="140" perspective="400">
+        <box x="20" y="30" width="40" height="30" depth="20" hidden="#ff00ff" />
+        <box x="80" y="30" width="40" height="30" depth="20" stroke-width="3" />
+        <rect x="10" y="10" width="20" height="20" fill="#fff" hidden="#ff00ff" />
+      </layer>
+    `)
+    const messages = report.issues.filter((issue) => issue.code === 'invalid-attr').map((issue) => issue.message)
+    expect(messages.some((message) => message.includes('hidden 要和 stroke'))).toBe(true)
+    expect(messages.some((message) => message.includes('stroke-width 要和 stroke'))).toBe(true)
+    expect(messages.some((message) => message.includes('hidden 只写在网格上'))).toBe(true)
+  })
+
   it('网格上的渐变、shadow、glow 会警告', async () => {
     const report = await checkFvg(
       `<layer width="160" height="120" perspective="400"><box x="60" y="45" width="40" height="30" depth="20" fill="linear-gradient(#fff, #000)" shadow="0 8 12 #000" glow="10 #fff" /></layer>`,

@@ -1,4 +1,4 @@
-import { createCanvas, type Canvas } from '@napi-rs/canvas'
+import { createCanvas, type Canvas, type CanvasRenderingContext2D } from '@napi-rs/canvas'
 import { readFileSync } from 'node:fs'
 import { solidPaint } from './gradient.js'
 import { parseGlb } from './glb.js'
@@ -15,6 +15,8 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
  * 正对镜头的面是 fill，侧面按内置主光和补光变暗。
  * 主光沿固定方向打一张正交深度图：不透明三角形互相挡住这盏光时，主光不计。
  * glb 用文件里的底色乘这套明暗。
+ * 写了 stroke 时，缩小抗锯齿之后再按屏幕像素描折棱和轮廓。
+ * hidden 只画被这只网格自己挡住的棱，虚线是 6 实 4 空。
  */
 
 const MAX_RASTER_SIDE = 8192
@@ -39,6 +41,27 @@ export type SoftwareMeshInput = {
   raster: (node: LayoutNode) => RasterBitmap
 }
 
+type MeshEdge = {
+  a: number
+  b: number
+  n0: [number, number, number]
+  n1: [number, number, number] | null
+  crease: boolean
+}
+
+type LineStyle = {
+  css: string
+  hiddenCss: string | null
+  width: number
+}
+
+/** 球心在网格坐标里。半径均匀时画解析轮廓，否则退回三角网的轮廓边。 */
+type SphereOutline = { x: number; y: number; z: number; r: number }
+
+const NO_EDGES: MeshEdge[] = []
+/** 相邻面法线夹角超过这个值才算折棱。圆弧细分不会变成笼子。 */
+const CREASE_DOT = Math.cos((40 * Math.PI) / 180)
+
 type Batch = {
   positions: Float32Array
   normals: Float32Array
@@ -57,6 +80,11 @@ type Batch = {
   toLayer: Mat4
   originX: number
   originY: number
+  /** 同一只网格的图元共用，用来区分「自己挡住」和「别的物体挡住」。 */
+  owner: number
+  edges: MeshEdge[]
+  lines: LineStyle | null
+  outline: SphereOutline | null
 }
 
 type Vert = {
@@ -873,6 +901,7 @@ function occluded(map: ShadowMap, x: number, y: number, z: number, nx: number, n
 function drawTriangle(
   color: Uint8ClampedArray,
   depth: Float32Array,
+  owners: Int16Array,
   width: number,
   height: number,
   a: ScreenVert,
@@ -964,7 +993,10 @@ function drawTriangle(
         sg = byte(batch.g * dim)
         sb = byte(batch.b * dim)
       }
-      if (batch.depthWrite) depth[di] = z
+      if (batch.depthWrite) {
+        depth[di] = z
+        owners[di] = batch.owner
+      }
       const pi = di * 4
       if (sa > 0) {
         if (sa >= 255 || color[pi + 3] === 0) {
@@ -1054,7 +1086,9 @@ function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: number
   const ph = Math.max(1, Math.round(viewH * pixelScale))
   const color = new Uint8ClampedArray(pw * ph * 4)
   const depth = new Float32Array(pw * ph)
+  const owners = new Int16Array(pw * ph)
   depth.fill(-1e30)
+  owners.fill(-1)
   const shadow = buildShadowMap(batches, authored, Math.max(layer.width, layer.height) * base * 2)
   const near = perspective * (1 - 1e-3)
   const toScreen = (v: Vert): ScreenVert => {
@@ -1076,7 +1110,7 @@ function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: number
         const a = clipped[0]!
         const b = clipped[k]!
         const c = clipped[k + 1]!
-        drawTriangle(color, depth, pw, ph, toScreen(a), toScreen(b), toScreen(c), batch, shadow)
+        drawTriangle(color, depth, owners, pw, ph, toScreen(a), toScreen(b), toScreen(c), batch, shadow)
       }
     }
   })
@@ -1087,7 +1121,367 @@ function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: number
   const outW = Math.max(1, Math.round(viewW * base))
   const outH = Math.max(1, Math.round(viewH * base))
   const out = hi.width >= outW && hi.height >= outH ? resolveSamples(hi, outW, outH) : hi
+  paintMeshLines(out, batches, authored, depth, owners, pw, ph, layer, perspective, padL, padT, viewW, viewH)
   return { canvas: out, x: -padL, y: -padT, width: viewW, height: viewH }
+}
+
+function rgbaCss(r: number, g: number, b: number, a: number) {
+  return `rgba(${r},${g},${b},${(a / 255).toFixed(4)})`
+}
+
+function lineStyleOf(node: MeshLayoutNode, opacity: number): LineStyle | null {
+  if (node.stroke === 'none' || !(node.strokeWidth > 0)) return null
+  const [r, g, b, a] = fillBytes(node.stroke, opacity)
+  if (a <= 0) return null
+  let hiddenCss: string | null = null
+  if (node.hidden !== 'none') {
+    const [hr, hg, hb, ha] = fillBytes(node.hidden, opacity)
+    if (ha > 0) hiddenCss = rgbaCss(hr, hg, hb, ha)
+  }
+  return { css: rgbaCss(r, g, b, a), hiddenCss, width: node.strokeWidth }
+}
+
+function sphereOutlineOf(node: MeshLayoutNode): SphereOutline | null {
+  if (node.mesh.type !== 'sphere') return null
+  const o = originOffset(node.origin, node.width, node.height)
+  return { x: node.width / 2 - o.x, y: -(node.height / 2 - o.y), z: 0, r: node.mesh.r }
+}
+
+function quantCoord(n: number) {
+  return Math.round(n * 1e3)
+}
+
+/** 按位置焊顶点，丢掉共面三角的对角线，留下折棱和边界。 */
+function extractEdges(positions: Float32Array, indices: Uint32Array): MeshEdge[] {
+  type Acc = { a: number; b: number; n0: [number, number, number] | null; n1: [number, number, number] | null }
+  const map = new Map<string, Acc>()
+  const at = (i: number) => i * 3
+  for (let t = 0; t < indices.length; t += 3) {
+    const i0 = indices[t]!
+    const i1 = indices[t + 1]!
+    const i2 = indices[t + 2]!
+    const a0 = at(i0)
+    const b0 = at(i1)
+    const c0 = at(i2)
+    const bx = positions[b0]! - positions[a0]!
+    const by = positions[b0 + 1]! - positions[a0 + 1]!
+    const bz = positions[b0 + 2]! - positions[a0 + 2]!
+    const cx = positions[c0]! - positions[a0]!
+    const cy = positions[c0 + 1]! - positions[a0 + 1]!
+    const cz = positions[c0 + 2]! - positions[a0 + 2]!
+    const nx = by * cz - bz * cy
+    const ny = bz * cx - bx * cz
+    const nz = bx * cy - by * cx
+    const len = Math.hypot(nx, ny, nz)
+    if (len < 1e-8) continue
+    const normal: [number, number, number] = [nx / len, ny / len, nz / len]
+    const tri = [i0, i1, i2]
+    for (let e = 0; e < 3; e++) {
+      const i = tri[e]!
+      const j = tri[(e + 1) % 3]!
+      const ka = `${quantCoord(positions[at(i)]!)},${quantCoord(positions[at(i) + 1]!)},${quantCoord(positions[at(i) + 2]!)}`
+      const kb = `${quantCoord(positions[at(j)]!)},${quantCoord(positions[at(j) + 1]!)},${quantCoord(positions[at(j) + 2]!)}`
+      const swap = ka > kb
+      const key = swap ? `${kb}|${ka}` : `${ka}|${kb}`
+      let acc = map.get(key)
+      if (!acc) {
+        acc = { a: swap ? j : i, b: swap ? i : j, n0: null, n1: null }
+        map.set(key, acc)
+      }
+      if (!acc.n0) acc.n0 = normal
+      else if (!acc.n1) acc.n1 = normal
+    }
+  }
+  const edges: MeshEdge[] = []
+  for (const acc of map.values()) {
+    if (!acc.n0) continue
+    const n1 = acc.n1
+    const dotN = n1 ? acc.n0[0] * n1[0] + acc.n0[1] * n1[1] + acc.n0[2] * n1[2] : -1
+    edges.push({ a: acc.a, b: acc.b, n0: acc.n0, n1, crease: dotN < CREASE_DOT })
+  }
+  return edges
+}
+
+function meshLineFields(
+  node: MeshLayoutNode,
+  opacity: number,
+  positions: Float32Array,
+  indices: Uint32Array,
+  owner: number,
+): Pick<Batch, 'edges' | 'lines' | 'outline' | 'owner'> {
+  const lines = lineStyleOf(node, opacity)
+  if (!lines) return { edges: NO_EDGES, lines: null, outline: null, owner }
+  return {
+    edges: extractEdges(positions, indices),
+    lines,
+    outline: sphereOutlineOf(node),
+    owner,
+  }
+}
+
+function facesCamera(
+  normal: [number, number, number],
+  toLayer: Mat4,
+  mid: { x: number; y: number; z: number },
+  vx: number,
+  vy: number,
+  perspective: number,
+) {
+  const n = transformNormal(toLayer, normal[0], normal[1], normal[2])
+  return n.x * (vx - mid.x) + n.y * (vy - mid.y) + n.z * (perspective - mid.z) > 1e-4
+}
+
+function isSilhouette(edge: MeshEdge, verts: Vert[], batch: Batch, vx: number, vy: number, perspective: number) {
+  const a = verts[edge.a]
+  const b = verts[edge.b]
+  if (!a || !b) return false
+  const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 }
+  const front0 = facesCamera(edge.n0, batch.toLayer, mid, vx, vy, perspective)
+  if (!edge.n1) return front0
+  return front0 !== facesCamera(edge.n1, batch.toLayer, mid, vx, vy, perspective)
+}
+
+function projectLayer(
+  v: Vert,
+  perspective: number,
+  vx: number,
+  vy: number,
+  padL: number,
+  padT: number,
+  scaleX: number,
+  scaleY: number,
+) {
+  const w = 1 - v.z / perspective
+  if (w <= 1e-4) return null
+  return {
+    x: (vx + (v.x - vx) / w + padL) * scaleX,
+    y: (vy + (v.y - vy) / w + padT) * scaleY,
+    z: v.z,
+  }
+}
+
+function classifySample(
+  depth: Float32Array,
+  owners: Int16Array,
+  pw: number,
+  ph: number,
+  mapX: number,
+  mapY: number,
+  x: number,
+  y: number,
+  z: number,
+  owner: number,
+  outline: boolean,
+): 'visible' | 'hidden' | 'skip' {
+  const ix = Math.round(x * mapX)
+  const iy = Math.round(y * mapY)
+  if (ix < 0 || iy < 0 || ix >= pw || iy >= ph) return 'skip'
+  const di = iy * pw + ix
+  const stored = depth[di]!
+  if (stored < -1e20 || stored <= z + 1.5) return 'visible'
+  if (owners[di] !== owner) return 'skip'
+  // 轮廓贴着自己的表面，深度会略近于这条线，不能当成隐藏线。
+  return outline ? 'visible' : 'hidden'
+}
+
+type ScreenSample = { x: number; y: number; kind: 'visible' | 'hidden' | 'skip' }
+
+function sampleSegment(
+  a: Vert,
+  b: Vert,
+  perspective: number,
+  vx: number,
+  vy: number,
+  padL: number,
+  padT: number,
+  scaleX: number,
+  scaleY: number,
+  depth: Float32Array,
+  owners: Int16Array,
+  pw: number,
+  ph: number,
+  mapX: number,
+  mapY: number,
+  owner: number,
+  outline: boolean,
+): ScreenSample[] {
+  const near = perspective * (1 - 1e-3)
+  let p0 = a
+  let p1 = b
+  const in0 = p0.z < near
+  const in1 = p1.z < near
+  if (!in0 && !in1) return []
+  if (in0 && !in1) p1 = lerpVert(p0, p1, near)
+  else if (!in0 && in1) p0 = lerpVert(p0, p1, near)
+  const s0 = projectLayer(p0, perspective, vx, vy, padL, padT, scaleX, scaleY)
+  const s1 = projectLayer(p1, perspective, vx, vy, padL, padT, scaleX, scaleY)
+  if (!s0 || !s1) return []
+  const steps = Math.max(1, Math.ceil(Math.hypot(s1.x - s0.x, s1.y - s0.y)))
+  const out: ScreenSample[] = []
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps
+    const v: Vert = {
+      x: p0.x + (p1.x - p0.x) * t,
+      y: p0.y + (p1.y - p0.y) * t,
+      z: p0.z + (p1.z - p0.z) * t,
+      nx: 0,
+      ny: 0,
+      nz: 1,
+      u: 0,
+      v: 0,
+    }
+    const s = projectLayer(v, perspective, vx, vy, padL, padT, scaleX, scaleY)
+    if (!s) continue
+    out.push({
+      x: s.x,
+      y: s.y,
+      kind: classifySample(depth, owners, pw, ph, mapX, mapY, s.x, s.y, s.z, owner, outline),
+    })
+  }
+  return out
+}
+
+function paintRun(ctx: CanvasRenderingContext2D, points: ScreenSample[], hidden: boolean, style: LineStyle, scale: number) {
+  if (points.length < 2) return
+  ctx.beginPath()
+  ctx.moveTo(points[0]!.x, points[0]!.y)
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i]!.x, points[i]!.y)
+  ctx.setLineDash(hidden ? [6 * scale, 4 * scale] : [])
+  ctx.lineCap = hidden ? 'butt' : 'round'
+  ctx.lineJoin = 'round'
+  ctx.lineWidth = style.width * scale
+  ctx.strokeStyle = hidden ? style.hiddenCss! : style.css
+  ctx.stroke()
+}
+
+function paintSamples(ctx: CanvasRenderingContext2D, samples: ScreenSample[], style: LineStyle, scale: number) {
+  let run: ScreenSample[] = []
+  let mode: ScreenSample['kind'] | null = null
+  const flush = () => {
+    if (mode === 'visible') paintRun(ctx, run, false, style, scale)
+    else if (mode === 'hidden' && style.hiddenCss) paintRun(ctx, run, true, style, scale)
+    run = []
+  }
+  for (const sample of samples) {
+    if (sample.kind !== mode) {
+      if (run.length > 0 && sample.kind !== 'skip' && mode !== 'skip' && mode != null) {
+        run.push(sample)
+        flush()
+        run = [sample]
+      } else {
+        flush()
+      }
+      mode = sample.kind
+    }
+    if (mode !== 'skip') run.push(sample)
+  }
+  flush()
+}
+
+function sphereRing(center: { x: number; y: number; z: number }, radius: number, vx: number, vy: number, perspective: number): Vert[] | null {
+  const dx = center.x - vx
+  const dy = center.y - vy
+  const dz = center.z - perspective
+  const dist = Math.hypot(dx, dy, dz)
+  if (dist <= radius + 1e-3) return null
+  const dir = { x: dx / dist, y: dy / dist, z: dz / dist }
+  const along = (radius * radius) / dist
+  const pc = { x: center.x - dir.x * along, y: center.y - dir.y * along, z: center.z - dir.z * along }
+  const rad = radius * Math.sqrt(Math.max(0, 1 - (radius * radius) / (dist * dist)))
+  const hint = Math.abs(dir.y) < 0.9 ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 }
+  const side = cross(hint, dir)
+  const u = unit(side.x, side.y, side.z)
+  const v = cross(dir, u)
+  const count = 72
+  const ring: Vert[] = []
+  for (let i = 0; i < count; i++) {
+    const ang = (i / count) * Math.PI * 2
+    const c = Math.cos(ang)
+    const s = Math.sin(ang)
+    ring.push({
+      x: pc.x + rad * (c * u.x + s * v.x),
+      y: pc.y + rad * (c * u.y + s * v.y),
+      z: pc.z + rad * (c * u.z + s * v.z),
+      nx: 0,
+      ny: 0,
+      nz: 1,
+      u: 0,
+      v: 0,
+    })
+  }
+  return ring
+}
+
+function roundSphere(batch: Batch): { x: number; y: number; z: number; radius: number } | null {
+  const outline = batch.outline
+  if (!outline) return null
+  const c = transformPoint(batch.toLayer, batch.originX, batch.originY, outline.x, outline.y, outline.z)
+  const px = transformPoint(batch.toLayer, batch.originX, batch.originY, outline.x + outline.r, outline.y, outline.z)
+  const py = transformPoint(batch.toLayer, batch.originX, batch.originY, outline.x, outline.y + outline.r, outline.z)
+  const pz = transformPoint(batch.toLayer, batch.originX, batch.originY, outline.x, outline.y, outline.z + outline.r)
+  const rx = Math.hypot(px.x - c.x, px.y - c.y, px.z - c.z)
+  const ry = Math.hypot(py.x - c.x, py.y - c.y, py.z - c.z)
+  const rz = Math.hypot(pz.x - c.x, pz.y - c.y, pz.z - c.z)
+  const mean = (rx + ry + rz) / 3
+  if (!(mean > 1e-3)) return null
+  if (Math.abs(rx - mean) > mean * 0.02 || Math.abs(ry - mean) > mean * 0.02 || Math.abs(rz - mean) > mean * 0.02) return null
+  return { x: c.x, y: c.y, z: c.z, radius: mean }
+}
+
+function paintMeshLines(
+  canvas: Canvas,
+  batches: Batch[],
+  authored: Vert[][],
+  depth: Float32Array,
+  owners: Int16Array,
+  pw: number,
+  ph: number,
+  layer: LayerLayoutNode,
+  perspective: number,
+  padL: number,
+  padT: number,
+  viewW: number,
+  viewH: number,
+) {
+  if (!batches.some((batch) => batch.lines)) return
+  const ctx = canvas.getContext('2d')
+  const scaleX = canvas.width / Math.max(viewW, 1e-3)
+  const scaleY = canvas.height / Math.max(viewH, 1e-3)
+  const scale = (scaleX + scaleY) / 2
+  const vx = layer.width / 2
+  const vy = layer.height / 2
+  const mapX = pw / canvas.width
+  const mapY = ph / canvas.height
+  const stroke = (a: Vert, b: Vert, style: LineStyle, owner: number, outline: boolean) => {
+    paintSamples(
+      ctx,
+      sampleSegment(a, b, perspective, vx, vy, padL, padT, scaleX, scaleY, depth, owners, pw, ph, mapX, mapY, owner, outline),
+      style,
+      scale,
+    )
+  }
+  batches.forEach((batch, index) => {
+    const style = batch.lines
+    if (!style) return
+    const verts = authored[index]
+    if (!verts) return
+    const round = roundSphere(batch)
+    if (batch.outline && round) {
+      const ring = sphereRing(round, round.radius, vx, vy, perspective)
+      if (!ring) return
+      for (let i = 0; i < ring.length; i++) stroke(ring[i]!, ring[(i + 1) % ring.length]!, style, batch.owner, true)
+      return
+    }
+    for (const edge of batch.edges) {
+      const silhouette = isSilhouette(edge, verts, batch, vx, vy, perspective)
+      if (!edge.crease && !silhouette) continue
+      const a = verts[edge.a]
+      const b = verts[edge.b]
+      if (!a || !b) continue
+      stroke(a, b, style, batch.owner, !edge.crease && silhouette)
+    }
+  })
+  ctx.setLineDash([])
 }
 
 function uniformBytes(data: Uint8ClampedArray): { r: number; g: number; b: number; a: number } | null {
@@ -1148,17 +1542,24 @@ function planeBatch(plane: SoftwareMeshInput['planes'][number], raster: Software
     toLayer: plane.toLayer,
     originX: o.x,
     originY: o.y,
+    owner: 0,
+    edges: NO_EDGES,
+    lines: null,
+    outline: null,
   }
 }
 
 export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
   const { layer, perspective, meshes, planes, scale, raster } = input
   const batches: Batch[] = []
+  let nextOwner = 1
   for (const instance of meshes) {
     const node = instance.node
     if (node.width <= 0 && node.mesh.type !== 'extrude') continue
     const o = originOffset(node.origin, node.width, node.height)
     if (applyPoseMatrix(instance.toLayer, o.x, o.y, 0).z >= perspective) continue
+    const owner = nextOwner++
+    const opacity = (instance.opacity ?? 1) * node.opacity
     if (node.mesh.type === 'model') {
       for (const prim of buildModel(node)) {
         batches.push({
@@ -1179,13 +1580,15 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
           toLayer: instance.toLayer,
           originX: o.x,
           originY: o.y,
+          ...meshLineFields(node, opacity, prim.positions, prim.indices, owner),
         })
       }
       continue
     }
     const geometry = geometryOf(node)
     if (!geometry) continue
-    const [r, g, b, a] = fillBytes(node.fill, (instance.opacity ?? 1) * node.opacity)
+    const fillNone = node.fill === 'none' || node.fill === 'transparent'
+    const [r, g, b, a] = fillNone ? [0, 0, 0, 0] : fillBytes(node.fill, opacity)
     batches.push({
       positions: geometry.positions,
       normals: geometry.normals,
@@ -1196,19 +1599,22 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
       b,
       a,
       doubleSided: node.mesh.type === 'extrude',
-      shaded: true,
-      depthWrite: a >= 255,
+      shaded: !fillNone,
+      depthWrite: fillNone || a >= 255,
       texture: null,
       tw: 0,
       th: 0,
       toLayer: instance.toLayer,
       originX: o.x,
       originY: o.y,
+      ...meshLineFields(node, opacity, geometry.positions, geometry.indices, owner),
     })
   }
   for (const plane of planes) {
     const batch = planeBatch(plane, raster)
-    if (batch) batches.push(batch)
+    if (!batch) continue
+    batch.owner = nextOwner++
+    batches.push(batch)
   }
   return rasterize(batches, layer, perspective, scale)
 }
