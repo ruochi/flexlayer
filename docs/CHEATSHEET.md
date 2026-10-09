@@ -10,7 +10,7 @@
 | `draw` | 子标签。正文是 JS（`ctx`、`el`），画在父元素内容之后 |
 | `div` 写 `display:flex` | 排布。默认横向；竖排加 `flex-direction:column`。`gap` `row-gap` `column-gap` `align-items` `align-content` `justify-content` `flex-wrap` `padding` 都在 `style` 里。**`align-items` 默认 `center`（CSS 里是 `stretch`）：column 忘写 `align-items` 会全部居中**。左对齐写 `align-items:flex-start`。横排按文字基线对齐写 `align-items:baseline`，竖排写了仍按 `flex-start`。`letter-spacing` 可以写 `0.05em`。`align-content` 默认 `flex-start`，管换行后的多行。`justify-content` 只管主轴，改不了这一层在父级交叉轴上的位置 |
 
-没写 `display:flex` 的 `div` 可以直接放 `p`、`h1`–`h3`、另一个 `div`，以及写了宽高的 `layer`，它们从上到下排，文字块拉到这一列的宽度。只写文字时 `div` 仍是一段文字。容器上的字号、颜色和 `text-align` 会传给里面的段落；`h1`–`h3` 仍用自己的默认字号。`em` / `i` 是斜体，`u` 加下划线。`p` 里可以直接放 `<img>`。`p`、`h1`–`h3`、`span` 里不要放 `layer`。
+没写 `display:flex` 的 `div` 可以直接放 `p`、`h1`–`h3`、另一个 `div`，以及写了宽高的 `layer`，它们从上到下排，文字块拉到这一列的宽度。只写文字时 `div` 仍是一段文字。容器上的字号、颜色和 `text-align` 会传给里面的段落；`h1`–`h3` 仍用自己的默认字号。`em` / `i` 是斜体，`u` 加下划线。`p` 里可以直接放 `<img>` 和 `<icon>`。`p`、`h1`–`h3`、`span` 里不要放 `layer`。
 
 要定位一组 HTML，包一层 `layer`，把 `x` `y` `anchor` 写在 `layer` 上。没写坐标时落在 `(0, 0)`。写了宽高的 `layer` 也可以直接放进 `div`，和文字并排；图形用这一层的局部坐标，这一层上不写 `x` `y`。例子见 [examples/html-layer.tsx](../examples/html-layer.tsx)。`anchor-box="ink"` 让 `x` `y` 对准子树着墨，而不是布局盒子。公式用 `<math>`，和文字并排时放进 `display:flex`，不要写进 `<p>`。单独成行的公式写 `display="block"`，`∑`、`∫` 用大号，上下限放到正上方和正下方。字母和运算符只用 `STIXTwoMath`，公式上写别的 `font-family` 不生效。说明文字用 `<mtext>`，跟外面的字体走。`scale` 可以写两个数：`scale="1.2 0.8"` 或 `scale="-1 1"`。文字写 `style="scale:1.2 0.8"`。只写一个数时两轴相同。`origin` 默认 `center`。九宫格之外可以写 `origin="640 420"` 或 `origin="33% 39%"`，镜头绕这一点推近，这一点不动。
 
@@ -21,6 +21,7 @@
 | 文字 `h1` `h2` `h3` `p` `div` `span` | 外包 `layer` 来定位。文字本身只写 `style` | 直接放 |
 | 写了宽高的 `layer` | 用 `x` `y` `anchor` 定位整组 | 直接放进 `div`。宽高是属性，里面的图形用局部坐标。这一层不写 `x` `y` |
 | 图片 `img`（`image` 相同） | 外包 `layer`。`src` 是属性，宽高和 `object-fit` 写 `style` | 直接放，默认不缩小 |
+| 图标 `icon` | 外包 `layer`。`name` 是 Material Symbols 的名字，`weight` 是 100–700。`size` 没写就跟周围的字号，颜色写 `style` | 直接放。写进 `p` 时跟文字排在同一段 |
 | `rect` | `x y width height`，左上角。`rx` 是圆角，`ry` 没写时跟 `rx` | 包一层有宽高的 layer，或改用 div |
 | `ellipse` | `cx cy rx ry`，圆心 | 同上 |
 | `g` | 放在 `layer` 里。`transform` 写 `translate` / `rotate` / `scale` / `matrix`。`fill`、`stroke` 传给子形状 | 不排进去，会 `warn` |

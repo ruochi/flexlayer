@@ -5,7 +5,7 @@ import { cssPropertyNames, diagnoseStyle, parseNumber, parseStyle, readOrigin } 
 import { MATH_TAGS } from './math/rules.js'
 import { isInlineTag, isTextBoxTag } from './text.js'
 import type { Issue, IssueLevel } from './types.js'
-import { isImageTag, isLineTag, isMeshTag, isShapeTag } from './tags.js'
+import { isIconTag, isImageTag, isLineTag, isMeshTag, isShapeTag } from './tags.js'
 
 const BLOCK_IN_TEXT = new Set(['h1', 'h2', 'h3', 'p', 'div'])
 
@@ -184,7 +184,7 @@ function hasStyle(attrs: Record<string, string>): boolean {
 
 /** 文字和图片都按 HTML：视觉属性进 style，位置写在外包的 layer 上。 */
 export function isHtmlTag(tag: string): boolean {
-  return isTextBoxTag(tag) || isImageTag(tag)
+  return isTextBoxTag(tag) || isImageTag(tag) || isIconTag(tag)
 }
 
 function usesAttributes(node: FvgNode): boolean {
@@ -315,6 +315,7 @@ export function suggestNames(raw: string, candidates: Iterable<string>): string[
 }
 
 function attrCandidates(node: FvgNode): Iterable<string> {
+  if (isIconTag(node.tag)) return [...HTML_STYLE_ATTRS, 'style', 'id', 'name', 'weight', 'size']
   if (isHtmlTag(node.tag) || isTextBoxTag(node.tag)) return [...HTML_STYLE_ATTRS, 'style', 'id', 'src', 'alt']
   return KNOWN_ATTRS
 }

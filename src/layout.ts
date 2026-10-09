@@ -14,6 +14,7 @@ import { imageInk, peekLayerImage, preloadLayerImagesSync, parseObjectFit, parse
 import type { FvgNode } from './parse.js'
 import { parseFvg } from './parse.js'
 import { ensureBuiltinFontsSync, primaryFontFamily, registerFontsFromDocumentSync } from './fonts.js'
+import { iconBoxStyle, ICON_FONT_FAMILY, readIcon, treeHasIcon } from './icons.js'
 import { materialize } from './components.js'
 import { catmullRomPath } from './curve.js'
 import { isGradient, parseGradient, solidPaint } from './gradient.js'
@@ -57,7 +58,7 @@ import { applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset
 import { layoutMath } from './math/layout.js'
 import { asBlockFlow, checkChildAttrs, checkTextBoxChildren, hasTwoPoint, isDisplayFlex, isHtmlTag, legacyCenterIssues, originValueIssues, rowColumnHint, styleIssues, typoAttrIssues } from './rules.js'
 import { fitViewAspect, parseView, viewExceeds } from './view.js'
-import { canonicalTag, FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag } from './tags.js'
+import { canonicalTag, FONT_TAG, isIconTag, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag } from './tags.js'
 import { boundsOf, parseSvgTransform } from './svg-transform.js'
 import type {
   Anchor,
@@ -762,6 +763,9 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
       images.push(laid)
       return { width: laid.width, height: laid.height, key }
     },
+    (iconIssues, iconPath) => {
+      for (const issue of iconIssues) ctx.issues.push({ ...issue, path: iconPath })
+    },
   )
   const nowrap = style['white-space'] === 'nowrap'
   const textWrap = style['text-wrap'] === 'wrap' ? 'wrap' : 'balance'
@@ -880,6 +884,30 @@ function refitImageNode(node: ImageLayoutNode, x: number, y: number, width: numb
 function displaySrc(src: string): string {
   if (/^data:/i.test(src)) return 'data URL'
   return src.length > 160 ? `${src.slice(0, 157)}…` : src
+}
+
+/** 图标单独成块。展开成一行 Symbols 文字，名字换成码位，避免按字母拆开。 */
+function layoutIcon(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: number): TextLayoutNode {
+  const inherited = {
+    fontFamily: ICON_FONT_FAMILY,
+    fontSize: ctx.fontSize ?? 40,
+    fontWeight: ctx.fontWeight ?? 400,
+    color: ctx.color,
+    letterSpacing: 0,
+  }
+  const icon = readIcon(node, inherited)
+  for (const issue of icon.issues) ctx.issues.push({ ...issue, path: ctx.pathPrefix })
+  const span: FvgNode = {
+    tag: 'span',
+    attrs: { style: iconBoxStyle(node, icon) },
+    children: icon.text ? [icon.text] : [],
+    ...(node.loc ? { loc: node.loc } : {}),
+  }
+  const laid = layoutTextBox(span, ctx, contentWidthLimit)
+  laid.tag = 'icon'
+  laid.attr = { ...node.attrs }
+  if (icon.name) laid.text = icon.name
+  return laid
 }
 
 function layoutImage(node: FvgNode, ctx: LayoutContext): ImageLayoutNode {
@@ -1407,6 +1435,17 @@ function measureFlexChild(raw: FvgNode, ctx: LayoutContext, direction: 'row' | '
   }
   if (isImageTag(node.tag)) {
     const laid = layoutImage(node, ctx)
+    return {
+      node: laid,
+      minMain: direction === 'row' ? laid.width : laid.height,
+      minCross: direction === 'row' ? laid.height : laid.width,
+      preferredMain: direction === 'row' ? laid.width : laid.height,
+      preferredCross: direction === 'row' ? laid.height : laid.width,
+      isText: false,
+    }
+  }
+  if (isIconTag(node.tag)) {
+    const laid = layoutIcon(node, ctx)
     return {
       node: laid,
       minMain: direction === 'row' ? laid.width : laid.height,
@@ -2204,6 +2243,7 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
     else if (isLineTag(laidSource.tag)) laid = layoutLineNode(laidSource, subCtx, ctx.color)
     else if (isDisplayFlex(laidSource.attrs.style) && isTextBoxTag(laidSource.tag)) laid = layoutFlex(laidSource, subCtx)
     else if (isImageTag(laidSource.tag)) laid = layoutImage(laidSource, subCtx)
+    else if (isIconTag(laidSource.tag)) laid = layoutIcon(laidSource, subCtx, textMax)
     else if (isTextBoxTag(laidSource.tag)) laid = layoutTextBox(laidSource, subCtx, textMax)
     else if (isShapeTag(laidSource.tag)) laid = layoutShape(laidSource, subCtx, ctx.color)
     else if (isMeshTag(laidSource.tag)) laid = layoutMesh(laidSource, subCtx)
@@ -2527,6 +2567,7 @@ export function prepareAssetsSync(root: FvgNode | null, baseDir: string, options
   )
   const families = new Set<string>([options.fontFamily ?? root?.attrs['font-family'] ?? 'ChillDuanSans'])
   if (root) collectFontFamilies(root, families)
+  if (root && treeHasIcon(root)) families.add(ICON_FONT_FAMILY)
   ensureBuiltinFontsSync(families)
   const srcs = [...(options.images ?? [])]
   if (root) collectImageSrcs(root, srcs)

@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module'
 import type { FvgChild, FvgNode } from './parse.js'
 import { applyCanvasFont } from './fonts.js'
+import { readIcon, type IconIssue } from './icons.js'
 import { getMeasureCtx } from './measureCtx.js'
 import { parseFontWeight, parseLetterSpacing, parsePx } from './style.js'
 import { emptyBox, translateBox, unionBoxes, type Box, type InlineOwner, type TextLayoutResult, type TextRunStyle, type TextSegment } from './types.js'
@@ -10,7 +11,7 @@ const LineBreaker = require('linebreak') as new (text: string) => {
   nextBreak(): { position: number; required: boolean } | null
 }
 
-const INLINE_TAGS = new Set(['span', 'strong', 'b', 'em', 'i', 'u', 'br'])
+const INLINE_TAGS = new Set(['span', 'strong', 'b', 'em', 'i', 'u', 'br', 'icon'])
 const TEXT_BOX_TAGS = new Set(['h1', 'h2', 'h3', 'p', 'div', 'span', 'strong', 'b', 'em', 'i', 'u'])
 
 const LINE_HEAD_FORBIDDEN = new Set('，。、；：？！）」』》】…'.split(''))
@@ -126,6 +127,7 @@ function walkInline(
   parentPath: string,
   inherited: InlineOwner | undefined,
   imageSize?: (node: FvgNode, path: string) => TextSegment['atom'],
+  onIcon?: (issues: IconIssue[], path: string) => void,
 ): void {
   let breakNext = hardBreakNext
   let elementIndex = 0
@@ -150,6 +152,13 @@ function walkInline(
       breakNext = false
       continue
     }
+    if (tag === 'icon') {
+      const icon = readIcon(child, style)
+      if (icon.issues.length > 0) onIcon?.(icon.issues, path)
+      if (icon.text) out.push({ text: icon.text, style: icon.style, hardBreakBefore: breakNext, owner: inherited })
+      breakNext = false
+      continue
+    }
     if (!INLINE_TAGS.has(tag)) continue
     let segStyle = style
     if (tag === 'strong' || tag === 'b') segStyle = { ...style, fontWeight: 700 }
@@ -158,7 +167,7 @@ function walkInline(
     segStyle = mergeStyle(segStyle, parseStyleAttr(child.attrs.style))
     const id = child.attrs.id?.trim()
     const owner = id ? { id, path, tag } : inherited
-    walkInline(child.children, segStyle, out, breakNext, path, owner, imageSize)
+    walkInline(child.children, segStyle, out, breakNext, path, owner, imageSize, onIcon)
     breakNext = false
   }
 }
@@ -168,6 +177,7 @@ export function extractTextSegments(
   defaults: TextBoxDefaults,
   parentPath = '',
   imageSize?: (node: FvgNode, path: string) => TextSegment['atom'],
+  onIcon?: (issues: IconIssue[], path: string) => void,
 ): TextSegment[] {
   const base: TextRunStyle = {
     fontFamily: defaults.fontFamily,
@@ -182,7 +192,7 @@ export function extractTextSegments(
   if (tag === 'em' || tag === 'i') style = { ...style, fontStyle: 'italic' }
   if (tag === 'u') style = { ...style, underline: true }
   const segs: TextSegment[] = []
-  walkInline(node.children, style, segs, false, parentPath, undefined, imageSize)
+  walkInline(node.children, style, segs, false, parentPath, undefined, imageSize, onIcon)
   return normalizeInlineSegments(segs)
 }
 

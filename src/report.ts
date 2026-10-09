@@ -761,6 +761,7 @@ const EXPECT_CODES = new Set([
   'empty-mask',
   'invalid-draw',
   'missing-image',
+  'missing-icon',
   'missing-model',
   'missing-symbol',
   'symbol-cycle',

@@ -48,6 +48,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | 绘制 | `draw`（子标签，正文 JS；程序侧也可用 `draw={fn}`） |
 | 文字 | `h1`、`h2`、`h3`、`p`、`div`、`span`；行内：`span`、`strong`、`b`、`em`、`br` |
 | 图片 | `img`（`image` 是同一个标签） |
+| 图标 | `icon`（Material Symbols，写 `name` 和 `weight`） |
 | 形状 | `rect`、`circle`、`ellipse` |
 | 分组 | `g`（放在 `layer` 里，用 `transform` 平移、旋转、缩放） |
 | 线条 | `line`、`arrow`、`polyline`、`polygon`、`path`、`curve`。`arrow` 是内置组件，排版时展开成 `g` |
@@ -240,7 +241,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 ## 5. 文字
 
-最外层的文字标签是一个**文字盒子**，里面只能放文字和行内标签（`span`、`strong`、`b`、`em`、`i`、`u`、`br`），也可以直接放 `<img>`。图片和文字排在同一段里，宽度不够时跟着一起换行。
+最外层的文字标签是一个**文字盒子**，里面只能放文字和行内标签（`span`、`strong`、`b`、`em`、`i`、`u`、`br`），也可以直接放 `<img>` 和 `<icon>`。图片、图标和文字排在同一段里，宽度不够时跟着一起换行。
 `div` 里有块级子元素时不是文字盒子，见 4.2。
 `p`、`h1`–`h3`、`span` 里不要嵌套 `div`、`p`，也不要放 `layer`。多段上下排写成 `<div><p>…</p></div>`。图形和文字并排时，把写了宽高的 `layer` 放进 `<div style="display:flex">`。
 `em` 和 `i` 是斜体，`strong` 和 `b` 是粗体，`u` 加下划线。没写字号时，它们和 `span` 一样继承外层。
@@ -327,6 +328,26 @@ const chars = await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })
 | `border-radius`、`opacity`、`padding`、`background`、`border` | 同其它 HTML。圆角会裁切图片 |
 
 图片可以放进 `display:flex`，默认不缩小。在 layer 里默认落在 `(0, 0)`；要指定位置就外包一层 `layer`，把 `x`、`y`、`anchor` 写在那一层上。`canvas.create` 会按 `src` 准备图片。读不到文件时报 `missing-image`，`hint` 说明路径。写了宽高的盒子仍然占位。缺 `src` 报 `invalid-attr`。
+
+### 图标
+
+`icon` 是 HTML。名字和字重写属性，颜色和字号跟周围的文字走，也可以写进 `style`。字体是 Material Symbols Outlined，第一次用到时下载。不要把 `fonts.googleapis.com` 的地址写进 `<font>`，也不要把图标名当成普通文字来排：排版按码位拆开，连字会散。
+
+```html
+<div style="display:flex; align-items:center; gap:12px; font-size:40px">
+  <icon name="home" weight="400" />
+  <span>首页</span>
+</div>
+```
+
+| 项 | 说明 |
+| --- | --- |
+| `name` | 必填属性。Material Symbols 的图标名，例如 `home`、`search`、`arrow_back` |
+| `weight` | 100 到 700，取最近的整百（100、200、300、400、500、600、700）。没写就用周围的 `font-weight`，默认 400。`style` 里写了 `font-weight` 时以 style 为准 |
+| `size` | 边长，像素。没写就用周围的 `font-size`。`style` 里写了 `font-size` 时以 style 为准 |
+| `style` | `color`、`opacity` 等同其它 HTML |
+
+放进 `p`、`span`、`h1`–`h3` 时跟文字排在同一段。放进 `display:flex` 或直接放在 `layer` 里时是一块正方形。没有这个名字时报 `missing-icon`。缺 `name` 报 `invalid-attr`。这是空心的一套，没有单独的实心轴。
 
 ## 7. 形状与线条
 
@@ -674,10 +695,11 @@ registerFilter({
 | `non-canonical` | info | 含义明确，但不是规范写法。照常渲染，`hint` 里是规范写法 |
 | `unknown-tag` | warn | 不认识的标签 |
 | `invalid-attr` | warn | 属性放错了位置，或两种写法混用。和已知属性编辑距离不超过 2 的名字也记在这里，`hint` 给出正确写法；候选按标签收窄，过短或没有共同开头的不推荐。其余不认识的属性名不报，留给 `draw`。`style` 里不支持或写错的声明也记在这里。`anchor` 写错、路径 `d` 无法解析同样是这个码；路径失败时跳过这一笔，不中断整张图 |
-| `invalid-child` | warn | 非法子元素：线条或 `g` 放进 flex 容器，文字盒子（`h1`–`h3`、`p`、`span`，以及只含文字的 `div`）里放了 `h1`–`h3`、`p`、`div`、`layer`、`g` 或 `math`，`mask` 放错位置或一层写了多个。含这些子元素的 `div` 按块级竖排，不报这条。文字盒子里的 `<img>` 跟文字排在同一段里，不报这条 |
+| `invalid-child` | warn | 非法子元素：线条或 `g` 放进 flex 容器，文字盒子（`h1`–`h3`、`p`、`span`，以及只含文字的 `div`）里放了 `h1`–`h3`、`p`、`div`、`layer`、`g` 或 `math`，`mask` 放错位置或一层写了多个。含这些子元素的 `div` 按块级竖排，不报这条。文字盒子里的 `<img>`、`<icon>` 跟文字排在同一段里，不报这条 |
 | `empty-mask` | warn | `mask` 里没有可用的形状或图片，不生效 |
 | `invalid-draw` | error / warn | `<draw>` 语法错误或运行出错（error），或内容为空（warn）。运行出错带上源码位置，其余内容照常绘制 |
 | `missing-image` | warn | `img` 的 `src` 读不到 |
+| `missing-icon` | warn | `icon` 的 `name` 不是 Material Symbols 里的图标名 |
 | `missing-model` | warn | `model` 的 `src` 缺失、不是 `.glb`，或文件读不到；没有可放入的宽高时也是这个码 |
 | `missing-symbol` | warn | `use` 的 `href` 没有对应的 `symbol` |
 | `symbol-cycle` | warn | `symbol` 通过 `use` 引用了自己 |

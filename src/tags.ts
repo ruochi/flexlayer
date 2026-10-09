@@ -30,6 +30,7 @@ const KNOWN_TAGS = new Set([
   'br',
   'img',
   'image',
+  'icon',
   'sphere',
   'box',
   'extrude',
@@ -73,6 +74,10 @@ export function canonicalTag(tag: string): string {
 
 export function isImageTag(tag: string): boolean {
   return IMAGE_TAGS.has(tag.toLowerCase())
+}
+
+export function isIconTag(tag: string): boolean {
+  return tag.toLowerCase() === 'icon'
 }
 
 export function isRootTag(tag: string): boolean {
