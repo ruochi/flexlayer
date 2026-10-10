@@ -218,6 +218,8 @@ export namespace JSX {
         'stroke-width'?: number | string
         /** 被这只球自己挡住的棱。要和 stroke 一起写 */
         hidden?: string
+        /** plastic、metal、glass，可跟 0 到 1 的粗糙度 */
+        material?: string
         rotate?: number | string
         rotateX?: number | string
         rotateY?: number | string
@@ -235,6 +237,7 @@ export namespace JSX {
         'stroke-width'?: number | string
         /** 被挡住的棱。要和 stroke 一起写 */
         hidden?: string
+        material?: string
         rotate?: number | string
         rotateX?: number | string
         rotateY?: number | string
@@ -250,6 +253,7 @@ export namespace JSX {
         stroke?: string
         'stroke-width'?: number | string
         hidden?: string
+        material?: string
         rotate?: number | string
         rotateX?: number | string
         rotateY?: number | string
@@ -264,6 +268,7 @@ export namespace JSX {
       stroke?: string
       'stroke-width'?: number | string
       hidden?: string
+      material?: string
     }
     curve: FvgGraphic & FvgLinePaint & { points?: string; closed?: boolean | string }
     h1: FvgHtml

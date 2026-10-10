@@ -56,7 +56,7 @@ import {
 } from './text.js'
 import { applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset, translated } from './matrix.js'
 import { layoutMath } from './math/layout.js'
-import { asBlockFlow, checkChildAttrs, checkTextBoxChildren, hasTwoPoint, hiddenAttrIssues, isDisplayFlex, isHtmlTag, legacyCenterIssues, originValueIssues, rowColumnHint, styleIssues, typoAttrIssues } from './rules.js'
+import { asBlockFlow, checkChildAttrs, checkTextBoxChildren, hasTwoPoint, hiddenAttrIssues, isDisplayFlex, isHtmlTag, legacyCenterIssues, materialAttrIssues, originValueIssues, rowColumnHint, styleIssues, typoAttrIssues } from './rules.js'
 import { fitViewAspect, parseView, viewExceeds } from './view.js'
 import { canonicalTag, FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag } from './tags.js'
 import { boundsOf, parseSvgTransform } from './svg-transform.js'
@@ -82,6 +82,7 @@ import type {
   LineGeometry,
   LineLayoutNode,
   MeshLayoutNode,
+  MeshMaterial,
   NoiseSpec,
   OverlaySpec,
   ShadowSpec,
@@ -1188,6 +1189,53 @@ function readMeshLines(node: FvgNode, ctx: LayoutContext): { stroke: string; str
   return { stroke, strokeWidth, hidden }
 }
 
+const MESH_MATERIALS = new Set(['plastic', 'metal', 'glass'])
+const MESH_ROUGHNESS = { plastic: 0.4, metal: 0.25, glass: 0.08 }
+
+function readMeshMaterial(raw: string | undefined, ctx: LayoutContext, tag: string): MeshMaterial | undefined {
+  if (raw == null) return undefined
+  const text = raw.trim().toLowerCase()
+  if (text === '' || text === 'none') return undefined
+  const parts = text.split(/[\s,]+/).filter((part) => part.length > 0 && part !== 'rough')
+  const name = parts[0] ?? ''
+  if (!MESH_MATERIALS.has(name)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `${tag} 不认识的 material: ${raw.trim()}`,
+      hint: '写成 plastic、metal 或 glass，粗糙度跟在后面，例如 material="metal 0.35"',
+    })
+    return undefined
+  }
+  const kind = name as MeshMaterial['kind']
+  let roughness = MESH_ROUGHNESS[kind]
+  if (parts.length > 1) {
+    const value = Number(parts[1])
+    if (!Number.isFinite(value)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${tag} 的 material 粗糙度无法解析: ${parts[1]}`,
+        hint: '粗糙度是 0 到 1，例如 material="plastic 0.4"',
+      })
+    } else {
+      if (value < 0 || value > 1) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: ctx.pathPrefix,
+          message: `${tag} 的 material 粗糙度要在 0 到 1`,
+          hint: '例如 material="metal 0.35"',
+        })
+      }
+      roughness = Math.min(1, Math.max(0, value))
+    }
+  }
+  return { kind, roughness }
+}
+
 function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
   warnNestedMasks(node, ctx)
   const appearance = readAttrAppearance(node.attrs)
@@ -1290,6 +1338,7 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
       hint: 'glow 写在平面上；网格用 fill 和 stroke',
     })
   }
+  const material = readMeshMaterial(node.attrs.material, ctx, node.tag)
   return {
     kind: 'mesh',
     path: ctx.pathPrefix,
@@ -1303,6 +1352,7 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
     ...appearance,
     mesh,
     fill,
+    ...(material ? { material } : {}),
     ...readMeshLines(node, ctx),
     ...effects,
     ...layoutDrawMeta(node, ctx),
@@ -2435,6 +2485,7 @@ function noteAttrTypos(node: FvgNode, path: string, issues: Issue[]) {
   const concrete = materialize(node)
   issues.push(...typoAttrIssues(concrete, path))
   issues.push(...hiddenAttrIssues(concrete, path))
+  issues.push(...materialAttrIssues(concrete, path))
   if (isHtmlTag(concrete.tag) || isTextBoxTag(concrete.tag)) issues.push(...styleIssues(concrete, path))
   let index = 0
   for (const child of concrete.children) {
