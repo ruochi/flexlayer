@@ -479,6 +479,17 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
         ),
       )
     }
+    if (present(attrs, 'ink-stroke')) {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-attr',
+          path,
+          'ink-stroke 已并入 stroke',
+          '改成 style="stroke:6 #000 outside"',
+        ),
+      )
+    }
     const graphic = GRAPHIC_ATTRS.filter((key) => key !== 'cx' && key !== 'cy' && present(attrs, key))
     if (graphic.length > 0) {
       out.push(
@@ -728,7 +739,7 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
           'non-canonical',
           path,
           'outline 与 -webkit-text-stroke 不会按墨迹描边',
-          '改用 ink-stroke，例如 style="ink-stroke:6 #000 outside"',
+          '改用 stroke，例如 style="stroke:6 #000 outside"',
         ),
       )
     }

@@ -208,8 +208,24 @@ describe('行内空白', () => {
     if (!node || node.kind !== 'text') return
     const bb = node.textLayout.lines[0]!.segments.find((seg) => seg.text.includes('B'))
     expect(bb?.style.color).toBe('#112233')
+    expect(bb?.style.fill).toBeUndefined()
     expect(bb?.style.background).toBeUndefined()
     expect(doc.issues.filter((issue) => issue.code === 'invalid-attr').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('color 上的渐变退回纯色，fill 保留', async () => {
+    if (!hasFont) return
+    const doc = await layoutSource(
+      `<layer width="360" height="80" safe="0" color="#112233"><p style="color:linear-gradient(to right, #ff0000, #0000ff); fill:linear-gradient(to right, #00ff00, #0000ff)">字</p></layer>`,
+      process.cwd(),
+    )
+    const node = doc.root.children[0]
+    expect(node?.kind).toBe('text')
+    if (!node || node.kind !== 'text') return
+    const style = node.textLayout.lines[0]!.segments[0]!.style
+    expect(style.color).toBe('#112233')
+    expect(style.fill).toBe('linear-gradient(to right, #00ff00, #0000ff)')
+    expect(doc.issues.some((issue) => issue.message.includes('color 只收纯色'))).toBe(true)
   })
 
   it('不是 100 倍数的字重仍按这个字号排', () => {

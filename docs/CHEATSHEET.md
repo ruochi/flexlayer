@@ -10,7 +10,7 @@
 | `draw` | 子标签。正文是 JS（`ctx`、`el`），画在父元素内容之后 |
 | `div` 写 `display:flex` | 排布。默认横向；竖排加 `flex-direction:column`。`gap` `row-gap` `column-gap` `align-items` `align-content` `justify-content` `flex-wrap` `padding` 都在 `style` 里。**`align-items` 默认 `center`（CSS 里是 `stretch`）：column 忘写 `align-items` 会全部居中**。左对齐写 `align-items:flex-start`。横排按文字基线对齐写 `align-items:baseline`，同一行被撑高后 `center` 和 `end` 按新的行盒再排，竖排写了仍按 `flex-start`。`letter-spacing` 可以写 `0.05em`。`align-content` 默认 `flex-start`，管换行后的多行。`justify-content` 只管主轴，改不了这一层在父级交叉轴上的位置 |
 
-没写 `display:flex` 的 `div` 可以直接放 `p`、`h1`–`h3`、另一个 `div`，以及写了宽高的 `layer`，它们从上到下排，文字块拉到这一列的宽度。只写文字时 `div` 仍是一段文字。容器上的字号、颜色和 `text-align` 会传给里面的段落；`h1`–`h3` 仍用自己的默认字号。`em` / `i` 是斜体，`u` 加下划线。`p` 里可以直接放 `<img>`。图标是 `<span class="material-symbols-outlined">home</span>`，字重写 `font-weight`。`p`、`h1`–`h3`、`span` 里不要放 `layer`。`color` 可以写渐变，和 `fill` 同一套写法。行内 `background` 高亮这一段的行盒，例如 `<span style="background:#ffe08a">词</span>`。
+没写 `display:flex` 的 `div` 可以直接放 `p`、`h1`–`h3`、另一个 `div`，以及写了宽高的 `layer`，它们从上到下排，文字块拉到这一列的宽度。只写文字时 `div` 仍是一段文字。容器上的字号、颜色和 `text-align` 会传给里面的段落；`h1`–`h3` 仍用自己的默认字号。`em` / `i` 是斜体，`u` 加下划线。`p` 里可以直接放 `<img>`。图标是 `<span class="material-symbols-outlined">home</span>`，字重写 `font-weight`。`p`、`h1`–`h3`、`span` 里不要放 `layer`。`color` 和 `background-color` 只写纯色。字形渐变写 `style="fill:linear-gradient(to right, #2f7bff, #b423c4)"`，没写 `fill` 时用 `color`。盒子渐变写 `background:linear-gradient(...)`，不写 `gradient()`。行内 `background` 高亮这一段的行盒，例如 `<span style="background:#ffe08a">词</span>`。反白是 `background-color` 加 `color:#fff`。
 
 要定位一组 HTML，包一层 `layer`，把 `x` `y` `anchor` 写在 `layer` 上。没写坐标时落在 `(0, 0)`。写了宽高的 `layer` 也可以直接放进 `div`，和文字并排；图形用这一层的局部坐标，这一层上不写 `x` `y`。例子见 [examples/html-layer.tsx](../examples/html-layer.tsx)。`anchor-box="ink"` 让 `x` `y` 对准子树着墨，而不是布局盒子。公式用 `<math>`，和文字并排时放进 `display:flex`，不要写进 `<p>`。单独成行的公式写 `display="block"`，`∑`、`∫` 用大号，上下限放到正上方和正下方。字母和运算符只用 `STIXTwoMath`，公式上写别的 `font-family` 不生效。说明文字用 `<mtext>`，跟外面的字体走。`scale` 可以写两个数：`scale="1.2 0.8"` 或 `scale="-1 1"`。文字写 `style="scale:1.2 0.8"`。只写一个数时两轴相同。`origin` 默认 `center`。九宫格之外可以写 `origin="640 420"` 或 `origin="33% 39%"`，镜头绕这一点推近，这一点不动。
 
@@ -24,7 +24,7 @@
 | 图标 | 跟文字一样外包 `layer`。`<span class="material-symbols-outlined">home</span>`，字重写 `font-weight`，字号和颜色跟周围文字 | 直接放。写进 `p` 时跟文字排在同一段 |
 | `rect` | `x y width height`，左上角。`rx` 是圆角，`ry` 没写时跟 `rx` | 包一层有宽高的 layer，或改用 div |
 | `ellipse` | `cx cy rx ry`，圆心 | 同上 |
-| `g` | 放在 `layer` 里。`transform` 写 `translate` / `rotate` / `scale` / `matrix`。`fill`、`stroke` 传给子形状 | 不排进去，会 `warn` |
+| `g` | 放在 `layer` 里。`transform` 写 `translate` / `rotate` / `scale` / `matrix`。`fill` 和纯色 `stroke` 传给子形状；`stroke="6 #000"` 留在这一组 | 不排进去，会 `warn` |
 | `circle` | `cx cy r`，圆心 | 同上 |
 | `sphere` | `cx cy r`，圆心，再加上 `z`。布局盒子是边长 `2r` 的正方形 | 放进有 `perspective` 的 layer |
 | `box` | `x y width height depth`。`rx` 圆棱，`round` 选边（不写是 12 条都圆，如 `front`、`x`、`front-top`）。`x y` 是左上角，布局不计厚度 | 放进有 `perspective` 的 layer |
@@ -40,13 +40,13 @@
 
 色块、圆点、分隔线用 div：`<div style="width:28px; height:28px; border-radius:14px; background:#3ecfc4">`，分隔线用 `flex:1; height:4px`。
 
-`fill` 可以写 `linear-gradient(to bottom, #0c1424, #6e7c72)`、`radial-gradient(at 40% 35%, #fff, #fff0)`，或 `gradient(#000, #fff)`。`ink-stroke` 按墨迹描边，例如 `6 #000 outside`。写在 `layer` 上时按整组子树墨迹描一圈。
+形状的 `fill` 和文字的 `style="fill:…"` 共用一套颜料：`linear-gradient(to bottom, #0c1424, #6e7c72)`、`radial-gradient(at 40% 35%, #fff, #fff0)`，或 `gradient(#000, #fff)`。文字写在盒子上按整段取样，写在 `span` 上按这一段的行盒取样。`stroke` 写颜色时，形状和线条居中（`stroke-width`）；写成 `6 #000 outside` 时沿墨迹描。文字、图片和 `layer` 的 `stroke="#000"` 沿外侧描，没写宽度时用 4。写在 `layer` 上时按整组子树墨迹描一圈。
 
 <!-- attrs:effects:begin -->
-效果：`shadow` `0 8 16 #00000055`（默认 颜色 `#00000066`）、`glow` `56 #f3ead4`（默认 颜色取本体）、`inner-shadow` `0 8 16 #00000055`（默认 同 shadow）、`inner-glow` `28 #7ec8ff`（默认 同 glow）、`ink-stroke` `6 #000 outside`（默认 outside）、`blur` `6`、`backdrop-blur` `16`、`glass` `clear`、`noise` `0.08`、`filter` `saturate(1.1)`、`blend` `multiply`（默认 `source-over`）、`overlay` `#00000066`（默认 透明度 1，`source-over`）、`grade` `lomo 0.8, fade 0.1`（默认 强度 1）、`grade-mask` `radial-gradient(#fff0 30%, #fff)`。作用于整棵子树的 `overlay`、`grade`、`grade-mask` 只写在 `layer` 上。
+效果：`shadow` `0 8 16 #00000055`（默认 颜色 `#00000066`）、`glow` `56 #f3ead4`（默认 颜色取本体）、`inner-shadow` `0 8 16 #00000055`（默认 同 shadow）、`inner-glow` `28 #7ec8ff`（默认 同 glow）、`blur` `6`、`backdrop-blur` `16`、`glass` `clear`、`noise` `0.08`、`filter` `saturate(1.1)`、`blend` `multiply`（默认 `source-over`）、`overlay` `#00000066`（默认 透明度 1，`source-over`）、`grade` `lomo 0.8, fade 0.1`（默认 强度 1）、`grade-mask` `radial-gradient(#fff0 30%, #fff)`。作用于整棵子树的 `overlay`、`grade`、`grade-mask` 只写在 `layer` 上。
 <!-- attrs:effects:end -->
 
-整层裁切用 `<mask>`，和内容并列写在 `layer` 里：`<mask><circle cx="160" cy="90" r="90" /></mask>`。实心是硬边，`fill="linear-gradient(to bottom, #fff, #fff0)"` 是软边。挖掉一块写 `op="subtract"`。羽化写 `<mask feather="8">`，反选写 `invert="true"`。黑白蒙版用 `<img channel="luma">`，编号区域用 `pick="3 5"`。缓存写 `<img src="photo.jpg" derive="subject">`。不要写 `mask-image`。`overflow="hidden"` 只裁子元素。蒙版裁掉子元素的阴影和模糊；这一层自己的 `shadow`、`glow`、外侧 `ink-stroke` 按留下的轮廓伸出蒙版，父层的描边和阴影也跟着这块轮廓。预览写在标记里：`<preview of="#cut" show="overlay checker" />`，`show` 是合法属性，正常成片不包含它。
+整层裁切用 `<mask>`，和内容并列写在 `layer` 里：`<mask><circle cx="160" cy="90" r="90" /></mask>`。实心是硬边，`fill="linear-gradient(to bottom, #fff, #fff0)"` 是软边。挖掉一块写 `op="subtract"`。羽化写 `<mask feather="8">`，反选写 `invert="true"`。黑白蒙版用 `<img channel="luma">`，编号区域用 `pick="3 5"`。缓存写 `<img src="photo.jpg" derive="subject">`。不要写 `mask-image`。`overflow="hidden"` 只裁子元素。蒙版裁掉子元素的阴影和模糊；这一层自己的 `shadow`、`glow`、外侧 `stroke` 按留下的轮廓伸出蒙版，父层的描边和阴影也跟着这块轮廓。预览写在标记里：`<preview of="#cut" show="overlay checker" />`，`show` 是合法属性，正常成片不包含它。
 
 透视：`<layer perspective="700"><rect rotateY="28" z="40" /></layer>`。`z` 越大越靠近观众。平行投影写 `<layer perspective="parallel">`，位置不随 `z` 缩放，大的 `z` 仍画在前面。没有网格时，直接子元素按中心深度从远到近画，深度相同按文档顺序。有 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 时改用深度缓冲，近的盖住远的。没有 `perspective` 的祖先时，`rotateX`、`rotateY`、`z` 仍按二维画，`z` 不改变顺序，并报 `flatten-3d`。例子见 [examples/perspective.layer](../examples/perspective.layer)。
 

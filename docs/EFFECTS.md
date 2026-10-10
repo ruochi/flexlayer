@@ -8,7 +8,7 @@
 | --- | --- |
 | `shadow` / `glow` | 外阴影 / 外发光 |
 | `inner-shadow` / `inner-glow` | 内阴影 / 内发光（clip + 离屏挖空） |
-| `ink-stroke` | 按墨迹距离描边（outside / inside / center，可多层） |
+| `stroke` | 纯色在形状和线条上居中；`宽度 颜色 [outside\|inside\|center]` 按墨迹距离描，可多层 |
 | `blur` | 图层模糊（含 layer 子树合成后再糊） |
 | `backdrop-blur` | 背景模糊（采样主画布已有像素） |
 | `glass` | iOS Liquid Glass：边缘弧面折射 + 色散 + 朝光高光，`clear` 零模糊 |
@@ -21,7 +21,7 @@
 
 归属：layer / 图形 / 线条 → 属性；文字 / flex HTML → `style`。**`overlay`、`grade`、`grade-mask` 例外：只允许写在 `layer` 上。** `<mask>` 是标签，不是属性。
 
-绘制顺序：`backdrop-blur` / `glass` 取样 → `shadow` → `glow` → 外描边（`ink-stroke` 的 outside 与 center 外半）→ 本体（`overflow="hidden"` 在这里裁子元素）→ 内描边（inside 与 center 内半）→ `inner-shadow` → `inner-glow` → `overlay` → `noise`；若有 `blur`、`filter`、`grade`、其它已注册滤镜或 `<mask>`，先画进离屏，依次做像素滤镜（含 `grade`）、`blur` / 画布滤镜（含 `filter`），有像素滤镜时再叠 `noise`，然后按 `<mask>` 的 alpha 裁掉，再贴回。画布底色不进 `<mask>`。
+绘制顺序：`backdrop-blur` / `glass` 取样 → `shadow` → `glow` → 外描边（`stroke` 的 outside 与 center 外半）→ 本体（`overflow="hidden"` 在这里裁子元素）→ 内描边（inside 与 center 内半）→ `inner-shadow` → `inner-glow` → `overlay` → `noise`；若有 `blur`、`filter`、`grade`、其它已注册滤镜或 `<mask>`，先画进离屏，依次做像素滤镜（含 `grade`）、`blur` / 画布滤镜（含 `filter`），有像素滤镜时再叠 `noise`，然后按 `<mask>` 的 alpha 裁掉，再贴回。画布底色不进 `<mask>`。
 
 ## 墨迹原则
 
@@ -37,17 +37,17 @@
 
 因此文字 `shadow` 是字形投影，不会落成一块矩形雾斑。文字和图片的 `spread`（含 `inner-shadow` / `inner-glow`）按这份 alpha 做距离膨胀或收缩：正数外扩，负数用内侧距离吃进去。形状和盒子背景仍按几何外扩。
 
-## `ink-stroke` 墨迹描边
+## `stroke` 描边
 
-不用现成名字：`stroke` 是 SVG 几何描边且居中；`outline` 按盒子描；`-webkit-text-stroke` 只能居中，中文笔画会被吃细，转角出尖刺。`ink-stroke` 表示「按着墨描边」。`outline` 留着不用。
+同一个名字两套几何。形状和线条写颜料时走 SVG：描边居中，宽度是 `stroke-width`。第一个词是正的宽度时走距离场：`<宽度> <颜色或渐变> [outside | inside | center]`，逗号分隔多层，从内到外。宽度是到墨迹的总距离，所以 `6 #fff, 14 #f00` 是 0–6 白、6–14 红。默认 `outside`。文字、图片、`layer` 和 flex 没有居中描边，只写颜料时当成外侧距离描边，没写 `stroke-width` 时宽度是 4。渐变坐标按元素盒子，与 `fill` 一样。
 
-语法：`<宽度> <颜色或渐变> [outside | inside | center]`，逗号分隔多层，从内到外。宽度是到墨迹的总距离，所以 `6 #fff, 14 #f00` 是 0–6 白、6–14 红。默认 `outside`。渐变坐标按元素盒子，与 `fill` 一样。
+文字默认外侧，是因为居中的 `-webkit-text-stroke` 会吃细中文笔画、转角出尖刺。`outline` 按盒子描，留着不用。
 
 距离场只在元素墨迹外框加上最大外描边宽度的范围内计算（Felzenszwalb 二维 EDT，与 `glass`、文字 `spread` 共用）。`outside` 取墨迹外侧 `0 < d ≤ w`，`inside` 取内侧，`center` 两侧各 `w / 2`。外缘在 `d = w` 处约 1px smoothstep。转角是圆角，没有 miter。
 
-写在 Layer（或 flex 容器）上时，先把子树墨迹合成一张再求距离，重叠的字只有一圈外轮廓。`shadow` / `glow` 的轮廓是本体并上外侧描边，再应用 `spread`。`overlay` 只染本体：蒙版是子树墨迹，内侧描边会从蒙版里挖掉，所以 Layer 渐变字加纯色描边时，描边不会被渐变盖住。
+写在 layer、flex 或 `<g>` 上时，先把子树墨迹合成一张再求距离，重叠的字只有一圈外轮廓。`shadow` / `glow` 的轮廓是本体并上外侧描边，再应用 `spread`。`overlay` 只染本体：蒙版是子树墨迹，内侧描边会从蒙版里挖掉，所以 Layer 渐变字加纯色描边时，描边不会被渐变盖住。
 
-`inside` / `center` 的内侧宽度 ≥ 字号约 8% 时报告 `ink-stroke-fill`。文字 style 里写 `-webkit-text-stroke`，或 HTML 上写 `outline`，报 `non-canonical`，hint 指向 `ink-stroke`。
+`inside` / `center` 的内侧宽度 ≥ 字号约 8% 时报告 `stroke-fill`。文字 style 里写 `-webkit-text-stroke`，或 HTML 上写 `outline`，报 `non-canonical`，hint 指向 `stroke`。写 `ink-stroke` 报 `invalid-attr`。
 
 ## `glass` 透镜
 
