@@ -4,6 +4,7 @@ import { solidPaint } from './gradient.js'
 import { parseGlb } from './glb.js'
 import { originOffset } from './matrix.js'
 import { applyPoseMatrix, PERSPECTIVE_AA, resolveSamples } from './perspective.js'
+import { roundedBoxGeometry, roundedCylinderGeometry } from './mesh-round.js'
 import { tessellateSvgPath } from './path.js'
 import type { LayerLayoutNode, LayoutNode, MeshLayoutNode } from './types.js'
 
@@ -454,6 +455,15 @@ function buildBox(node: MeshLayoutNode) {
   const hw = node.width / 2
   const hh = node.height / 2
   const hd = node.mesh.depth / 2
+  if (node.mesh.rx > 0 && node.mesh.edges.length > 0 && hw > 0 && hh > 0 && hd > 0) {
+    const built = roundedBoxGeometry(hw, hh, hd, node.mesh.rx, node.mesh.edges)
+    centerMesh(node, built.positions)
+    return {
+      positions: Float32Array.from(built.positions),
+      normals: Float32Array.from(built.normals),
+      indices: Uint32Array.from(built.indices),
+    }
+  }
   const positions: number[] = []
   const normals: number[] = []
   const indices: number[] = []
@@ -515,6 +525,15 @@ function buildCylinder(node: MeshLayoutNode) {
   const radius = node.mesh.r
   const half = node.mesh.height / 2
   if (!(radius > 0) || !(half > 0)) return null
+  if (node.mesh.rx > 0 && node.mesh.rims.length > 0) {
+    const built = roundedCylinderGeometry(radius, half, node.mesh.rx, node.mesh.rims)
+    centerMesh(node, built.positions)
+    return {
+      positions: Float32Array.from(built.positions),
+      normals: Float32Array.from(built.normals),
+      indices: Uint32Array.from(built.indices),
+    }
+  }
   const segments = 48
   const positions: number[] = []
   const normals: number[] = []

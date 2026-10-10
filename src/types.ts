@@ -443,11 +443,28 @@ export type CustomLayoutNode = LayoutNodeBase & {
   kind: 'custom'
 }
 
+/** 长方体 12 条棱。名字是两个面，不分先后；`top` 是画面上方。 */
+export type BoxEdge =
+  | 'front-top'
+  | 'front-bottom'
+  | 'front-left'
+  | 'front-right'
+  | 'back-top'
+  | 'back-bottom'
+  | 'back-left'
+  | 'back-right'
+  | 'top-left'
+  | 'top-right'
+  | 'bottom-left'
+  | 'bottom-right'
+
+export type CylinderRim = 'top' | 'bottom'
+
 export type MeshSpec =
   | { type: 'sphere'; r: number }
-  | { type: 'box'; depth: number }
+  | { type: 'box'; depth: number; rx: number; edges: readonly BoxEdge[] }
   | { type: 'extrude'; d: string; depth: number }
-  | { type: 'cylinder'; r: number; height: number }
+  | { type: 'cylinder'; r: number; height: number; rx: number; rims: readonly CylinderRim[] }
   | { type: 'torus'; r: number; tube: number }
   | { type: 'tube'; d: string; r: number }
   | { type: 'model'; src: string; file?: string; span?: { x: number; y: number; z: number } }

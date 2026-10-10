@@ -19,6 +19,7 @@ import { materialize } from './components.js'
 import { catmullRomPath } from './curve.js'
 import { isGradient, parseGradient, solidPaint } from './gradient.js'
 import { glbSpan, resolveModelFile } from './glb.js'
+import { readBoxFillet, readCylinderFillet } from './mesh-round.js'
 import { openSvgPath, translateSvgPath } from './path.js'
 import { perspectiveIssues } from './perspective.js'
 import {
@@ -1261,7 +1262,17 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
       })
     }
     const depth = readDepth(node.attrs.depth, Math.min(width, height), ctx, 'box')
-    mesh = { type: 'box', depth }
+    const fillet = readBoxFillet(node.attrs.rx, node.attrs.round, width, height, depth)
+    for (const issue of fillet.issues) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: issue.message,
+        hint: issue.hint,
+      })
+    }
+    mesh = { type: 'box', depth, rx: fillet.rx, edges: fillet.edges }
   } else if (node.tag === 'extrude') {
     const d = node.attrs.d ?? ''
     if (!d.trim()) {
@@ -1304,7 +1315,17 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
     height = length
     x = cx - radius
     y = cy - length / 2
-    mesh = { type: 'cylinder', r: radius, height: length }
+    const fillet = readCylinderFillet(node.attrs.rx, node.attrs.round, radius, length)
+    for (const issue of fillet.issues) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: issue.message,
+        hint: issue.hint,
+      })
+    }
+    mesh = { type: 'cylinder', r: radius, height: length, rx: fillet.rx, rims: fillet.rims }
   } else if (node.tag === 'torus') {
     const r = parseNumber(node.attrs.r) ?? 0
     if (!(r > 0)) {

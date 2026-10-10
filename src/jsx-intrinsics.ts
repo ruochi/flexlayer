@@ -232,6 +232,10 @@ export namespace JSX {
         r?: number | string
         /** 沿画面竖直方向的长度 */
         height?: number | string
+        /** 上下圆口的圆角半径。不写 round 时两端都圆 */
+        rx?: number | string
+        /** top、bottom 或 all。不写是两端 */
+        round?: string
         fill?: string
         stroke?: string
         'stroke-width'?: number | string
@@ -281,6 +285,10 @@ export namespace JSX {
         width?: number | string
         height?: number | string
         depth?: number | string
+        /** 棱的圆角半径。不写 round 时 12 条棱都圆 */
+        rx?: number | string
+        /** 哪些棱。front、x、front-top；不写是全部 */
+        round?: string
         fill?: string
         stroke?: string
         'stroke-width'?: number | string

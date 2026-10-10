@@ -47,7 +47,7 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 | 公式只用带 MATH 表的字体 | `<math style="font-family:Kai">` | 不写 `font-family`，字母和运算符用 `STIXTwoMath`。说明文字用 `<mtext>`，跟外面的字体走 | `invalid-attr` |
 | 整层裁切用 `<mask>`，里面直接写形状或 `<img>` | 把 mask 写成属性，或放进 flex | `<layer><mask><circle cx="160" cy="90" r="90" /></mask>…</layer>`。省略 `fill` 为不透明白 | `invalid-child` |
 | 透视写在父 `layer`，转动和 `z` 写在子元素 | `<rect perspective="900" rotateY="20">` | `<layer perspective="900"><rect rotateY="20" z="40" /></layer>` | `invalid-attr`、`flatten-3d` |
-| 球体、圆柱、圆环、线管、长方体、拉伸和 glb 放在带 `perspective` 的 layer 里 | `<sphere r="40">` 没有视距 | `<layer perspective="700"><sphere cx="80" cy="80" r="40" /></layer>`。圆柱 `<cylinder cx cy r height>`，圆环 `<torus cx cy r tube>`，线管 `<tube d r>`。`model` 只写 `src`，尺寸写在外包 layer | `flatten-3d`、`missing-model` |
+| 球体、圆柱、圆环、线管、长方体、拉伸和 glb 放在带 `perspective` 的 layer 里 | `<sphere r="40">` 没有视距 | `<layer perspective="700"><sphere cx="80" cy="80" r="40" /></layer>`。圆柱 `<cylinder cx cy r height>`，圆环 `<torus cx cy r tube>`，线管 `<tube d r>`。`box` 的 `rx` 圆棱，`round` 选边；圆柱的 `rx` 圆口，`round` 写 `top` 或 `bottom`。`model` 只写 `src`，尺寸写在外包 layer | `flatten-3d`、`missing-model` |
 
 根节点 `<layer width height background>` 上的 `background` 是画布底色，只有这一处可以写。没写时不铺底色，PNG 里空出来的像素是透明的。要白底写 `background="#ffffff"`。
 

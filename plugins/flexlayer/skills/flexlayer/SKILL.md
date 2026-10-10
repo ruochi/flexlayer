@@ -88,7 +88,7 @@ export default canvas.create(
 | 公式字体 | 不写 `font-family`。说明文字用 `<mtext>` | `invalid-attr` |
 | 整层裁切 | `<layer><mask><circle cx="160" cy="90" r="90" /></mask>…</layer>` | `invalid-child` |
 | 透视 | `<layer perspective="900"><rect rotateY="20" z="40" /></layer>` | `invalid-attr`、`flatten-3d` |
-| 球体、圆柱、圆环、线管、长方体、拉伸、glb | `<layer perspective="700"><sphere cx="80" cy="80" r="40" /></layer>`。圆柱 `cx cy r height`，圆环 `cx cy r tube`，线管 `d` 和 `r`。`model` 只写 `src`，尺寸写在外包 layer | `flatten-3d`、`missing-model` |
+| 球体、圆柱、圆环、线管、长方体、拉伸、glb | `<layer perspective="700"><sphere cx="80" cy="80" r="40" /></layer>`。圆柱 `cx cy r height`，圆环 `cx cy r tube`，线管 `d` 和 `r`。`box` 的 `rx` 圆棱，`round` 选边；圆柱的 `rx` 圆口。`model` 只写 `src`，尺寸写在外包 layer | `flatten-3d`、`missing-model` |
 
 `align-items` 默认 `center`。竖排要左对齐时写 `align-items:flex-start`。横排按文字基线对齐写 `align-items:baseline`，竖排写了仍按 `flex-start`。`letter-spacing` 可以写 `em`。`justify-content` 只管这一层的主轴。`align-content` 默认 `flex-start`，管的是 `flex-wrap` 之后的多行。
 

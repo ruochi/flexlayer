@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { describe, expect, it } from 'vitest'
 import { solidBoxGlb } from './glb.js'
+import { BOX_EDGES, roundedBoxGeometry } from './mesh-round.js'
 import { checkFvg, renderFvg } from './render.js'
 import { tessellateSvgPath } from './path.js'
 
@@ -379,6 +380,113 @@ describe('网格绘制', () => {
     expect(at(8, 8)).toBeLessThan(8)
     expect(soft).toBeGreaterThan(80)
     expect(hard).toBeLessThan(8)
+  }, 30000)
+
+  it('box 的 rx 不改变布局，round 选棱，放不下就收小', async () => {
+    const report = await checkFvg(`
+      <layer width="240" height="160" perspective="400">
+        <box x="20" y="30" width="80" height="60" depth="40" rx="12" round="front, top-left" />
+        <box x="120" y="30" width="80" height="40" depth="20" rx="40" />
+        <box x="20" y="110" width="40" height="30" depth="20" round="x" />
+        <box x="80" y="110" width="40" height="30" depth="20" rx="8" round="nope" />
+      </layer>
+    `)
+    const boxes = report.elements.filter((el) => el.tag === 'box')
+    expect(boxes[0]).toMatchObject({ box: { x: 20, y: 30, width: 80, height: 60 } })
+    expect(boxes[1]).toMatchObject({ box: { x: 120, y: 30, width: 80, height: 40 } })
+    const messages = report.issues.filter((issue) => issue.code === 'invalid-attr').map((issue) => issue.message)
+    expect(messages.some((message) => message.includes('已从 40 收到 10'))).toBe(true)
+    expect(messages.some((message) => message.includes('没有正的 rx'))).toBe(true)
+    expect(messages.some((message) => message.includes('不认识「nope」'))).toBe(true)
+    expect(messages.some((message) => message.includes('没有选中棱'))).toBe(true)
+  })
+
+  it('cylinder 的 rx 只圆口缘，不改变布局', async () => {
+    const report = await checkFvg(`
+      <layer width="200" height="160" perspective="400">
+        <cylinder cx="50" cy="60" r="20" height="80" rx="8" round="top" />
+        <cylinder cx="140" cy="60" r="20" height="80" rx="30" />
+      </layer>
+    `)
+    const cylinders = report.elements.filter((el) => el.tag === 'cylinder')
+    expect(cylinders[0]).toMatchObject({ box: { x: 30, y: 20, width: 40, height: 80 } })
+    const messages = report.issues.filter((issue) => issue.code === 'invalid-attr').map((issue) => issue.message)
+    expect(messages.some((message) => message.includes('已从 30 收到 20'))).toBe(true)
+  })
+
+  it('圆角盒子的顶点落在球面附近，不超出原盒子', () => {
+    const hw = 40
+    const hh = 40
+    const hd = 20
+    const rx = 16
+    const built = roundedBoxGeometry(hw, hh, hd, rx, BOX_EDGES)
+    expect(built.indices.length % 3).toBe(0)
+    expect(built.indices.length).toBeGreaterThan(200)
+    let nearSphere = false
+    const center = { x: hw - rx, y: hh - rx, z: hd - rx }
+    for (let i = 0; i < built.positions.length; i += 3) {
+      const x = built.positions[i]!
+      const y = built.positions[i + 1]!
+      const z = built.positions[i + 2]!
+      expect(Math.abs(x)).toBeLessThanOrEqual(hw + 1e-4)
+      expect(Math.abs(y)).toBeLessThanOrEqual(hh + 1e-4)
+      expect(Math.abs(z)).toBeLessThanOrEqual(hd + 1e-4)
+      const dist = Math.hypot(x - center.x, y - center.y, z - center.z)
+      if (Math.abs(dist - rx) < 0.05) nearSphere = true
+    }
+    expect(nearSphere).toBe(true)
+  })
+
+  it('box 圆角：z 向棱挖掉正面角，沿宽的棱和正面四棱仍是直角轮廓', async () => {
+    const shot = async (round?: string) => {
+      const attr = round ? ` round="${round}"` : ''
+      const { png } = await renderFvg(
+        `<layer width="160" height="160" background="#010203" perspective="4000"><box x="40" y="40" width="80" height="80" depth="40" rx="16"${attr} fill="#ff2244" /></layer>`,
+      )
+      return {
+        corner: await pixelAt(png, 41, 41),
+        inside: await pixelAt(png, 52, 52),
+        center: await pixelAt(png, 80, 80),
+      }
+    }
+    const painted = (px: Uint8ClampedArray) => px[0]! > 80
+    const all = await shot()
+    const depthEdges = await shot('z')
+    const widthEdges = await shot('x')
+    const front = await shot('front')
+    expect(painted(all.center)).toBe(true)
+    expect(painted(all.inside)).toBe(true)
+    expect(painted(all.corner)).toBe(false)
+    expect(painted(depthEdges.corner)).toBe(false)
+    expect(painted(depthEdges.inside)).toBe(true)
+    expect(painted(widthEdges.corner)).toBe(true)
+    expect(painted(front.corner)).toBe(true)
+    expect(painted(front.center)).toBe(true)
+  }, 30000)
+
+  it('cylinder 的圆口只挖掉被选中的那一端', async () => {
+    const shot = async (round?: string) => {
+      const attr = round ? ` round="${round}"` : ''
+      const { png } = await renderFvg(
+        `<layer width="160" height="200" background="#010203" perspective="4000"><cylinder cx="80" cy="100" r="40" height="120" rx="16"${attr} fill="#ff2244" /></layer>`,
+      )
+      return {
+        top: await pixelAt(png, 41, 41),
+        bottom: await pixelAt(png, 41, 158),
+        mid: await pixelAt(png, 80, 100),
+      }
+    }
+    const painted = (px: Uint8ClampedArray) => px[0]! > 80
+    const both = await shot()
+    const topOnly = await shot('top')
+    const bottomOnly = await shot('bottom')
+    expect(painted(both.mid)).toBe(true)
+    expect(painted(both.top)).toBe(false)
+    expect(painted(both.bottom)).toBe(false)
+    expect(painted(topOnly.top)).toBe(false)
+    expect(painted(topOnly.bottom)).toBe(true)
+    expect(painted(bottomOnly.top)).toBe(true)
+    expect(painted(bottomOnly.bottom)).toBe(false)
   }, 30000)
 
   it('圆弧挤出的采样比八个切面更密', () => {
