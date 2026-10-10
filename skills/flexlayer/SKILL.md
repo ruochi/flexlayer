@@ -35,7 +35,7 @@ npx flexlayer render scene.tsx --frames out/ --from 0 --to 90
 
 ## 先量再摆
 
-文件头写 `/** @jsxImportSource flexlayer */`。`canvas.create` 的参数必须是 `<layer>`。返回的 `left` `top` `right` `bottom` 是没转之前的布局盒；接着摆下一块用 `rotatedBox.bottom`。贴着某个圆或矩形用 `elements[].box`，躲开转过的图形用 `ink`。
+文件头写 `/** @jsxImportSource flexlayer */`。`canvas.create` 的参数必须是 `<layer>`。返回的 `left` `top` `right` `bottom` 是没转之前的布局盒；接着摆下一块用 `rotatedBox.bottom`。贴着某个圆或矩形用 `elements[].box`，躲开转过的图形用 `ink`。透视里的网格还有投影后的 `points`、`edges` 和轮廓 `d`：顶点带 `visible` 或 `hidden`，棱是 `outline`、`crease` 或 `hidden`。球只给解析轮廓。不在透视里的网格没有这三项。
 
 检查抠图结果或黑白蒙版用 `await analyzeImage('cut.png')`：返回留下的比例 `area`、外接矩形 `ink`、碎片数 `pieces`、洞数 `holes`、软边宽度 `softEdge` 和轮廓 `d`，坐标是图片像素。`d` 直接写进 `<mask><path d /></mask>`。
 
