@@ -409,23 +409,60 @@ describe('网格绘制', () => {
     expect(Math.abs(shade(plastic, 110, 120) - shade(plain, 110, 120))).toBeLessThan(20)
   }, 30000)
 
-  it('金属映横向灯带，左右差得比上下多，亮处仍带着 fill', async () => {
-    const paint = (material: string) =>
-      renderFvg(
-        `<layer width="180" height="180" background="#101010" perspective="700"><sphere cx="90" cy="90" r="50" fill="#cc2222"${material} /></layer>`,
-      )
-    const matte = await imageOf((await paint(' material="matte"')).png)
-    const metal = await imageOf((await paint(' material="metal 0.2"')).png)
-    const lum = (image: ImageSample, x: number, y: number) => image.at(x, y).reduce((sum, channel, index) => (index < 3 ? sum + channel : sum), 0)
-    const across = lum(metal, 50, 90) - lum(metal, 130, 90)
-    const upright = Math.abs(lum(metal, 90, 50) - lum(metal, 90, 130))
-    expect(across).toBeGreaterThan(80)
-    expect(upright).toBeLessThan(40)
-    expect(across).toBeGreaterThan(upright + 60)
-    expect(lum(metal, 90, 130)).toBeLessThan(lum(matte, 90, 130) - 40)
-    const peak = brightest(metal)
+  it('金属映竖向灯板，亮带和暗带偏开正中，中间有灰过渡', async () => {
+    const { png } = await renderFvg(`
+      <layer width="240" height="320" background="#101010" perspective="700">
+        <cylinder cx="120" cy="170" r="70" height="200" fill="#d8d8d8" material="metal 0.2" />
+      </layer>
+    `)
+    const img = await imageOf(png)
+    const lum = (x: number, y: number) => img.at(x, y).reduce((sum, channel, index) => (index < 3 ? sum + channel : sum), 0)
+    const y = 170
+    const samples: Array<{ x: number; lum: number }> = []
+    for (let x = 70; x <= 170; x++) samples.push({ x, lum: lum(x, y) })
+    const bright = samples.reduce((best, sample) => (sample.lum > best.lum ? sample : best))
+    const dark = samples.reduce((best, sample) => (sample.lum < best.lum ? sample : best))
+    expect(bright.lum).toBeGreaterThan(500)
+    expect(dark.lum).toBeLessThan(140)
+    expect(bright.x).toBeLessThan(108)
+    expect(dark.x).toBeGreaterThan(118)
+    expect(dark.x).toBeLessThan(165)
+    const lo = Math.min(bright.x, dark.x)
+    const hi = Math.max(bright.x, dark.x)
+    const transition = samples.some((sample) => sample.x > lo && sample.x < hi && sample.lum > dark.lum + 80 && sample.lum < bright.lum - 120)
+    expect(transition).toBe(true)
+    for (const dy of [-60, 60]) {
+      expect(lum(bright.x, y + dy)).toBeGreaterThan(bright.lum * 0.75)
+      expect(lum(dark.x, y + dy)).toBeLessThan(200)
+    }
+
+    const tinted = await imageOf(
+      (
+        await renderFvg(
+          `<layer width="180" height="180" background="#101010" perspective="700"><sphere cx="90" cy="90" r="50" fill="#cc2222" material="metal 0.2" /></layer>`,
+        )
+      ).png,
+    )
+    const peak = brightest(tinted)
     expect(peak.rgba[0]).toBeGreaterThan(peak.rgba[1]! + 40)
   }, 30000)
+
+  it('金属球亮带旁边没有孤立的黑边', async () => {
+    const { png } = await renderFvg(
+      `<layer width="180" height="180" background="#c8c8c8" perspective="700"><sphere cx="90" cy="90" r="50" fill="#cc2222" material="metal 0.2" /></layer>`,
+    )
+    const img = await imageOf(png)
+    for (const y of [76, 90, 104]) {
+      for (let x = 40; x < 145; x++) {
+        const [r, g, b] = img.at(x, y)
+        if (r > 180 && g > 180 && b > 180) continue
+        if (r > 28) continue
+        const left = img.at(x - 5, y)[0]!
+        const right = img.at(x + 5, y)[0]!
+        expect(left > 160 && right > 160).toBe(false)
+      }
+    }
+  })
 
   it('玻璃透出后面的颜色，边缘更白，前面的不透明球盖住它', async () => {
     const { png } = await renderFvg(`
@@ -514,34 +551,6 @@ describe('网格绘制', () => {
       `<layer width="200" height="130" background="#ffffff" perspective="800"><torus cx="100" cy="68" r="40" tube="12" fill="#ff2244" rotateX="64" /></layer>`,
     )
     expect(tight.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
-  })
-
-  it('金属球背光一侧没有锯齿黑边', async () => {
-    const { png } = await renderFvg(
-      `<layer width="180" height="180" background="#c8c8c8" perspective="700"><sphere cx="90" cy="90" r="50" fill="#cc2222" material="metal 0.2" /></layer>`,
-    )
-    const img = await imageOf(png)
-    const solid = (y: number, count: number) => {
-      const found: Array<[number, number, number]> = []
-      for (let x = img.width - 1; x > 80 && found.length < count; x--) {
-        const [r, g, b] = img.at(x, y)
-        if (r > 180 && g > 180 && b > 180) continue
-        if (g > 70) continue
-        found.push([r, g, b])
-      }
-      return found
-    }
-    for (const y of [84, 90, 96]) {
-      const pixels = solid(y, 8)
-      expect(pixels.length).toBe(8)
-      for (const [r, g, b] of pixels) {
-        expect(r).toBeGreaterThan(70)
-        expect(r).toBeGreaterThan(g + 20)
-        expect(b).toBeLessThan(r)
-      }
-    }
-    const equator = solid(90, 8).map(([r]) => r)
-    expect(Math.min(...equator)).toBeGreaterThan(100)
   })
 
   it('网格斜边有抗锯齿过渡', async () => {

@@ -1,7 +1,7 @@
 /**
  * 金属和玻璃共用的一张固定工作室环境。
- * 灯是横条：正面一条，左侧一条更亮，右侧一条更弱。上下两极是暗的，没有上亮下暗的渐变。
- * 粗糙度只决定取哪一层模糊，一次双线性采样。
+ * 灯是竖向柔光板，方位和仰角都躲开 0°、90°、180°、270°，板子自己也从竖直偏开一点。
+ * 白、黑和中间的灰过渡都有，接近商业静物的布灯。粗糙度只决定取哪一层模糊，一次双线性采样。
  */
 
 const WIDTH = 128
@@ -9,15 +9,35 @@ const HEIGHT = 64
 const LEVELS = 5
 const RADII = [0, 1, 3, 7, 16]
 
-const ROOM = { r: 18, g: 20, b: 24 }
+const ROOM = { r: 12, g: 12, b: 14 }
 
-type Strip = { u: number; v: number; hu: number; hv: number; feather: number; r: number; g: number; b: number }
+type Panel = {
+  /** 方位角，度。0 是正前方，向右增加。 */
+  az: number
+  /** 仰角，度。正数朝上。 */
+  el: number
+  /** 窄边、长边的半宽，度。长边沿灯板方向。 */
+  across: number
+  along: number
+  /** 相对竖直偏转的角度。0 是正竖直。 */
+  lean: number
+  feather: number
+  r: number
+  g: number
+  b: number
+}
 
-/** u 从正前方起算，向右增加。v 0 是上方，0.5 是地平线。横条的 hu 大于 hv。 */
-const STRIPS: Strip[] = [
-  { u: 0, v: 0.5, hu: 0.22, hv: 0.11, feather: 0.03, r: 250, g: 250, b: 252 },
-  { u: 0.75, v: 0.5, hu: 0.12, hv: 0.1, feather: 0.028, r: 255, g: 248, b: 238 },
-  { u: 0.25, v: 0.5, hu: 0.1, hv: 0.08, feather: 0.024, r: 110, g: 118, b: 130 },
+/**
+ * 主灯在左前方，右侧一块辅灯，中间留黑，边上用灰把黑和白接上。
+ * 角度都不落在 90° 的整数倍上。
+ */
+const PANELS: Panel[] = [
+  { az: -38, el: 16, across: 16, along: 72, lean: 13, feather: 11, r: 252, g: 252, b: 255 },
+  { az: -16, el: 10, across: 7, along: 60, lean: -9, feather: 14, r: 156, g: 158, b: 164 },
+  { az: 64, el: 12, across: 10, along: 66, lean: -15, feather: 13, r: 240, g: 242, b: 246 },
+  { az: 158, el: 6, across: 12, along: 56, lean: -11, feather: 18, r: 228, g: 230, b: 234 },
+  { az: 86, el: -6, across: 8, along: 48, lean: 11, feather: 16, r: 108, g: 110, b: 116 },
+  { az: -72, el: 8, across: 12, along: 54, lean: 10, feather: 18, r: 78, g: 80, b: 86 },
 ]
 
 const SAMPLE = { r: 0, g: 0, b: 0 }
@@ -28,17 +48,31 @@ function clamp01(n: number) {
   return n
 }
 
-function wrapDist(a: number, b: number) {
-  const d = Math.abs(a - b)
-  return Math.min(d, 1 - d)
-}
-
 function window1d(distance: number, half: number, feather: number) {
   if (distance <= half) return 1
   if (distance >= half + feather) return 0
   const t = (distance - half) / feather
   const s = t * t * (3 - 2 * t)
   return 1 - s
+}
+
+function wrapSigned(d: number) {
+  let x = d
+  while (x > 0.5) x -= 1
+  while (x < -0.5) x += 1
+  return x
+}
+
+/** 灯板在经纬上的权重。窄边沿方位，偏 lean 度之后不再是正竖直。 */
+function panelWeight(u: number, v: number, panel: Panel) {
+  const az = wrapSigned(u - panel.az / 360) * 360
+  const el = (0.5 - v) * 180 - panel.el
+  const lean = (panel.lean * Math.PI) / 180
+  const c = Math.cos(lean)
+  const s = Math.sin(lean)
+  const across = Math.abs(az * c + el * s)
+  const along = Math.abs(-az * s + el * c)
+  return window1d(across, panel.across, panel.feather) * window1d(along, panel.along, panel.feather)
 }
 
 function paintStudio(): Uint8Array {
@@ -50,12 +84,12 @@ function paintStudio(): Uint8Array {
       let r = ROOM.r
       let g = ROOM.g
       let b = ROOM.b
-      for (const strip of STRIPS) {
-        const w = window1d(wrapDist(u, strip.u), strip.hu, strip.feather) * window1d(Math.abs(v - strip.v), strip.hv, strip.feather)
+      for (const panel of PANELS) {
+        const w = panelWeight(u, v, panel)
         if (w <= 0) continue
-        r = Math.max(r, ROOM.r + (strip.r - ROOM.r) * w)
-        g = Math.max(g, ROOM.g + (strip.g - ROOM.g) * w)
-        b = Math.max(b, ROOM.b + (strip.b - ROOM.b) * w)
+        r = Math.max(r, ROOM.r + (panel.r - ROOM.r) * w)
+        g = Math.max(g, ROOM.g + (panel.g - ROOM.g) * w)
+        b = Math.max(b, ROOM.b + (panel.b - ROOM.b) * w)
       }
       const i = (y * WIDTH + x) * 3
       data[i] = Math.round(r)

@@ -19,7 +19,7 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
  * glb 用文件里的底色乘这套明暗。
  * 写了 stroke 时，缩小抗锯齿之后再按屏幕像素描折棱和轮廓。
  * hidden 只画被这只网格自己挡住的棱，虚线是 6 实 4 空。
- * 不写 material 时是磨砂：主光乘 fill。plastic 加高光，metal 和 glass 映一张横向的工作室环境，glass 后画叠色。
+ * 不写 material 时是磨砂：主光乘 fill。plastic 加高光，metal 和 glass 映一张竖向的工作室环境，glass 后画叠色。
  * 同一条折线上的短段接成一条再取虚线相位，圆弧不会接成实线。
  */
 
@@ -210,11 +210,8 @@ function materialBytes(
       const exposure = blocked ? 0.32 : 0.5 + 0.5 * Math.min(1, shade)
       const specAdd = spec * 220
       const envLum = (envR + envG + envB) / 3
-      // 暗部留两成 fill，避免房间暗处变成纯黑。
-      // 灯带之间的暗墙映到水平轮廓上时，再补一截 fill，否则背光一侧会压出一条近黑的边。朝上朝下仍是暗的。
-      const horiz = clamp01(1 - Math.abs(reflect.y) / 0.55)
-      const room = clamp01((130 - envLum) / 70)
-      const fillKeep = 0.2 + 0.35 * horiz * room
+      // 暗部只留一点 fill，避免掠射处掉成纯黑的一像素。竖向黑旗要保持黑，不再把整条水平暗反射补亮。
+      const fillKeep = 0.08 + (envLum < 28 && ndotv < 0.18 ? 0.12 : 0)
       const tint = (channel: number, envC: number) => {
         const f = channel / 255
         return Math.min(255, (f + (1 - f) * fres) * envC * exposure + channel * fillKeep + specAdd * (0.25 + 0.75 * f))
