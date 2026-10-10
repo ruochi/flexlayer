@@ -265,6 +265,8 @@ export type TextRunStyle = {
   fontStyle?: 'normal' | 'italic'
   /** u 加下划线。 */
   underline?: boolean
+  /** 行内标签自己的背景。不继承。铺在这一段文字的行盒上。 */
+  background?: string
 }
 
 /** 带 id 的行内标签。最内层有 id 的那段拥有这些字；里面没写 id 的行内标签沿用外层。 */
@@ -288,6 +290,8 @@ export type LaidTextLine = {
   segments: Array<{ text: string; style: TextRunStyle; x: number; width: number; owner?: InlineOwner }>
   width: number
   height: number
+  /** 相对文字内容区顶部。竖排的字距加在行与行之间，不在 height 里。 */
+  y: number
   baselineY: number
   ink: Box
   /** 这一行里的图片，坐标相对文字内容区左上角。 */

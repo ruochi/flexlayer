@@ -342,3 +342,103 @@ describe('圆角', () => {
     expect((await pixelAt(ellipse.png, 12, 1))[0]).toBeLessThan(40)
   })
 })
+
+async function inkBounds(png: Buffer, scale: number, isInk: (r: number, g: number, b: number, a: number) => boolean) {
+  const img = await loadImage(png)
+  const canvas = createCanvas(img.width, img.height)
+  const ctx = canvas.getContext('2d')
+  ctx.drawImage(img, 0, 0)
+  const { data, width, height } = ctx.getImageData(0, 0, img.width, img.height)
+  let minX = width
+  let minY = height
+  let maxX = -1
+  let maxY = -1
+  let count = 0
+  const samples: Array<{ x: number; r: number; b: number }> = []
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4
+      const r = data[i]!
+      const g = data[i + 1]!
+      const b = data[i + 2]!
+      const a = data[i + 3]!
+      if (!isInk(r, g, b, a)) continue
+      count++
+      if (x < minX) minX = x
+      if (y < minY) minY = y
+      if (x > maxX) maxX = x
+      if (y > maxY) maxY = y
+      samples.push({ x, r, b })
+    }
+  }
+  const user = (device: number) => device / scale
+  const left = samples.filter((sample) => sample.x <= minX + (maxX - minX) * 0.18)
+  const right = samples.filter((sample) => sample.x >= maxX - (maxX - minX) * 0.18)
+  const avg = (items: Array<{ r: number; b: number }>, channel: 'r' | 'b') =>
+    items.reduce((sum, item) => sum + item[channel], 0) / Math.max(1, items.length)
+  return {
+    count,
+    userMinX: user(minX),
+    userMinY: user(minY),
+    userWidth: user(maxX - minX + 1),
+    leftR: avg(left, 'r'),
+    leftB: avg(left, 'b'),
+    rightR: avg(right, 'r'),
+    rightB: avg(right, 'b'),
+  }
+}
+
+describe('文字样式', () => {
+  const gradient = `<layer width="720" height="140" background="#ffffff" safe="0"><p style="font-size:72px; white-space:nowrap; color:linear-gradient(to right, #ff0000, #0000ff)">GRADIENT</p></layer>`
+
+  it('渐变文字在 1、2、0.5 倍下大小和位置一致，左红右蓝', async () => {
+    const at = async (scale: number) => {
+      const { png, report } = await renderFvg(gradient, { scale })
+      expect(report.issues.filter((issue) => issue.level === 'error')).toEqual([])
+      return inkBounds(png, scale, (r, g, b, a) => a > 20 && (r < 245 || g < 245 || b < 245))
+    }
+    const full = await at(1)
+    const retina = await at(2)
+    const preview = await at(0.5)
+    for (const ink of [full, retina, preview]) {
+      expect(ink.count).toBeGreaterThan(80)
+      expect(ink.leftR).toBeGreaterThan(ink.leftB + 40)
+      expect(ink.rightB).toBeGreaterThan(ink.rightR + 40)
+    }
+    expect(retina.userWidth).toBeGreaterThan(full.userWidth * 0.92)
+    expect(retina.userWidth).toBeLessThan(full.userWidth * 1.08)
+    expect(preview.userWidth).toBeGreaterThan(full.userWidth * 0.85)
+    expect(Math.abs(retina.userMinX - full.userMinX)).toBeLessThan(4)
+    expect(Math.abs(retina.userMinY - full.userMinY)).toBeLessThan(4)
+    expect(Math.abs(preview.userMinX - full.userMinX)).toBeLessThan(6)
+  })
+
+  it('行内 background 高亮这个词，倍率变化后仍停在词的位置', async () => {
+    const source = `<layer width="420" height="90" background="#eeeeee" safe="0"><p style="font-size:40px; white-space:nowrap; color:#111111">AA<span style="background:#ff0000; color:#ffffff">BB</span>CC</p></layer>`
+    const at = async (scale: number) => {
+      const { png, report } = await renderFvg(source, { scale })
+      expect(report.issues.filter((issue) => issue.level === 'error')).toEqual([])
+      const red = await inkBounds(png, scale, (r, g, b, a) => a > 200 && r > 180 && g < 80 && b < 80)
+      const dark = await inkBounds(png, scale, (r, g, b, a) => a > 200 && r < 40 && g < 40 && b < 40)
+      return { red, dark }
+    }
+    const full = await at(1)
+    const retina = await at(2)
+    expect(full.red.count).toBeGreaterThan(20)
+    expect(full.red.userMinX).toBeGreaterThan(12)
+    expect(full.dark.count).toBeGreaterThan(10)
+    expect(full.dark.userMinX).toBeLessThan(full.red.userMinX - 4)
+    expect(Math.abs(retina.red.userMinX - full.red.userMinX)).toBeLessThan(4)
+  })
+
+  it('行内渐变背景左红右蓝', async () => {
+    const { png, report } = await renderFvg(
+      `<layer width="360" height="90" background="#ffffff" safe="0"><p style="font-size:40px; white-space:nowrap">AA<span style="background:linear-gradient(to right, #ff0000, #0000ff)">WORD</span></p></layer>`,
+    )
+    expect(report.issues.filter((issue) => issue.level === 'error')).toEqual([])
+    const ink = await inkBounds(png, 1, (r, g, b, a) => a > 200 && (r > 180 || b > 180) && g < 80)
+    expect(ink.count).toBeGreaterThan(40)
+    expect(ink.leftR).toBeGreaterThan(ink.leftB + 40)
+    expect(ink.rightB).toBeGreaterThan(ink.rightR + 40)
+  })
+})
