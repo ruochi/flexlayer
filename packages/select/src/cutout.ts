@@ -90,7 +90,7 @@ export async function cutout(src: string, options: CutoutOptions = {}): Promise<
   writePng(files.regions, regionsRgba(ids), width, height)
   if (processed.shadow) writePng(files.shadow, shadowRgba(processed.shadow), width, height)
 
-  const analysisFull = await analyzeImage(files.subject, { channel: 'alpha', baseDir: dirname(srcFile) })
+  const analysisFull = analyzeImage(files.subject, { channel: 'alpha', baseDir: dirname(srcFile) })
   const analysis: CutoutAnalysis = {
     area: analysisFull.area,
     pieces: analysisFull.pieces,

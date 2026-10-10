@@ -1,7 +1,7 @@
 import { isAbsolute, resolve } from 'node:path'
 import { contoursToPath, labelParts, round, SOLID, summarize, traceContours } from './bitmap.js'
 import { layerBaseDir } from './canvas.js'
-import { loadLayerImage } from './image.js'
+import { peekLayerImage, preloadLayerImageSync } from './image.js'
 import type { Box } from './types.js'
 
 export type ImageChannel = 'alpha' | 'luma'
@@ -67,9 +67,9 @@ function expose(analysis: ImageAnalysis): ImageAnalysis {
 
 /**
  * 读一张图，量出留下的面积、碎片、洞、软边，并描出实心部分的轮廓 `d`。
- * 和 `glyph` 一样是程序接口：先拿到数和路径，再决定怎么摆、怎么裁。同一张图同一组参数只算一次。
+ * 同步返回，调用方可以立刻拿 `d` 和面积去摆下一层。同一张图同一组参数只算一次。
  */
-export async function analyzeImage(src: string, options: AnalyzeImageOptions = {}): Promise<ImageAnalysis> {
+export function analyzeImage(src: string, options: AnalyzeImageOptions = {}): ImageAnalysis {
   const baseDir = options.baseDir ?? layerBaseDir()
   const threshold = options.threshold ?? SOLID
   const tolerance = options.tolerance ?? 0.5
@@ -81,7 +81,10 @@ export async function analyzeImage(src: string, options: AnalyzeImageOptions = {
   const hit = cache.get(key)
   if (hit) return expose(hit)
 
-  const image = await loadLayerImage(src, baseDir)
+  preloadLayerImageSync(src, baseDir)
+  const peeked = peekLayerImage(src, baseDir)
+  if (peeked.status !== 'ok') throw new Error(`图片无法加载: ${src}`)
+  const image = peeked.image
   const { width, height } = image
   const rgba = image.getContext('2d').getImageData(0, 0, width, height).data
   let hasAlpha = false

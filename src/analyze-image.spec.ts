@@ -25,7 +25,7 @@ describe('analyzeImage', () => {
         ctx.fillRect(60, 10, 30, 20)
       }),
     )
-    const info = await analyzeImage(src)
+    const info = analyzeImage(src)
     expect(info).toMatchObject({ width: 100, height: 50, channel: 'alpha', hasAlpha: true, pieces: 2, holes: 0 })
     expect(info.area).toBeCloseTo(1600 / 5000, 3)
     expect(info.ink).toEqual({ x: 0, y: 0, width: 90, height: 50 })
@@ -45,7 +45,7 @@ describe('analyzeImage', () => {
         ctx.clearRect(20, 20, 20, 20)
       }),
     )
-    const info = await analyzeImage(src)
+    const info = analyzeImage(src)
     expect(info.pieces).toBe(1)
     expect(info.holes).toBe(1)
   })
@@ -61,13 +61,13 @@ describe('analyzeImage', () => {
         ctx.fill()
       }),
     )
-    const info = await analyzeImage(src)
+    const info = analyzeImage(src)
     expect(info.channel).toBe('luma')
     expect(info.hasAlpha).toBe(false)
     expect(info.pieces).toBe(1)
     expect(info.area).toBeCloseTo((Math.PI * 25 * 25) / 6400, 2)
     expect(info.softEdge).toBeLessThan(2)
-    const alpha = await analyzeImage(src, { channel: 'alpha' })
+    const alpha = analyzeImage(src, { channel: 'alpha' })
     expect(alpha.area).toBe(1)
   })
 
@@ -79,7 +79,7 @@ describe('analyzeImage', () => {
         ctx.fillRect(2, 2, 1, 1)
       }),
     )
-    const info = await analyzeImage(src, { tolerance: 0 })
+    const info = analyzeImage(src, { tolerance: 0 })
     expect(info.pieces).toBe(1)
     expect(info.holes).toBe(0)
     expect(info.d.match(/M/g)).toHaveLength(1)
@@ -94,11 +94,11 @@ describe('analyzeImage', () => {
       ctx.fillRect(85, 10, 25, 70)
       ctx.clearRect(92, 30, 10, 20)
     })
-    const info = await analyzeImage(dataUrl(original))
+    const info = analyzeImage(dataUrl(original))
     expect(info.pieces).toBe(2)
     expect(info.holes).toBe(1)
     const { png: redrawn } = await renderFvg(`<layer width="120" height="90"><path d="${info.d}" fill="#fff" stroke="none" /></layer>`)
-    const again = await analyzeImage(dataUrl(redrawn))
+    const again = analyzeImage(dataUrl(redrawn))
     expect(again.pieces).toBe(2)
     expect(again.holes).toBe(1)
     expect(Math.abs(again.area - info.area)).toBeLessThan(0.005)
@@ -114,7 +114,7 @@ describe('analyzeImage', () => {
         ctx.fill()
       }),
     )
-    const info = await analyzeImage(src)
+    const info = analyzeImage(src)
     const { report } = await renderFvg(
       `<layer width="60" height="40"><layer id="cut" width="60" height="40"><mask><path d="${info.d}" /></mask><rect width="60" height="40" fill="#fff" /></layer></layer>`,
     )
@@ -132,22 +132,22 @@ describe('analyzeImage', () => {
         ctx.fillRect(0, 0, 5, 10)
       }),
     )
-    const info = await analyzeImage('cut.png', { baseDir: dir })
+    const info = analyzeImage('cut.png', { baseDir: dir })
     expect(info.area).toBeCloseTo(0.5, 3)
-    const nearby = await analyzeImage('../examples/math.png')
+    const nearby = analyzeImage('../examples/math.png')
     expect(nearby.width).toBeGreaterThan(0)
-    await expect(analyzeImage('missing.png', { baseDir: dir })).rejects.toThrow(/missing\.png/)
+    expect(() => analyzeImage('missing.png', { baseDir: dir })).toThrow(/missing\.png/)
   })
 
   it('参数写错时抛错，缓存的结果改了也不影响下一次', async () => {
     const src = dataUrl(png(8, 8, (ctx) => ctx.fillRect(0, 0, 4, 4)))
-    await expect(analyzeImage(src, { threshold: 0 })).rejects.toThrow(/threshold/)
-    await expect(analyzeImage(src, { tolerance: -1 })).rejects.toThrow(/tolerance/)
-    await expect(analyzeImage(src, { channel: 'red' as never })).rejects.toThrow(/channel/)
-    const first = await analyzeImage(src)
+    expect(() => analyzeImage(src, { threshold: 0 })).toThrow(/threshold/)
+    expect(() => analyzeImage(src, { tolerance: -1 })).toThrow(/tolerance/)
+    expect(() => analyzeImage(src, { channel: 'red' as never })).toThrow(/channel/)
+    const first = analyzeImage(src)
     first.parts.length = 0
     first.ink!.x = 99
-    const second = await analyzeImage(src)
+    const second = analyzeImage(src)
     expect(second.parts).toHaveLength(1)
     expect(second.ink!.x).toBe(0)
   })

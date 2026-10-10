@@ -37,7 +37,7 @@ npx flexlayer render scene.tsx --frames out/ --from 0 --to 90
 
 文件头写 `/** @jsxImportSource flexlayer */`。`canvas.create` 的参数必须是 `<layer>`。返回的 `left` `top` `right` `bottom` 是没转之前的布局盒；接着摆下一块用 `rotatedBox.bottom`。贴着某个圆或矩形用 `elements[].box`，躲开转过的图形用 `ink`。
 
-检查抠图结果或黑白蒙版用 `await analyzeImage('cut.png')`：返回留下的比例 `area`、外接矩形 `ink`、碎片数 `pieces`、洞数 `holes`、软边宽度 `softEdge` 和轮廓 `d`，坐标是图片像素。`d` 直接写进 `<mask><path d /></mask>`。
+检查抠图结果或黑白蒙版用 `analyzeImage('cut.png')`，同步返回留下的比例 `area`、外接矩形 `ink`、碎片数 `pieces`、洞数 `holes`、软边宽度 `softEdge` 和轮廓 `d`，坐标是图片像素。`d` 直接写进 `<mask><path d /></mask>`。
 
 抠主体不在渲染器里。装了 `flexlayer-select` 之后，`npx flexlayer-select cutout photo.jpg --preset portrait` 写出缓存。标记里写 `<img src="photo.jpg" derive="subject" />`，预览写 `<preview of="#cut" show="overlay checker black white edges" />`。正常成片不画预览，`npx flexlayer render scene.layer --preview out.png` 才出拼图。
 

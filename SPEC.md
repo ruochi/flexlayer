@@ -339,12 +339,12 @@ const chars = await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })
 
 ### 分析 analyzeImage
 
-`.tsx` 里可以先读一张图，量出它留下了多少、碎成几块，并描出轮廓。和 `glyph` 一样是程序接口，不是标签，也不进渲染：先拿到数和路径，再决定怎么摆、怎么裁。常用来检查抠图结果或黑白蒙版。
+`.tsx` 里可以先读一张图，量出它留下了多少、碎成几块，并描出轮廓。它是同步的程序接口，不是标签，也不进渲染：先拿到数和路径，再决定怎么摆、怎么裁。常用来检查抠图结果或黑白蒙版。读图会等到像素就绪再返回，所以可以直接写在 `canvas.create` 前面。
 
 ```ts
 import { analyzeImage } from 'flexlayer'
 
-const cut = await analyzeImage('photo.subject.png')
+const cut = analyzeImage('photo.subject.png')
 ```
 
 | 字段 | 含义 |
