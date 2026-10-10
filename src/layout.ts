@@ -89,6 +89,7 @@ import type {
   ShadowSpec,
   ShapeLayoutNode,
   TextLayoutNode,
+  TextSegment,
 } from './types.js'
 import { emptyBox, unionBoxes } from './types.js'
 import { formatSourceLoc } from './source-loc.js'
@@ -735,6 +736,38 @@ function normalizeLineGeometry(geom: LineGeometry, box: Box): LineGeometry {
   return geom
 }
 
+function sanitizeTextPaints(segments: TextSegment[], ctx: LayoutContext): TextSegment[] {
+  return segments.map((seg) => {
+    let color = seg.style.color
+    let background = seg.style.background
+    if (isGradient(color) && !parseGradient(color)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `无法解析 color: ${color}`,
+        hint: '写成 #112233，或 linear-gradient(to right, #ff0000, #0000ff)',
+      })
+      color = ctx.color
+    }
+    if (background && background !== 'transparent' && background !== 'none' && isGradient(background) && !parseGradient(background)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `无法解析 background: ${background}`,
+        hint: '写成 #ffe08a，或 linear-gradient(to right, #ff0000, #0000ff)',
+      })
+      background = undefined
+    }
+    if (color === seg.style.color && background === seg.style.background) return seg
+    const style = { ...seg.style, color }
+    if (background) style.background = background
+    else delete style.background
+    return { ...seg, style }
+  })
+}
+
 function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: number): TextLayoutNode {
   warnNestedMasks(node, ctx)
   const style = parseStyle(node.attrs.style)
@@ -746,7 +779,7 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
     parseFontWeight(style['font-weight']) ??
     (isHeadingTag(tag) || tag === 'strong' || tag === 'b' ? 700 : ctx.fontWeight ?? defaultFontWeightForTag(tag))
   const fontFamily = style['font-family']?.trim() || (symbols ? ICON_FONT_FAMILY : ctx.fontFamily)
-  const color = style.color ?? ctx.color
+  const color = readPaint(style.color ?? ctx.color, ctx.color, ctx, 'color')
   const letterSpacing = parseLetterSpacing(style['letter-spacing'], fontSize) ?? ctx.letterSpacing ?? 0
   const images: ImageLayoutNode[] = []
   const segments = extractTextSegments(
@@ -770,6 +803,7 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
       for (const note of notes) ctx.issues.push({ ...note, path: notePath })
     },
   )
+  const paintedSegments = sanitizeTextPaints(segments, ctx)
   const nowrap = style['white-space'] === 'nowrap' || (symbols != null && !style['white-space'])
   const textWrap = style['text-wrap'] === 'wrap' ? 'wrap' : 'balance'
   const fixedW = parsePx(style.width)
@@ -797,7 +831,7 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
   const innerPadY = appearance.padding.top + appearance.padding.bottom + (appearance.border?.width ?? 0) * 2
 
   const textLayout = layoutText({
-    segments,
+    segments: paintedSegments,
     fixedWidth: fixedW != null ? Math.max(0, fixedW - innerPadX) : undefined,
     fixedHeight: fixedH != null ? Math.max(0, fixedH - innerPadY) : undefined,
     maxWidth: vertical ? undefined : maxW,

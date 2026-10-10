@@ -185,22 +185,140 @@ function drawImageNode(ctx: CanvasRenderingContext2D, node: ImageLayoutNode, rec
   ctx.restore()
 }
 
+type PaintBox = { x: number; y: number; width: number; height: number }
+
+/** 单行蒙版的设备像素上限。更大时退回直接填充，避免一张离屏盖住整页。 */
+const TEXT_MASK_LIMIT = 8192
+
+function textColorBox(node: TextLayoutNode, color: string, fragment: PaintBox): PaintBox {
+  const declared = node.style.color?.trim()
+  if (declared && declared === color.trim() && node.width > 0 && node.height > 0) {
+    return { x: node.x, y: node.y, width: node.width, height: node.height }
+  }
+  return fragment
+}
+
+/**
+ * 渐变不要直接交给 fillText。倍率不是 1 时，着色器会把字画偏，并且缩成大约一半。
+ * 字形先画成实色蒙版，渐变只铺在矩形上，再按设备像素 1:1 贴回当前画布。
+ */
+function fillTextPaint(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  baseline: number,
+  color: string,
+  box: PaintBox,
+  fontSize: number,
+) {
+  if (!text || !isGradient(color)) {
+    ctx.fillStyle = color
+    ctx.fillText(text, x, baseline)
+    return
+  }
+  const metrics = ctx.measureText(text)
+  const pad = Math.max(4, fontSize * 0.2)
+  const left = metrics.actualBoundingBoxLeft
+  const right = metrics.actualBoundingBoxRight > 0 ? metrics.actualBoundingBoxRight : metrics.width
+  const ascent = metrics.actualBoundingBoxAscent > 0 ? metrics.actualBoundingBoxAscent : fontSize * 0.8
+  const descent = metrics.actualBoundingBoxDescent > 0 ? metrics.actualBoundingBoxDescent : fontSize * 0.2
+  const gx = x - left - pad
+  const gy = baseline - ascent - pad
+  const gw = Math.max(1, left + right + pad * 2)
+  const gh = Math.max(1, ascent + descent + pad * 2)
+  const paint = ctx as PaintCtx
+  const tr = paint.getTransform()
+  const corners: Array<[number, number]> = [
+    [gx, gy],
+    [gx + gw, gy],
+    [gx + gw, gy + gh],
+    [gx, gy + gh],
+  ]
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const [px, py] of corners) {
+    const dx = tr.a * px + tr.c * py + tr.e
+    const dy = tr.b * px + tr.d * py + tr.f
+    minX = Math.min(minX, dx)
+    minY = Math.min(minY, dy)
+    maxX = Math.max(maxX, dx)
+    maxY = Math.max(maxY, dy)
+  }
+  const ox = Math.floor(minX) - 1
+  const oy = Math.floor(minY) - 1
+  const dw = Math.ceil(maxX) - ox + 1
+  const dh = Math.ceil(maxY) - oy + 1
+  if (!(dw > 0) || !(dh > 0) || dw > TEXT_MASK_LIMIT || dh > TEXT_MASK_LIMIT || dw * dh > 8_000_000) {
+    ctx.fillStyle = paintOf(ctx, color, box.x, box.y, Math.max(box.width, 1), Math.max(box.height, 1))
+    ctx.fillText(text, x, baseline)
+    return
+  }
+  const mask = createCanvas(dw, dh)
+  const mctx = mask.getContext('2d')
+  mctx.setTransform(tr.a, tr.b, tr.c, tr.d, tr.e - ox, tr.f - oy)
+  mctx.font = ctx.font
+  mctx.fontVariationSettings = ctx.fontVariationSettings
+  mctx.letterSpacing = ctx.letterSpacing
+  mctx.textAlign = ctx.textAlign
+  mctx.textBaseline = ctx.textBaseline
+  mctx.direction = ctx.direction
+  mctx.fillStyle = '#000000'
+  mctx.fillText(text, x, baseline)
+
+  const off = createCanvas(dw, dh)
+  const octx = off.getContext('2d')
+  octx.setTransform(tr.a, tr.b, tr.c, tr.d, tr.e - ox, tr.f - oy)
+  octx.fillStyle = paintOf(octx, color, box.x, box.y, Math.max(box.width, 1), Math.max(box.height, 1))
+  octx.fillRect(gx, gy, gw, gh)
+  octx.setTransform(1, 0, 0, 1, 0, 0)
+  octx.globalCompositeOperation = 'destination-in'
+  octx.drawImage(mask, 0, 0)
+
+  ctx.save()
+  try {
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.imageSmoothingEnabled = false
+    paint.drawImage(off, ox, oy)
+  } finally {
+    ctx.restore()
+  }
+}
+
 function drawTextNode(ctx: CanvasRenderingContext2D, node: TextLayoutNode, inkColor?: string) {
-  const contentX = node.x + node.padding.left + (node.border?.width ?? 0)
-  const contentY = node.y + node.padding.top + (node.border?.width ?? 0)
+  const border = node.border?.width ?? 0
+  const contentX = node.x + node.padding.left + border
+  const contentY = node.y + node.padding.top + border
+  const innerW = node.width - node.padding.left - node.padding.right - border * 2
   for (const line of node.textLayout.lines) {
     let offsetX = 0
-    if (node.textAlign === 'center') offsetX = (node.width - node.padding.left - node.padding.right - (node.border?.width ?? 0) * 2 - line.width) / 2
-    if (node.textAlign === 'right') offsetX = node.width - node.padding.left - node.padding.right - (node.border?.width ?? 0) * 2 - line.width
+    if (node.textAlign === 'center') offsetX = (innerW - line.width) / 2
+    if (node.textAlign === 'right') offsetX = innerW - line.width
+    const lineTop = contentY + line.y
     for (const seg of line.segments) {
-      applyCanvasFont(ctx, seg.style.fontFamily, seg.style.fontWeight, seg.style.fontSize, seg.style.fontStyle)
-      ctx.fillStyle = inkColor ?? seg.style.color
-      ctx.letterSpacing = `${seg.style.letterSpacing}px`
       const x = contentX + offsetX + seg.x
-      ctx.fillText(seg.text, x, contentY + line.baselineY)
+      const fragment: PaintBox = {
+        x,
+        y: lineTop,
+        width: Math.max(seg.width, 1),
+        height: Math.max(line.height, 1),
+      }
+      const background = seg.style.background
+      if (!inkColor && background && background !== 'transparent' && background !== 'none' && seg.width > 0 && line.height > 0) {
+        ctx.fillStyle = paintOf(ctx, background, fragment.x, fragment.y, fragment.width, fragment.height)
+        ctx.fillRect(x, lineTop, seg.width, line.height)
+      }
+      if (!seg.text) continue
+      applyCanvasFont(ctx, seg.style.fontFamily, seg.style.fontWeight, seg.style.fontSize, seg.style.fontStyle)
+      ctx.letterSpacing = `${seg.style.letterSpacing}px`
+      const color = inkColor ?? seg.style.color
+      const box = inkColor ? fragment : textColorBox(node, seg.style.color, fragment)
+      fillTextPaint(ctx, seg.text, x, contentY + line.baselineY, color, box, seg.style.fontSize)
       if (seg.style.underline) {
         const y = contentY + line.baselineY + Math.max(1, seg.style.fontSize * 0.12)
-        ctx.strokeStyle = inkColor ?? seg.style.color
+        ctx.strokeStyle =
+          !inkColor && isGradient(color) ? paintOf(ctx, color, box.x, box.y, Math.max(box.width, 1), Math.max(box.height, 1)) : color
         ctx.lineWidth = Math.max(1, seg.style.fontSize / 16)
         ctx.beginPath()
         ctx.moveTo(x, y)

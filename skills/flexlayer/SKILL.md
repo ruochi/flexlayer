@@ -92,7 +92,7 @@ export default canvas.create(
 
 `align-items` 默认 `center`。竖排要左对齐时写 `align-items:flex-start`。横排按文字基线对齐写 `align-items:baseline`，竖排写了仍按 `flex-start`。`letter-spacing` 可以写 `em`。`justify-content` 只管这一层的主轴。`align-content` 默认 `flex-start`，管的是 `flex-wrap` 之后的多行。
 
-没写 `display:flex` 的 `div` 里直接放 `p`、`h1`–`h3`、`div`、写了宽高的 `layer` 时，从上到下排。只放文字和行内标签时，`div` 仍是文字盒子。`p`、`h1`–`h3`、`span` 里可以放 `<img>`，不要放块级标签或 `layer`。图标写成 `<span class="material-symbols-outlined">home</span>`。容器上的字号、字重、字体、颜色、字距和 `text-align` 会传给没写这些的 `p`、`div`、`span`；`h1`–`h3` 仍用自己的默认字号和字重。
+没写 `display:flex` 的 `div` 里直接放 `p`、`h1`–`h3`、`div`、写了宽高的 `layer` 时，从上到下排。只放文字和行内标签时，`div` 仍是文字盒子。`p`、`h1`–`h3`、`span` 里可以放 `<img>`，不要放块级标签或 `layer`。图标写成 `<span class="material-symbols-outlined">home</span>`。容器上的字号、字重、字体、颜色、字距和 `text-align` 会传给没写这些的 `p`、`div`、`span`；`h1`–`h3` 仍用自己的默认字号和字重。文字的 `color` 可以写渐变。行内 `background` 高亮这一段的行盒。
 
 带 `perspective` 的 layer 里，没有网格时直接子元素按中心深度从远到近画。出现 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 时近的盖住远的。不在透视里时 `z` 不改变顺序，并报 `flatten-3d`。网格可以写 `material="matte"`（默认的磨砂塑料）、`material="plastic"`、`material="metal 0.35"` 或 `material="glass"`。
 
