@@ -26,7 +26,7 @@ import { backdropFilters, filtersPad, getFilter, orderedFilters } from './filter
 import { fitImageRect } from './image.js'
 import { canvasPaint, isGradient } from './gradient.js'
 import { gradientStyle, isGradientPaint, type GradientBox } from './gradientField.js'
-import { applyToBox, aroundPivot, invert, multiply, originOffset } from './matrix.js'
+import { applyToBox, aroundPivot, IDENTITY, intersectBox, invert, multiply, originOffset, translated, type Matrix } from './matrix.js'
 import { invalidDrawIssue } from './draw-tag.js'
 import { openSvgPath } from './path.js'
 import { ownsMeshScene, renderMeshLayer, type MeshFrame } from './mesh.js'
@@ -63,6 +63,10 @@ export type PaintOptions = {
   fps?: number
   /** 绘制时 `<draw>` 抛错写到这里，不中断其余内容。 */
   issues?: Issue[]
+  /** 网格超采样。1、2 或 4，缺省 4。 */
+  meshSamples?: 1 | 2 | 4
+  /** 网格场景缓存上限，字节。false 关闭。 */
+  meshCache?: number | false
 }
 
 type PaintState = {
@@ -1865,9 +1869,11 @@ function paintBody(ctx: PaintCtx, node: LayoutNode, debug: boolean, t: number, s
       ctx.transform(mapping.a, mapping.b, mapping.c, mapping.d, mapping.e, mapping.f)
     }
     const meshFrame = node.kind === 'layer' ? state.meshFrames?.get(node) : undefined
-    if (meshFrame) {
+    if (meshFrame && meshFrame.width > 0 && meshFrame.height > 0) {
       ctx.imageSmoothingEnabled = true
       ctx.drawImage(meshFrame.canvas, meshFrame.x, meshFrame.y, meshFrame.width, meshFrame.height)
+    } else if (meshFrame) {
+      // 投影落在可见范围外，这一层不再走二维透视。
     } else if (node.kind === 'layer' && hasPerspective(node.perspective) && node.children.some(has3dPose)) {
       paintPerspectiveChildren(ctx, node, debug, t, state)
     } else {
@@ -2141,12 +2147,50 @@ function paintNode(
   pctx.restore()
 }
 
+function nodePose(node: LayoutNode): Matrix {
+  if (node.rotate === 0 && node.scaleX === 1 && node.scaleY === 1) return IDENTITY
+  const o = originOffset(node.origin, node.width, node.height)
+  return aroundPivot(node.x + o.x, node.y + o.y, node.rotate, node.scaleX, node.scaleY)
+}
+
+/** 文档画布和沿途裁剪，换算到这一层绘制网格时的坐标。 */
+function meshVisibleRect(docWidth: number, docHeight: number, root: LayerLayoutNode, target: LayerLayoutNode): Box {
+  let found: Box | null = null
+  const visit = (node: LayoutNode, parent: Matrix, clip: Box) => {
+    if (found) return
+    const posed = multiply(parent, nodePose(node))
+    const insetX = node.kind === 'flex' ? node.padding.left + (node.border?.width ?? 0) : 0
+    const insetY = node.kind === 'flex' ? node.padding.top + (node.border?.width ?? 0) : 0
+    const preView = node.kind === 'group' ? posed : multiply(posed, translated(node.x + insetX, node.y + insetY))
+    let nextClip = clip
+    if (node.kind === 'layer' && (node.overflow === 'hidden' || node.view)) {
+      nextClip = intersectBox(clip, applyToBox(preView, { x: 0, y: 0, width: node.width, height: node.height }))
+    }
+    let content = preView
+    if (node.kind === 'layer' && node.view) content = multiply(preView, viewMatrix(node.width, node.height, node.view))
+    if (node.kind === 'group') content = multiply(posed, node.svg)
+    if (node === target && node.kind === 'layer') {
+      const inv = invert(content)
+      found = inv ? applyToBox(inv, nextClip) : { x: 0, y: 0, width: node.width, height: node.height }
+      return
+    }
+    if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
+      for (const child of node.children) visit(child, content, nextClip)
+    }
+  }
+  visit(root, IDENTITY, { x: 0, y: 0, width: docWidth, height: docHeight })
+  return found ?? { x: 0, y: 0, width: target.width, height: target.height }
+}
+
 async function prepareMeshFrames(
   root: LayerLayoutNode,
   scale: number,
   t: number,
   clock: { frame: number; fps: number },
   issues: Issue[],
+  docWidth: number,
+  docHeight: number,
+  mesh: { samples?: 1 | 2 | 4; cacheBytes?: number | false },
 ): Promise<Map<LayerLayoutNode, MeshFrame>> {
   const frames = new Map<LayerLayoutNode, MeshFrame>()
   const state: PaintState = { canvasWidth: 0, canvasHeight: 0, frame: clock.frame, fps: clock.fps, issues, meshFrames: frames }
@@ -2160,6 +2204,11 @@ async function prepareMeshFrames(
       node,
       k,
       (peeled) => paintChildBitmap(peeled, Math.max(k, 1e-3) * 2, t, state),
+      {
+        clip: meshVisibleRect(docWidth, docHeight, root, node),
+        samples: mesh.samples,
+        cacheBytes: mesh.cacheBytes,
+      },
     )
     if (frame) frames.set(node, frame)
   }
@@ -2193,7 +2242,10 @@ export async function paintDocument(
     frame: opts.frame ?? 0,
     fps: opts.fps ?? 0,
     issues,
-    meshFrames: await prepareMeshFrames(root, opts.scale, opts.t, { frame: opts.frame ?? 0, fps: opts.fps ?? 0 }, issues),
+    meshFrames: await prepareMeshFrames(root, opts.scale, opts.t, { frame: opts.frame ?? 0, fps: opts.fps ?? 0 }, issues, opts.width, opts.height, {
+      samples: opts.meshSamples,
+      cacheBytes: opts.meshCache,
+    }),
   }
   const rootPaintsBackground =
     root.background != null &&

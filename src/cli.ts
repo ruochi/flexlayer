@@ -19,7 +19,7 @@ const CONTACT_LIMIT = 300
 
 function usage(): never {
   console.error(`用法:
-  flexlayer render <file.layer|file.tsx> [-o out.png] [--report out.json] [--scale 0.5] [--debug] [--preview out.png] [--emit out.layer] [--frame N] [--frames dir] [--from N] [--to N] [--step N] [--rgba -|file]
+  flexlayer render <file.layer|file.tsx> [-o out.png] [--report out.json] [--scale 0.5] [--debug] [--preview out.png] [--emit out.layer] [--frame N] [--frames dir] [--from N] [--to N] [--step N] [--rgba -|file] [--mesh-samples 1|2|4]
   flexlayer check <file.layer|file.tsx> [--report out.json] [--emit out.layer] [--frame N] [--frames all|A-B|N] [--step N]
   flexlayer select …   转给 flexlayer-select。没安装时提示安装命令
 
@@ -49,6 +49,7 @@ function parseArgs(argv: string[]) {
   let scale = 1
   let debug = false
   let preview: string | undefined
+  let meshSamples: 1 | 2 | 4 | undefined
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i]!
     const next = () => {
@@ -68,7 +69,11 @@ function parseArgs(argv: string[]) {
     else if (a === '--from') from = Number(next())
     else if (a === '--to') to = Number(next())
     else if (a === '--step') step = Number(next())
-    else usage()
+    else if (a === '--mesh-samples') {
+      const n = Number(next())
+      if (n !== 1 && n !== 2 && n !== 4) usage()
+      meshSamples = n
+    } else usage()
   }
   if (frame != null && (!Number.isInteger(frame) || frame < 0)) usage()
   if (from != null && (!Number.isInteger(from) || from < 0)) usage()
@@ -79,7 +84,7 @@ function parseArgs(argv: string[]) {
   if (frame != null && (framesArg != null || rgba != null || from != null || to != null || step != null)) usage()
   if (cmd === 'render' && rgba != null && framesArg != null) usage()
   if (cmd === 'check' && step != null && framesArg == null) usage()
-  return { cmd, file, out, report, emit, framesArg, rgba, frame, from, to, step, scale, debug, preview }
+  return { cmd, file, out, report, emit, framesArg, rgba, frame, from, to, step, scale, debug, preview, meshSamples }
 }
 
 function frameInput(frame: number, fps: number): FrameInput {
@@ -234,6 +239,7 @@ async function main() {
         t: input.t,
         frame: args.frame,
         fps: comp.fps,
+        meshSamples: args.meshSamples,
       })
       attachFileIssues(report)
       await emitNode(node, args.emit, report)
@@ -284,6 +290,7 @@ async function main() {
       to: args.to,
       step: args.step,
       format: args.rgba ? 'rgba' : 'png',
+      meshSamples: args.meshSamples,
     })) {
       if (rendered.rgba && rgbaStream) await writeChunk(rgbaStream, rendered.rgba)
       if (args.framesArg && rendered.png) {
@@ -322,7 +329,7 @@ async function main() {
   }
 
   const source = loaded.kind === 'markup' ? loaded.source : loaded.node
-  const { png, report } = await renderFvg(source, { baseDir, scale: args.scale, debug: args.debug })
+  const { png, report } = await renderFvg(source, { baseDir, scale: args.scale, debug: args.debug, meshSamples: args.meshSamples })
   if (loaded.kind === 'node') await emitNode(loaded.node, args.emit, report)
   attachFileIssues(report)
   const outPath = outPng(abs, args.out)
