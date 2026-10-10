@@ -100,6 +100,13 @@ export const composition: Composition = {
     expect(existsSync(join(dir, 'scene.png'))).toBe(true)
   })
 
+  it('没装 flexlayer-select 时提示安装命令', () => {
+    const result = runCli(['select', 'cutout', 'photo.jpg'])
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('没有安装 flexlayer-select')
+    expect(result.stderr).toContain('packages/select')
+  })
+
   it('--rgba - 的标准输出只有像素', () => {
     const result = runCliBuffer(['render', scene, '--rgba', '-'])
     expect(result.stdout.length).toBe(6 * 40 * 40 * 4)

@@ -19,6 +19,7 @@ type PaintCtx = CanvasRenderingContext2D & {
     y1: number,
   ): { addColorStop(offset: number, color: string): void }
   getTransform(): { a: number; b: number; c: number; d: number; e: number; f: number }
+  imageSmoothingEnabled: boolean
 }
 import { applyCanvasFont } from './fonts.js'
 import { backdropFilters, filtersPad, getFilter, orderedFilters } from './filter.js'
@@ -30,6 +31,7 @@ import { invalidDrawIssue } from './draw-tag.js'
 import { openSvgPath } from './path.js'
 import { ownsMeshScene, renderMeshLayer, type MeshFrame } from './mesh.js'
 import { drawTexturedPlane, has3dPose, PERSPECTIVE_AA, planeDepth, posePoint, project } from './perspective.js'
+import { compositeMask } from './mask-compose.js'
 import { outerInkStrokeReach } from './style.js'
 import { layoutScale, viewMatrix } from './view.js'
 import { unionBoxes, type AppliedFilter, type Box,
@@ -39,6 +41,7 @@ import { unionBoxes, type AppliedFilter, type Box,
   InkStrokeSpec,
   LayerLayoutNode,
   LayoutNode,
+  type MaskOpReport,
   LineLayoutNode,
   NoiseSpec,
   OverlaySpec,
@@ -169,6 +172,7 @@ function drawImageNode(ctx: CanvasRenderingContext2D, node: ImageLayoutNode, rec
   ctx.rect(boxX, boxY, boxW, boxH)
   ctx.clip()
   const paint = ctx as PaintCtx
+  if (node.maskPick) paint.imageSmoothingEnabled = false
   if (recolor) {
     const tw = Math.max(1, Math.ceil(boxW))
     const th = Math.max(1, Math.ceil(boxH))
@@ -890,21 +894,61 @@ function copyParentUnderlay(parent: PaintCtx, dest: PaintCtx) {
   dest.restore()
 }
 
-/** 形状和图片按书写顺序画进透明缓冲，再用 destination-in 只保留 alpha。 */
-function applyLayerMask(canvas: Canvas, shapes: LayoutNode[], k: number, origin: number, t: number, state: PaintState) {
+function maskComposite(
+  width: number,
+  height: number,
+  shapes: LayoutNode[],
+  prepare: (ctx: CanvasRenderingContext2D) => void,
+  feather: number,
+  invert: boolean,
+  t: number,
+  state: PaintState,
+) {
+  return compositeMask({
+    width,
+    height,
+    shapes,
+    feather,
+    invert,
+    prepare,
+    paintShape: (ctx, shape) => paintNode(ctx, shape, false, t, state),
+    enterGroup: (ctx, shape) => {
+      applyNodeTransform(ctx, shape)
+      ctx.transform(shape.svg.a, shape.svg.b, shape.svg.c, shape.svg.d, shape.svg.e, shape.svg.f)
+    },
+  })
+}
+
+/** 形状和图片按 op 合成，再用 destination-in 只保留 alpha。 */
+function applyLayerMask(
+  canvas: Canvas,
+  shapes: LayoutNode[],
+  k: number,
+  origin: number,
+  t: number,
+  state: PaintState,
+  feather = 0,
+  invert = false,
+) {
   const pw = canvas.width
   const ph = canvas.height
   if (pw <= 0 || ph <= 0) return
-  const mask = createCanvas(pw, ph)
-  const mctx = mask.getContext('2d') as PaintCtx
-  mctx.setTransform(k, 0, 0, k, origin * k, origin * k)
-  for (const shape of shapes) paintNode(mctx, shape, false, t, state)
+  const mask = maskComposite(
+    pw,
+    ph,
+    shapes,
+    (ctx) => ctx.setTransform(k, 0, 0, k, origin * k, origin * k),
+    feather * k,
+    invert,
+    t,
+    state,
+  )
   const cctx = canvas.getContext('2d') as PaintCtx
   cctx.save()
   cctx.setTransform(1, 0, 0, 1, 0, 0)
   cctx.globalAlpha = 1
   cctx.globalCompositeOperation = 'destination-in'
-  cctx.drawImage(mask, 0, 0)
+  cctx.drawImage(mask.canvas, 0, 0)
   cctx.restore()
 }
 
@@ -921,20 +965,28 @@ export type MaskRaster = {
 const MASK_RASTER_LIMIT = 4_000_000
 
 /** 和绘制时同一套形状和图片，在 layer 布局盒里画成 alpha 位图。原点是 layer 左上角。 */
-export function rasterizeMask(shapes: LayoutNode[], width: number, height: number): MaskRaster | null {
+export function rasterizeMask(
+  shapes: LayoutNode[],
+  width: number,
+  height: number,
+  options: { feather?: number; invert?: boolean } = {},
+): (MaskRaster & { steps: MaskOpReport[] }) | null {
   if (!(width > 0) || !(height > 0)) return null
   const scale = Math.min(1, Math.sqrt(MASK_RASTER_LIMIT / (width * height)))
   const pw = Math.max(1, Math.ceil(width * scale))
   const ph = Math.max(1, Math.ceil(height * scale))
-  const canvas = createCanvas(pw, ph)
-  const ctx = canvas.getContext('2d') as PaintCtx
-  ctx.setTransform(scale, 0, 0, scale, 0, 0)
   const state: PaintState = { canvasWidth: pw, canvasHeight: ph, frame: 0, fps: 30, issues: [] }
-  for (const shape of shapes) paintNode(ctx, shape, false, 0, state)
-  const rgba = ctx.getImageData(0, 0, pw, ph).data
-  const alpha = new Uint8ClampedArray(pw * ph)
-  for (let i = 0; i < alpha.length; i++) alpha[i] = rgba[i * 4 + 3]!
-  return { width: pw, height: ph, scale, alpha }
+  const mask = maskComposite(
+    pw,
+    ph,
+    shapes,
+    (ctx) => ctx.setTransform(scale, 0, 0, scale, 0, 0),
+    (options.feather ?? 0) * scale,
+    options.invert ?? false,
+    0,
+    state,
+  )
+  return { width: pw, height: ph, scale, alpha: mask.alpha, steps: mask.steps }
 }
 
 function nodeDeviceBounds(ctx: PaintCtx, node: LayoutNode, padDevice: number) {
@@ -1902,7 +1954,7 @@ function paintWithLayerFilter(ctx: PaintCtx, node: LayoutNode, debug: boolean, t
     paintNoise(nctx, node, node.noise)
     nctx.restore()
   }
-  applyLayerMask(target, masks, k, effectPad, t, state)
+  applyLayerMask(target, masks, k, effectPad, t, state, node.kind === 'layer' ? node.maskFeather ?? 0 : 0, node.kind === 'layer' ? node.maskInvert ?? false : false)
   ctx.save()
   ctx.filter = 'none'
   ctx.drawImage(target, node.x - effectPad, node.y - effectPad, tw, th)
@@ -1964,6 +2016,17 @@ async function prepareMeshFrames(
   }
   await visit(root, scale)
   return frames
+}
+
+/** 把这一层画在自己的布局盒里，原点是左上角。`masked` 为假时不套蒙版。 */
+export function paintLayerIsolated(node: LayerLayoutNode, masked: boolean): Canvas {
+  const width = Math.max(1, Math.ceil(node.width))
+  const height = Math.max(1, Math.ceil(node.height))
+  const canvas = createCanvas(width, height)
+  const state: PaintState = { canvasWidth: width, canvasHeight: height, frame: 0, fps: 30, issues: [] }
+  const clone: LayerLayoutNode = { ...node, x: 0, y: 0, mask: masked ? node.mask : undefined }
+  paintNode(canvas.getContext('2d'), clone, false, 0, state)
+  return canvas
 }
 
 export async function paintDocument(
@@ -2029,16 +2092,24 @@ export async function paintDocument(
         octx.globalAlpha *= root.opacity
         applyNodeTransform(octx, root)
         paintNoise(octx, root, root.noise, 'source-over')
-        const mask = createCanvas(w, h)
-        const mctx = mask.getContext('2d') as PaintCtx
-        mctx.scale(opts.scale, opts.scale)
-        applyNodeTransform(mctx, root)
-        for (const shape of root.mask) paintNode(mctx, shape, false, opts.t, state)
+        const masked = maskComposite(
+          w,
+          h,
+          root.mask,
+          (ctx) => {
+            ctx.scale(opts.scale, opts.scale)
+            applyNodeTransform(ctx, root)
+          },
+          (root.maskFeather ?? 0) * opts.scale,
+          root.maskInvert ?? false,
+          opts.t,
+          state,
+        )
         octx.save()
         octx.setTransform(1, 0, 0, 1, 0, 0)
         octx.globalAlpha = 1
         octx.globalCompositeOperation = 'destination-in'
-        octx.drawImage(mask, 0, 0)
+        octx.drawImage(masked.canvas, 0, 0)
         octx.restore()
         pctx.save()
         pctx.setTransform(1, 0, 0, 1, 0, 0)

@@ -1,4 +1,7 @@
 import { createCanvas, loadImage, type CanvasRenderingContext2D } from '@napi-rs/canvas'
+import { createHash } from 'node:crypto'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -6,7 +9,7 @@ import { canvas } from './canvas.js'
 import { initFontsForMeasure } from './fonts.js'
 import { h } from './h.js'
 import { layoutSource } from './layout.js'
-import { checkFvg, renderFvg } from './render.js'
+import { checkFvg, renderFvg, renderPreview } from './render.js'
 
 beforeAll(async () => {
   for (const dir of [join(homedir(), '.cache', 'flexlayer', 'fonts'), '/tmp/flexlayer-test']) {
@@ -375,5 +378,179 @@ describe('mask', () => {
     const corner = await pixelAt(png, 2, 2)
     expect(center[0]).toBeGreaterThan(200)
     expect(corner[1]).toBeGreaterThan(200)
+  })
+
+  it('subtract 挖掉中间，intersect 只留重叠', async () => {
+    const cut = await renderFvg(`
+      <layer width="40" height="40" background="#00ff00">
+        <mask>
+          <rect x="0" y="0" width="40" height="40" />
+          <circle cx="20" cy="20" r="8" op="subtract" />
+        </mask>
+        <rect width="40" height="40" fill="#ff0000" />
+      </layer>
+    `)
+    expect((await pixelAt(cut.png, 2, 2))[0]).toBeGreaterThan(200)
+    expect((await pixelAt(cut.png, 20, 20))[1]).toBeGreaterThan(200)
+
+    const both = await renderFvg(`
+      <layer width="40" height="40" background="#00ff00">
+        <mask>
+          <rect x="0" y="0" width="30" height="40" />
+          <rect x="10" y="0" width="30" height="40" op="intersect" />
+        </mask>
+        <rect width="40" height="40" fill="#ff0000" />
+      </layer>
+    `)
+    expect((await pixelAt(both.png, 2, 20))[1]).toBeGreaterThan(200)
+    expect((await pixelAt(both.png, 20, 20))[0]).toBeGreaterThan(200)
+    expect((await pixelAt(both.png, 36, 20))[1]).toBeGreaterThan(200)
+
+    const xor = await renderFvg(`
+      <layer width="40" height="40" background="#00ff00">
+        <mask>
+          <rect x="0" y="0" width="40" height="40" />
+          <rect x="0" y="0" width="20" height="40" op="xor" />
+        </mask>
+        <rect width="40" height="40" fill="#ff0000" />
+      </layer>
+    `)
+    expect((await pixelAt(xor.png, 5, 20))[1]).toBeGreaterThan(200)
+    expect((await pixelAt(xor.png, 30, 20))[0]).toBeGreaterThan(200)
+  })
+
+  it('g 先加再减，整体再交到一个框里', async () => {
+    const { png } = await renderFvg(`
+      <layer width="40" height="40" background="#00ff00">
+        <mask>
+          <g>
+            <rect x="0" y="0" width="40" height="40" />
+            <rect x="0" y="0" width="20" height="40" op="subtract" />
+          </g>
+        </mask>
+        <rect width="40" height="40" fill="#ff0000" />
+      </layer>
+    `)
+    expect((await pixelAt(png, 5, 20))[1]).toBeGreaterThan(200)
+    expect((await pixelAt(png, 30, 20))[0]).toBeGreaterThan(200)
+  })
+
+  it('channel=luma 读黑白图，pick 只留编号', async () => {
+    const gray = pngDataUrl(40, 40, (ctx) => {
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, 40, 40)
+      ctx.fillStyle = '#000000'
+      ctx.fillRect(20, 0, 20, 40)
+    })
+    const luma = await renderFvg(`
+      <layer width="40" height="40" background="#00ff00">
+        <mask><img src="${gray}" channel="luma" style="width:40px; height:40px" /></mask>
+        <rect width="40" height="40" fill="#ff0000" />
+      </layer>
+    `)
+    expect((await pixelAt(luma.png, 6, 20))[0]).toBeGreaterThan(200)
+    expect((await pixelAt(luma.png, 30, 20))[1]).toBeGreaterThan(200)
+
+    const regions = pngDataUrl(40, 40, (ctx) => {
+      ctx.fillStyle = '#030303'
+      ctx.fillRect(0, 0, 20, 40)
+      ctx.fillStyle = '#050505'
+      ctx.fillRect(20, 0, 20, 40)
+    })
+    const picked = await renderFvg(`
+      <layer width="40" height="40" background="#00ff00">
+        <mask><img src="${regions}" pick="5" style="width:40px; height:40px" /></mask>
+        <rect width="40" height="40" fill="#ff0000" />
+      </layer>
+    `)
+    expect((await pixelAt(picked.png, 6, 20))[1]).toBeGreaterThan(200)
+    expect((await pixelAt(picked.png, 30, 20))[0]).toBeGreaterThan(200)
+  })
+
+  it('CSS 的 mask-image 报 invalid-attr，并提示 mask 标签', async () => {
+    const report = await checkFvg(`<layer width="40" height="40"><rect width="20" height="20" style="mask-image:url(a.png)" /></layer>`)
+    const issue = report.issues.find((item) => item.message.includes('mask-image'))
+    expect(issue?.code).toBe('invalid-attr')
+    expect(issue?.hint).toContain('<mask>')
+  })
+
+  it('feather 让边上变软，invert 把没选的变成选中', () => {
+    const soft = canvas.create(
+      h('layer', { width: '40', height: '40' }, h('mask', { feather: '6' }, h('rect', { x: '10', y: '10', width: '20', height: '20' })), h('rect', { width: '40', height: '40', fill: '#fff' })),
+    )
+    const hard = canvas.create(
+      h('layer', { width: '40', height: '40' }, h('mask', {}, h('rect', { x: '10', y: '10', width: '20', height: '20' })), h('rect', { width: '40', height: '40', fill: '#fff' })),
+    )
+    expect(soft.mask!.softEdge).toBeGreaterThan(hard.mask!.softEdge + 2)
+    const flipped = canvas.create(
+      h('layer', { width: '40', height: '40' }, h('mask', { invert: 'true' }, h('rect', { width: '10', height: '40' })), h('rect', { width: '40', height: '40', fill: '#fff' })),
+    )
+    expect(flipped.mask!.area).toBeGreaterThan(0.7)
+  })
+
+  it('没碰到选区的 subtract 报 mask-op-noop，并写出每一步', async () => {
+    const report = await checkFvg(`
+      <layer width="40" height="40">
+        <mask>
+          <rect x="0" y="0" width="10" height="40" />
+          <rect x="30" y="0" width="8" height="8" op="subtract" />
+        </mask>
+        <rect width="40" height="40" fill="#fff" />
+      </layer>
+    `)
+    expect(report.issues.some((issue) => issue.code === 'mask-op-noop')).toBe(true)
+    const layer = report.elements.find((el) => el.mask)
+    expect(layer?.mask?.ops?.map((step) => step.op)).toEqual(['add', 'subtract'])
+    expect(layer?.mask?.ops?.[1]?.changed).toBe(0)
+  })
+
+  it('preview 不进成片，--preview 的叠色图能看出选区', async () => {
+    const source = `
+      <layer width="40" height="40" background="#000000">
+        <layer id="cut" width="40" height="40">
+          <mask><rect x="0" y="0" width="20" height="40" /></mask>
+          <rect width="40" height="40" fill="#ffffff" />
+        </layer>
+        <preview of="#cut" show="overlay" />
+      </layer>
+    `
+    const { png, report } = await renderFvg(source)
+    expect(report.elements.some((el) => el.tag === 'preview')).toBe(false)
+    expect((await pixelAt(png, 5, 20))[0]).toBeGreaterThan(200)
+    expect((await pixelAt(png, 30, 20))[0]).toBeLessThan(20)
+    const sheet = await renderPreview(source)
+    expect(sheet).toBeTruthy()
+    const kept = await pixelAt(sheet!, 5, 20 + 16)
+    const dropped = await pixelAt(sheet!, 30, 20 + 16)
+    expect(kept[0]).toBeGreaterThan(200)
+    expect(dropped[0]).toBeGreaterThan(dropped[2])
+  })
+
+  it('derive 缺缓存是 error，哈希对不上是 stale-mask', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flexlayer-derive-'))
+    const photo = pngDataUrl(8, 8, (ctx) => {
+      ctx.fillStyle = '#fff'
+      ctx.fillRect(0, 0, 8, 8)
+    })
+    writeFileSync(join(dir, 'photo.png'), Buffer.from(photo.slice(photo.indexOf(',') + 1), 'base64'))
+    const missing = await checkFvg(`<layer width="8" height="8"><mask><img src="photo.png" derive="subject" style="width:8px; height:8px" /></mask></layer>`, { baseDir: dir })
+    const missingIssue = missing.issues.find((issue) => issue.code === 'missing-mask')
+    expect(missingIssue?.level).toBe('error')
+    expect(missingIssue?.hint).toContain('flexlayer-select cutout')
+
+    const subject = pngDataUrl(8, 8, (ctx) => {
+      ctx.fillStyle = '#fff'
+      ctx.fillRect(0, 0, 4, 8)
+    })
+    writeFileSync(join(dir, 'photo.subject.png'), Buffer.from(subject.slice(subject.indexOf(',') + 1), 'base64'))
+    writeFileSync(join(dir, 'photo.cutout.json'), JSON.stringify({ srcHash: 'nope', preset: 'portrait' }))
+    const stale = await checkFvg(`<layer width="8" height="8"><mask><img src="photo.png" derive="subject" style="width:8px; height:8px" /></mask><rect width="8" height="8" fill="#fff" /></layer>`, { baseDir: dir })
+    expect(stale.issues.some((issue) => issue.code === 'stale-mask')).toBe(true)
+
+    const hash = createHash('sha256').update(readFileSync(join(dir, 'photo.png'))).digest('hex')
+    writeFileSync(join(dir, 'photo.cutout.json'), JSON.stringify({ srcHash: hash, preset: 'portrait' }))
+    const { png } = await renderFvg(`<layer width="8" height="8" background="#00ff00"><mask><img src="photo.png" derive="subject" style="width:8px; height:8px" /></mask><rect width="8" height="8" fill="#ff0000" /></layer>`, { baseDir: dir })
+    expect((await pixelAt(png, 1, 4))[0]).toBeGreaterThan(200)
+    expect((await pixelAt(png, 6, 4))[1]).toBeGreaterThan(200)
   })
 })

@@ -1,6 +1,7 @@
 import type { Canvas } from '@napi-rs/canvas'
 import { layoutSync, prepareAssets, readLayerRoot } from './layout.js'
 import { paintDocument } from './paint.js'
+import { renderPreviewSheet } from './preview.js'
 import { buildReport } from './report.js'
 import type { FvgReport, RenderOptions } from './types.js'
 import { initFontsForMeasure, setFontsCacheDir } from './fonts.js'
@@ -41,6 +42,18 @@ export async function renderToCanvas(source: string | FvgNode, options: RenderOp
 export async function renderFvg(source: string | FvgNode, options: RenderOptions = {}): Promise<RenderResult> {
   const { canvas, report } = await renderToCanvas(source, options)
   return { png: canvas.toBuffer('image/png'), report }
+}
+
+/** `<preview>` 拼成的图。文档里没有 preview 时返回 null。 */
+export async function renderPreview(source: string | FvgNode, options: RenderOptions = {}): Promise<Buffer | null> {
+  if (options.fontsCacheDir) setFontsCacheDir(options.fontsCacheDir)
+  await initFontsForMeasure({ fontsCacheDir: options.fontsCacheDir })
+  const baseDir = options.baseDir ?? process.cwd()
+  const opened = readLayerRoot(source)
+  const assets = await prepareAssets(opened.root, baseDir, { fonts: opened.fonts })
+  const doc = layoutSync(opened.root, assets)
+  const sheet = renderPreviewSheet(doc)
+  return sheet ? sheet.toBuffer('image/png') : null
 }
 
 export async function checkFvg(source: string | FvgNode, options: RenderOptions = {}): Promise<FvgReport> {

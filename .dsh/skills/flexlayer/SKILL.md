@@ -37,6 +37,10 @@ npx flexlayer render scene.tsx --frames out/ --from 0 --to 90
 
 文件头写 `/** @jsxImportSource flexlayer */`。`canvas.create` 的参数必须是 `<layer>`。返回的 `left` `top` `right` `bottom` 是没转之前的布局盒；接着摆下一块用 `rotatedBox.bottom`。贴着某个圆或矩形用 `elements[].box`，躲开转过的图形用 `ink`。
 
+检查抠图结果或黑白蒙版用 `await analyzeImage('cut.png')`：返回留下的比例 `area`、外接矩形 `ink`、碎片数 `pieces`、洞数 `holes`、软边宽度 `softEdge` 和轮廓 `d`，坐标是图片像素。`d` 直接写进 `<mask><path d /></mask>`。
+
+抠主体不在渲染器里。装了 `flexlayer-select` 之后，`npx flexlayer-select cutout photo.jpg --preset portrait` 写出缓存。标记里写 `<img src="photo.jpg" derive="subject" />`，预览写 `<preview of="#cut" show="overlay checker black white edges" />`。正常成片不画预览，`npx flexlayer render scene.layer --preview out.png` 才出拼图。
+
 ```tsx
 /** @jsxImportSource flexlayer */
 import { canvas } from 'flexlayer'
@@ -87,6 +91,9 @@ export default canvas.create(
 | 公式 | `<div style="display:flex"><span>因此</span><math><mi>x</mi></math></div>` | `invalid-child` |
 | 公式字体 | 不写 `font-family`。说明文字用 `<mtext>` | `invalid-attr` |
 | 整层裁切 | `<layer><mask><circle cx="160" cy="90" r="90" /></mask>…</layer>` | `invalid-child` |
+| 蒙版运算 | `<mask><rect … /><circle op="subtract" /></mask>`。默认 `add`，分组用 `<g>`。不要写 `mask-image` | `invalid-attr` |
+| 黑白图和编号 | `<img channel="luma">`、`<img pick="3 5">`。缓存写 `derive="subject"` | `invalid-attr`、`missing-mask` |
+| 羽化、反选、预览 | `<mask feather="8" invert="true">`、`<preview of="#cut" />` | `invalid-attr` |
 | 透视 | `<layer perspective="900"><rect rotateY="20" z="40" /></layer>` | `invalid-attr`、`flatten-3d` |
 | 球体、圆柱、圆环、线管、长方体、拉伸、glb | `<layer perspective="700"><sphere cx="80" cy="80" r="40" /></layer>`。圆柱 `cx cy r height`，圆环 `cx cy r tube`，线管 `d` 和 `r`。`box` 的 `rx` 圆棱，`round` 选边；圆柱的 `rx` 圆口。`model` 只写 `src`，尺寸写在外包 layer | `flatten-3d`、`missing-model` |
 
@@ -113,6 +120,7 @@ export default canvas.create(
 - `ink`：旋转缩放或透视之后的着墨范围。判断 `overflow-canvas` 看 `ink`。
 - `quad`：透视平面投影后的四个角。
 - `effect`：阴影、光晕、模糊或玻璃可能占用的范围。`effect-clipped` 表示画出了画布。
+- `mask`：写了 `<mask>` 的 layer 才有。`area` 是留下的比例，`ink` 是留下来的外接矩形，`pieces` 是碎片数，`softEdge` 是软边宽度，`ops` 是每一步的 `op` 和 `changed`。`canvas.create` 的返回值和 `elements` 上也有。`<preview>` 不在这张表里。
 
 元素跑出画布就改位置、缩小，或用 `view` 取景。光晕被裁切就缩小 `glow` 或挪开元素。短行居中、长行看起来贴左，是竖排没写 `align-items:flex-start`。
 

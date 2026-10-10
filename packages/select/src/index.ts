@@ -1,0 +1,6 @@
+export { runSelect, type SelectHooks } from './cli.js'
+export { cutout, writeAnswers, type CutoutAnalysis, type CutoutOptions, type CutoutResult, type Segmenter } from './cutout.js'
+export { answersFromChoices, applyAnswers, cutoutMarkup, type Answer } from './markup.js'
+export { isPreset, PRESETS, type Preset } from './preset.js'
+export { birefnetSegment, MODEL_ID } from './segment.js'
+export type { Question, Where } from './regions.js'

@@ -28,7 +28,10 @@ type FvgHtml = FvgNodeBase & {
   style?: FvgStyle
 }
 
-type FvgGraphic = FvgNodeBase
+type FvgGraphic = FvgNodeBase & {
+  /** 只在 mask 里：add、subtract、intersect、xor */
+  op?: string
+}
 
 type FvgPositioned = FvgGraphic & {
   x?: number | string
@@ -170,9 +173,21 @@ export namespace JSX {
     symbol: FvgGraphic & { width?: number | string; height?: number | string }
     /**
      * 蒙版。只作为 layer 的直接子元素。
-     * 里面写 rect / circle / ellipse / polygon / path / img；省略 fill 为 #fff，只取 alpha。
+     * 里面写 rect / circle / ellipse / polygon / path / img / g。运算用 op，不沿用 CSS。
      */
-    mask: FvgGraphic
+    mask: FvgGraphic & {
+      /** 羽化半径，像素 */
+      feather?: number | string
+      /** true 时反选 */
+      invert?: string | boolean
+    }
+    /** 正常渲染不画。render --preview 才出选区预览 */
+    preview: FvgGraphic & {
+      /** #id，指向要预览的 layer */
+      of?: string
+      /** overlay checker black white edges */
+      show?: string
+    }
     use: FvgPositioned & {
       href?: string
       rotate?: number | string
@@ -364,7 +379,16 @@ export namespace JSX {
     u: FvgHtml
     br: FvgHtml
     /** HTML 图片。src、alt 是属性，宽高写 style。`image` 与 `img` 相同。 */
-    img: FvgHtml & { src?: string; alt?: string }
+    img: FvgHtml & {
+      src?: string
+      alt?: string
+      /** 只在 mask 里：alpha 或 luma */
+      channel?: string
+      /** 只在 mask 里：编号，例如 "3 5" */
+      pick?: string
+      /** 只在 mask 里：subject、mask 或 regions，读缓存不跑模型 */
+      derive?: string
+    }
     image: FvgHtml & { src?: string; alt?: string }
     math: FvgHtml
     mrow: FvgHtml

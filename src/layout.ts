@@ -10,7 +10,8 @@ import {
 } from 'yoga-layout/load'
 import { attachDrawTags } from './draw-tag.js'
 import { collectFilters, mergeFilters, type FilterIssue } from './filter.js'
-import { imageInk, peekLayerImage, preloadLayerImagesSync, parseObjectFit, parseObjectPosition } from './image.js'
+import { checkDerive, isDeriveKind } from './derive.js'
+import { imageInk, peekLayerImage, preloadLayerImageSync, preloadLayerImagesSync, parseObjectFit, parseObjectPosition } from './image.js'
 import type { FvgNode } from './parse.js'
 import { parseFvg } from './parse.js'
 import { ensureBuiltinFontsSync, primaryFontFamily, registerFontsFromDocumentSync } from './fonts.js'
@@ -83,8 +84,10 @@ import type {
   LineGeometry,
   LineLayoutNode,
   MeshLayoutNode,
+  MaskOp,
   MeshMaterial,
   NoiseSpec,
+  PreviewSpec,
   OverlaySpec,
   ShadowSpec,
   ShapeLayoutNode,
@@ -119,6 +122,9 @@ export type LayoutContext = {
   /** `<g>` 上传下来的 fill / stroke。子元素自己写了的优先。 */
   paintFill?: string
   paintStroke?: string
+  /** 正在排 mask 里面的内容。 */
+  inMask?: boolean
+  previews: PreviewSpec[]
 }
 
 function isClosedFlag(raw: string | undefined): boolean {
@@ -577,6 +583,16 @@ function layoutCustomDraw(node: FvgNode, ctx: LayoutContext): CustomLayoutNode |
 }
 
 function layoutUnknownOrCustom(node: FvgNode, ctx: LayoutContext): LayoutNode | null {
+  if (node.tag === 'preview') {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-child',
+      path: ctx.pathPrefix,
+      message: 'preview 只能作为 layer 的直接子元素',
+      hint: '写在 <layer> 里，例如 <preview of="#person" />',
+    })
+    return null
+  }
   warnNestedMasks(node, ctx)
   const custom = layoutCustomDraw(node, ctx)
   if (custom) return custom
@@ -964,6 +980,7 @@ function layoutImage(node: FvgNode, ctx: LayoutContext): ImageLayoutNode {
       })
     }
   }
+  bitmap = derivedBitmap(node, ctx, bitmap)
   const parsedFit = parseObjectFit(style['object-fit'])
   if (parsedFit.invalid) {
     ctx.issues.push({
@@ -1023,6 +1040,7 @@ function layoutImage(node: FvgNode, ctx: LayoutContext): ImageLayoutNode {
       bitmap,
       objectFit,
       objectPosition,
+      ...maskImageFields(node, ctx),
       ...appearance,
       ...readEffects(style, ctx, ctx.color),
       ...layoutDrawMeta(node, ctx),
@@ -1682,7 +1700,18 @@ function prepareHtmlBox(node: FvgNode): FvgNode {
 
 function measureFlexChild(raw: FvgNode, ctx: LayoutContext, direction: 'row' | 'column', crossAlign?: string): FlexMeasure | null {
   const node = prepareHtmlBox(materialize(raw))
-  if (node.tag === 'symbol' || node.tag === 'draw') return null
+  if (node.tag === 'symbol' || node.tag === 'draw' || node.tag === 'preview') {
+    if (node.tag === 'preview') {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-child',
+        path: ctx.pathPrefix,
+        message: 'preview 只能作为 layer 的直接子元素',
+        hint: '写在 <layer> 里，例如 <preview of="#person" />',
+      })
+    }
+    return null
+  }
   if (node.tag === 'g') {
     ctx.issues.push({
       level: 'warn',
@@ -2230,8 +2259,206 @@ function placeInLayer(node: FvgNode, laid: LayoutNode) {
   laid.y = tl.y
 }
 
+const MASK_OPS = new Set(['add', 'subtract', 'intersect', 'xor'])
+const PREVIEW_SHOWS = ['overlay', 'checker', 'black', 'white', 'edges'] as const
+
+function maskImageFields(node: FvgNode, ctx: LayoutContext): { maskChannel?: 'alpha' | 'luma'; maskPick?: number[] } {
+  const out: { maskChannel?: 'alpha' | 'luma'; maskPick?: number[] } = {}
+  const channel = node.attrs.channel?.trim()
+  if (channel) {
+    if (!ctx.inMask) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'channel 只写在 mask 里的 img 上',
+        hint: '蒙版写成 <mask><img src="cut.png" channel="luma" /></mask>',
+      })
+    } else if (channel !== 'alpha' && channel !== 'luma') {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `channel 只能是 alpha 或 luma，收到 ${channel}`,
+        hint: '黑白蒙版写 channel="luma"，抠图结果不用写',
+      })
+    } else {
+      out.maskChannel = channel
+    }
+  }
+  const pick = node.attrs.pick?.trim()
+  if (pick) {
+    const ids = pick.split(/[\s,]+/).map((part) => Number(part))
+    const bad = !ctx.inMask || ids.length === 0 || ids.some((id) => !Number.isInteger(id) || id < 1 || id > 255)
+    if (!ctx.inMask) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'pick 只写在 mask 里的 img 上',
+        hint: '蒙版写成 <mask><img src="regions.png" pick="3 5" /></mask>',
+      })
+    } else if (bad) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `pick 要是 1 到 255 的编号，收到 ${pick}`,
+        hint: '编号图里灰度值就是编号，0 是背景。例如 pick="3 5"',
+      })
+    } else {
+      out.maskPick = ids
+    }
+  }
+  return out
+}
+
+function derivedBitmap(node: FvgNode, ctx: LayoutContext, bitmap: ImageLayoutNode['bitmap']): ImageLayoutNode['bitmap'] {
+  const derive = node.attrs.derive?.trim()
+  if (!derive) return bitmap
+  if (!ctx.inMask) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: 'derive 只写在 mask 里的 img 上',
+      hint: '蒙版写成 <mask><img src="photo.jpg" derive="subject" /></mask>',
+    })
+    return bitmap
+  }
+  if (!isDeriveKind(derive)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `derive 只能是 subject、mask 或 regions，收到 ${derive}`,
+      hint: '主体写 derive="subject"',
+    })
+    return bitmap
+  }
+  const src = node.attrs.src ?? ''
+  const checked = checkDerive(src, ctx.baseDir, derive)
+  if (checked.status === 'remote') {
+    ctx.issues.push({
+      level: 'error',
+      code: 'missing-mask',
+      path: ctx.pathPrefix,
+      message: 'derive 只接受本地图片',
+      hint: 'src 写成文件路径，再运行 npx flexlayer-select cutout',
+    })
+    return null
+  }
+  if (checked.status === 'missing') {
+    ctx.issues.push({
+      level: 'error',
+      code: 'missing-mask',
+      path: ctx.pathPrefix,
+      message: `没有 ${derive} 的缓存`,
+      hint: checked.command,
+    })
+    return null
+  }
+  if (checked.status === 'stale') {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'stale-mask',
+      path: ctx.pathPrefix,
+      message: '蒙版缓存和原图对不上',
+      hint: checked.command,
+    })
+  }
+  preloadLayerImageSync(checked.file, ctx.baseDir)
+  const peeked = peekLayerImage(checked.file, ctx.baseDir)
+  if (peeked.status !== 'ok') {
+    ctx.issues.push({
+      level: 'error',
+      code: 'missing-mask',
+      path: ctx.pathPrefix,
+      message: `蒙版缓存读不了: ${checked.file}`,
+      hint: '删掉这张缓存，再运行 npx flexlayer-select cutout',
+    })
+    return null
+  }
+  return peeked.image
+}
+
+function applyMaskOp(node: FvgNode, laid: LayoutNode, ctx: LayoutContext) {
+  const raw = node.attrs.op?.trim()
+  if (!raw) return
+  if (!ctx.inMask) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: 'op 只写在 mask 里面',
+      hint: '蒙版里写 <circle op="subtract" />，取值 add、subtract、intersect、xor',
+    })
+    return
+  }
+  if (!MASK_OPS.has(raw)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `op 只能是 add、subtract、intersect、xor，收到 ${raw}`,
+      hint: '默认是 add。减一块写 op="subtract"',
+    })
+    return
+  }
+  laid.maskOp = raw as MaskOp
+}
+
+function notePreview(node: FvgNode, ctx: LayoutContext, path: string) {
+  track(ctx, path, node)
+  const of = node.attrs.of?.trim().replace(/^#/, '') ?? ''
+  if (!of) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path,
+      message: 'preview 缺少 of',
+      hint: '写成 <preview of="#person" show="overlay checker black white edges" />',
+    })
+    return
+  }
+  const raw = node.attrs.show?.trim()
+  const tokens = raw ? raw.split(/[\s,]+/).filter(Boolean) : [...PREVIEW_SHOWS]
+  const show: PreviewSpec['show'] = []
+  for (const token of tokens) {
+    if ((PREVIEW_SHOWS as readonly string[]).includes(token)) show.push(token as PreviewSpec['show'][number])
+    else {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path,
+        message: `show 不认识 ${token}`,
+        hint: '用 overlay、checker、black、white、edges',
+      })
+    }
+  }
+  if (show.length === 0) return
+  const spec: PreviewSpec = { of, show, path }
+  const source = ctx.sources.get(path)
+  if (source) spec.source = source
+  ctx.previews.push(spec)
+}
+
+function warnFeatherInvert(node: FvgNode, ctx: LayoutContext) {
+  if (node.tag === 'mask') return
+  for (const key of ['feather', 'invert'] as const) {
+    if (!node.attrs[key]?.trim()) continue
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `${key} 只写在 <mask> 上`,
+      hint: '写成 <mask feather="8" invert="true">',
+    })
+  }
+}
+
 /** 把 mask 里的形状和图片排进 layer 的局部坐标。空的或全被忽略时不生效。 */
-function layoutMask(maskNode: FvgNode, ctx: LayoutContext): LayoutNode[] | undefined {
+function layoutMask(maskNode: FvgNode, ctx: LayoutContext): { shapes: LayoutNode[]; feather?: number; invert?: boolean } | undefined {
   if (maskNode.attrs.style != null && maskNode.attrs.style.trim() !== '') {
     ctx.issues.push({
       level: 'warn',
@@ -2241,43 +2468,130 @@ function layoutMask(maskNode: FvgNode, ctx: LayoutContext): LayoutNode[] | undef
       hint: '形状用属性写 fill、x、y 或 cx、cy；图片的宽高写在 img 的 style 上',
     })
   }
-  const children = maskNode.children.filter((c) => typeof c !== 'string') as FvgNode[]
-  const laid: LayoutNode[] = []
-  for (let i = 0; i < children.length; i++) {
-    const ch = children[i]!
-    const path = nodePath(ctx.pathPrefix, ch.tag, i)
-    track(ctx, path, ch)
-    const sub: LayoutContext = { ...ctx, pathPrefix: path, fillDefault: '#ffffff' }
-    if (!isMaskContentTag(ch.tag)) {
-      ctx.issues.push({
-        level: 'warn',
-        code: 'invalid-child',
-        path,
-        message: `mask 里不收 <${ch.tag}>`,
-        hint: '改成 rect、circle、ellipse、polygon、path 或 img。没画到的地方会藏起来',
-      })
-      continue
-    }
-    ctx.issues.push(...checkChildAttrs(ch, 'layer', path))
-    const node = isImageTag(ch.tag)
-      ? layoutImage(ch, sub)
-      : isShapeTag(ch.tag)
-        ? layoutShape(ch, sub, ctx.color)
-        : layoutLineNode(ch, sub, ctx.color)
-    placeInLayer(ch, node)
-    laid.push(node)
-  }
+  const maskCtx: LayoutContext = { ...ctx, inMask: true }
+  const laid = layoutMaskEntries(maskNode, maskCtx)
   if (laid.length === 0) {
     ctx.issues.push({
       level: 'warn',
       code: 'empty-mask',
       path: ctx.pathPrefix,
       message: 'mask 里没有可用的形状或图片，没有生效',
-      hint: '在里面写 rect、circle、ellipse、polygon、path 或 img',
+      hint: '在里面写 rect、circle、ellipse、polygon、path、img 或 g。没画到的地方会藏起来',
     })
     return undefined
   }
+  let feather: number | undefined
+  const featherRaw = maskNode.attrs.feather?.trim()
+  if (featherRaw) {
+    const parsed = parseNumber(featherRaw)
+    if (parsed == null || parsed < 0) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `feather 要是不小于 0 的像素，收到 ${featherRaw}`,
+        hint: '写成 feather="8"',
+      })
+    } else if (parsed > 0) {
+      feather = parsed
+    }
+  }
+  const invertRaw = maskNode.attrs.invert?.trim().toLowerCase()
+  let invert = false
+  if (invertRaw) {
+    if (invertRaw === 'true' || invertRaw === '1' || invertRaw === 'yes') invert = true
+    else if (invertRaw !== 'false' && invertRaw !== '0' && invertRaw !== 'no') {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `invert 写成 true 或 false，收到 ${invertRaw}`,
+        hint: '反选写 invert="true"',
+      })
+    }
+  }
+  return { shapes: laid, ...(feather != null ? { feather } : {}), ...(invert ? { invert } : {}) }
+}
+
+function layoutMaskEntries(parent: FvgNode, ctx: LayoutContext): LayoutNode[] {
+  const children = parent.children.filter((c) => typeof c !== 'string') as FvgNode[]
+  const laid: LayoutNode[] = []
+  for (let i = 0; i < children.length; i++) {
+    const ch = children[i]!
+    const path = nodePath(ctx.pathPrefix, ch.tag, i)
+    track(ctx, path, ch)
+    const sub: LayoutContext = { ...ctx, pathPrefix: path, fillDefault: '#ffffff', inMask: true }
+    warnFeatherInvert(ch, sub)
+    if (ch.tag !== 'g' && !isMaskContentTag(ch.tag)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-child',
+        path,
+        message: `mask 里不收 <${ch.tag}>`,
+        hint: '改成 rect、circle、ellipse、polygon、path、img 或 g。没画到的地方会藏起来',
+      })
+      continue
+    }
+    ctx.issues.push(...checkChildAttrs(ch, 'layer', path))
+    const node =
+      ch.tag === 'g'
+        ? layoutMaskGroup(ch, sub)
+        : isImageTag(ch.tag)
+          ? layoutImage(ch, sub)
+          : isShapeTag(ch.tag)
+            ? layoutShape(ch, sub, ctx.color)
+            : layoutLineNode(ch, sub, ctx.color)
+    if (ch.tag !== 'g') placeInLayer(ch, node)
+    applyMaskOp(ch, node, sub)
+    laid.push(node)
+  }
   return laid
+}
+
+function layoutMaskGroup(node: FvgNode, ctx: LayoutContext): GroupLayoutNode {
+  const appearance = readAttrAppearance(node.attrs)
+  const parsed = parseSvgTransform(node.attrs.transform)
+  if (parsed.error) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 transform: ${parsed.error}`,
+      hint: '写成 translate、rotate、scale 或 matrix，例如 transform="translate(12,8)"',
+    })
+  }
+  const children = layoutMaskEntries(node, ctx)
+  let box = { x: 0, y: 0, width: 0, height: 0 }
+  let any = false
+  for (const child of children) {
+    const next = boundsOf(parsed.matrix, { x: child.x, y: child.y, width: child.width, height: child.height })
+    if (!any) {
+      box = next
+      any = true
+    } else {
+      const x = Math.min(box.x, next.x)
+      const y = Math.min(box.y, next.y)
+      const right = Math.max(box.x + box.width, next.x + next.width)
+      const bottom = Math.max(box.y + box.height, next.y + next.height)
+      box = { x, y, width: right - x, height: bottom - y }
+    }
+  }
+  return {
+    kind: 'group',
+    path: ctx.pathPrefix,
+    id: node.attrs.id,
+    tag: 'g',
+    x: box.x,
+    y: box.y,
+    width: box.width,
+    height: box.height,
+    ink: { x: 0, y: 0, width: box.width, height: box.height },
+    ...appearance,
+    children,
+    svg: parsed.matrix,
+    ...readEffects(node.attrs, ctx, solidPaint(node.attrs.fill ?? ctx.paintFill ?? '#ffffff', ctx.color)),
+    ...layoutDrawMeta(node, ctx),
+  }
 }
 
 const measuredBoxes = new WeakMap<FvgNode, { width: number; height: number }>()
@@ -2585,6 +2899,10 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
 
   for (let i = 0; i < childFvg.length; i++) {
     const ch = childFvg[i]!
+    if (ch.tag === 'preview') {
+      notePreview(ch, ctx, nodePath(ctx.pathPrefix, ch.tag, i))
+      continue
+    }
     if (ch.tag === 'symbol' || ch.tag === 'draw' || ch.tag === 'mask') {
       if (ch.tag === 'symbol') track(ctx, nodePath(ctx.pathPrefix, ch.tag, i), ch)
       continue
@@ -2598,6 +2916,8 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
     const concrete = materialize(ch)
     const path = nodePath(ctx.pathPrefix, concrete.tag, i)
     track(ctx, path, ch)
+    warnFeatherInvert(concrete, { ...ctx, pathPrefix: path })
+    if (!ctx.inMask) applyMaskOp(concrete, { maskOp: undefined } as LayoutNode, { ...ctx, pathPrefix: path, inMask: false })
     ctx.issues.push(...checkChildAttrs(concrete, 'layer', path))
     const textMax = contentWidthFor(node, fixedW, layerCtx.maxContentWidth)
     const subCtx = { ...layerCtx, pathPrefix: path, maxContentWidth: textMax }
@@ -2690,9 +3010,10 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
       perspective = parsed
     }
   }
-  const mask = chosenMask
+  const laidMask = chosenMask
     ? layoutMask(chosenMask, { ...ctx, pathPrefix: chosenMaskPath })
     : undefined
+  const mask = laidMask?.shapes
   if (node.attrs.mask != null && node.attrs.mask.trim() !== '') {
     ctx.issues.push({
       level: 'warn',
@@ -2750,6 +3071,8 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
     ...(view ? { view } : {}),
     ...(perspective != null ? { perspective } : {}),
     ...(mask ? { mask } : {}),
+    ...(laidMask?.feather != null ? { maskFeather: laidMask.feather } : {}),
+    ...(laidMask?.invert ? { maskInvert: true } : {}),
     ...effects,
     ...(overlay ? { overlay } : {}),
     ...layerFilters,
@@ -2896,6 +3219,7 @@ export function measureLayer(node: FvgNode, env: MeasureEnv): { laid: LayerLayou
     useStack: [],
     baseDir: env.baseDir,
     sources: new Map(),
+    previews: [],
   }
   track(ctx, 'layer', node)
   const laid = layoutLayer(node, ctx)
@@ -3004,6 +3328,7 @@ export function layoutSync(rootNode: FvgNode, assets: LayoutAssets): FvgDocument
     useStack: [],
     baseDir,
     sources,
+    previews: [],
   }
   track(paintCtx, 'layer', rootNode)
   // 没写 background 时不铺底色，PNG 里空出来的像素保持透明。
@@ -3025,7 +3350,40 @@ export function layoutSync(rootNode: FvgNode, assets: LayoutAssets): FvgDocument
     })
   }
 
-  return { width, height, background, color, fontFamily, safe, root, issues, sources }
+  const ids = new Set<string>()
+  collectLayerIds(root, ids)
+  for (const preview of paintCtx.previews) {
+    if (!ids.has(preview.of)) {
+      issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: preview.path,
+        ...(preview.source ? { source: preview.source } : {}),
+        message: `preview 找不到 #${preview.of}`,
+        hint: 'of 写成带 id 的 layer，例如 <preview of="#person" />',
+      })
+    }
+  }
+
+  return {
+    width,
+    height,
+    background,
+    color,
+    fontFamily,
+    safe,
+    root,
+    issues,
+    sources,
+    ...(paintCtx.previews.length ? { previews: paintCtx.previews } : {}),
+  }
+}
+
+function collectLayerIds(node: LayoutNode, ids: Set<string>) {
+  if (node.kind === 'layer' && node.id) ids.add(node.id)
+  if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
+    for (const child of node.children) collectLayerIds(child, ids)
+  }
 }
 
 function canonicalizeTree(node: FvgNode): void {
