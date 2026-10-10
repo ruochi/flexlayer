@@ -201,22 +201,28 @@ function materialBytes(
       batch.a,
     ]
   }
-  const reflect = reflectView(v, n)
-  const env = studioAt(reflect.x, reflect.y, reflect.z, batch.roughness)
-  const envR = env.r
-  const envG = env.g
-  const envB = env.b
-  if (batch.material === 'metal') {
-    const ndotv = clamp01(n.x * v.x + n.y * v.y + n.z * v.z)
-    const fres = (1 - ndotv) ** 5
-    const exposure = blocked ? 0.32 : 0.5 + 0.5 * Math.min(1, shade)
-    const specAdd = spec * 220
-    const tint = (channel: number, envC: number) => {
-      const f = channel / 255
-      return Math.min(255, (f + (1 - f) * fres) * envC * exposure + specAdd * (0.25 + 0.75 * f))
+    const reflect = reflectView(v, n)
+    const env = studioAt(reflect.x, reflect.y, reflect.z, batch.roughness)
+    const envR = env.r
+    const envG = env.g
+    const envB = env.b
+    if (batch.material === 'metal') {
+      const ndotv = clamp01(n.x * v.x + n.y * v.y + n.z * v.z)
+      const fres = (1 - ndotv) ** 5
+      const exposure = blocked ? 0.32 : 0.5 + 0.5 * Math.min(1, shade)
+      const specAdd = spec * 220
+      const envLum = (envR + envG + envB) / 3
+      // 暗部留两成 fill，避免房间暗处变成纯黑。
+      // 灯带之间的暗墙映到水平轮廓上时，再补一截 fill，否则背光一侧会压出一条近黑的边。朝上朝下仍是暗的。
+      const horiz = clamp01(1 - Math.abs(reflect.y) / 0.55)
+      const room = clamp01((130 - envLum) / 70)
+      const fillKeep = 0.2 + 0.35 * horiz * room
+      const tint = (channel: number, envC: number) => {
+        const f = channel / 255
+        return Math.min(255, (f + (1 - f) * fres) * envC * exposure + channel * fillKeep + specAdd * (0.25 + 0.75 * f))
+      }
+      return [byte(tint(batch.r, envR)), byte(tint(batch.g, envG)), byte(tint(batch.b, envB)), batch.a]
     }
-    return [byte(tint(batch.r, envR)), byte(tint(batch.g, envG)), byte(tint(batch.b, envB)), batch.a]
-  }
   const ndotv = clamp01(n.x * v.x + n.y * v.y + n.z * v.z)
   const edge = (1 - ndotv) ** 2.2
   const body = batch.a / 255
@@ -1270,6 +1276,7 @@ function drawTriangle(
   const openShade = flat && batch.shaded ? shadeOf(a.nx, a.ny, a.nz, back, false) : 0
   const shutShade = flat && batch.shaded ? shadeOf(a.nx, a.ny, a.nz, back, true) : 0
   const flatBias = flat && shadow ? shadowBias(shadow, a.nx, a.ny, a.nz) : 0
+  const round = roundSphere(batch)
   const texture = batch.texture
   for (let iy = minY; iy <= maxY; iy++) {
     const py = iy + 0.5
@@ -1297,10 +1304,22 @@ function drawTriangle(
         w1 += e1x
         continue
       }
-      const nx = flat ? a.nx : (w0 * a.nx * a.invW + w1 * b.nx * b.invW + w2 * c.nx * c.invW) / iw
-      const ny = flat ? a.ny : (w0 * a.ny * a.invW + w1 * b.ny * b.invW + w2 * c.ny * c.invW) / iw
-      const nz = flat ? a.nz : (w0 * a.nz * a.invW + w1 * b.nz * b.invW + w2 * c.nz * c.invW) / iw
-      const blocked = shadow !== null && occluded(shadow, x, y, z, nx, ny, nz, flat ? flatBias : undefined)
+      let nx = flat ? a.nx : (w0 * a.nx * a.invW + w1 * b.nx * b.invW + w2 * c.nx * c.invW) / iw
+      let ny = flat ? a.ny : (w0 * a.ny * a.invW + w1 * b.ny * b.invW + w2 * c.ny * c.invW) / iw
+      let nz = flat ? a.nz : (w0 * a.nz * a.invW + w1 * b.nz * b.invW + w2 * c.nz * c.invW) / iw
+      let px = x
+      let py = y
+      let pz = z
+      if (round) {
+        const hit = sphereSurface(camera, round, x, y, z)
+        nx = hit.nx
+        ny = hit.ny
+        nz = hit.nz
+        px = hit.x
+        py = hit.y
+        pz = hit.z
+      }
+      const blocked = shadow !== null && occluded(shadow, px, py, pz, nx, ny, nz, flat ? flatBias : undefined)
       let sr = batch.r
       let sg = batch.g
       let sb = batch.b
@@ -1316,7 +1335,7 @@ function drawTriangle(
         sa = tex.a
       } else if (batch.material !== 'lambert') {
         const shade = flat ? (blocked ? shutShade : openShade) : shadeOf(nx, ny, nz, back, blocked)
-        const painted = materialBytes(batch, nx, ny, nz, back, shade, blocked, x, y, z, camera)
+        const painted = materialBytes(batch, nx, ny, nz, back, shade, blocked, px, py, pz, camera)
         sr = painted[0]
         sg = painted[1]
         sb = painted[2]
@@ -1565,11 +1584,12 @@ function meshLineFields(
   owner: number,
 ): Pick<Batch, 'edges' | 'lines' | 'outline' | 'owner'> {
   const lines = lineStyleOf(node, opacity)
-  if (!lines) return { edges: NO_EDGES, lines: null, outline: null, owner }
+  const outline = sphereOutlineOf(node)
+  if (!lines) return { edges: NO_EDGES, lines: null, outline, owner }
   return {
     edges: extractEdges(positions, indices),
     lines,
-    outline: sphereOutlineOf(node),
+    outline,
     owner,
   }
 }
@@ -1841,6 +1861,49 @@ function sphereRing(center: { x: number; y: number; z: number }, radius: number,
   return ring
 }
 
+/** 三角形在球里面。沿视线打到球面，法线和阴影都用这个交点，避免背光轮廓被自己的阴影图吃掉。 */
+function sphereSurface(
+  camera: ShadeCamera,
+  round: { x: number; y: number; z: number; radius: number },
+  x: number,
+  y: number,
+  z: number,
+) {
+  const ocx = camera.x - round.x
+  const ocy = camera.y - round.y
+  const ocz = camera.z - round.z
+  let dx = x - camera.x
+  let dy = y - camera.y
+  let dz = z - camera.z
+  const len = Math.hypot(dx, dy, dz) || 1
+  dx /= len
+  dy /= len
+  dz /= len
+  const b = ocx * dx + ocy * dy + ocz * dz
+  const c = ocx * ocx + ocy * ocy + ocz * ocz - round.radius * round.radius
+  const disc = b * b - c
+  if (disc >= 0) {
+    const s = Math.sqrt(disc)
+    let t = -b - s
+    if (t < 1e-4) t = -b + s
+    if (t > 1e-4) {
+      const hx = camera.x + dx * t
+      const hy = camera.y + dy * t
+      const hz = camera.z + dz * t
+      const nx = hx - round.x
+      const ny = hy - round.y
+      const nz = hz - round.z
+      const hlen = Math.hypot(nx, ny, nz)
+      if (hlen > 1e-4) return { x: hx, y: hy, z: hz, nx: nx / hlen, ny: ny / hlen, nz: nz / hlen }
+    }
+  }
+  const fx = x - round.x
+  const fy = y - round.y
+  const fz = z - round.z
+  const flen = Math.hypot(fx, fy, fz) || 1
+  return { x, y, z, nx: fx / flen, ny: fy / flen, nz: fz / flen }
+}
+
 function roundSphere(batch: Batch): { x: number; y: number; z: number; radius: number } | null {
   const outline = batch.outline
   if (!outline) return null
@@ -1900,8 +1963,35 @@ function paintSplit(ctx: CanvasRenderingContext2D, run: InkRun, scale: number) {
   }
 }
 
+/** 折线上离 (x, y) 最近的点，沿折线到两端的距离。 */
+function closestAlong(points: ChainPoint[], x: number, y: number) {
+  let best = Infinity
+  let along = 0
+  let walked = 0
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!
+    const b = points[i]!
+    const vx = b.x - a.x
+    const vy = b.y - a.y
+    const len2 = vx * vx + vy * vy
+    const seg = Math.sqrt(len2)
+    let t = 0
+    if (len2 > 1e-8) t = Math.min(1, Math.max(0, ((x - a.x) * vx + (y - a.y) * vy) / len2))
+    const cx = a.x + vx * t
+    const cy = a.y + vy * t
+    const d2 = (x - cx) * (x - cx) + (y - cy) * (y - cy)
+    if (d2 < best) {
+      best = d2
+      along = walked + seg * t
+    }
+    walked += seg
+  }
+  return { dist2: best, along, total: walked }
+}
+
 /**
  * 可见线按 (线宽 / 2 + halo) 盖住更远的线。共用端点的棱不切开，角上仍连着。
+ * 盖住的位置贴着这条线自己的端点时也不切开：线管端面和轮廓只在端点相接。
  * 深度差不到 2 个像素的不算压在前面。
  */
 function cutCrossings(runs: InkRun[], edges: EdgeEnds[], width: number, height: number, scale: number) {
@@ -1910,6 +2000,7 @@ function cutCrossings(runs: InkRun[], edges: EdgeEnds[], width: number, height: 
   const edgeBuf = new Int32Array(width * height)
   zBuf.fill(-1e30)
   edgeBuf.fill(-1)
+  const byEdge = new Map<number, ChainPoint[]>()
   const stamp = (x: number, y: number, z: number, edge: number, radius: number) => {
     const r = Math.ceil(radius)
     const x0 = Math.max(0, Math.floor(x - r))
@@ -1934,7 +2025,12 @@ function cutCrossings(runs: InkRun[], edges: EdgeEnds[], width: number, height: 
     if (run.hidden || !(run.style.halo > 0)) continue
     const radius = (run.style.widths[run.kind] / 2 + run.style.halo) * scale
     if (!(radius > 0)) continue
-    for (const point of run.points) stamp(point.x, point.y, point.z, point.edge, radius)
+    for (const point of run.points) {
+      const list = byEdge.get(point.edge)
+      if (list) list.push(point)
+      else byEdge.set(point.edge, [point])
+      stamp(point.x, point.y, point.z, point.edge, radius)
+    }
   }
   for (const run of runs) {
     for (const point of run.points) {
@@ -1944,7 +2040,13 @@ function cutCrossings(runs: InkRun[], edges: EdgeEnds[], width: number, height: 
       const i = iy * width + ix
       const other = edgeBuf[i]!
       if (other < 0 || !(zBuf[i]! > point.z + 2)) continue
-      if (shareEnds(edges[other]!, edges[point.edge]!) || joinsParticipant(edges[other]!, edges[point.edge]!)) continue
+      const nearEdge = edges[other]
+      const farEdge = edges[point.edge]
+      if (nearEdge && farEdge && (shareEnds(nearEdge, farEdge) || joinsParticipant(nearEdge, farEdge))) continue
+      const nearPts = byEdge.get(other)
+      if (!nearPts || nearPts.length < 2) continue
+      const hit = closestAlong(nearPts, point.x, point.y)
+      if (hit.along < 3 || hit.total - hit.along < 3) continue
       point.cut = true
     }
   }

@@ -482,6 +482,68 @@ describe('网格绘制', () => {
     expect(messages.some((message) => message.includes('glow'))).toBe(true)
   })
 
+  it('倾斜圆环的墨迹贴着画出来的像素', async () => {
+    const source = `<layer width="240" height="180" background="#ffffff" perspective="800"><torus cx="120" cy="90" r="40" tube="12" fill="#ff2244" rotateX="64" /></layer>`
+    const { png, report } = await renderFvg(source)
+    expect(report.issues.filter((issue) => issue.code === 'overflow-canvas')).toEqual([])
+    const torus = report.elements.find((el) => el.tag === 'torus')
+    expect(torus).toBeTruthy()
+    const img = await imageOf(png)
+    let minX = img.width
+    let minY = img.height
+    let maxX = 0
+    let maxY = 0
+    for (let y = 0; y < img.height; y++) {
+      for (let x = 0; x < img.width; x++) {
+        const [r, g, b] = img.at(x, y)
+        if (r > 180 && g < 80 && b < 120) {
+          if (x < minX) minX = x
+          if (y < minY) minY = y
+          if (x > maxX) maxX = x
+          if (y > maxY) maxY = y
+        }
+      }
+    }
+    expect(maxX).toBeGreaterThan(minX + 20)
+    const ink = torus!.ink
+    expect(Math.abs(ink.x - minX)).toBeLessThan(8)
+    expect(Math.abs(ink.y - minY)).toBeLessThan(8)
+    expect(Math.abs(ink.right - (maxX + 1))).toBeLessThan(8)
+    expect(Math.abs(ink.bottom - (maxY + 1))).toBeLessThan(8)
+    const tight = await checkFvg(
+      `<layer width="200" height="130" background="#ffffff" perspective="800"><torus cx="100" cy="68" r="40" tube="12" fill="#ff2244" rotateX="64" /></layer>`,
+    )
+    expect(tight.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
+  })
+
+  it('金属球背光一侧没有锯齿黑边', async () => {
+    const { png } = await renderFvg(
+      `<layer width="180" height="180" background="#c8c8c8" perspective="700"><sphere cx="90" cy="90" r="50" fill="#cc2222" material="metal 0.2" /></layer>`,
+    )
+    const img = await imageOf(png)
+    const solid = (y: number, count: number) => {
+      const found: Array<[number, number, number]> = []
+      for (let x = img.width - 1; x > 80 && found.length < count; x--) {
+        const [r, g, b] = img.at(x, y)
+        if (r > 180 && g > 180 && b > 180) continue
+        if (g > 70) continue
+        found.push([r, g, b])
+      }
+      return found
+    }
+    for (const y of [84, 90, 96]) {
+      const pixels = solid(y, 8)
+      expect(pixels.length).toBe(8)
+      for (const [r, g, b] of pixels) {
+        expect(r).toBeGreaterThan(70)
+        expect(r).toBeGreaterThan(g + 20)
+        expect(b).toBeLessThan(r)
+      }
+    }
+    const equator = solid(90, 8).map(([r]) => r)
+    expect(Math.min(...equator)).toBeGreaterThan(100)
+  })
+
   it('网格斜边有抗锯齿过渡', async () => {
     const { png } = await renderFvg(
       `<layer width="200" height="200" background="#000000" perspective="800"><box x="20" y="93" width="160" height="14" depth="2" rotate="24" fill="#ffffff" /></layer>`,

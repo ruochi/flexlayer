@@ -46,6 +46,8 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 | 公式用 `<math>`，不要写进文字盒子 | `<p>因此<math><mi>x</mi></math></p>` | `<div style="display:flex"><span>因此</span><math><mi>x</mi></math></div>` | `invalid-child` |
 | 公式只用带 MATH 表的字体 | `<math style="font-family:Kai">` | 不写 `font-family`，字母和运算符用 `STIXTwoMath`。说明文字用 `<mtext>`，跟外面的字体走 | `invalid-attr` |
 | 整层裁切用 `<mask>`，里面直接写形状或 `<img>` | 把 mask 写成属性，或放进 flex | `<layer><mask><circle cx="160" cy="90" r="90" /></mask>…</layer>`。省略 `fill` 为不透明白 | `invalid-child` |
+| 抠完要贴纸边或发光轮廓 | 把 `shadow` 写在子元素上，或让父层描边套住没抠的矩形 | 把 `shadow`、`glow`、外侧 `ink-stroke` 写在蒙版所在的 `layer` 上。轮廓跟着留下的形状，可以伸出蒙版。父层的描边和阴影也跟着这块轮廓 | |
+| `<preview>` 的 `show` | 把它当成不认识的属性 | `<preview of="#cut" show="overlay checker black white edges" />`。`show` 和 `of` 只在 `preview` 上合法 | |
 | 蒙版加减用 `op`，不要写 CSS | `mask-image`、`mask-composite` | `<mask><rect … /><circle op="subtract" /></mask>`。默认 `add`。分组用 `<g>` | `invalid-attr` |
 | 蒙版读黑白图或编号 | `<img mask-mode="luminance">` | `<img channel="luma">`、`<img pick="3 5">`。只写在 mask 里 | `invalid-attr` |
 | 羽化和反选写在 `<mask>` 上 | `<rect feather="8">` | `<mask feather="8" invert="true">` | `invalid-attr` |
@@ -99,7 +101,7 @@ export default canvas.create(
 - 动画导出 `composition`（见 SPEC 第 13 章）。文件头写 `/** @jsxImportSource flexlayer */`，标签不用 import。`flexlayer check` / `render` 会执行它。`--emit out.layer` 把展开结果写回 `.layer`。`draw={(ctx, el) => ...}` 里只用 `ctx` 和 `el`，否则 `--emit` 报 `emit-draw`，并且不写出 `<draw>`。不要用 `Math.random` 或 `Date.now`。可重复的随机数用 `random(seed)` 或 `noise`。例子：`examples/slide.tsx`。
 - 要从字体取出某个字的轮廓，`import { glyph } from 'flexlayer'`。`glyph('春眠', { font: 'Kai', size: 120, weight: 700 })` 同步按码位返回数组，每项有 `text`、`d`、`font`、`size`、`weight`、字宽 `width`、字身高度 `height`、`baseline`、`ink` 和 `missing`。`d` 的原点在字身左上角，y 向下，单位是像素。字宽和字身高度来自字体，不来自路径外接框。缺字（`😀`、`𠀀`）`missing` 为 `true`，`d` 是同一个缺字方框。可变字体只出默认字重。见 SPEC 5.4。
 - 要检查一张抠图结果或黑白蒙版，`import { analyzeImage } from 'flexlayer'`。`await analyzeImage('photo.subject.png')` 返回 `width`、`height`、`channel`、留下的比例 `area`、外接矩形 `ink`、碎片数 `pieces`、最大几块 `parts`、洞数 `holes`、软边宽度 `softEdge` 和轮廓 `d`。坐标是图片像素。有透明像素时看 alpha，否则看亮度，可以用 `channel` 指定。`d` 直接写进 `<mask><path d /></mask>`；单独画出来要写 `stroke="none"`。和 `glyph` 一样不进渲染，同一张图只算一次。见 SPEC 第 6 章。
-- 抠主体用仓库里的 `packages/select`（包名 `flexlayer-select`），不要把模型放进渲染器。`npx flexlayer-select cutout photo.jpg --preset portrait` 写出 `photo.subject.png` 和 `photo.cutout.json`。标记里写 `<img src="photo.jpg" derive="subject" />`。没装这个包时，`flexlayer select` 只提示安装命令。
+- 抠主体用仓库里的 `packages/select`（包名 `flexlayer-select`），不要把模型放进渲染器，也不要写 `npm install flexlayer-select`：这个包不在 npm 上。在 `packages/select` 里执行 `npm ci && npm run build`。第一次下载的模型是 fp16，大约 470MB，不是 940MB 的 fp32。`npx flexlayer-select cutout photo.jpg --preset portrait` 写出 `photo.subject.png` 和 `photo.cutout.json`。标记里写 `<img src="photo.jpg" derive="subject" />`。没装这个包时，`flexlayer select` 只提示这条安装路径。
 
 ```ts
 import { renderLayer } from 'flexlayer'

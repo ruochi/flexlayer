@@ -159,7 +159,7 @@ const root = h(
 await renderLayer(root)
 ```
 
-抠主体在单独的包里，渲染器只读它写出的缓存。`npx flexlayer-select cutout photo.jpg --preset portrait` 得到 `photo.subject.png`。标记里写 `<img src="photo.jpg" derive="subject" />`，不要改原图。
+抠主体在仓库里的 `packages/select`，不在 npm 上，渲染器只读它写出的缓存。进入这个目录执行 `npm ci && npm run build`，第一次会下载大约 470MB 的 fp16 模型。然后 `npx flexlayer-select cutout photo.jpg --preset portrait` 得到 `photo.subject.png`。标记里写 `<img src="photo.jpg" derive="subject" />`，不要改原图。
 
 按帧生成一组 PNG 和一张联系表：
 
