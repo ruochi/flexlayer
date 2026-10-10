@@ -264,8 +264,6 @@ export namespace JSX {
     /** HTML 图片。src、alt 是属性，宽高写 style。`image` 与 `img` 相同。 */
     img: FvgHtml & { src?: string; alt?: string }
     image: FvgHtml & { src?: string; alt?: string }
-    /** Material Symbols 图标。name 是图标名，weight 是 100–700，size 是边长。颜色和字号也可以写 style。 */
-    icon: FvgHtml & { name?: string; weight?: number | string; size?: number | string }
     math: FvgHtml
     mrow: FvgHtml
     mi: FvgHtml
