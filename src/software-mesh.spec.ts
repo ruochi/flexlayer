@@ -803,4 +803,43 @@ describe('软件光栅', () => {
       expect(blocked.data[p + 1]).toBeLessThan(140)
     }
   })
+
+  it('parallel 正对的长方体保持布局宽高，近的球仍盖住它', async () => {
+    const face = `
+      <box x="70" y="40" width="100" height="80" depth="60" fill="#ff2244" />
+    `
+    const parallel = await render(`
+      <layer width="240" height="160" background="#000000" perspective="parallel">${face}</layer>
+    `)
+    const numeric = await render(`
+      <layer width="240" height="160" background="#000000" perspective="180">${face}</layer>
+    `)
+    const inside = await pixelAt(parallel.png, 80, 80)
+    const outside = await pixelAt(parallel.png, 64, 80)
+    const enlarged = await pixelAt(numeric.png, 64, 80)
+    expect(inside[0]).toBeGreaterThan(140)
+    expect(outside[0]).toBeLessThan(20)
+    expect(enlarged[0]).toBeGreaterThan(140)
+    const covered = await render(`
+      <layer width="160" height="160" background="#000000" perspective="parallel">
+        <box x="20" y="40" width="120" height="80" depth="20" fill="#2244ff" />
+        <sphere cx="80" cy="80" r="24" z="40" fill="#ff2244" />
+      </layer>
+    `)
+    const sphere = await pixelAt(covered.png, 80, 80)
+    const box = await pixelAt(covered.png, 28, 80)
+    expect(sphere[0]).toBeGreaterThan(sphere[2] + 20)
+    expect(box[2]).toBeGreaterThan(box[0] + 20)
+    const ring = await render(`
+      <layer width="200" height="200" background="#000000" perspective="parallel">
+        <sphere cx="100" cy="100" r="40" fill="none" stroke="#ff2244" stroke-width="4" />
+      </layer>
+    `)
+    const onRing = await pixelAt(ring.png, 140, 100)
+    const insideRing = await pixelAt(ring.png, 120, 100)
+    const outsideRing = await pixelAt(ring.png, 156, 100)
+    expect(onRing[0]).toBeGreaterThan(140)
+    expect(insideRing[0]).toBeLessThan(20)
+    expect(outsideRing[0]).toBeLessThan(20)
+  })
 })

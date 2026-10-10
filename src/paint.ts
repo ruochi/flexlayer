@@ -30,7 +30,7 @@ import { applyToBox, aroundPivot, invert, multiply, originOffset } from './matri
 import { invalidDrawIssue } from './draw-tag.js'
 import { openSvgPath } from './path.js'
 import { ownsMeshScene, renderMeshLayer, type MeshFrame } from './mesh.js'
-import { drawTexturedPlane, has3dPose, PERSPECTIVE_AA, planeDepth, posePoint, project } from './perspective.js'
+import { behindCamera, drawTexturedPlane, has3dPose, hasPerspective, PERSPECTIVE_AA, planeDepth, posePoint, project, type Perspective } from './perspective.js'
 import { compositeMask } from './mask-compose.js'
 import { outerInkStrokeReach } from './style.js'
 import { layoutScale, viewMatrix } from './view.js'
@@ -1786,7 +1786,7 @@ function paintPerspectiveChildren(ctx: PaintCtx, node: LayerLayoutNode, debug: b
     .sort((a, b) => a.depth - b.depth || a.index - b.index)
   for (const { child, depth } of ordered) {
     if (child.width <= 0 || child.height <= 0) continue
-    if (depth >= perspective) continue
+    if (behindCamera(depth, perspective)) continue
     if (!has3dPose(child)) {
       paintNode(ctx, child, debug, t, state)
       continue
@@ -1806,7 +1806,7 @@ function strokeProjectedQuad(
   child: LayoutNode,
   vx: number,
   vy: number,
-  perspective: number,
+  perspective: Perspective,
 ) {
   const locals: Array<[number, number]> = [
     [0, 0],
@@ -1868,7 +1868,7 @@ function paintBody(ctx: PaintCtx, node: LayoutNode, debug: boolean, t: number, s
     if (meshFrame) {
       ctx.imageSmoothingEnabled = true
       ctx.drawImage(meshFrame.canvas, meshFrame.x, meshFrame.y, meshFrame.width, meshFrame.height)
-    } else if (node.kind === 'layer' && node.perspective != null && node.perspective > 0 && node.children.some(has3dPose)) {
+    } else if (node.kind === 'layer' && hasPerspective(node.perspective) && node.children.some(has3dPose)) {
       paintPerspectiveChildren(ctx, node, debug, t, state)
     } else {
       for (const ch of node.children) paintNode(ctx, ch, debug, t, state)

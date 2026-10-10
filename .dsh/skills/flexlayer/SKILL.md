@@ -94,14 +94,14 @@ export default canvas.create(
 | 蒙版运算 | `<mask><rect … /><circle op="subtract" /></mask>`。默认 `add`，分组用 `<g>`。不要写 `mask-image` | `invalid-attr` |
 | 黑白图和编号 | `<img channel="luma">`、`<img pick="3 5">`。缓存写 `derive="subject"` | `invalid-attr`、`missing-mask` |
 | 羽化、反选、预览 | `<mask feather="8" invert="true">`、`<preview of="#cut" />` | `invalid-attr` |
-| 透视 | `<layer perspective="900"><rect rotateY="20" z="40" /></layer>` | `invalid-attr`、`flatten-3d` |
+| 透视 | `<layer perspective="900"><rect rotateY="20" z="40" /></layer>`。平行投影写 `perspective="parallel"`，没有近大远小 | `invalid-attr`、`flatten-3d` |
 | 球体、圆柱、圆环、线管、长方体、拉伸、glb | `<layer perspective="700"><sphere cx="80" cy="80" r="40" /></layer>`。圆柱 `cx cy r height`，圆环 `cx cy r tube`，线管 `d` 和 `r`。`box` 的 `rx` 圆棱，`round` 选边；圆柱的 `rx` 圆口。`model` 只写 `src`，尺寸写在外包 layer | `flatten-3d`、`missing-model` |
 
 `align-items` 默认 `center`。竖排要左对齐时写 `align-items:flex-start`。横排按文字基线对齐写 `align-items:baseline`，同一行被撑高后 `center` 和 `end` 按新的行盒再排，竖排写了仍按 `flex-start`。`letter-spacing` 可以写 `em`。`justify-content` 只管这一层的主轴。`align-content` 默认 `flex-start`，管的是 `flex-wrap` 之后的多行。
 
 没写 `display:flex` 的 `div` 里直接放 `p`、`h1`–`h3`、`div`、写了宽高的 `layer` 时，从上到下排。只放文字和行内标签时，`div` 仍是文字盒子。`p`、`h1`–`h3`、`span` 里可以放 `<img>`，不要放块级标签或 `layer`。图标写成 `<span class="material-symbols-outlined">home</span>`。容器上的字号、字重、字体、颜色、字距和 `text-align` 会传给没写这些的 `p`、`div`、`span`；`h1`–`h3` 仍用自己的默认字号和字重。文字的 `color` 可以写渐变。行内 `background` 高亮这一段的行盒。
 
-带 `perspective` 的 layer 里，没有网格时直接子元素按中心深度从远到近画。出现 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 时近的盖住远的。不在透视里时 `z` 不改变顺序，并报 `flatten-3d`。网格可以写 `material="matte"`（默认的磨砂塑料）、`material="plastic"`、`material="metal 0.35"` 或 `material="glass"`。金属和玻璃映同一张固定的工作室环境，灯带是横的，不是上亮下暗。`stroke-width="3 2 1"` 依次是轮廓、折棱和隐藏线。两只都写了 `stroke` 的网格相互穿过时描出交界线，算折棱，颜色和宽度跟后写的那只；面贴面不描。`halo="3"` 让可见线在交叉处把更远的线断开。共用一个角的棱不断开，线管端面和自己的轮廓也不切开。
+带 `perspective` 的 layer 里，没有网格时直接子元素按中心深度从远到近画。出现 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 时近的盖住远的。`perspective="parallel"` 是平行投影，视线平行于 z，没有近大远小，也没有镜头平面。不在透视里时 `z` 不改变顺序，并报 `flatten-3d`。网格可以写 `material="matte"`（默认的磨砂塑料）、`material="plastic"`、`material="metal 0.35"` 或 `material="glass"`。金属和玻璃映同一张固定的工作室环境，灯带是横的，不是上亮下暗。`stroke-width="3 2 1"` 依次是轮廓、折棱和隐藏线。两只都写了 `stroke` 的网格相互穿过时描出交界线，算折棱，颜色和宽度跟后写的那只；面贴面不描。`halo="3"` 让可见线在交叉处把更远的线断开。共用一个角的棱不断开，线管端面和自己的轮廓也不切开。
 
 ## 字体、配色、图片
 

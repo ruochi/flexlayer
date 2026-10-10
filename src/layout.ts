@@ -2994,20 +2994,24 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
 
   const overlay = readLayerOverlay(node.attrs, ctx)
   const layerFilters = readLayerFilters(node.attrs, ctx)
-  let perspective: number | undefined
+  let perspective: number | 'parallel' | undefined
   const perspectiveRaw = node.attrs.perspective
   if (perspectiveRaw != null && perspectiveRaw.trim() !== '') {
-    const parsed = parseNumber(perspectiveRaw)
-    if (parsed == null || parsed <= 0) {
-      ctx.issues.push({
-        level: 'warn',
-        code: 'invalid-attr',
-        path: ctx.pathPrefix,
-        message: `无法解析 perspective: ${perspectiveRaw}`,
-        hint: '写成像素视距，例如 perspective="900"',
-      })
+    if (perspectiveRaw.trim() === 'parallel') {
+      perspective = 'parallel'
     } else {
-      perspective = parsed
+      const parsed = parseNumber(perspectiveRaw)
+      if (parsed == null || parsed <= 0) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: ctx.pathPrefix,
+          message: `无法解析 perspective: ${perspectiveRaw}`,
+          hint: '写成像素视距 perspective="900"，或平行投影 perspective="parallel"',
+        })
+      } else {
+        perspective = parsed
+      }
     }
   }
   const laidMask = chosenMask

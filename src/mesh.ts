@@ -1,5 +1,5 @@
 import type { Canvas } from '@napi-rs/canvas'
-import { planeDepth, poseMatrix } from './perspective.js'
+import { behindCamera, hasPerspective, planeDepth, poseMatrix } from './perspective.js'
 import { renderMeshSoftware } from './software-mesh.js'
 import type { LayerLayoutNode, LayoutNode, MeshLayoutNode } from './types.js'
 
@@ -24,12 +24,12 @@ function translation(x: number, y: number, z = 0): Mat4 {
 
 /** 这一层自己的 perspective 里有网格，且网格不在更内层的 perspective 中。 */
 export function ownsMeshScene(layer: LayerLayoutNode): boolean {
-  if (layer.perspective == null || layer.perspective <= 0) return false
+  if (!hasPerspective(layer.perspective)) return false
   const visit = (node: LayoutNode, blocked: boolean): boolean => {
     if (blocked) return false
     if (node.kind === 'mesh') return true
     if (node.kind !== 'layer' && node.kind !== 'flex') return false
-    const nested = node !== layer && node.kind === 'layer' && node.perspective != null && node.perspective > 0
+    const nested = node !== layer && node.kind === 'layer' && hasPerspective(node.perspective)
     return node.children.some((child) => visit(child, nested))
   }
   return visit(layer, false)
@@ -99,11 +99,11 @@ export function renderMeshLayer(
   raster: (node: LayoutNode) => MeshRaster,
 ): MeshFrame | null {
   const perspective = layer.perspective
-  if (perspective == null || perspective <= 0 || layer.width <= 0 || layer.height <= 0) return null
+  if (!hasPerspective(perspective) || layer.width <= 0 || layer.height <= 0) return null
   const meshes: MeshInstance[] = []
   const planes: PlaneInstance[] = []
   for (const child of layer.children) {
-    if (planeDepth(child) >= perspective) continue
+    if (behindCamera(planeDepth(child), perspective)) continue
     collectMeshes(child, IDENTITY, 1, meshes)
     if (child.kind === 'mesh') continue
     const peeled = stripMeshes(child)
