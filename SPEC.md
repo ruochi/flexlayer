@@ -329,6 +329,43 @@ const chars = await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })
 
 图片可以放进 `display:flex`，默认不缩小。在 layer 里默认落在 `(0, 0)`；要指定位置就外包一层 `layer`，把 `x`、`y`、`anchor` 写在那一层上。`canvas.create` 会按 `src` 准备图片。读不到文件时报 `missing-image`，`hint` 说明路径。写了宽高的盒子仍然占位。缺 `src` 报 `invalid-attr`。
 
+### 分析 analyzeImage
+
+`.tsx` 里可以先读一张图，量出它留下了多少、碎成几块，并描出轮廓。和 `glyph` 一样是程序接口，不是标签，也不进渲染：先拿到数和路径，再决定怎么摆、怎么裁。常用来检查抠图结果或黑白蒙版。
+
+```ts
+import { analyzeImage } from 'flexlayer'
+
+const cut = await analyzeImage('photo.subject.png')
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `src` | 传进来的路径 |
+| `width`、`height` | 图片像素尺寸 |
+| `channel` | 实际分析的通道，`alpha` 或 `luma` |
+| `hasAlpha` | 图里有没有不透明度低于 255 的像素 |
+| `area` | 留下的比例，0 到 1。半透明按值折算 |
+| `ink` | 值大于 0 的外接矩形，字段是 `x`、`y`、`width`、`height`。整张为 0 时是 `null` |
+| `pieces` | 实心部分的八连通块个数 |
+| `parts` | 最大的几块，按面积从大到小，最多 64 块。每块有 `area` 和 `ink` |
+| `holes` | 实心部分里的洞的个数 |
+| `softEdge` | 软边平均宽度，像素。等于半透明像素数除以实心区域的边界长度，硬边接近 0 到 1 |
+| `d` | 实心部分的轮廓，SVG 路径。外圈和洞的绕向相反 |
+
+坐标都是图片像素，原点在左上角，y 向下。值不低于 `threshold` 的像素算实心，碎片、洞和轮廓都按它切。轮廓用移动方块描出，交点按值插值，再按 `tolerance` 化简；对角相连的两个实心像素算同一块，和 `pieces` 一致。
+
+| 选项 | 说明 |
+| --- | --- |
+| `channel` | `auto`（默认）：图里有透明像素时看 alpha，否则看亮度。抠图结果用 `alpha`，没有透明通道的黑白蒙版用 `luma`。亮度乘过 alpha |
+| `threshold` | 1 到 255，默认 128 |
+| `tolerance` | 化简允许偏离的像素，默认 0.5。写 0 不化简 |
+| `baseDir` | 相对路径从这里找。默认是调用方源文件所在目录，和 `<img src>` 一样 |
+
+`d` 写进 `<mask><path d /></mask>` 就是同一块蒙版，`mask` 里的 `path` 不描边。单独画出来时写 `<path d fill="#fff" stroke="none">`，因为 `path` 默认带 4 像素描边。图片画在页面上时如果缩放过，把 `d` 放进写了 `scale` 的 `layer`，或者按显示尺寸换算 `ink`。
+
+同一张图、同一组选项在一个进程里只算一次，返回的是副本，改了不影响下一次。读不到图片、或选项写错时抛错。
+
 ### 图标
 
 图标不是单独的标签，写法和网页一样。`class="material-symbols-outlined"` 把这一段换成 Material Symbols Outlined，里面写图标名。字号和颜色跟周围的文字走，用 `style` 里的 `font-size` 和 `color`，不会单独变成 24px。字重写 `font-weight`，按 100、200、300、400、500、600、700 取最近的一档；两边一样近时用较轻的那一档。没写就跟周围的字重，默认 400。`.tsx` 里也可以写 `className`。这个 class 写在 `i` 上时仍是正体。

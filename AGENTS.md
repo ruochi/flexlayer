@@ -93,6 +93,7 @@ export default canvas.create(
 - 直接写 `.layer`：渲染器和 `--emit` 用的文本。静态单帧可以手写。速查见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，例子在 [examples/](examples/)。
 - 动画导出 `composition`（见 SPEC 第 13 章）。文件头写 `/** @jsxImportSource flexlayer */`，标签不用 import。`flexlayer check` / `render` 会执行它。`--emit out.layer` 把展开结果写回 `.layer`。`draw={(ctx, el) => ...}` 里只用 `ctx` 和 `el`，否则 `--emit` 报 `emit-draw`，并且不写出 `<draw>`。不要用 `Math.random` 或 `Date.now`。可重复的随机数用 `random(seed)` 或 `noise`。例子：`examples/slide.tsx`。
 - 要从字体取出某个字的轮廓，`import { glyph } from 'flexlayer'`。`await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })` 按码位返回数组，每项有 `text`、`d`、`font`、`size`、`weight`、字宽 `width`、字身高度 `height`、`baseline`、`ink` 和 `missing`。`d` 的原点在字身左上角，y 向下，单位是像素。字宽和字身高度来自字体，不来自路径外接框。缺字（`😀`、`𠀀`）`missing` 为 `true`，`d` 是同一个缺字方框。可变字体只出默认字重。见 SPEC 5.4。
+- 要检查一张抠图结果或黑白蒙版，`import { analyzeImage } from 'flexlayer'`。`await analyzeImage('photo.subject.png')` 返回 `width`、`height`、`channel`、留下的比例 `area`、外接矩形 `ink`、碎片数 `pieces`、最大几块 `parts`、洞数 `holes`、软边宽度 `softEdge` 和轮廓 `d`。坐标是图片像素。有透明像素时看 alpha，否则看亮度，可以用 `channel` 指定。`d` 直接写进 `<mask><path d /></mask>`；单独画出来要写 `stroke="none"`。和 `glyph` 一样不进渲染，同一张图只算一次。见 SPEC 第 6 章。
 
 ```ts
 import { renderLayer } from 'flexlayer'
@@ -110,6 +111,7 @@ const { png, report } = await renderLayer(source, { baseDir: process.cwd() })
 | `canvas.component` / `registerComponent` | 按标签名注册组件。内置 `arrow` 也从这里来，`arrowComponent` 是它的函数 |
 | `renderLayer` / `checkLayer` | 渲染 PNG，或只排版并出报告 |
 | `glyph` | 按码位取轮廓 |
+| `analyzeImage` | 读一张图，量面积、碎片、洞、软边，并描出轮廓 `d` |
 | `registerFilter` / `unregisterFilter` / `getFilter` / `listFilters` | 登记像素或画布滤镜。内置 `grade` 和 `filter` 也在这张表上 |
 | `h` | 不用 JSX 时建节点 |
 | `renderFrames` / `renderComposition` / `interpolate` / `spring` / `sequence` / `random` / `noise` / `zoomView` | 逐帧产出，或一次拿回全部 PNG。`interpolate` 可写多点区间和 `Easing`。`random`、`noise` 由 seed 决定。`zoomView(center, zoom, size)` 返回镜头的 `view` |
