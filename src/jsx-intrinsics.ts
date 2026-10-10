@@ -38,7 +38,7 @@ type FvgPositioned = FvgGraphic & {
   'anchor-box'?: string
 }
 
-/** circle、ellipse、sphere 的圆心。 */
+/** circle、ellipse、sphere、cylinder、torus 的圆心。 */
 type FvgCenter = {
   cx?: number | string
   cy?: number | string
@@ -217,6 +217,57 @@ export namespace JSX {
         stroke?: string
         'stroke-width'?: number | string
         /** 被这只球自己挡住的棱。要和 stroke 一起写 */
+        hidden?: string
+        rotate?: number | string
+        rotateX?: number | string
+        rotateY?: number | string
+        z?: number | string
+        scale?: number | string
+        opacity?: number | string
+      }
+    /** 竖直圆柱。轴沿画面上下，圆截面朝镜头鼓出 r。 */
+    cylinder: FvgPositioned &
+      FvgCenter &
+      FvgEffects & {
+        r?: number | string
+        /** 沿画面竖直方向的长度 */
+        height?: number | string
+        fill?: string
+        stroke?: string
+        'stroke-width'?: number | string
+        hidden?: string
+        rotate?: number | string
+        rotateX?: number | string
+        rotateY?: number | string
+        z?: number | string
+        scale?: number | string
+        opacity?: number | string
+      }
+    /** 躺在所在平面里的圆环。r 是环心到管心，tube 是管半径。 */
+    torus: FvgPositioned &
+      FvgCenter &
+      FvgEffects & {
+        r?: number | string
+        tube?: number | string
+        fill?: string
+        stroke?: string
+        'stroke-width'?: number | string
+        hidden?: string
+        rotate?: number | string
+        rotateX?: number | string
+        rotateY?: number | string
+        z?: number | string
+        scale?: number | string
+        opacity?: number | string
+      }
+    /** 沿路径扫出的圆管。d 是中心线，r 是管半径。 */
+    tube: FvgPositioned &
+      FvgEffects & {
+        d?: string
+        r?: number | string
+        fill?: string
+        stroke?: string
+        'stroke-width'?: number | string
         hidden?: string
         rotate?: number | string
         rotateX?: number | string

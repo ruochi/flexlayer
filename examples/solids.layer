@@ -1,0 +1,5 @@
+<layer width="960" height="540" background="#0f1115" perspective="820">
+  <cylinder cx="170" cy="280" r="64" height="210" fill="#e8b04a" rotateY="-26" />
+  <torus cx="450" cy="270" r="82" tube="22" fill="#4CC3D9" rotateX="64" />
+  <tube x="640" y="155" d="M0 150 C36 150 34 18 100 18 C160 18 156 140 210 100" r="14" fill="#EF2D5E" rotateX="48" />
+</layer>

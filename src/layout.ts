@@ -715,7 +715,7 @@ function lineInk(box: Box, strokeWidth: number): Box {
 
 function usesOwnCoords(node: FvgNode, kind: LayoutNode['kind']): boolean {
   if (kind === 'line' || kind === 'group') return true
-  if (node.tag === 'circle' || node.tag === 'ellipse' || node.tag === 'sphere') return true
+  if (node.tag === 'circle' || node.tag === 'ellipse' || node.tag === 'sphere' || node.tag === 'cylinder' || node.tag === 'torus') return true
   if (node.tag === 'rect') return true
   return kind === 'custom' && hasTwoPoint(node.attrs)
 }
@@ -1093,6 +1093,39 @@ function pathBoundsOf(d: string, ctx: LayoutContext | undefined): Box {
   return { x: 0, y: 0, width: 0, height: 0 }
 }
 
+function readPositiveAttr(
+  raw: string | undefined,
+  fallback: number,
+  ctx: LayoutContext,
+  tag: string,
+  attr: string,
+  example: string,
+): number {
+  const fb = fallback > 0 ? fallback : 1
+  if (raw == null || raw.trim() === '') {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `${tag} 缺少 ${attr}，已用 ${fb}`,
+      hint: example,
+    })
+    return fb
+  }
+  const parsed = parseNumber(raw)
+  if (parsed == null || !(parsed > 0)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 ${attr}: ${raw}`,
+      hint: example,
+    })
+    return fb
+  }
+  return parsed
+}
+
 function readDepth(raw: string | undefined, fallback: number, ctx: LayoutContext, tag: string): number {
   const fb = fallback > 0 ? fallback : 1
   if (raw == null || raw.trim() === '') {
@@ -1245,6 +1278,99 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
     height = box.height
     const depth = readDepth(node.attrs.depth, Math.min(width, height), ctx, 'extrude')
     mesh = { type: 'extrude', d: translateSvgPath(d, -box.x, -box.y), depth }
+  } else if (node.tag === 'cylinder') {
+    const r = parseNumber(node.attrs.r) ?? 0
+    if (!(r > 0)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'cylinder 需要正的 r',
+        hint: '例如 <cylinder cx="180" cy="260" r="40" height="120" />',
+      })
+    }
+    const radius = Math.max(0, r)
+    const length = readPositiveAttr(
+      node.attrs.height,
+      radius * 2,
+      ctx,
+      'cylinder',
+      'height',
+      '例如 <cylinder cx="180" cy="260" r="40" height="120" />',
+    )
+    const cx = parseNumber(node.attrs.cx) ?? 0
+    const cy = parseNumber(node.attrs.cy) ?? 0
+    width = radius * 2
+    height = length
+    x = cx - radius
+    y = cy - length / 2
+    mesh = { type: 'cylinder', r: radius, height: length }
+  } else if (node.tag === 'torus') {
+    const r = parseNumber(node.attrs.r) ?? 0
+    if (!(r > 0)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'torus 需要正的 r',
+        hint: '例如 <torus cx="200" cy="200" r="70" tube="16" />',
+      })
+    }
+    const radius = Math.max(0, r)
+    const fallback = radius > 0 ? radius / 4 : 1
+    const rawTube = node.attrs.tube
+    const parsedTube = rawTube == null || rawTube.trim() === '' ? null : parseNumber(rawTube)
+    const missingTube = rawTube == null || rawTube.trim() === ''
+    const badTube = !missingTube && (parsedTube == null || !(parsedTube > 0))
+    const tooBig = parsedTube != null && parsedTube > 0 && radius > 0 && parsedTube >= radius
+    let tube = parsedTube != null && parsedTube > 0 ? parsedTube : fallback
+    if (missingTube || badTube || tooBig) {
+      const message = tooBig
+        ? 'torus 的 tube 要小于 r，否则没有孔'
+        : missingTube
+          ? `torus 缺少 tube，已用 ${fallback}`
+          : `无法解析 tube: ${rawTube}`
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message,
+        hint: 'r 是环心到管心的半径，tube 是管半径，例如 tube="16"',
+      })
+      tube = fallback
+    }
+    const outer = radius + tube
+    const cx = parseNumber(node.attrs.cx) ?? 0
+    const cy = parseNumber(node.attrs.cy) ?? 0
+    width = height = outer * 2
+    x = cx - outer
+    y = cy - outer
+    mesh = { type: 'torus', r: radius, tube }
+  } else if (node.tag === 'tube') {
+    const d = node.attrs.d ?? ''
+    if (!d.trim()) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'tube 缺少 d',
+        hint: 'd 是中心线，和 path 一样，例如 <tube d="M0 40 C80 40 80 120 160 80" r="8" />',
+      })
+    }
+    const box = pathBoundsOf(d, ctx)
+    if (d.trim() && box.width <= 0 && box.height <= 0) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'tube 的路径至少要有一段',
+        hint: 'd 写成有长度的中心线，闭合的管子加上 Z',
+      })
+    }
+    const radius = readPositiveAttr(node.attrs.r, 8, ctx, 'tube', 'r', '例如 <tube d="M0 0 H120" r="8" />')
+    width = box.width + radius * 2
+    height = box.height + radius * 2
+    mesh = { type: 'tube', d: translateSvgPath(d, -box.x + radius, -box.y + radius), r: radius }
   } else {
     const src = node.attrs.src ?? ''
     const resolved = resolveModelFile(src, ctx.baseDir)

@@ -447,6 +447,9 @@ export type MeshSpec =
   | { type: 'sphere'; r: number }
   | { type: 'box'; depth: number }
   | { type: 'extrude'; d: string; depth: number }
+  | { type: 'cylinder'; r: number; height: number }
+  | { type: 'torus'; r: number; tube: number }
+  | { type: 'tube'; d: string; r: number }
   | { type: 'model'; src: string; file?: string; span?: { x: number; y: number; z: number } }
 
 export type MeshLayoutNode = LayoutNodeBase & {

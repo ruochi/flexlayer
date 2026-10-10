@@ -54,7 +54,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | 线条 | `line`、`arrow`、`polyline`、`polygon`、`path`、`curve`。`arrow` 是内置组件，排版时展开成 `g` |
 | 复用 | `symbol`、`use` |
 | 蒙版 | `mask`（只作为 `layer` 的直接子元素） |
-| 网格 | `sphere`、`box`、`extrude`、`model`。放在带 `perspective` 的 `layer` 里 |
+| 网格 | `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model`。放在带 `perspective` 的 `layer` 里 |
 | 字体 | `font`（只作为根元素的子元素，`family` 加 `src`） |
 
 - 标签一律小写。写成 `<Circle>` 仍会渲染，并报 `non-canonical`。HTML 只写 `style`，`layer` 和图形只写属性。图片的 `src`、`alt` 仍是属性。
@@ -66,7 +66,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | 属性 | 说明 |
 | --- | --- |
 | `id` | 报告里用来指认元素 |
-| `x`、`y` | 写在 `layer`、`use`、`rect`、`box`、`extrude` 和带尺寸的自定义元素上。是定位点，没写是 `0`。默认对应盒子左上角（见 `anchor`） |
+| `x`、`y` | 写在 `layer`、`use`、`rect`、`box`、`extrude`、`tube` 和带尺寸的自定义元素上。是定位点，没写是 `0`。默认对应盒子左上角（见 `anchor`） |
 | `anchor` | `(x, y)` 落在盒子的哪个点。九宫格：`top-left`（默认）、`top`、`bottom`、`left`、`right`、`center`、`top-right`、`bottom-left`、`bottom-right` |
 | `opacity` | 0 到 1。嵌套时逐层相乘 |
 | `rotate` | 绕 `origin` 旋转，单位度，顺时针为正。对文字、线条、形状和 layer 都生效；layer 上的旋转作用到整棵子树 |
@@ -77,9 +77,9 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 `perspective` 只写在 `layer` 上，单位是像素，是直接子元素共用的视距。灭点是这一层盒子的中心，`z` 正方向朝观众，数值越大看起来越大。`rotateX`、`rotateY`、`z` 的归属和 `rotate` 相同，写在要转动或推近的那一层上，不改变布局。没有祖先写 `perspective` 时仍按二维绘制，并报 `flatten-3d`；这时 `z` 不改变绘制顺序。子元素的 `z` 大于等于视距时报 `behind-camera`，该元素不绘制。带三维姿态的平面先按 4 倍分辨率绘制，再平均缩回逻辑像素，斜边因此抗锯齿。平面上的 `shadow` 和 `glow` 画在这张位图的外侧，再一起投影，不会被裁在平面自己的框里。没有三维姿态、也没有网格的内容仍走原来的二维绘制。
 
-`z` 的前后只在带 `perspective` 的那一层生效。这一层没有 `sphere`、`box`、`extrude`、`model` 时，直接子元素按中心深度从远到近绘制，深度相同保持文档顺序。出现这些网格时，这一层改成一台三维场景，网格和带姿态的平面放进同一个深度缓冲：更靠近观众（`z` 更大）的面盖住更远的面，不透明的面写入深度。嵌套 `layer` 自己没有 `perspective` 时，里面的网格和平面仍算进外层这台场景。
+`z` 的前后只在带 `perspective` 的那一层生效。这一层没有 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 时，直接子元素按中心深度从远到近绘制，深度相同保持文档顺序。出现这些网格时，这一层改成一台三维场景，网格和带姿态的平面放进同一个深度缓冲：更靠近观众（`z` 更大）的面盖住更远的面，不透明的面写入深度。嵌套 `layer` 自己没有 `perspective` 时，里面的网格和平面仍算进外层这台场景。
 
-同一层里如果出现 `sphere`、`box`、`extrude` 或 `model`，这一层改成一台三维场景，和带姿态的平面共用这一个 `perspective`。没有这些标签时，像素和上面的平面透视一致。`sphere` 写 `cx` `cy` `r`，布局盒子是边长 `2r` 的正方形，圆心就是这个点。`box` 写 `x` `y` `width` `height` `depth`，布局只看宽高，`x` `y` 是左上角。`extrude` 的 `d` 和 `path` 相同，沿 z 挤出 `depth`，厚度以所在平面为中心。`d` 里分开的子路径是分开的实体；包在外圈里面的才是洞。`model` 只写 `src`，指向一个 `.glb`；位置和宽高写在外包的 `layer` 上，模型按 contain 居中放进这个盒子，文件里的相机忽略。单位都是像素。没写 `depth` 时报 `invalid-attr`，并退回宽高里较小的一边。面用 `fill`，默认 `#000000`。`fill="none"` 不填色，深度仍写入，后面的棱不会穿出来。正对镜头的面就是这个颜色，侧面更暗；`model` 的面色来自文件，不看 `fill`，再乘这套明暗。渐变 `fill` 只用第一个颜色，并报 `invalid-attr`。`stroke` 写在这个网格上时描可见的折棱和轮廓；不写就不描。`stroke-width` 是屏幕像素，写了 `stroke` 没写宽度时是 2。`hidden` 是被这只网格自己的面挡住的棱的颜色，按屏幕像素画成 6 实、4 空的虚线；被别的网格或平面挡住的部分不画。不写 `hidden` 就不画隐藏线。只写 `hidden` 或 `stroke-width`、没写 `stroke`，报 `invalid-attr`。`hidden` 写在别的标签上同样报 `invalid-attr`。球没有折棱，`stroke` 只画轮廓圆。这些线在 4 倍缩小之后再描。父 `layer` 不负责把整层改成线框。`shadow` 和 `glow` 写在网格上也会报 `invalid-attr`，不绘制。网格可以画出它所在 layer 的盒子，和平面一样；投影后的 `ink` 超出画布时报 `overflow-canvas`。`overflow="hidden"` 仍裁在这一层里。网格没有落在 `perspective` 里时报 `flatten-3d`，并且不绘制。`src` 缺失、不是 `.glb` 或读不到时报 `missing-model`。这一层按 4 倍分辨率绘制，再按预乘 alpha 平均缩回，和透视平面同一套抗锯齿。网格用自带的三角形光栅绘制。同一台透视场景里，不透明的网格和平面会沿内置主光互相投下硬边影子；被挡住时主光不计，只留环境光和补光。这里的同一台场景不限于同一个父标签：没有自己 `perspective` 的嵌套 `layer` 里的 `sphere`、`box`、`extrude`、`model` 和平面，仍算进外层这台场景，影子会投到父层的地板上，也会挡住父层的物体。嵌套 `layer` 自己写了 `perspective` 时是另一台场景，不共用这张影子。属性 `shadow` 仍是平面上的偏移暗边。`Scene3D` 仍不使用。
+同一层里如果出现 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude` 或 `model`，这一层改成一台三维场景，和带姿态的平面共用这一个 `perspective`。没有这些标签时，像素和上面的平面透视一致。`sphere` 写 `cx` `cy` `r`，布局盒子是边长 `2r` 的正方形，圆心就是这个点。`box` 写 `x` `y` `width` `height` `depth`，布局只看宽高，`x` `y` 是左上角。`cylinder` 写 `cx` `cy` `r` `height`，轴沿画面竖直方向，`height` 是这段长度，圆截面在朝向镜头的方向上鼓出 `r`。布局盒子宽 `2r`、高 `height`，`cx` `cy` 是盒子中心。没写 `height` 时报 `invalid-attr`，并退回 `2r`。`torus` 写 `cx` `cy` `r` `tube`，环躺在所在平面里。`r` 是环心到管心的半径，`tube` 是管半径，要小于 `r` 才有孔。布局盒子是边长 `2(r+tube)` 的正方形，圆心是 `cx` `cy`。没写 `tube`，或 `tube` 不小于 `r`，报 `invalid-attr`，并退回 `r/4`。`tube` 的 `d` 是中心线，语法和 `path` 相同，`r` 是管半径。开口的子路径两端是平的圆盖；写了 `Z` 的闭合成环。分开的子路径是分开的管子。布局盒子是中心线包围盒四边各扩 `r`，`x` `y` 是这个盒子的左上角。没写 `r` 时报 `invalid-attr`，并退回 8。`extrude` 的 `d` 和 `path` 相同，沿 z 挤出 `depth`，厚度以所在平面为中心。`d` 里分开的子路径是分开的实体；包在外圈里面的才是洞。`model` 只写 `src`，指向一个 `.glb`；位置和宽高写在外包的 `layer` 上，模型按 contain 居中放进这个盒子，文件里的相机忽略。单位都是像素。没写 `depth` 时报 `invalid-attr`，并退回宽高里较小的一边。面用 `fill`，默认 `#000000`。`fill="none"` 不填色，深度仍写入，后面的棱不会穿出来。正对镜头的面就是这个颜色，侧面更暗；`model` 的面色来自文件，不看 `fill`，再乘这套明暗。渐变 `fill` 只用第一个颜色，并报 `invalid-attr`。`stroke` 写在这个网格上时描可见的折棱和轮廓；不写就不描。`stroke-width` 是屏幕像素，写了 `stroke` 没写宽度时是 2。`hidden` 是被这只网格自己的面挡住的棱的颜色，按屏幕像素画成 6 实、4 空的虚线；被别的网格或平面挡住的部分不画。不写 `hidden` 就不画隐藏线。只写 `hidden` 或 `stroke-width`、没写 `stroke`，报 `invalid-attr`。`hidden` 写在别的标签上同样报 `invalid-attr`。球没有折棱，`stroke` 只画轮廓圆。圆柱描上下圆边和轮廓，圆环描轮廓，线管描轮廓以及两端圆盖的折棱。这些线在 4 倍缩小之后再描。父 `layer` 不负责把整层改成线框。`shadow` 和 `glow` 写在网格上也会报 `invalid-attr`，不绘制。网格可以画出它所在 layer 的盒子，和平面一样；投影后的 `ink` 超出画布时报 `overflow-canvas`。`overflow="hidden"` 仍裁在这一层里。网格没有落在 `perspective` 里时报 `flatten-3d`，并且不绘制。`src` 缺失、不是 `.glb` 或读不到时报 `missing-model`。这一层按 4 倍分辨率绘制，再按预乘 alpha 平均缩回，和透视平面同一套抗锯齿。网格用自带的三角形光栅绘制。同一台透视场景里，不透明的网格和平面会沿内置主光互相投下硬边影子；被挡住时主光不计，只留环境光和补光。这里的同一台场景不限于同一个父标签：没有自己 `perspective` 的嵌套 `layer` 里的 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 和平面，仍算进外层这台场景，影子会投到父层的地板上，也会挡住父层的物体。嵌套 `layer` 自己写了 `perspective` 时是另一台场景，不共用这张影子。属性 `shadow` 仍是平面上的偏移暗边。`Scene3D` 仍不使用。
 
 属性归属（由 [src/schema.ts](src/schema.ts) 生成，不要手改两行标记之间的表）：
 
@@ -89,7 +89,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | `width`、`height`、`x`、`y`、`anchor`、`anchor-box` | `width`、`height` 以及 `x`、`y`、`anchor`。`x`、`y` 是左上角，默认 0；`anchor` 默认 `top-left`。HTML 上写了报 `warn` |
 | `opacity`、`rotate`、`rotateX`、`rotateY`、`z`、`scale`、`origin` | 图形、线条和 `layer` 写属性；文字写在 `style`。HTML 上写成属性报 `warn` |
 | `background`、`padding`、`font-size`、`color`、`flex`、`flex-grow`、`flex-shrink`、`gap`、`border`、`border-radius`、`max-width`、`align-items`、`align-content`、`justify-content`、`flex-wrap`、`row-gap`、`column-gap`、`writing-mode`、`object-fit`、`object-position` | HTML 的 `style`。`layer` 或图形写了 `style` 报 `warn` |
-| `cx`、`cy`、`x1`、`y1`、`x2`、`y2`、`points`、`d`、`depth`、`fill`、`stroke`、`hidden`、`transform` | 图形属性，坐标是所在 `layer` 的局部坐标 |
+| `cx`、`cy`、`x1`、`y1`、`x2`、`y2`、`points`、`d`、`depth`、`tube`、`fill`、`stroke`、`hidden`、`transform` | 图形属性，坐标是所在 `layer` 的局部坐标 |
 | `src`、`alt` | 只写在 `img` 或 `model` 上。图片宽高仍放进 `style` |
 | `shadow`、`glow`、`inner-shadow`、`inner-glow`、`ink-stroke`、`blur`、`backdrop-blur`、`glass`、`noise`、`filter`、`blend` | 图形和 `layer` 写属性；文字写在 `style`。见第 9 章 |
 | `perspective`、`overlay`、`grade`、`grade-mask`、`view` | 只写在 `layer` 上。写在别处或写进 `style` 报 `warn` |
@@ -104,12 +104,12 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | 文字，以及没写宽高的一组 HTML | 外包一层 `layer`，把 `x`、`y`、`anchor` 写在 `layer` 上。HTML 上写 `x`、`y` 会忽略并报 `warn` |
 | 图片 `img` | 和文字一样，外包一层 `layer` 来定位 |
 | `rect` | `x` `y` `width` `height`，左上角。`rx`、`ry` 是圆角。不用 `anchor`，写了报 `info` |
-| `box`、`extrude`、带尺寸的自定义元素 | `x` `y` 加上 `anchor`，默认左上角 |
-| `circle`、`ellipse`、`sphere` | 圆心 `cx` `cy`。椭圆再写 `rx` `ry` |
+| `box`、`extrude`、`tube`、带尺寸的自定义元素 | `x` `y` 加上 `anchor`，默认左上角 |
+| `circle`、`ellipse`、`sphere`、`cylinder`、`torus` | 圆心 `cx` `cy`。椭圆再写 `rx` `ry`。圆柱再写 `r` `height`，圆环再写 `r` `tube` |
 | `g` | 放在 `layer` 里。`transform` 作用到子元素，盒子是变换后的并集 |
 | 线条 | 端点、`points`、`d` 本身就是坐标，不写 `x`、`y` |
 
-没写 `x`、`y` 时是 `0, 0`，不再放到父级中心。`layer`、`use`、`rect`、`box`、`extrude` 上的 `cx`、`cy` 已忽略，报 `invalid-attr`，`hint` 给出等价的 `x`、`y`。
+没写 `x`、`y` 时是 `0, 0`，不再放到父级中心。`layer`、`use`、`rect`、`box`、`extrude`、`tube` 上的 `cx`、`cy` 已忽略，报 `invalid-attr`，`hint` 给出等价的 `x`、`y`。
 
 `anchor` 示例：`<layer x="60" y="120"><h1>标题</h1></layer>` 表示这一层的左上角在 (60, 120)。要让中心落在这一点，写 `anchor="center"`。写错的值按 `top-left` 摆，并报 `invalid-attr`。
 
@@ -119,7 +119,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 ### 4.1 layer：自由摆放，也可以当分组
 
-原点是 layer 的左上角。嵌套 `layer`、`use`、`box`、`extrude` 和带尺寸的自定义元素用 `x`、`y` 定位；圆、椭圆和球用圆心。HTML 不写 `x`、`y`，要单独摆放就再包一层 layer。layer 可以嵌套。外层的 `opacity`、`rotate`、`scale` 会作用到里面的全部子元素，所以一组要一起移动、旋转或缩放时，包一层 layer 即可。嵌套 layer 写了 `width` 时，里面的文字按这个宽度换行；宽高都写了再减去这一层的 `safe`。这一层上的 `color`、`font-family` 会传给里面没写这些的文字，和根 layer 一样。
+原点是 layer 的左上角。嵌套 `layer`、`use`、`box`、`extrude`、`tube` 和带尺寸的自定义元素用 `x`、`y` 定位；圆、椭圆、球、圆柱和圆环用圆心。HTML 不写 `x`、`y`，要单独摆放就再包一层 layer。layer 可以嵌套。外层的 `opacity`、`rotate`、`scale` 会作用到里面的全部子元素，所以一组要一起移动、旋转或缩放时，包一层 layer 即可。嵌套 layer 写了 `width` 时，里面的文字按这个宽度换行；宽高都写了再减去这一层的 `safe`。这一层上的 `color`、`font-family` 会传给里面没写这些的文字，和根 layer 一样。
 
 - 写了 `width`、`height`：layer 就是这么大，原点固定。内容可以画出盒子。做动画的分组建议写上宽高，这样坐标不会跟着内容变。
 - 没写：宽高等于从原点到子元素右下角的距离。坐标在负方向的子元素会画到盒子外面，但不会把其他子元素一起平移。
@@ -360,7 +360,7 @@ const chars = await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })
 | `ellipse` | `cx` `cy` `rx` `ry`，圆心 |
 | `circle` | `cx` `cy` `r`，圆心 |
 
-`rect`、`circle`、`ellipse` 上的 `anchor` 忽略并报 `info`。`rect`、`box`、`extrude` 上的 `cx`、`cy` 忽略并报 `warn`。
+`rect`、`circle`、`ellipse` 上的 `anchor` 忽略并报 `info`。`rect`、`box`、`extrude`、`tube` 上的 `cx`、`cy` 忽略并报 `warn`。
 
 绘制属性和 SVG 一致：`fill`（默认 `#000000`，写 `none` 不填充）、`stroke`（默认 `none`）、`stroke-width`（默认 1）、`stroke-dasharray`（像素长度，空格或逗号分隔；奇数段会再重复一遍；写错报 `invalid-attr` 并画成实线）。
 
@@ -709,7 +709,7 @@ registerFilter({
 | `ink-inset` | info | 锚点贴着左边或右边，字形比布局盒子靠里至少 2px，且不小于字号的 4%。想让笔画贴齐就写 `anchor-box="ink"` |
 | `ink-anchor-empty` | info | `anchor-box="ink"` 的子树没有着墨，已按布局盒子定位 |
 | `ink-anchor-rotate` | info | `anchor-box="ink"` 和 `rotate` 同时存在，对齐点是旋转前的着墨 |
-| `flatten-3d` | warn | `rotateX`、`rotateY`、`z` 没有落在带 `perspective` 的 layer 里，仍按二维绘制。`sphere`、`box`、`extrude`、`model` 同样报这个码，并且不绘制 |
+| `flatten-3d` | warn | `rotateX`、`rotateY`、`z` 没有落在带 `perspective` 的 layer 里，仍按二维绘制。`sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 同样报这个码，并且不绘制 |
 | `behind-camera` | warn | 平面或网格的 `z` 大于等于所在 layer 的 `perspective`，不绘制 |
 | `emit-draw` | warn | `--emit` 时 `draw` 函数用了外部变量，或读不出函数体。按语法判断：字符串、注释，以及同一条声明里的多个名字，都不算外部变量。这种 `<draw>` 不会写进 `.layer` |
 | `emit-data` | warn | `--emit` 时 `data` 含函数、`Map`、循环引用或其它不能写成 JSON 的值，没有写回这个属性 |
@@ -860,7 +860,7 @@ for await (const { frame, png, report } of renderFrames(scene, { from: 0, to: 30
 - 把帧序列编码成视频。原始像素已经可以从 `renderFrames` 的 `rgba` 或命令行 `--rgba` 拿走，编码由调用方完成，flexlayer 不依赖 ffmpeg。时间轴预览还没有。
 - 墨迹布局：按着墨范围计算间距、居中、包裹。
 - `Icon`。
-- `Scene3D` 这个名字仍保留，不要挪作他用。`sphere`、`box`、`extrude`、`model` 画在父 `layer` 的 `perspective` 里，见第 3 章。单独的视口、作者灯光和阴影还没有，讨论见 [docs/proposals/3D.md](docs/proposals/3D.md)。
+- `Scene3D` 这个名字仍保留，不要挪作他用。`sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 画在父 `layer` 的 `perspective` 里，见第 3 章。单独的视口、作者灯光和阴影还没有，讨论见 [docs/proposals/3D.md](docs/proposals/3D.md)。
 - 滤镜设计说明见 [docs/EFFECTS.md](docs/EFFECTS.md)。勿占用：`outer-glow`、`drop-shadow`、`backdrop-filter`、`texture`、`outline`。
 
 ## 15. 用 tsx 写 layer

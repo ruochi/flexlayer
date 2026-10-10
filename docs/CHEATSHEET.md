@@ -28,6 +28,9 @@
 | `circle` | `cx cy r`，圆心 | 同上 |
 | `sphere` | `cx cy r`，圆心，再加上 `z`。布局盒子是边长 `2r` 的正方形 | 放进有 `perspective` 的 layer |
 | `box` | `x y width height depth`。`x y` 是左上角，布局不计厚度 | 放进有 `perspective` 的 layer |
+| `cylinder` | `cx cy r height`。轴竖直，`height` 是长度，圆截面朝镜头鼓出 `r`。盒子宽 `2r`、高 `height`，中心是 `cx cy` | 放进有 `perspective` 的 layer |
+| `torus` | `cx cy r tube`。环躺在平面里，`r` 是环心到管心，`tube` 是管半径。盒子边长 `2(r+tube)` | 放进有 `perspective` 的 layer |
+| `tube` | `d` 是中心线，`r` 是管半径。`Z` 闭合成环，开口两端封平盖。`x y` 是包围盒（四边各扩 `r`）的左上角 | 放进有 `perspective` 的 layer |
 | `extrude` | `d` 与 `path` 相同，`depth` 是沿 z 的厚度，以平面为中心。位置用 `x y` | 放进有 `perspective` 的 layer |
 | `model` | 只写 `src`（一个 `.glb`）。宽高和 `x y z` 写在外包的 layer 上，contain 居中 | 放进有 `perspective` 的 layer |
 | `line` `arrow` `polyline` `polygon` `path` `curve` | `x1 y1 x2 y2` / `points` / `d`。`curve` 闭合加 `closed`。`arrow` 是组件，展开成线和三角，`head` 默认 `max(12, stroke-width × 4)` | 包一层 `<layer>` |
@@ -44,9 +47,9 @@
 
 整层裁切用 `<mask>`，和内容并列写在 `layer` 里：`<mask><circle cx="160" cy="90" r="90" /></mask>`。实心是硬边，`fill="linear-gradient(to bottom, #fff, #fff0)"` 是软边。`overflow="hidden"` 只裁子元素。
 
-透视：`<layer perspective="700"><rect rotateY="28" z="40" /></layer>`。`z` 越大越靠近观众。没有网格时，直接子元素按中心深度从远到近画，深度相同按文档顺序。有 `sphere`、`box`、`extrude`、`model` 时改用深度缓冲，近的盖住远的。没有 `perspective` 的祖先时，`rotateX`、`rotateY`、`z` 仍按二维画，`z` 不改变顺序，并报 `flatten-3d`。例子见 [examples/perspective.layer](../examples/perspective.layer)。
+透视：`<layer perspective="700"><rect rotateY="28" z="40" /></layer>`。`z` 越大越靠近观众。没有网格时，直接子元素按中心深度从远到近画，深度相同按文档顺序。有 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 时改用深度缓冲，近的盖住远的。没有 `perspective` 的祖先时，`rotateX`、`rotateY`、`z` 仍按二维画，`z` 不改变顺序，并报 `flatten-3d`。例子见 [examples/perspective.layer](../examples/perspective.layer)。
 
-网格和透视共用这一层：`<layer perspective="700"><sphere cx="220" cy="340" r="90" z="50" fill="#4CC3D9" /><box x="355" y="350" width="150" height="100" depth="60" fill="#EF2D5E" /></layer>`。`extrude` 用 `d` 和 `depth`，`d` 里并排的形状各自挤出，套在里面的才是洞。`model` 放在有宽高的 layer 里，`src` 指向 `.glb`。网格的 `fill` 是纯色，渐变、`shadow`、`glow` 会警告。棱线写在网格上：`stroke="#1c1915" stroke-width="2"` 描可见折棱和轮廓，`hidden="#8a8175"` 把被自己挡住的棱画成虚线，`fill="none"` 只留线。球的 `stroke` 只画轮廓圆。没有 `perspective` 时不绘制。例子见 [examples/meshes.layer](../examples/meshes.layer)、[examples/wire.layer](../examples/wire.layer)。
+网格和透视共用这一层：`<layer perspective="700"><sphere cx="220" cy="340" r="90" z="50" fill="#4CC3D9" /><box x="355" y="350" width="150" height="100" depth="60" fill="#EF2D5E" /></layer>`。`cylinder` 是竖直圆柱，`torus` 是躺着的圆环，`tube` 沿 `d` 扫出圆管。`extrude` 用 `d` 和 `depth`，`d` 里并排的形状各自挤出，套在里面的才是洞。`model` 放在有宽高的 layer 里，`src` 指向 `.glb`。网格的 `fill` 是纯色，渐变、`shadow`、`glow` 会警告。棱线写在网格上：`stroke="#1c1915" stroke-width="2"` 描可见折棱和轮廓，`hidden="#8a8175"` 把被自己挡住的棱画成虚线，`fill="none"` 只留线。球没有折棱，`stroke` 只画轮廓圆。没有 `perspective` 时不绘制。例子见 [examples/meshes.layer](../examples/meshes.layer)、[examples/solids.layer](../examples/solids.layer)、[examples/wire.layer](../examples/wire.layer)。
 
 竖排：`style="writing-mode:vertical-rl"`。字体名见 [docs/RESOURCES.md](RESOURCES.md)，直接写 `font-family`，不用自带字体文件。
 

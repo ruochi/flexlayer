@@ -476,6 +476,216 @@ function buildBox(node: MeshLayoutNode) {
   return { positions: Float32Array.from(positions), normals: Float32Array.from(normals), indices: Uint32Array.from(indices) }
 }
 
+type Vec3 = { x: number; y: number; z: number }
+
+function vec3(x: number, y: number, z: number): Vec3 {
+  return { x, y, z }
+}
+
+function centerMesh(node: MeshLayoutNode, positions: number[]) {
+  const o = originOffset(node.origin, node.width, node.height)
+  const tx = node.width / 2 - o.x
+  const ty = -(node.height / 2 - o.y)
+  for (let i = 0; i < positions.length; i += 3) {
+    positions[i]! += tx
+    positions[i + 1]! += ty
+  }
+}
+
+function addDisk(positions: number[], normals: number[], indices: number[], center: Vec3, ring: Vec3[], normal: Vec3, reverse: boolean) {
+  const base = positions.length / 3
+  positions.push(center.x, center.y, center.z)
+  normals.push(normal.x, normal.y, normal.z)
+  for (const v of ring) {
+    positions.push(v.x, v.y, v.z)
+    normals.push(normal.x, normal.y, normal.z)
+  }
+  const radial = ring.length - 1
+  for (let k = 0; k < radial; k++) {
+    const i0 = base + 1 + k
+    const i1 = base + 2 + k
+    if (reverse) indices.push(base, i1, i0)
+    else indices.push(base, i0, i1)
+  }
+}
+
+/** 轴沿画面竖直方向。圆截面在 xz，朝镜头的一侧法线是 +z。 */
+function buildCylinder(node: MeshLayoutNode) {
+  if (node.mesh.type !== 'cylinder') return null
+  const radius = node.mesh.r
+  const half = node.mesh.height / 2
+  if (!(radius > 0) || !(half > 0)) return null
+  const segments = 48
+  const positions: number[] = []
+  const normals: number[] = []
+  const indices: number[] = []
+  for (let iy = 0; iy <= 1; iy++) {
+    const y = iy === 0 ? half : -half
+    for (let ix = 0; ix <= segments; ix++) {
+      const theta = (ix / segments) * Math.PI * 2
+      const nx = Math.cos(theta)
+      const nz = Math.sin(theta)
+      positions.push(radius * nx, y, radius * nz)
+      normals.push(nx, 0, nz)
+    }
+  }
+  const cols = segments + 1
+  for (let ix = 0; ix < segments; ix++) {
+    const a = ix
+    const b = ix + cols
+    indices.push(a, a + 1, b, a + 1, b + 1, b)
+  }
+  const top: Vec3[] = []
+  const bottom: Vec3[] = []
+  for (let ix = 0; ix <= segments; ix++) {
+    const theta = (ix / segments) * Math.PI * 2
+    const x = radius * Math.cos(theta)
+    const z = radius * Math.sin(theta)
+    top.push(vec3(x, half, z))
+    bottom.push(vec3(x, -half, z))
+  }
+  addDisk(positions, normals, indices, vec3(0, half, 0), top, vec3(0, 1, 0), true)
+  addDisk(positions, normals, indices, vec3(0, -half, 0), bottom, vec3(0, -1, 0), false)
+  centerMesh(node, positions)
+  return { positions: Float32Array.from(positions), normals: Float32Array.from(normals), indices: Uint32Array.from(indices) }
+}
+
+/** 环躺在 xy 平面。r 是环心到管心，tube 是管半径。 */
+function buildTorus(node: MeshLayoutNode) {
+  if (node.mesh.type !== 'torus') return null
+  const major = node.mesh.r
+  const tube = node.mesh.tube
+  if (!(major > 0) || !(tube > 0) || tube >= major) return null
+  const tubular = 48
+  const radial = 24
+  const positions: number[] = []
+  const normals: number[] = []
+  const indices: number[] = []
+  for (let iy = 0; iy <= radial; iy++) {
+    const psi = (iy / radial) * Math.PI * 2
+    const cy = Math.cos(psi)
+    const sy = Math.sin(psi)
+    for (let ix = 0; ix <= tubular; ix++) {
+      const phi = (ix / tubular) * Math.PI * 2
+      const cx = Math.cos(phi)
+      const sx = Math.sin(phi)
+      positions.push((major + tube * cy) * cx, (major + tube * cy) * sx, tube * sy)
+      normals.push(cy * cx, cy * sx, sy)
+    }
+  }
+  const cols = tubular + 1
+  for (let iy = 0; iy < radial; iy++) {
+    for (let ix = 0; ix < tubular; ix++) {
+      const a = iy * cols + ix
+      const b = a + cols
+      indices.push(a, a + 1, b, a + 1, b + 1, b)
+    }
+  }
+  centerMesh(node, positions)
+  return { positions: Float32Array.from(positions), normals: Float32Array.from(normals), indices: Uint32Array.from(indices) }
+}
+
+function tangentOf(points: Vec3[], index: number, closed: boolean): Vec3 {
+  const n = points.length
+  const curr = points[index]!
+  const prev = closed ? points[(index - 1 + n) % n]! : points[Math.max(0, index - 1)]!
+  const next = closed ? points[(index + 1) % n]! : points[Math.min(n - 1, index + 1)]!
+  let x = next.x - prev.x
+  let y = next.y - prev.y
+  let z = next.z - prev.z
+  if (x * x + y * y + z * z < 1e-8) {
+    x = curr.x - prev.x
+    y = curr.y - prev.y
+    z = curr.z - prev.z
+  }
+  if (x * x + y * y + z * z < 1e-8) {
+    x = next.x - curr.x
+    y = next.y - curr.y
+    z = next.z - curr.z
+  }
+  return unit(x, y, z)
+}
+
+function tubeFrame(tangent: Vec3): { n: Vec3; b: Vec3 } | null {
+  const up = Math.abs(tangent.z) < 0.9 ? vec3(0, 0, 1) : vec3(0, 1, 0)
+  const side = cross(up, tangent)
+  const n = unit(side.x, side.y, side.z)
+  if (n.x === 0 && n.y === 0 && n.z === 0) return null
+  const bin = cross(tangent, n)
+  return { n, b: unit(bin.x, bin.y, bin.z) }
+}
+
+/** 圆截面沿路径扫出一根管子。路径在所在平面，y 向下。 */
+function buildTube(node: MeshLayoutNode) {
+  if (node.mesh.type !== 'tube') return null
+  const radius = node.mesh.r
+  if (!(radius > 0)) return null
+  const o = originOffset(node.origin, node.width, node.height)
+  const rings = tessellateSvgPath(node.mesh.d, 12, Math.PI / 20)
+  const positions: number[] = []
+  const normals: number[] = []
+  const indices: number[] = []
+  const radial = 16
+  for (const ring of rings) {
+    const points = dedupe(ring.points).map((p) => vec3(p.x - o.x, -(p.y - o.y), 0))
+    const closed = ring.closed && points.length >= 3
+    if (points.length < 2) continue
+    const frames: Array<{ n: Vec3; b: Vec3; t: Vec3 }> = []
+    let broken = false
+    for (let i = 0; i < points.length; i++) {
+      const t = tangentOf(points, i, closed)
+      const frame = tubeFrame(t)
+      if (!frame) {
+        broken = true
+        break
+      }
+      frames.push({ ...frame, t })
+    }
+    if (broken || frames.length !== points.length) continue
+    const base = positions.length / 3
+    const cols = radial + 1
+    const samples: Vec3[][] = []
+    for (let i = 0; i < points.length; i++) {
+      const frame = frames[i]!
+      const p = points[i]!
+      const row: Vec3[] = []
+      for (let k = 0; k <= radial; k++) {
+        const ang = (k / radial) * Math.PI * 2
+        const c = Math.cos(ang)
+        const s = Math.sin(ang)
+        const nx = c * frame.n.x + s * frame.b.x
+        const ny = c * frame.n.y + s * frame.b.y
+        const nz = c * frame.n.z + s * frame.b.z
+        const vertex = vec3(p.x + radius * nx, p.y + radius * ny, p.z + radius * nz)
+        row.push(vertex)
+        positions.push(vertex.x, vertex.y, vertex.z)
+        normals.push(nx, ny, nz)
+      }
+      samples.push(row)
+    }
+    const rows = points.length
+    const segCount = closed ? rows : rows - 1
+    for (let i = 0; i < segCount; i++) {
+      const i0 = base + i * cols
+      const i1 = base + ((i + 1) % rows) * cols
+      for (let k = 0; k < radial; k++) {
+        const a = i0 + k
+        const b = i1 + k
+        indices.push(a, a + 1, b, a + 1, b + 1, b)
+      }
+    }
+    if (!closed) {
+      const last = points.length - 1
+      const startT = frames[0]!.t
+      const endT = frames[last]!.t
+      addDisk(positions, normals, indices, points[0]!, samples[0]!, vec3(-startT.x, -startT.y, -startT.z), true)
+      addDisk(positions, normals, indices, points[last]!, samples[last]!, endT, false)
+    }
+  }
+  if (indices.length === 0) return null
+  return { positions: Float32Array.from(positions), normals: Float32Array.from(normals), indices: Uint32Array.from(indices) }
+}
+
 function orient(points: Pt[], ccw: boolean) {
   const area = signedArea(points)
   if (ccw && area < 0) return points.slice().reverse()
@@ -676,6 +886,9 @@ function buildModel(node: MeshLayoutNode) {
 function geometryOf(node: MeshLayoutNode) {
   if (node.mesh.type === 'sphere') return buildSphere(node)
   if (node.mesh.type === 'box') return buildBox(node)
+  if (node.mesh.type === 'cylinder') return buildCylinder(node)
+  if (node.mesh.type === 'torus') return buildTorus(node)
+  if (node.mesh.type === 'tube') return buildTube(node)
   if (node.mesh.type === 'extrude') return buildExtrude(node)
   return null
 }

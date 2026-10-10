@@ -33,6 +33,39 @@ describe('网格布局', () => {
     expect(report.issues.some((issue) => issue.code === 'unknown-tag')).toBe(false)
   })
 
+  it('cylinder 以圆心摆放，高度是竖直长度', async () => {
+    const report = await checkFvg(
+      `<layer width="200" height="200" perspective="400"><cylinder cx="40" cy="50" r="10" height="30" /></layer>`,
+    )
+    const cylinder = report.elements.find((el) => el.tag === 'cylinder')
+    expect(cylinder).toMatchObject({ box: { x: 30, y: 35, width: 20, height: 30 } })
+    expect(report.issues.some((issue) => issue.code === 'unknown-tag')).toBe(false)
+  })
+
+  it('torus 的盒子包住外圆，tube 不小于 r 时退回 r/4', async () => {
+    const report = await checkFvg(`
+      <layer width="240" height="160" perspective="400">
+        <torus cx="80" cy="40" r="20" tube="6" />
+        <torus cx="180" cy="40" r="20" tube="20" />
+      </layer>
+    `)
+    const rings = report.elements.filter((el) => el.tag === 'torus')
+    expect(rings[0]).toMatchObject({ box: { x: 54, y: 14, width: 52, height: 52 } })
+    expect(rings[1]).toMatchObject({ box: { x: 155, y: 15, width: 50, height: 50 } })
+    expect(report.issues.some((issue) => issue.code === 'invalid-attr' && issue.message.includes('没有孔'))).toBe(true)
+  })
+
+  it('tube 的盒子是中心线四边各扩 r', async () => {
+    const report = await checkFvg(
+      `<layer width="200" height="80" perspective="300"><tube x="10" y="20" d="M0 0 H40" r="4" /></layer>`,
+    )
+    const tube = report.elements.find((el) => el.tag === 'tube')
+    expect(tube).toMatchObject({ box: { x: 10, y: 20, width: 48, height: 8 } })
+    const missing = await checkFvg(`<layer width="80" height="40" perspective="200"><tube d="M0 0" /></layer>`)
+    expect(missing.issues.some((issue) => issue.message.includes('至少要有一段'))).toBe(true)
+    expect(missing.issues.some((issue) => issue.message.includes('缺少 r'))).toBe(true)
+  })
+
   it('extrude 按路径包围盒居中', async () => {
     const report = await checkFvg(
       `<layer width="640" height="800" perspective="700"><extrude x="250" y="600" d="M0 0 H140 V36 H90 V80 H0 Z" depth="18" /></layer>`,
@@ -97,6 +130,56 @@ describe('网格绘制', () => {
     expect(corner[0]).toBeGreaterThan(10)
     expect(corner[0]).toBeLessThan(40)
     expect(corner[2]).toBeGreaterThan(70)
+  }, 30000)
+
+  it('圆柱侧面有颜色，圆环中间是孔，线管跟着中心线走', async () => {
+    const column = await renderFvg(
+      `<layer width="160" height="180" background="#123456" perspective="500"><cylinder cx="80" cy="90" r="28" height="100" fill="#ff2244" /></layer>`,
+    )
+    const body = await pixelAt(column.png, 80, 90)
+    const outside = await pixelAt(column.png, 8, 8)
+    expect(body[0]).toBeGreaterThan(140)
+    expect(body[0]).toBeGreaterThan(body[2] + 30)
+    expect(outside[2]).toBeGreaterThan(70)
+
+    const ring = await renderFvg(
+      `<layer width="180" height="180" background="#010203" perspective="500"><torus cx="90" cy="90" r="40" tube="12" fill="#ff2244" /></layer>`,
+    )
+    const hole = await pixelAt(ring.png, 90, 90)
+    const pipe = await pixelAt(ring.png, 90, 50)
+    expect(hole[0]).toBeLessThan(20)
+    expect(hole[2]).toBeLessThan(20)
+    expect(pipe[0]).toBeGreaterThan(140)
+    expect(pipe[0]).toBeGreaterThan(pipe[2] + 30)
+
+    const hose = await renderFvg(
+      `<layer width="160" height="80" background="#010203" perspective="400"><tube x="10" y="28" d="M0 12 H120" r="12" fill="#ff2244" /></layer>`,
+    )
+    const onHose = await pixelAt(hose.png, 82, 40)
+    const offHose = await pixelAt(hose.png, 82, 8)
+    expect(onHose[0]).toBeGreaterThan(140)
+    expect(offHose[0]).toBeLessThan(20)
+
+    const loop = await renderFvg(
+      `<layer width="160" height="160" background="#010203" perspective="400"><tube x="20" y="20" d="M0 0 H80 V80 H0 Z" r="8" fill="#ff2244" /></layer>`,
+    )
+    const loopHole = await pixelAt(loop.png, 68, 68)
+    const loopWall = await pixelAt(loop.png, 68, 28)
+    expect(loopHole[0]).toBeLessThan(20)
+    expect(loopWall[0]).toBeGreaterThan(120)
+  }, 30000)
+
+  it('更近的圆柱挡住后面的圆环', async () => {
+    const { png } = await renderFvg(`
+      <layer width="220" height="220" background="#000000" perspective="600">
+        <torus cx="110" cy="110" r="46" tube="14" fill="#2244ff" />
+        <cylinder cx="110" cy="64" r="18" height="48" z="36" fill="#ff2244" />
+      </layer>
+    `)
+    const front = await pixelAt(png, 110, 64)
+    const side = await pixelAt(png, 156, 110)
+    expect(front[0]).toBeGreaterThan(front[2] + 20)
+    expect(side[2]).toBeGreaterThan(side[0] + 20)
   }, 30000)
 
   it('更近的球体挡住长方体和平面', async () => {
