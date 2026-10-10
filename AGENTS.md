@@ -28,6 +28,7 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 | --- | --- | --- | --- |
 | HTML 用 `style`，`layer` 和图形用属性 | `<p font-size="40">`、`<circle style="fill:#fff">` | `<p style="font-size:40px">`、`<circle fill="#fff">` | `invalid-attr` |
 | 字形渐变写 `fill`，`color` 只写纯色 | `<p style="color:linear-gradient(...)">` | `<p style="fill:linear-gradient(to right, #2f7bff, #b423c4)">`。底板渐变写 `background`，`background-color` 只写纯色 | `invalid-attr` |
+| 描边只写 `stroke` | `ink-stroke="6 #000"` | 形状 `stroke="#fff" stroke-width="4"` 居中。沿墨迹写 `stroke="6 #000 outside"`。文字 `style="stroke:#000; stroke-width:6"` | `invalid-attr` |
 | 标签一律小写 | `<Circle>`、`<Row>` | `<circle>`、`<div style="display:flex">`。大写标签会渲染并报 `info` | `non-canonical` |
 | 嵌套 `layer` / `use` 不写 `background` | `<layer background="#fff">` | `<rect fill="#fff">`、HTML `background`，或 `<draw>` | `invalid-attr` |
 | 排布用 `div` 的 `display:flex` | `<Column>` | `<div style="display:flex; flex-direction:column">` | `unknown-tag` |

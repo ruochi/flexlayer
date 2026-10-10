@@ -1354,11 +1354,11 @@ function drawInkMask(ctx: PaintCtx, node: LayoutNode, isTop: boolean) {
 
 /**
  * 阴影 / 光晕的轮廓 = 本体 ∪ 外侧描边，再按 spread 胀缩。
- * Layer / flex 上的描边先合并子树再膨胀，重叠的字不会各留一圈。
+ * layer、flex、g 上的描边先合并子树再膨胀，重叠的字不会各留一圈。
  */
 function drawEffectInk(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: number, state?: PaintState) {
   const extra = outerInkStrokeReach(node.inkStroke)
-  if ((node.kind === 'layer' || node.kind === 'flex') && extra > 0) {
+  if ((node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') && extra > 0) {
     const bounds = groupInkBounds(node)
     if (!bounds) return
     paintDilatedInk(ctx as PaintCtx, spread + extra, SILHOUETTE, bounds, (octx) => drawInkMask(octx, node, true))
@@ -1396,7 +1396,7 @@ function paintInkStrokes(ctx: PaintCtx, node: LayoutNode, phase: 'outer' | 'inne
   if (!layers?.length) return
   const bands = collectStrokeBands(layers, phase)
   if (bands.length === 0) return
-  const subtree = node.kind === 'layer' || node.kind === 'flex'
+  const subtree = node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group'
   const base = subtree ? groupInkBounds(node) : leafInkBounds(node)
   if (!base || base.width <= 0 || base.height <= 0) return
   const reach = phase === 'outer' ? outerInkStrokeReach(layers) : 2

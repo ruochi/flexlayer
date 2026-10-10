@@ -83,6 +83,7 @@ export default canvas.create(
 | 图片 | `<img src="cover.png" style="width:320px; height:180px">`。`image` 同样可用 | `invalid-attr` |
 | 图标 | `<span class="material-symbols-outlined">home</span>`。字重写 `font-weight`，字号和颜色跟周围文字 | `missing-icon` |
 | 字形渐变 | `<p style="fill:linear-gradient(to right, #2f7bff, #b423c4)">`。`color` 和 `background-color` 只写纯色，底板渐变写 `background` | `invalid-attr` |
+| 描边 | 形状 `stroke="#fff" stroke-width="4"` 居中。沿墨迹写 `stroke="6 #000 outside"`。文字 `style="stroke:#000; stroke-width:6"`，默认外侧 | `invalid-attr` |
 | 整棵子树的效果 | `<layer grade="lomo" overlay="#00000066">` | `invalid-attr` |
 | 调色 | `<layer grade="lomo 0.8, fade 0.1">` | `invalid-attr` |
 | 结构化数据 | `data={{ values: [1, 2] }}`。`.layer` 写 `data='{"values":[1,2]}'`，`draw` 读 `el.data` | `invalid-attr`、`emit-data` |

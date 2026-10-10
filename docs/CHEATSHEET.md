@@ -24,7 +24,7 @@
 | 图标 | 跟文字一样外包 `layer`。`<span class="material-symbols-outlined">home</span>`，字重写 `font-weight`，字号和颜色跟周围文字 | 直接放。写进 `p` 时跟文字排在同一段 |
 | `rect` | `x y width height`，左上角。`rx` 是圆角，`ry` 没写时跟 `rx` | 包一层有宽高的 layer，或改用 div |
 | `ellipse` | `cx cy rx ry`，圆心 | 同上 |
-| `g` | 放在 `layer` 里。`transform` 写 `translate` / `rotate` / `scale` / `matrix`。`fill`、`stroke` 传给子形状 | 不排进去，会 `warn` |
+| `g` | 放在 `layer` 里。`transform` 写 `translate` / `rotate` / `scale` / `matrix`。`fill` 和纯色 `stroke` 传给子形状；`stroke="6 #000"` 留在这一组 | 不排进去，会 `warn` |
 | `circle` | `cx cy r`，圆心 | 同上 |
 | `sphere` | `cx cy r`，圆心，再加上 `z`。布局盒子是边长 `2r` 的正方形 | 放进有 `perspective` 的 layer |
 | `box` | `x y width height depth`。`rx` 圆棱，`round` 选边（不写是 12 条都圆，如 `front`、`x`、`front-top`）。`x y` 是左上角，布局不计厚度 | 放进有 `perspective` 的 layer |
@@ -40,10 +40,10 @@
 
 色块、圆点、分隔线用 div：`<div style="width:28px; height:28px; border-radius:14px; background:#3ecfc4">`，分隔线用 `flex:1; height:4px`。
 
-形状的 `fill` 和文字的 `style="fill:…"` 共用一套颜料：`linear-gradient(to bottom, #0c1424, #6e7c72)`、`radial-gradient(at 40% 35%, #fff, #fff0)`，或 `gradient(#000, #fff)`。文字写在盒子上按整段取样，写在 `span` 上按这一段的行盒取样。`ink-stroke` 按墨迹描边，例如 `6 #000 outside`。写在 `layer` 上时按整组子树墨迹描一圈。
+形状的 `fill` 和文字的 `style="fill:…"` 共用一套颜料：`linear-gradient(to bottom, #0c1424, #6e7c72)`、`radial-gradient(at 40% 35%, #fff, #fff0)`，或 `gradient(#000, #fff)`。文字写在盒子上按整段取样，写在 `span` 上按这一段的行盒取样。`stroke` 写颜色时，形状和线条居中（`stroke-width`）；写成 `6 #000 outside` 时沿墨迹描。文字、图片和 `layer` 的 `stroke="#000"` 沿外侧描，没写宽度时用 4。写在 `layer` 上时按整组子树墨迹描一圈。
 
 <!-- attrs:effects:begin -->
-效果：`shadow` `0 8 16 #00000055`（默认 颜色 `#00000066`）、`glow` `56 #f3ead4`（默认 颜色取本体）、`inner-shadow` `0 8 16 #00000055`（默认 同 shadow）、`inner-glow` `28 #7ec8ff`（默认 同 glow）、`ink-stroke` `6 #000 outside`（默认 outside）、`blur` `6`、`backdrop-blur` `16`、`glass` `clear`、`noise` `0.08`、`filter` `saturate(1.1)`、`blend` `multiply`（默认 `source-over`）、`overlay` `#00000066`（默认 透明度 1，`source-over`）、`grade` `lomo 0.8, fade 0.1`（默认 强度 1）、`grade-mask` `radial-gradient(#fff0 30%, #fff)`。作用于整棵子树的 `overlay`、`grade`、`grade-mask` 只写在 `layer` 上。
+效果：`shadow` `0 8 16 #00000055`（默认 颜色 `#00000066`）、`glow` `56 #f3ead4`（默认 颜色取本体）、`inner-shadow` `0 8 16 #00000055`（默认 同 shadow）、`inner-glow` `28 #7ec8ff`（默认 同 glow）、`blur` `6`、`backdrop-blur` `16`、`glass` `clear`、`noise` `0.08`、`filter` `saturate(1.1)`、`blend` `multiply`（默认 `source-over`）、`overlay` `#00000066`（默认 透明度 1，`source-over`）、`grade` `lomo 0.8, fade 0.1`（默认 强度 1）、`grade-mask` `radial-gradient(#fff0 30%, #fff)`。作用于整棵子树的 `overlay`、`grade`、`grade-mask` 只写在 `layer` 上。
 <!-- attrs:effects:end -->
 
 整层裁切用 `<mask>`，和内容并列写在 `layer` 里：`<mask><circle cx="160" cy="90" r="90" /></mask>`。实心是硬边，`fill="linear-gradient(to bottom, #fff, #fff0)"` 是软边。挖掉一块写 `op="subtract"`。羽化写 `<mask feather="8">`，反选写 `invert="true"`。黑白蒙版用 `<img channel="luma">`，编号区域用 `pick="3 5"`。缓存写 `<img src="photo.jpg" derive="subject">`。不要写 `mask-image`。`overflow="hidden"` 只裁子元素。预览写在标记里：`<preview of="#cut" show="overlay checker" />`，正常成片不包含它。

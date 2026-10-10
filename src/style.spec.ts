@@ -12,6 +12,7 @@ import {
   parseGlass,
   parseGlow,
   parseInkStroke,
+  strokeTakesInk,
   parseNoise,
   parseOverlay,
   parseLetterSpacing,
@@ -97,6 +98,11 @@ describe('style', () => {
     expect(parseInkStroke('none')).toBeUndefined()
     expect(parseInkStroke('0 #000')).toBeUndefined()
     expect(parseInkStroke('6 outside')).toBeUndefined()
+    expect(parseInkStroke('#fff')).toBeUndefined()
+    expect(strokeTakesInk('6 #000 outside')).toBe(true)
+    expect(strokeTakesInk('6 outside')).toBe(true)
+    expect(strokeTakesInk('#fff')).toBe(false)
+    expect(strokeTakesInk('none')).toBe(false)
     expect(parseGlass('thick')).toMatchObject({ variant: 'thick', blur: 36, refraction: 0.5 })
     expect(parseGlass('clear')).toMatchObject({ variant: 'clear', blur: 0, refraction: 1 })
     expect(parseGlass('24 #ffffff33')).toMatchObject({ variant: 'regular', blur: 24, tint: '#ffffff33' })

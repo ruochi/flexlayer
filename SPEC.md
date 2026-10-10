@@ -91,7 +91,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | `background`、`padding`、`font-size`、`color`、`flex`、`flex-grow`、`flex-shrink`、`gap`、`border`、`border-radius`、`max-width`、`align-items`、`align-content`、`justify-content`、`flex-wrap`、`row-gap`、`column-gap`、`writing-mode`、`object-fit`、`object-position` | HTML 的 `style`。`layer` 或图形写了 `style` 报 `warn` |
 | `cx`、`cy`、`x1`、`y1`、`x2`、`y2`、`points`、`d`、`depth`、`tube`、`round`、`fill`、`stroke`、`hidden`、`halo`、`material`、`transform` | 图形属性，坐标是所在 `layer` 的局部坐标 |
 | `src`、`alt` | 只写在 `img` 或 `model` 上。图片宽高仍放进 `style` |
-| `shadow`、`glow`、`inner-shadow`、`inner-glow`、`ink-stroke`、`blur`、`backdrop-blur`、`glass`、`noise`、`filter`、`blend` | 图形和 `layer` 写属性；文字写在 `style`。见第 9 章 |
+| `shadow`、`glow`、`inner-shadow`、`inner-glow`、`blur`、`backdrop-blur`、`glass`、`noise`、`filter`、`blend` | 图形和 `layer` 写属性；文字写在 `style`。见第 9 章 |
 | `perspective`、`overlay`、`grade`、`grade-mask`、`view` | 只写在 `layer` 上。写在别处或写进 `style` 报 `warn` |
 | `data` | 任何元素都可以写。值是 JSON；程序里直接传对象或数组。`draw` 读 `el.data`，不在 `el.attr` |
 | `expect` | 任何元素都可以写。声明预期中的问题码，出现在该节点或子树里时降为 info。没出现报 `unused-expect` |
@@ -424,7 +424,7 @@ npx flexlayer-select apply photo.jpg --add 2 --subtract 1
 
 `rect`、`circle`、`ellipse` 上的 `anchor` 忽略并报 `info`。`rect`、`box`、`extrude`、`tube` 上的 `cx`、`cy` 忽略并报 `warn`。
 
-绘制属性和 SVG 一致：`fill`（默认 `#000000`，写 `none` 不填充）、`stroke`（默认 `none`）、`stroke-width`（默认 1）、`stroke-dasharray`（像素长度，空格或逗号分隔；奇数段会再重复一遍；写错报 `invalid-attr` 并画成实线）。
+绘制属性和 SVG 一致：`fill`（默认 `#000000`，写 `none` 不填充）、`stroke`（默认 `none`）、`stroke-width`（默认 1）、`stroke-dasharray`（像素长度，空格或逗号分隔；奇数段会再重复一遍；写错报 `invalid-attr` 并画成实线）。`stroke` 写成 `6 #000` 这种「宽度 + 颜料」时改为沿墨迹描边，见第 8 章。
 
 ### 7.2 线条
 
@@ -448,7 +448,7 @@ npx flexlayer-select apply photo.jpg --add 2 --subtract 1
 
 `<g>` 放在 `layer` 里面，把几笔收成一组。它没有宽高，不建立新坐标系，子元素仍用 SVG 坐标。允许嵌套的形状、线条、`path`、`curve` 和 `<g>`。放进文字盒子或 flex 报 `invalid-child`。
 
-平移、旋转、缩放写 SVG 的 `transform`（`translate`、`rotate`、`scale`、`matrix`），只写在 `<g>` 上。`layer` 继续用 `x`、`y`、`rotate`、`scale`，不收成一条 `transform`。`fill`、`stroke` 从 `<g>` 传到子形状，子元素自己写了的优先。`opacity` 乘在这一组上。布局盒子是变换后的并集；父 `layer` 没写宽高时把这个范围算进去。
+平移、旋转、缩放写 SVG 的 `transform`（`translate`、`rotate`、`scale`、`matrix`），只写在 `<g>` 上。`layer` 继续用 `x`、`y`、`rotate`、`scale`，不收成一条 `transform`。`fill` 和纯色 `stroke` 从 `<g>` 传到子形状，子元素自己写了的优先。写成宽度加颜料的 `stroke` 留在这一组，按合并后的墨迹描一圈。`opacity` 乘在这一组上。布局盒子是变换后的并集；父 `layer` 没写宽高时把这个范围算进去。
 
 ```html
 <g transform="translate(12,8)" fill="#e8b04a">
@@ -465,12 +465,14 @@ npx flexlayer-select apply photo.jpg --add 2 --subtract 1
 | 槽 | 收什么 | 画在哪 |
 | --- | --- | --- |
 | `fill` | 全部 | 字形或形状内部。文字写 `style="fill:…"`，形状写属性 |
-| `stroke` | 全部 | 形状或线条的描边 |
+| `stroke` | 全部 | 形状和线条的居中描边；或任何元素沿墨迹的距离描边 |
 | `overlay`、`grade-mask` | 全部 | 整层，只写在 `layer` 上 |
 | `background` | 纯色、`linear-gradient()`、`radial-gradient()` | 盒子或行盒。不收 `gradient()` |
 | `background-color`、`color`、画布 `background` | 纯色 | 底板、字形的默认色、画布清屏色 |
 
 文字盒子上的 `fill` 按这一层的盒子取样，行内标签自己的 `fill` 按这一段的行盒取样。没写 `fill` 时字形用 `color`。
+
+`stroke` 用同一套颜料。形状和线条写颜色时居中描边，宽度是 `stroke-width`（形状默认 1，线条默认 4）。写成 `6 #000`、`6 #000 outside`、`6 #fff inside`、`8 #fff center`，或 `6 #ffffff, 14 #c8321e` 时，按到墨迹的距离描边，默认 `outside`，后一层的宽度是总距离。文字、图片、`layer` 和 flex 写颜色时沿墨迹外侧描：`style="stroke:#000"` 或 `stroke="#000"`，没写宽度时用 4，写了 `stroke-width` 用那个宽度。`layer` 和 flex 按整棵子树合并后的墨迹描一圈。网格的 `stroke` 仍是折线颜色。`inside` / `center` 的内侧宽度达到字号的约 8% 时报 `stroke-fill`。
 
 ```html
 <rect x="0" y="0" width="720" height="960" fill="linear-gradient(to bottom, #0c1424, #1a3352 55%, #6e7c72)" />
@@ -514,7 +516,7 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 
 效果只影响绘制，不改变布局盒子。**一律按着墨（墨迹 / alpha）计算，不按布局盒子**：文字跟字形，形状跟实际画出来的填充和描边，`fill="none"` 只留描边，不把中间填上。`layer` / `flex` 的 `shadow` 和 `glow` 跟着这一层实际画出来的子树，不跟空的布局盒子；这一层若是三维场景，就跟着已经画好的那张画面。其余效果里，layer 只算自身边框，flex 只算自身背景和边框。`blur` / `filter` / `blend` 作用在已绘制像素上。
 
-绘制顺序只此一份：`backdrop-blur` / `glass` 取样 → `shadow` → `glow` → 本体（`overflow="hidden"` 在这里裁子元素）→ `inner-shadow` → `inner-glow` → `overlay` → `noise`。若有 `blur`、`filter`、`grade`、其它已注册滤镜或 `<mask>`，先画进离屏，依次做像素滤镜（含 `grade`，`order` 小的在前）、`blur` / 画布滤镜（含 `filter`），有像素滤镜时再叠 `noise`，然后按 `<mask>` 的 alpha 裁掉，再贴回。画布底色不进 `<mask>`。写了像素滤镜时颗粒不被染色。同时写了 `blur` 与 `filter` 时，图层模糊以 `blur` 为准，并报 `info`。`glass` 与 `backdrop-blur` 同时出现时以 `glass` 为准，并报 `info`。
+绘制顺序只此一份：`backdrop-blur` / `glass` 取样 → `shadow` → `glow` → `stroke` 的外侧（`outside` 与 `center` 的外半）→ 本体（`overflow="hidden"` 在这里裁子元素）→ `stroke` 的内侧（`inside` 与 `center` 的内半）→ `inner-shadow` → `inner-glow` → `overlay` → `noise`。若有 `blur`、`filter`、`grade`、其它已注册滤镜或 `<mask>`，先画进离屏，依次做像素滤镜（含 `grade`，`order` 小的在前）、`blur` / 画布滤镜（含 `filter`），有像素滤镜时再叠 `noise`，然后按 `<mask>` 的 alpha 裁掉，再贴回。画布底色不进 `<mask>`。写了像素滤镜时颗粒不被染色。同时写了 `blur` 与 `filter` 时，图层模糊以 `blur` 为准，并报 `info`。`glass` 与 `backdrop-blur` 同时出现时以 `glass` 为准，并报 `info`。
 
 每个效果都按同一套字段描述：归属、语法、是否复用 paint、作用范围、在上面这条顺序里的位置、报告与问题码、图格。实现取舍见 [docs/EFFECTS.md](docs/EFFECTS.md)。图在 [docs/GALLERY.md](docs/GALLERY.md)。
 
@@ -549,7 +551,6 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 
 | 属性 | 语法 | 说明 |
 | --- | --- | --- |
-| `ink-stroke` | `<宽度> <颜色或渐变> [outside\|inside\|center]`，逗号分隔多层 | 按墨迹距离描边。默认 `outside`。第二层宽度是到墨迹的总距离。`none` 不描边 |
 | `blur` | 单个非负像素 | 图层模糊：糊本元素（含 layer 子树）已绘制像素；外扩计入 `effect-clipped` |
 | `backdrop-blur` | 单个非负像素 | 背景模糊：糊元素背后已画内容，再透过半透明本体看见 |
 | `glass` | 见下 | 边缘凸弧面透镜折射 + 色散 + 朝光高光。与 `backdrop-blur` 同时写时以 `glass` 为准 |
@@ -568,7 +569,7 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 | 作用范围 | `blur` 作用于已绘制像素；`backdrop-blur` / `glass` 取样背后的画面，再按墨迹贴回 |
 | 图 | [docs/gallery/blur-glass.png](docs/gallery/blur-glass.png)、[docs/gallery/glass-scene.png](docs/gallery/glass-scene.png) |
 
-`ink-stroke` 按着墨距离描边，不占用 `stroke`、`outline` 或 `-webkit-text-stroke`。写法：`6 #000`、`6 #000 outside`、`6 #fff inside`、`8 #fff center`，或 `6 #ffffff, 14 #c8321e`。颜色可以是纯色或渐变，坐标按该元素盒子计算。默认 `outside`。解析失败报 `invalid-attr`。写在 `layer` 上时按整棵子树合并后的墨迹描一圈。`shadow` / `glow` 的轮廓带上外侧描边。`inside` / `center` 的内侧宽度达到字号的约 8% 时，报 `ink-stroke-fill`。文字和图片的 `spread` 按墨迹 alpha 膨胀或收缩。
+沿墨迹的 `stroke` 见第 8 章。`shadow` / `glow` 的轮廓带上它的外侧。文字和图片的 `spread` 按墨迹 alpha 膨胀或收缩。`outline` 和 `-webkit-text-stroke` 报 `non-canonical`，改写 `stroke`。
 
 ### 9.3 调色
 
@@ -783,7 +784,7 @@ registerFilter({
 | `open-curve-fill` | warn | 开口的 `curve` 写了 `fill`，没有填充 |
 | `effect-clipped` | warn | 本体在画布内，阴影、光晕、描边或图层模糊超出画布。外扩按屏幕像素，乘 `screenScale` |
 | `view-outside` | error | `view` 没有被这一层直接子元素转完、缩完的四边形盖住，成片会露底。`<g>` 按 transform 后的形状算，不用外接矩形 |
-| `ink-stroke-fill` | warn | `inside` / `center` 的内侧宽度达到字号的约 8%，容易填死字内空白 |
+| `stroke-fill` | warn | `inside` / `center` 的内侧宽度达到字号的约 8%，容易填死字内空白 |
 | `ink-inset` | info | 锚点贴着左边或右边，字形比布局盒子靠里至少 2px，且不小于字号的 4%。想让笔画贴齐就写 `anchor-box="ink"` |
 | `ink-anchor-empty` | info | `anchor-box="ink"` 的子树没有着墨，已按布局盒子定位 |
 | `ink-anchor-rotate` | info | `anchor-box="ink"` 和 `rotate` 同时存在，对齐点是旋转前的着墨 |

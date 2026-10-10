@@ -681,7 +681,7 @@ export function buildReport(doc: FvgDocument): FvgReport {
         code: 'effect-clipped',
         path: el.path,
         message: '本体在画布内，但阴影、光晕、描边或模糊超出画布',
-        hint: '把元素往里移，或减小 blur / ink-stroke',
+        hint: '把元素往里移，或减小 blur / stroke',
       })
     }
     if (!el.inline && el.lines != null && (el.tag === 'h1' || el.tag === 'h2' || el.tag === 'h3' || el.tag === 'p' || el.tag === 'div' || el.tag === 'span')) {
@@ -710,7 +710,7 @@ export function buildReport(doc: FvgDocument): FvgReport {
       if (inner >= el.fontSize * 0.08) {
         issues.push({
           level: 'warn',
-          code: 'ink-stroke-fill',
+          code: 'stroke-fill',
           path: el.path,
           message: '小字号宽内描边会填死字内空白（如「口」）',
           hint: '把 inside / center 的内侧宽度收到字号的 8% 以内，或改用 outside',

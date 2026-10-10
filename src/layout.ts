@@ -33,6 +33,7 @@ import {
   parseGlass,
   parseGlow,
   parseInkStroke,
+  strokeTakesInk,
   parseNoise,
   parseLineHeight,
   parseLetterSpacing,
@@ -191,6 +192,9 @@ function track(ctx: LayoutContext, path: string, node: FvgNode) {
 }
 
 const DEFAULT_SHADOW_COLOR = '#00000066'
+/** 文字、图片、layer 只写了颜料、没写宽度时，沿墨迹外侧描这么宽。 */
+const INK_PAINT_WIDTH = 4
+const STROKE_HINT = '写成 6 #000 outside，或 stroke="#000" stroke-width="6"'
 
 type EffectFields = {
   shadow?: ShadowSpec
@@ -231,7 +235,61 @@ function pushFilterIssues(ctx: LayoutContext, issues: FilterIssue[]) {
   }
 }
 
-function readEffects(src: EffectSource, ctx: LayoutContext, glowColor: string): EffectFields {
+function rejectLegacyInkStroke(src: EffectSource, ctx: LayoutContext) {
+  const legacy = src['ink-stroke']
+  if (legacy == null || legacy.trim() === '' || legacy.trim().toLowerCase() === 'none') return
+  ctx.issues.push({
+    level: 'warn',
+    code: 'invalid-attr',
+    path: ctx.pathPrefix,
+    message: 'ink-stroke 已并入 stroke',
+    hint: '改成 stroke="6 #000 outside"。文字写 style="stroke:6 #000 outside"',
+  })
+}
+
+function readStrokeEffect(src: EffectSource, ctx: LayoutContext, out: EffectFields, mode: 'geometric' | 'ink' | 'mesh') {
+  rejectLegacyInkStroke(src, ctx)
+  const raw = src.stroke
+  if (raw == null || raw.trim() === '' || raw.trim().toLowerCase() === 'none') return
+  if (mode === 'mesh') {
+    if (strokeTakesInk(raw)) warnInvalid(ctx, 'stroke', raw, '网格的 stroke 是折线颜色，例如 stroke="#1c1915" stroke-width="2"')
+    return
+  }
+  const parsed = parseInkStroke(raw)
+  if (parsed) {
+    const badGradient = parsed.some((layer) => isGradient(layer.color) && !parseGradient(layer.color))
+    if (badGradient) warnInvalid(ctx, 'stroke', raw, STROKE_HINT)
+    else out.inkStroke = parsed
+    return
+  }
+  if (strokeTakesInk(raw)) {
+    warnInvalid(ctx, 'stroke', raw, STROKE_HINT)
+    return
+  }
+  if (mode !== 'ink') return
+  if (isGradient(raw) && !parseGradient(raw)) {
+    warnInvalid(ctx, 'stroke', raw, STROKE_HINT)
+    return
+  }
+  const widthRaw = src['stroke-width']
+  let width = INK_PAINT_WIDTH
+  if (widthRaw != null && widthRaw.trim() !== '') {
+    const parsedWidth = parsePx(widthRaw)
+    if (parsedWidth == null || parsedWidth < 0) {
+      warnInvalid(ctx, 'stroke-width', widthRaw, '写成 6 或 6px')
+      return
+    }
+    width = parsedWidth
+  }
+  if (width > 0) out.inkStroke = [{ width, color: raw.trim(), position: 'outside' }]
+}
+
+function readEffects(
+  src: EffectSource,
+  ctx: LayoutContext,
+  glowColor: string,
+  strokeMode: 'geometric' | 'ink' | 'mesh' = 'geometric',
+): EffectFields {
   const out: EffectFields = {}
   const shadowRaw = src.shadow
   const parsedShadow = parseShadow(shadowRaw)
@@ -262,15 +320,7 @@ function readEffects(src: EffectSource, ctx: LayoutContext, glowColor: string): 
     warnInvalid(ctx, 'inner-glow', innerGlowRaw, '写成 24 #f3ead4，顺序是 blur spread color')
   }
 
-  const inkRaw = src['ink-stroke']
-  const parsedInk = parseInkStroke(inkRaw)
-  if (parsedInk) {
-    const badGradient = parsedInk.some((layer) => isGradient(layer.color) && !parseGradient(layer.color))
-    if (badGradient) warnInvalid(ctx, 'ink-stroke', inkRaw!, '写成 6 #000 outside')
-    else out.inkStroke = parsedInk
-  } else if (inkRaw && inkRaw.trim() !== 'none') {
-    warnInvalid(ctx, 'ink-stroke', inkRaw, '写成 6 #000 outside')
-  }
+  readStrokeEffect(src, ctx, out, strokeMode)
 
   const blurRaw = src.blur
   const parsedBlur = parseBlurRadius(blurRaw)
@@ -636,7 +686,7 @@ function layoutCustomDraw(node: FvgNode, ctx: LayoutContext): CustomLayoutNode |
     height: h,
     ink: { x: 0, y: 0, width: w, height: h },
     ...appearance,
-    ...readEffects(node.attrs, ctx, solidPaint(appearance.background, ctx.color)),
+    ...readEffects(node.attrs, ctx, solidPaint(appearance.background, ctx.color), 'ink'),
     ...layoutDrawMeta(node, ctx),
   }
 }
@@ -1008,7 +1058,7 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
     textLayout,
     textAlign,
     ...(images.length ? { inlines: images } : {}),
-    ...readEffects(style, ctx, color),
+    ...readEffects(style, ctx, color, 'ink'),
     ...layoutDrawMeta(node, ctx),
   }
 }
@@ -1138,7 +1188,7 @@ function layoutImage(node: FvgNode, ctx: LayoutContext): ImageLayoutNode {
       objectPosition,
       ...maskImageFields(node, ctx),
       ...appearance,
-      ...readEffects(style, ctx, ctx.color),
+      ...readEffects(style, ctx, ctx.color, 'ink'),
       ...layoutDrawMeta(node, ctx),
     },
     0,
@@ -1193,9 +1243,10 @@ function layoutShape(node: FvgNode, ctx: LayoutContext, _defaultStroke: string):
   }
   const fillFallback = ctx.fillDefault ?? ctx.paintFill ?? '#000000'
   const fill = readPaint(node.attrs.fill ?? fillFallback, fillFallback, ctx, 'fill')
-  const strokeFallback = ctx.fillDefault != null ? 'none' : (node.attrs.stroke ?? ctx.paintStroke ?? 'none')
-  const stroke = readPaint(node.attrs.stroke ?? strokeFallback, strokeFallback, ctx, 'stroke')
-  const strokeWidth = parseNumber(node.attrs['stroke-width']) ?? 1
+  const distanceStroke = strokeTakesInk(node.attrs.stroke)
+  const strokeFallback = ctx.fillDefault != null ? 'none' : (distanceStroke ? (ctx.paintStroke ?? 'none') : (node.attrs.stroke ?? ctx.paintStroke ?? 'none'))
+  const stroke = distanceStroke ? 'none' : readPaint(node.attrs.stroke ?? strokeFallback, strokeFallback, ctx, 'stroke')
+  const strokeWidth = distanceStroke ? 0 : (parseNumber(node.attrs['stroke-width']) ?? 1)
   const dash = readDash(node.attrs['stroke-dasharray'], ctx)
   const ink = { x: 0, y: 0, width: w, height: h }
   const rx = parseNumber(node.attrs.rx)
@@ -1303,7 +1354,7 @@ function readDepth(raw: string | undefined, fallback: number, ctx: LayoutContext
 }
 
 function readMeshLines(node: FvgNode, ctx: LayoutContext): { stroke: string; strokeWidths: [number, number, number]; hidden: string; halo: number } {
-  const rawStroke = node.attrs.stroke
+  const rawStroke = strokeTakesInk(node.attrs.stroke) ? undefined : node.attrs.stroke
   const rawHidden = node.attrs.hidden
   const rawWidth = node.attrs['stroke-width']
   const strokeWritten = rawStroke != null && rawStroke.trim() !== '' && rawStroke.trim() !== 'none'
@@ -1638,7 +1689,7 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
     const span = resolved.file ? glbSpan(resolved.file) ?? undefined : undefined
     mesh = { type: 'model', src, ...(resolved.file ? { file: resolved.file } : {}), ...(span ? { span } : {}) }
   }
-  const effects = readEffects(node.attrs, ctx, solidPaint(fill, ctx.color))
+  const effects = readEffects(node.attrs, ctx, solidPaint(fill, ctx.color), 'mesh')
   if (isGradient(node.attrs.fill)) {
     ctx.issues.push({
       level: 'warn',
@@ -1716,12 +1767,13 @@ function layoutLineNode(node: FvgNode, ctx: LayoutContext, defaultStroke: string
   } else {
     geom = { kind: 'path', d: node.attrs.d ?? '' }
   }
-  const strokeWidth = parseNumber(node.attrs['stroke-width']) ?? 4
+  const distanceStroke = strokeTakesInk(node.attrs.stroke)
+  const strokeWidth = distanceStroke ? 0 : (parseNumber(node.attrs['stroke-width']) ?? 4)
   const dash = readDash(node.attrs['stroke-dasharray'], ctx)
   const strokeFallback = ctx.fillDefault != null ? 'none' : (ctx.paintStroke ?? defaultStroke)
-  const stroke = readPaint(node.attrs.stroke ?? strokeFallback, strokeFallback, ctx, 'stroke')
+  const stroke = distanceStroke ? 'none' : readPaint(node.attrs.stroke ?? strokeFallback, strokeFallback, ctx, 'stroke')
   const fillFallback = ctx.fillDefault ?? ctx.paintFill ?? 'none'
-  const fillRaw = node.attrs.fill === 'inherit' ? (node.attrs.stroke ?? strokeFallback) : (node.attrs.fill ?? fillFallback)
+  const fillRaw = node.attrs.fill === 'inherit' ? (distanceStroke ? strokeFallback : (node.attrs.stroke ?? strokeFallback)) : (node.attrs.fill ?? fillFallback)
   let fill = readPaint(fillRaw, fillFallback, ctx, 'fill')
   const curveClosed = node.tag === 'curve' && isClosedFlag(node.attrs.closed)
   if (node.tag === 'curve' && !curveClosed && fill !== 'none') {
@@ -2278,7 +2330,7 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
     ...appearance,
     direction,
     children: laidChildren,
-    ...readEffects(style, ctx, solidPaint(appearance.background, ctx.color)),
+    ...readEffects(style, ctx, solidPaint(appearance.background, ctx.color), 'ink'),
     ...layoutDrawMeta(node, ctx),
   }
 }
@@ -2330,7 +2382,7 @@ function layoutUse(node: FvgNode, ctx: LayoutContext): LayerLayoutNode | null {
   const appearance = readAttrAppearance(node.attrs)
   // use 与 layer 一样不填背景；色块用 rect / HTML / <draw>
   appearance.background = undefined
-  const effects = readEffects(node.attrs, ctx, solidPaint(appearance.border?.color, ctx.color))
+  const effects = readEffects(node.attrs, ctx, solidPaint(appearance.border?.color, ctx.color), 'ink')
   const filters = mergeFilters(laid.filters, effects.filters)
   return {
     ...laid,
@@ -2719,7 +2771,7 @@ function layoutGroup(node: FvgNode, ctx: LayoutContext): GroupLayoutNode {
   const inherited: LayoutContext = {
     ...ctx,
     paintFill: node.attrs.fill ?? ctx.paintFill,
-    paintStroke: node.attrs.stroke ?? ctx.paintStroke,
+    paintStroke: strokeTakesInk(node.attrs.stroke) ? ctx.paintStroke : (node.attrs.stroke ?? ctx.paintStroke),
   }
   const children: LayoutNode[] = []
   const childFvg = node.children.filter((c) => typeof c !== 'string') as FvgNode[]
@@ -3129,7 +3181,7 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
       hint: '在 layer 里写 <mask>…</mask>，不要写进 style',
     })
   }
-  const effects = readEffects(node.attrs, ctx, solidPaint(appearance.border?.color, ctx.color))
+  const effects = readEffects(node.attrs, ctx, solidPaint(appearance.border?.color, ctx.color), 'ink')
   const filters = mergeFilters(effects.filters, layerFilters.filters)
   let view = readLayerView(node, layerW, layerH, ctx)
   if (view && perspective != null) {
