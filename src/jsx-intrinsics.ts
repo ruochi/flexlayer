@@ -218,6 +218,8 @@ export namespace JSX {
         'stroke-width'?: number | string
         /** 被这只球自己挡住的棱。要和 stroke 一起写 */
         hidden?: string
+        /** 可见线在交叉处把更远的线断开，屏幕像素 */
+        halo?: number | string
         /** matte、plastic、metal、glass。不写是磨砂。粗糙度跟在名字后面 */
         material?: string
         rotate?: number | string
@@ -242,6 +244,8 @@ export namespace JSX {
         stroke?: string
         'stroke-width'?: number | string
         hidden?: string
+        /** 可见线在交叉处把更远的线断开，屏幕像素 */
+        halo?: number | string
         /** matte、plastic、metal、glass。不写是磨砂。粗糙度跟在名字后面 */
         material?: string
         rotate?: number | string
@@ -261,6 +265,8 @@ export namespace JSX {
         stroke?: string
         'stroke-width'?: number | string
         hidden?: string
+        /** 可见线在交叉处把更远的线断开，屏幕像素 */
+        halo?: number | string
         /** matte、plastic、metal、glass。不写是磨砂。粗糙度跟在名字后面 */
         material?: string
         rotate?: number | string
@@ -279,6 +285,8 @@ export namespace JSX {
         stroke?: string
         'stroke-width'?: number | string
         hidden?: string
+        /** 可见线在交叉处把更远的线断开，屏幕像素 */
+        halo?: number | string
         /** matte、plastic、metal、glass。不写是磨砂。粗糙度跟在名字后面 */
         material?: string
         rotate?: number | string
@@ -302,6 +310,8 @@ export namespace JSX {
         'stroke-width'?: number | string
         /** 被挡住的棱。要和 stroke 一起写 */
         hidden?: string
+        /** 可见线在交叉处把更远的线断开，屏幕像素 */
+        halo?: number | string
         material?: string
         rotate?: number | string
         rotateX?: number | string
@@ -318,6 +328,8 @@ export namespace JSX {
         stroke?: string
         'stroke-width'?: number | string
         hidden?: string
+        /** 可见线在交叉处把更远的线断开，屏幕像素 */
+        halo?: number | string
         material?: string
         rotate?: number | string
         rotateX?: number | string
@@ -333,6 +345,8 @@ export namespace JSX {
       stroke?: string
       'stroke-width'?: number | string
       hidden?: string
+      /** 可见线在交叉处把更远的线断开，屏幕像素 */
+      halo?: number | string
       material?: string
     }
     curve: FvgGraphic & FvgLinePaint & { points?: string; closed?: boolean | string }

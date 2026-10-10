@@ -55,7 +55,9 @@ type MeshEdge = {
 type LineStyle = {
   css: string
   hiddenCss: string | null
-  width: number
+  /** 屏幕像素：轮廓、折棱、隐藏线。 */
+  widths: [number, number, number]
+  halo: number
 }
 
 /** 球心在网格坐标里。半径均匀时画解析轮廓，否则退回三角网的轮廓边。 */
@@ -1491,7 +1493,8 @@ function rgbaCss(r: number, g: number, b: number, a: number) {
 }
 
 function lineStyleOf(node: MeshLayoutNode, opacity: number): LineStyle | null {
-  if (node.stroke === 'none' || !(node.strokeWidth > 0)) return null
+  const widths = node.strokeWidths
+  if (node.stroke === 'none' || !(Math.max(widths[0], widths[1], widths[2]) > 0)) return null
   const [r, g, b, a] = fillBytes(node.stroke, opacity)
   if (a <= 0) return null
   let hiddenCss: string | null = null
@@ -1499,7 +1502,7 @@ function lineStyleOf(node: MeshLayoutNode, opacity: number): LineStyle | null {
     const [hr, hg, hb, ha] = fillBytes(node.hidden, opacity)
     if (ha > 0) hiddenCss = rgbaCss(hr, hg, hb, ha)
   }
-  return { css: rgbaCss(r, g, b, a), hiddenCss, width: node.strokeWidth }
+  return { css: rgbaCss(r, g, b, a), hiddenCss, widths, halo: node.halo }
 }
 
 function sphereOutlineOf(node: MeshLayoutNode): SphereOutline | null {
@@ -1645,7 +1648,7 @@ function classifySample(
   return outline ? 'visible' : 'hidden'
 }
 
-type ScreenSample = { x: number; y: number; kind: 'visible' | 'hidden' | 'skip' }
+type ScreenSample = { x: number; y: number; z: number; kind: 'visible' | 'hidden' | 'skip' }
 
 function sampleSegment(
   a: Vert,
@@ -1696,6 +1699,7 @@ function sampleSegment(
     out.push({
       x: s.x,
       y: s.y,
+      z: s.z,
       kind: classifySample(depth, owners, pw, ph, mapX, mapY, s.x, s.y, s.z, owner, outline),
     })
   }
@@ -1706,31 +1710,34 @@ function paintRun(
   ctx: CanvasRenderingContext2D,
   points: Array<{ x: number; y: number }>,
   hidden: boolean,
-  style: LineStyle,
+  css: string,
+  width: number,
   scale: number,
+  dashOffset = 0,
 ) {
-  if (points.length < 2) return
+  if (points.length < 2 || !(width > 0)) return
   ctx.beginPath()
   ctx.moveTo(points[0]!.x, points[0]!.y)
   for (let i = 1; i < points.length; i++) ctx.lineTo(points[i]!.x, points[i]!.y)
   ctx.setLineDash(hidden ? [6 * scale, 4 * scale] : [])
-  ctx.lineDashOffset = 0
+  ctx.lineDashOffset = hidden ? dashOffset : 0
   ctx.lineCap = hidden ? 'butt' : 'round'
   ctx.lineJoin = 'round'
-  ctx.lineWidth = style.width * scale
-  ctx.strokeStyle = hidden ? style.hiddenCss! : style.css
+  ctx.lineWidth = width * scale
+  ctx.strokeStyle = css
   ctx.stroke()
 }
 
-type PointRun = { points: Array<{ x: number; y: number }> }
+type ChainPoint = { x: number; y: number; z: number; edge: number; cut?: boolean }
+type PointRun = { points: ChainPoint[] }
 
-function collectRuns(samples: ScreenSample[]): Array<PointRun & { hidden: boolean }> {
-  const out: Array<PointRun & { hidden: boolean }> = []
+function collectRuns(samples: ScreenSample[]): Array<{ points: Array<{ x: number; y: number; z: number }>; hidden: boolean }> {
+  const out: Array<{ points: Array<{ x: number; y: number; z: number }>; hidden: boolean }> = []
   let run: ScreenSample[] = []
   let mode: ScreenSample['kind'] | null = null
   const flush = () => {
     if (run.length >= 2 && (mode === 'visible' || mode === 'hidden')) {
-      out.push({ points: run.map((p) => ({ x: p.x, y: p.y })), hidden: mode === 'hidden' })
+      out.push({ points: run.map((p) => ({ x: p.x, y: p.y, z: p.z })), hidden: mode === 'hidden' })
     }
     run = []
   }
@@ -1752,7 +1759,7 @@ function collectRuns(samples: ScreenSample[]): Array<PointRun & { hidden: boolea
 }
 
 /** 端点重合的隐藏段合成一条折线，虚线相位才能沿圆弧走下去。 */
-function chainHidden(runs: PointRun[]): Array<Array<{ x: number; y: number }>> {
+function chainHidden(runs: PointRun[]): ChainPoint[][] {
   const n = runs.length
   if (n === 0) return []
   const used = new Array<boolean>(n).fill(false)
@@ -1770,9 +1777,9 @@ function chainHidden(runs: PointRun[]): Array<Array<{ x: number; y: number }>> {
     const last = pts[pts.length - 1]!
     if (keyOf(last) !== keyOf(pts[0]!)) pushAt(last, i)
   }
-  const orient = (points: Array<{ x: number; y: number }>, tip: { x: number; y: number }) =>
+  const orient = (points: ChainPoint[], tip: { x: number; y: number }) =>
     keyOf(points[0]!) === keyOf(tip) ? points : [...points].reverse()
-  const out: Array<Array<{ x: number; y: number }>> = []
+  const out: ChainPoint[][] = []
   for (let seed = 0; seed < n; seed++) {
     if (used[seed]) continue
     used[seed] = true
@@ -1857,6 +1864,91 @@ function roundSphere(batch: Batch): { x: number; y: number; z: number; radius: n
   return { x: c.x, y: c.y, z: c.z, radius: mean }
 }
 
+type InkRun = { points: ChainPoint[]; hidden: boolean; kind: 0 | 1 | 2; style: LineStyle }
+type EdgeEnds = { a: string; b: string }
+
+function edgeKey(v: { x: number; y: number; z: number }) {
+  return `${quantCoord(v.x)},${quantCoord(v.y)},${quantCoord(v.z)}`
+}
+
+function shareEnds(a: EdgeEnds, b: EdgeEnds) {
+  return a.a === b.a || a.a === b.b || a.b === b.a || a.b === b.b
+}
+
+/** 从折线起点走到 index 的屏幕长度，断口也算，虚线相位才能接上。 */
+function prefixLength(points: ChainPoint[], index: number) {
+  let length = 0
+  for (let i = 1; i <= index; i++) {
+    length += Math.hypot(points[i]!.x - points[i - 1]!.x, points[i]!.y - points[i - 1]!.y)
+  }
+  return length
+}
+
+function paintSplit(ctx: CanvasRenderingContext2D, run: InkRun, scale: number) {
+  const width = run.style.widths[run.kind]
+  const css = run.hidden ? run.style.hiddenCss : run.style.css
+  if (!css || !(width > 0)) return
+  const points = run.points
+  let i = 0
+  while (i < points.length) {
+    while (i < points.length && points[i]!.cut) i++
+    const start = i
+    while (i < points.length && !points[i]!.cut) i++
+    const slice = points.slice(start, i)
+    if (slice.length >= 2) paintRun(ctx, slice, run.hidden, css, width, scale, run.hidden ? prefixLength(points, start) : 0)
+  }
+}
+
+/**
+ * 可见线按 (线宽 / 2 + halo) 盖住更远的线。共用端点的棱不切开，角上仍连着。
+ * 深度差不到 2 个像素的不算压在前面。
+ */
+function cutCrossings(runs: InkRun[], edges: EdgeEnds[], width: number, height: number, scale: number) {
+  if (!runs.some((run) => !run.hidden && run.style.halo > 0)) return
+  const zBuf = new Float32Array(width * height)
+  const edgeBuf = new Int32Array(width * height)
+  zBuf.fill(-1e30)
+  edgeBuf.fill(-1)
+  const stamp = (x: number, y: number, z: number, edge: number, radius: number) => {
+    const r = Math.ceil(radius)
+    const x0 = Math.max(0, Math.floor(x - r))
+    const y0 = Math.max(0, Math.floor(y - r))
+    const x1 = Math.min(width - 1, Math.ceil(x + r))
+    const y1 = Math.min(height - 1, Math.ceil(y + r))
+    const r2 = radius * radius
+    for (let yy = y0; yy <= y1; yy++) {
+      const dy = yy - y
+      for (let xx = x0; xx <= x1; xx++) {
+        const dx = xx - x
+        if (dx * dx + dy * dy > r2) continue
+        const i = yy * width + xx
+        if (z > zBuf[i]!) {
+          zBuf[i] = z
+          edgeBuf[i] = edge
+        }
+      }
+    }
+  }
+  for (const run of runs) {
+    if (run.hidden || !(run.style.halo > 0)) continue
+    const radius = (run.style.widths[run.kind] / 2 + run.style.halo) * scale
+    if (!(radius > 0)) continue
+    for (const point of run.points) stamp(point.x, point.y, point.z, point.edge, radius)
+  }
+  for (const run of runs) {
+    for (const point of run.points) {
+      const ix = Math.round(point.x)
+      const iy = Math.round(point.y)
+      if (ix < 0 || iy < 0 || ix >= width || iy >= height) continue
+      const i = iy * width + ix
+      const other = edgeBuf[i]!
+      if (other < 0 || !(zBuf[i]! > point.z + 2)) continue
+      if (shareEnds(edges[other]!, edges[point.edge]!)) continue
+      point.cut = true
+    }
+  }
+}
+
 function paintMeshLines(
   canvas: Canvas,
   batches: Batch[],
@@ -1881,13 +1973,22 @@ function paintMeshLines(
   const vy = layer.height / 2
   const mapX = pw / canvas.width
   const mapY = ph / canvas.height
-  const consume = (a: Vert, b: Vert, style: LineStyle, owner: number, outline: boolean, hiddenRuns: PointRun[]) => {
+  const edges: EdgeEnds[] = []
+  const runs: InkRun[] = []
+  const addEdge = (a: Vert, b: Vert) => {
+    const id = edges.length
+    edges.push({ a: edgeKey(a), b: edgeKey(b) })
+    return id
+  }
+  const consume = (a: Vert, b: Vert, style: LineStyle, owner: number, outline: boolean, kind: 0 | 1, hiddenRuns: PointRun[]) => {
+    const edge = addEdge(a, b)
     for (const run of collectRuns(
       sampleSegment(a, b, perspective, vx, vy, padL, padT, scaleX, scaleY, depth, owners, pw, ph, mapX, mapY, owner, outline),
     )) {
+      const points = run.points.map((point) => ({ ...point, edge }))
       if (run.hidden) {
-        if (style.hiddenCss) hiddenRuns.push({ points: run.points })
-      } else paintRun(ctx, run.points, false, style, scale)
+        if (style.hiddenCss) hiddenRuns.push({ points })
+      } else runs.push({ points, hidden: false, kind, style })
     }
   }
   batches.forEach((batch, index) => {
@@ -1900,7 +2001,7 @@ function paintMeshLines(
     if (batch.outline && round) {
       const ring = sphereRing(round, round.radius, vx, vy, perspective)
       if (!ring) return
-      for (let i = 0; i < ring.length; i++) consume(ring[i]!, ring[(i + 1) % ring.length]!, style, batch.owner, true, hiddenRuns)
+      for (let i = 0; i < ring.length; i++) consume(ring[i]!, ring[(i + 1) % ring.length]!, style, batch.owner, true, 0, hiddenRuns)
     } else {
       for (const edge of batch.edges) {
         const silhouette = isSilhouette(edge, verts, batch, vx, vy, perspective)
@@ -1908,13 +2009,15 @@ function paintMeshLines(
         const a = verts[edge.a]
         const b = verts[edge.b]
         if (!a || !b) continue
-        consume(a, b, style, batch.owner, !edge.crease && silhouette, hiddenRuns)
+        consume(a, b, style, batch.owner, !edge.crease && silhouette, silhouette ? 0 : 1, hiddenRuns)
       }
     }
     if (style.hiddenCss) {
-      for (const chain of chainHidden(hiddenRuns)) paintRun(ctx, chain, true, style, scale)
+      for (const chain of chainHidden(hiddenRuns)) runs.push({ points: chain, hidden: true, kind: 2, style })
     }
   })
+  cutCrossings(runs, edges, canvas.width, canvas.height, scale)
+  for (const run of runs) paintSplit(ctx, run, scale)
   ctx.setLineDash([])
 }
 

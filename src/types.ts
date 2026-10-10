@@ -500,8 +500,10 @@ export type MeshLayoutNode = LayoutNodeBase & {
   material?: MeshMaterial
   /** 可见折棱和轮廓。`none` 不描。 */
   stroke: string
-  /** 屏幕像素。写了 stroke 没写宽度时是 2。 */
-  strokeWidth: number
+  /** 屏幕像素，依次是轮廓、折棱、隐藏线。只写一个数时三档相同。 */
+  strokeWidths: [number, number, number]
+  /** 可见线压过更远的线时，交叉处两侧断开的屏幕像素。0 不断开。 */
+  halo: number
   /** 被这只网格自己挡住的棱。`none` 不画。 */
   hidden: string
 }

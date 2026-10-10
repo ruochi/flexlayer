@@ -340,6 +340,21 @@ export function materialAttrIssues(node: FvgNode, path: string): Issue[] {
   ]
 }
 
+/** `halo` 是网格可见线在交叉处留出的断开，不写在平面、线条或文字上。 */
+export function haloAttrIssues(node: FvgNode, path: string): Issue[] {
+  if (!present(node.attrs, 'halo')) return []
+  if (isMeshTag(node.tag)) return []
+  return [
+    flagged(
+      'warn',
+      'invalid-attr',
+      path,
+      'halo 只写在网格上',
+      '可见线会在交叉处把更远的线断开，例如 halo="3"',
+    ),
+  ]
+}
+
 /** `hidden` 是网格被挡住的棱，不写在平面、线条或文字上。 */
 export function hiddenAttrIssues(node: FvgNode, path: string): Issue[] {
   if (!present(node.attrs, 'hidden')) return []

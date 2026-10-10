@@ -57,7 +57,7 @@ import {
 } from './text.js'
 import { applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset, translated } from './matrix.js'
 import { layoutMath } from './math/layout.js'
-import { asBlockFlow, checkChildAttrs, checkTextBoxChildren, hasTwoPoint, hiddenAttrIssues, isDisplayFlex, isHtmlTag, legacyCenterIssues, materialAttrIssues, originValueIssues, rowColumnHint, styleIssues, typoAttrIssues } from './rules.js'
+import { asBlockFlow, checkChildAttrs, checkTextBoxChildren, haloAttrIssues, hasTwoPoint, hiddenAttrIssues, isDisplayFlex, isHtmlTag, legacyCenterIssues, materialAttrIssues, originValueIssues, rowColumnHint, styleIssues, typoAttrIssues } from './rules.js'
 import { fitViewAspect, parseView, viewExceeds } from './view.js'
 import { canonicalTag, FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag } from './tags.js'
 import { boundsOf, parseSvgTransform } from './svg-transform.js'
@@ -1188,7 +1188,7 @@ function readDepth(raw: string | undefined, fallback: number, ctx: LayoutContext
   return parsed
 }
 
-function readMeshLines(node: FvgNode, ctx: LayoutContext): { stroke: string; strokeWidth: number; hidden: string } {
+function readMeshLines(node: FvgNode, ctx: LayoutContext): { stroke: string; strokeWidths: [number, number, number]; hidden: string; halo: number } {
   const rawStroke = node.attrs.stroke
   const rawHidden = node.attrs.hidden
   const rawWidth = node.attrs['stroke-width']
@@ -1230,19 +1230,27 @@ function readMeshLines(node: FvgNode, ctx: LayoutContext): { stroke: string; str
       hidden = solidPaint(readPaint(rawHidden!, '#000000', ctx, 'hidden'), '#000000')
     }
   }
-  let strokeWidth = 2
+  const fallbackWidths: [number, number, number] = [2, 2, 2]
+  let strokeWidths = fallbackWidths
   if (rawWidth != null && rawWidth.trim() !== '') {
-    const parsed = parseNumber(rawWidth)
-    if (parsed == null || parsed < 0) {
+    const parts = rawWidth.trim().split(/\s+/)
+    const nums = parts.map((part) => parseNumber(part))
+    if (parts.length > 3 || nums.some((n) => n == null || n < 0)) {
       ctx.issues.push({
         level: 'warn',
         code: 'invalid-attr',
         path: ctx.pathPrefix,
-        message: `${node.tag} 的 stroke-width 需要非负像素`,
-        hint: '例如 stroke-width="2"',
+        message:
+          parts.length > 3
+            ? `${node.tag} 的 stroke-width 最多三个数：轮廓、折棱、隐藏线`
+            : `${node.tag} 的 stroke-width 需要非负像素`,
+        hint: '例如 stroke-width="3 2 1"。写一个数时三档相同，写两个数时隐藏线用折棱的宽度',
       })
     } else {
-      strokeWidth = parsed
+      const outline = nums[0]!
+      const crease = nums[1] ?? outline
+      const hiddenWidth = nums[2] ?? crease
+      strokeWidths = [outline, crease, hiddenWidth]
     }
     if (!strokeWritten) {
       ctx.issues.push({
@@ -1254,7 +1262,32 @@ function readMeshLines(node: FvgNode, ctx: LayoutContext): { stroke: string; str
       })
     }
   }
-  return { stroke, strokeWidth, hidden }
+  let halo = 0
+  const rawHalo = node.attrs.halo
+  if (rawHalo != null && rawHalo.trim() !== '') {
+    const parsed = parseNumber(rawHalo)
+    if (parsed == null || parsed < 0) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${node.tag} 的 halo 需要非负像素`,
+        hint: '例如 halo="3"',
+      })
+    } else {
+      halo = parsed
+    }
+    if (!strokeWritten) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${node.tag} 的 halo 要和 stroke 一起写`,
+        hint: '例如 stroke="#1c1915" halo="3"',
+      })
+    }
+  }
+  return { stroke, strokeWidths, hidden, halo }
 }
 
 const MESH_MATERIALS = new Set(['matte', 'plastic', 'metal', 'glass'])
@@ -2731,6 +2764,7 @@ function noteAttrTypos(node: FvgNode, path: string, issues: Issue[]) {
   const concrete = materialize(node)
   issues.push(...typoAttrIssues(concrete, path))
   issues.push(...hiddenAttrIssues(concrete, path))
+  issues.push(...haloAttrIssues(concrete, path))
   issues.push(...materialAttrIssues(concrete, path))
   if (isHtmlTag(concrete.tag) || isTextBoxTag(concrete.tag)) issues.push(...styleIssues(concrete, path))
   let index = 0

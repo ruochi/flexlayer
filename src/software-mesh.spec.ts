@@ -453,4 +453,172 @@ describe('软件光栅', () => {
     expect(center[0]).toBeGreaterThan(center[2] + 20)
     expect(center[0]).toBeGreaterThan(180)
   })
+
+  it('轮廓、折棱、隐藏线按 stroke-width 的三个数依次变细', async () => {
+    const stats = async (width: string) => {
+      const { png } = await render(`
+        <layer width="280" height="240" background="#ffffff" perspective="2400">
+          <box x="70" y="50" width="120" height="90" depth="80" fill="#f2f2f2" stroke="#000000" stroke-width="${width}" hidden="#ff00ff" rotateY="-32" rotateX="22" />
+        </layer>
+      `)
+      const img = await loadImage(png)
+      const canvas = createCanvas(img.width, img.height)
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, 0, 0)
+      const data = ctx.getImageData(0, 0, img.width, img.height).data
+      const dark = (i: number) => (data[i] ?? 255) < 40 && (data[i + 1] ?? 255) < 40 && (data[i + 2] ?? 255) < 40
+      const dash = (i: number) => (data[i] ?? 0) > 180 && (data[i + 2] ?? 0) > 180 && (data[i + 1] ?? 255) < 90
+      let outline = 0
+      let crease = 0
+      const hidden: number[] = []
+      for (let y = 0; y < img.height; y++) {
+        let blackRun = 0
+        let magentaRun = 0
+        const flush = () => {
+          if (blackRun >= 7) outline++
+          else if (blackRun >= 3 && blackRun <= 5) crease++
+          if (magentaRun > 0) hidden.push(magentaRun)
+          blackRun = 0
+          magentaRun = 0
+        }
+        for (let x = 0; x < img.width; x++) {
+          const i = (y * img.width + x) * 4
+          if (dark(i)) blackRun++
+          else {
+            if (blackRun >= 7) outline++
+            else if (blackRun >= 3 && blackRun <= 5) crease++
+            blackRun = 0
+          }
+          if (dash(i)) magentaRun++
+          else {
+            if (magentaRun > 0) hidden.push(magentaRun)
+            magentaRun = 0
+          }
+        }
+        flush()
+      }
+      hidden.sort((a, b) => a - b)
+      return { outline, crease, hidden: hidden[Math.floor(hidden.length / 2)] ?? 0, hiddenMax: hidden[hidden.length - 1] ?? 0 }
+    }
+    const tiered = await stats('10 4 1')
+    const hiddenInherits = await stats('10 4')
+    expect(tiered.outline).toBeGreaterThan(150)
+    expect(tiered.crease).toBeGreaterThan(40)
+    expect(tiered.hidden).toBeLessThanOrEqual(2)
+    expect(tiered.hiddenMax).toBeLessThan(8)
+    expect(hiddenInherits.hidden).toBeGreaterThan(tiered.hidden)
+  })
+
+  it('前面的线在交叉处把后面的线断开，角上仍然连着', async () => {
+    const paint = (halo: string, scale = 1) =>
+      render(
+        `
+        <layer width="220" height="200" background="#ffffff" perspective="4000">
+          <box x="50" y="24" width="90" height="150" depth="16" fill="#ffffff" stroke="#000000" stroke-width="2" hidden="#000000" halo="4" />
+          <tube x="0" y="70" d="M20 30 H200" r="5" z="40" fill="#ff2244" stroke="#ff2244" stroke-width="2"${halo} />
+        </layer>
+      `,
+        { scale },
+      )
+    const measure = async (png: Buffer) => {
+      const img = await loadImage(png)
+      const canvas = createCanvas(img.width, img.height)
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, 0, 0)
+      const data = ctx.getImageData(0, 0, img.width, img.height).data
+      const at = (x: number, y: number) => {
+        const i = (y * img.width + x) * 4
+        return [data[i] ?? 0, data[i + 1] ?? 0, data[i + 2] ?? 0]
+      }
+      const isBlack = (x: number, y: number) => {
+        const [r, g, b] = at(x, y)
+        return r < 40 && g < 40 && b < 40
+      }
+      const isRed = (x: number, y: number) => {
+        const [r, g, b] = at(x, y)
+        return r > 180 && g < 90 && b < 90
+      }
+      let edgeX = 0
+      let best = 0
+      for (let x = 0; x < img.width * 0.45; x++) {
+        let n = 0
+        for (let y = 0; y < img.height; y++) if (isBlack(x, y)) n++
+        if (n > best) {
+          best = n
+          edgeX = x
+        }
+      }
+      const reds: number[] = []
+      const reach = Math.round(img.width * 0.08)
+      for (let y = 0; y < img.height; y++) {
+        for (let dx = -reach; dx <= reach; dx++) {
+          const x = edgeX + dx
+          if (x < 0 || x >= img.width) continue
+          if (isRed(x, y)) reds.push(y)
+        }
+      }
+      const top = Math.min(...reds)
+      let gap = 0
+      for (let y = top - 1; y >= 0; y--) {
+        if (isBlack(edgeX, y)) break
+        gap++
+      }
+      let cornerX = img.width
+      let cornerY = img.height
+      for (let y = 0; y < img.height; y++) {
+        for (let x = 0; x < img.width; x++) {
+          if (!isBlack(x, y)) continue
+          if (x + y < cornerX + cornerY) {
+            cornerX = x
+            cornerY = y
+          }
+        }
+      }
+      let right = 0
+      for (let x = cornerX; x < cornerX + 12 && x < img.width; x++) {
+        let hit = false
+        for (let dy = -2; dy <= 2; dy++) {
+          const y = cornerY + dy
+          if (y >= 0 && y < img.height && isBlack(x, y)) hit = true
+        }
+        if (!hit) break
+        right++
+      }
+      let down = 0
+      for (let y = cornerY; y < cornerY + 12 && y < img.height; y++) {
+        let hit = false
+        for (let dx = -2; dx <= 2; dx++) {
+          const x = cornerX + dx
+          if (x >= 0 && x < img.width && isBlack(x, y)) hit = true
+        }
+        if (!hit) break
+        down++
+      }
+      return { edgeX, top, gap, right, down, isBlack }
+    }
+    const plain = await measure((await paint('')).png)
+    const opened = await measure((await paint(' halo="8"')).png)
+    const doubled = await measure((await paint(' halo="8"', 2)).png)
+    expect(plain.gap).toBeLessThanOrEqual(2)
+    expect(plain.isBlack(plain.edgeX, plain.top - 2)).toBe(true)
+    expect(opened.gap).toBeGreaterThanOrEqual(6)
+    expect(opened.isBlack(opened.edgeX, opened.top - 2)).toBe(false)
+    expect(opened.right).toBeGreaterThanOrEqual(8)
+    expect(opened.down).toBeGreaterThanOrEqual(8)
+    expect(doubled.gap).toBeGreaterThan(opened.gap * 1.6)
+  })
+
+  it('halo 不配 stroke、写在平面上，或 stroke-width 超过三个数，会警告', async () => {
+    const report = await checkFvg(`
+      <layer width="180" height="140" perspective="400">
+        <box x="20" y="30" width="40" height="30" depth="20" halo="3" />
+        <rect x="10" y="10" width="20" height="20" fill="#fff" halo="3" />
+        <box x="80" y="30" width="40" height="30" depth="20" fill="#fff" stroke="#000" stroke-width="1 2 3 4" />
+      </layer>
+    `)
+    const messages = report.issues.filter((issue) => issue.code === 'invalid-attr').map((issue) => issue.message)
+    expect(messages.some((message) => message.includes('halo 要和 stroke'))).toBe(true)
+    expect(messages.some((message) => message.includes('halo 只写在网格上'))).toBe(true)
+    expect(messages.some((message) => message.includes('最多三个数'))).toBe(true)
+  })
 })
