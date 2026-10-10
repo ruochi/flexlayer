@@ -52,7 +52,7 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 
 带 `perspective` 的 layer 里，没有网格时直接子元素按中心深度从远到近画，深度相同按文档顺序。出现 `sphere`、`box`、`extrude`、`model` 时这一层改用深度缓冲，近的盖住远的。不在透视里时 `z` 不改变顺序，并报 `flatten-3d`。
 
-flex 的 `align-items` 默认 `center`（CSS 里是 `stretch`）。**column 忘写 `align-items` 会全部居中**：较窄的子项在交叉轴居中，和容器同宽的子项看起来仍贴着起点。左对齐写 `align-items:flex-start`。横排按文字基线对齐写 `align-items:baseline`（图片、`layer`、形状对齐到下边缘）；竖排写了 `baseline` 按 `flex-start`。`letter-spacing` 可以写 `em`，按写这条声明的元素自己的字号换算后再继承。`justify-content` 只管本层主轴，写在子项上改不了它在父级交叉轴上的位置。`align-content` 默认 `flex-start`，管的是 `flex-wrap` 之后的多行，不是一行里的子项。`flex-wrap` 可以写 `wrap` 或 `wrap-reverse`。
+flex 的 `align-items` 默认 `center`（CSS 里是 `stretch`）。**column 忘写 `align-items` 会全部居中**：较窄的子项在交叉轴居中，和容器同宽的子项看起来仍贴着起点。左对齐写 `align-items:flex-start`。横排按文字基线对齐写 `align-items:baseline`（图片、`layer`、形状对齐到下边缘）。同一行被基线撑高后，`center` 和 `end` 的子项按新的行盒再排，`start` 仍贴着行的起点。竖排写了 `baseline` 按 `flex-start`。`letter-spacing` 可以写 `em`，按写这条声明的元素自己的字号换算后再继承。`justify-content` 只管本层主轴，写在子项上改不了它在父级交叉轴上的位置。`align-content` 默认 `flex-start`，管的是 `flex-wrap` 之后的多行，不是一行里的子项。`flex-wrap` 可以写 `wrap` 或 `wrap-reverse`。
 
 没写 `display:flex` 的 `div` 里直接放 `p`、`h1`–`h3`、`div`、写了宽高的 `layer` 或其他非行内标签时，按块级从上到下排，文字块拉到这一列的宽度，不报 `invalid-child`。只放文字和行内标签时，`div` 仍是文字盒子。`p`、`h1`–`h3`、`span` 里嵌套块级标签或 `layer` 仍然报 `invalid-child`，但可以直接放 `<img>`。放进 `div` 的 `layer` 写 `width`、`height`，位置由排布决定，这一层上不写 `x`、`y`。容器上的字号、字重、字体、颜色、字距和 `text-align` 会传给没写这些的 `p`、`div`、`span`；`h1`–`h3` 仍用自己的默认字号和字重。`em` / `i` 是斜体，`u` 加下划线。
 
@@ -175,7 +175,7 @@ flowchart TD
 
 | 现象 | 建议 |
 | --- | --- |
-| 元素跑出画布 | `overflow-canvas`（error）；看 `ink` 与画布尺寸。镜头写 `view`，取景窗外的不算。`view` 没被舞台盖住报 `view-outside`。透视平面先看 `quad`，`box` 仍是没投影的布局盒 |
+| 元素跑出画布 | `overflow-canvas`（error）；看 `ink` 与画布尺寸。镜头写 `view`，取景窗外的不算。`view` 没被舞台盖住报 `view-outside`，`<g>` 按 transform 后的形状算，不用外接矩形。透视平面先看 `quad`，`box` 仍是没投影的布局盒 |
 | 光晕被裁切 | `effect-clipped`；缩小 glow 或移动元素 |
 | 字距和 `gap` 不一致 | 看 debug 里的 ink 间距 |
 | flex 子项被挤爆 | 加宽 flex 容器或缩小子项 |

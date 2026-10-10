@@ -96,6 +96,48 @@ describe('view', () => {
     expect(bare.issues.some((issue) => issue.code === 'view-outside')).toBe(true)
   })
 
+  it('g 旋转后露出的角报 view-outside，转完仍盖住就不报', async () => {
+    const turned = await checkFvg(
+      page(
+        `<layer width="100" height="100" view="0 0 100 100"><g transform="rotate(45 50 50)"><rect x="0" y="0" width="100" height="100" fill="#fff" /></g></layer>`,
+        'width="120" height="120" safe="0"',
+      ),
+    )
+    expect(turned.issues.some((issue) => issue.code === 'view-outside' && issue.level === 'error')).toBe(true)
+
+    const nested = await checkFvg(
+      page(
+        `<layer width="100" height="100" view="0 0 100 100"><g transform="rotate(45 50 50)"><g><rect x="0" y="0" width="100" height="100" fill="#fff" /></g></g></layer>`,
+        'width="120" height="120" safe="0"',
+      ),
+    )
+    expect(nested.issues.some((issue) => issue.code === 'view-outside' && issue.level === 'error')).toBe(true)
+
+    const attr = await checkFvg(
+      page(
+        `<layer width="100" height="100" view="0 0 100 100"><g rotate="45"><rect x="0" y="0" width="100" height="100" fill="#fff" /></g></layer>`,
+        'width="120" height="120" safe="0"',
+      ),
+    )
+    expect(attr.issues.some((issue) => issue.code === 'view-outside' && issue.level === 'error')).toBe(true)
+
+    const covered = await checkFvg(
+      page(
+        `<layer width="100" height="100" view="0 0 100 100"><g transform="rotate(45 50 50)"><rect x="-50" y="-50" width="200" height="200" fill="#fff" /></g></layer>`,
+        'width="100" height="100" safe="0"',
+      ),
+    )
+    expect(covered.issues.some((issue) => issue.code === 'view-outside')).toBe(false)
+
+    const plain = await checkFvg(
+      page(
+        `<layer width="100" height="100" view="0 0 100 100"><g><rect x="0" y="0" width="100" height="100" fill="#fff" /></g></layer>`,
+        'width="100" height="100" safe="0"',
+      ),
+    )
+    expect(plain.issues.some((issue) => issue.code === 'view-outside')).toBe(false)
+  })
+
   it('最小字号按短边，横竖屏同一档', async () => {
     const wide = await checkFvg(`<layer width="1920" height="1080" safe="0"><p style="font-size:28px; white-space:nowrap">正文</p></layer>`)
     expect(wide.issues.some((issue) => issue.code === 'min-font-size')).toBe(false)

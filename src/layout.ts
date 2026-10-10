@@ -1581,12 +1581,28 @@ function contentBaseline(node: LayoutNode): number {
   return node.height
 }
 
+function crossPlace(align: string | undefined): 'start' | 'center' | 'end' {
+  switch ((align ?? 'center').trim().toLowerCase()) {
+    case 'start':
+    case 'flex-start':
+    case 'stretch':
+      return 'start'
+    case 'end':
+    case 'flex-end':
+      return 'end'
+    default:
+      return 'center'
+  }
+}
+
 /**
  * 横排里写了 baseline 的子项，按第一行基线对齐。
  * Yoga 先把它们排在行的起点，这里再挪。行被撑高时，后面的行一起下移。
+ * 同一行里居中或靠底的子项按新的行盒重排，靠起点的仍贴着行顶。
  */
-function alignFlexBaselines(children: LayoutNode[], baseline: boolean[]) {
+function alignFlexBaselines(children: LayoutNode[], baseline: boolean[], crossAlign: Array<string | undefined>) {
   const originY = children.map((child) => child.y)
+  const originBottom = children.map((child, i) => originY[i]! + child.height)
   const groups: number[][] = []
   for (let i = 0; i < children.length; i++) {
     if (!baseline[i]) continue
@@ -1597,29 +1613,77 @@ function alignFlexBaselines(children: LayoutNode[], baseline: boolean[]) {
   }
   groups.sort((a, b) => originY[a[0]!]! - originY[b[0]!]!)
 
-  const growths: Array<{ bottom: number; extra: number }> = []
+  const lineOf = new Array<number>(children.length).fill(-1)
+  const lineSpan = groups.map((group) => ({
+    top: Math.min(...group.map((i) => originY[i]!)),
+    bottom: Math.max(...group.map((i) => originBottom[i]!)),
+  }))
+  groups.forEach((group, gi) => {
+    for (const i of group) lineOf[i] = gi
+  })
+  for (let i = 0; i < children.length; i++) {
+    if (baseline[i] || lineSpan.length === 0) continue
+    let best = -1
+    let bestOverlap = 0
+    for (let gi = 0; gi < lineSpan.length; gi++) {
+      const span = lineSpan[gi]!
+      const overlap = Math.min(originBottom[i]!, span.bottom) - Math.max(originY[i]!, span.top)
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap
+        best = gi
+      }
+    }
+    if (best >= 0 && bestOverlap > 0.5) lineOf[i] = best
+  }
+  for (let i = 0; i < children.length; i++) {
+    const gi = lineOf[i]!
+    if (gi < 0 || baseline[i]) continue
+    const span = lineSpan[gi]!
+    span.top = Math.min(span.top, originY[i]!)
+    span.bottom = Math.max(span.bottom, originBottom[i]!)
+  }
+
+  const growths: Array<{ bottom: number; extra: number; top: number; newTop: number; newBottom: number }> = []
   let carried = 0
-  for (const group of groups) {
+  for (let gi = 0; gi < groups.length; gi++) {
+    const group = groups[gi]!
+    const span = lineSpan[gi]!
     const top = Math.min(...group.map((i) => originY[i]!)) + carried
     const lineAscent = Math.max(...group.map((i) => contentBaseline(children[i]!)))
-    const originBottom = Math.max(...group.map((i) => originY[i]! + children[i]!.height))
     for (const i of group) {
       const ascent = contentBaseline(children[i]!)
       children[i]!.y = top + (lineAscent - ascent)
     }
-    const newBottom = Math.max(...group.map((i) => children[i]!.y + children[i]!.height))
-    const extra = Math.max(0, newBottom - (originBottom + carried))
-    growths.push({ bottom: originBottom, extra })
+    const baselineBottom = Math.max(...group.map((i) => children[i]!.y + children[i]!.height))
+    const shiftedBottom = span.bottom + carried
+    const newBottom = Math.max(baselineBottom, shiftedBottom)
+    const extra = Math.max(0, newBottom - shiftedBottom)
+    growths.push({ bottom: span.bottom, extra, top: span.top, newTop: top, newBottom })
     carried += extra
   }
 
   for (let i = 0; i < children.length; i++) {
     if (baseline[i]) continue
-    let push = 0
-    for (const growth of growths) {
-      if (originY[i]! >= growth.bottom - 1) push += growth.extra
+    const gi = lineOf[i]!
+    if (gi < 0) {
+      let push = 0
+      for (const growth of growths) {
+        if (originY[i]! >= growth.bottom - 1) push += growth.extra
+      }
+      children[i]!.y = originY[i]! + push
+      continue
     }
-    children[i]!.y = originY[i]! + push
+    const growth = growths[gi]!
+    const prev = growths.slice(0, gi).reduce((sum, item) => sum + item.extra, 0)
+    if (growth.extra <= 0.5) {
+      children[i]!.y = originY[i]! + prev
+      continue
+    }
+    const height = children[i]!.height
+    const place = crossPlace(crossAlign[i])
+    if (place === 'end') children[i]!.y = growth.newBottom - height
+    else if (place === 'start') children[i]!.y = growth.newTop + (originY[i]! - growth.top)
+    else children[i]!.y = growth.newTop + (growth.newBottom - growth.newTop - height) / 2
   }
 }
 
@@ -1781,6 +1845,7 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
     alignFlexBaselines(
       laidChildren,
       measures.map((m) => isBaselineAlign(m.crossAlign)),
+      measures.map((m) => m.crossAlign),
     )
   }
 

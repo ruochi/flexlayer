@@ -367,6 +367,33 @@ describe('layoutSource', () => {
     expect(selfBig!.y).toBeLessThan(40)
   })
 
+  it('基线把行撑高后，居中和靠底的子项跟着新行盒走', async () => {
+    const doc = await layoutSource(
+      `<layer width="800" height="400" safe="0"><div style="display:flex; align-items:baseline; gap:12px"><p style="font-size:48px; white-space:nowrap">甲</p><p style="font-size:16px; white-space:nowrap; padding:0 0 80px">乙</p><div style="width:30px; height:30px; align-self:center; background:#ccc"></div><div style="width:30px; height:20px; align-self:flex-end; background:#ccc"></div><div style="width:30px; height:16px; align-self:end; background:#ccc"></div><div style="width:30px; height:12px; align-self:flex-start; background:#ccc"></div></div></layer>`,
+      process.cwd(),
+    )
+    const row = doc.root.children[0] as {
+      children: Array<{
+        y: number
+        height: number
+        padding: { top: number }
+        border?: { width: number }
+        textLayout?: { lines: Array<{ baselineY: number }> }
+      }>
+    }
+    const [big, small, center, end, namedEnd, start] = row.children
+    const base = (node: NonNullable<typeof big>) =>
+      node.y + node.padding.top + (node.border?.width ?? 0) + node.textLayout!.lines[0]!.baselineY
+    const lineBottom = small!.y + small!.height
+    expect(base(big!)).toBeCloseTo(base(small!), 0)
+    expect(small!.y).toBeGreaterThan(1)
+    expect(lineBottom).toBeGreaterThan(big!.y + big!.height + 1)
+    expect(end!.y + end!.height).toBeCloseTo(lineBottom, 0)
+    expect(namedEnd!.y + namedEnd!.height).toBeCloseTo(lineBottom, 0)
+    expect(center!.y + center!.height / 2).toBeCloseTo(lineBottom / 2, 0)
+    expect(start!.y).toBeCloseTo(0, 0)
+  })
+
   it('align-items 的 flex-start 和 flex-end 按起止对齐', async () => {
     const place = async (align: string) => {
       const doc = await layoutSource(
