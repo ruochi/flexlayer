@@ -1,7 +1,7 @@
 import { filtersInPaintOrder, getFilter } from './filter.js'
 import { MESH_TAGS } from './tags.js'
 import { apply, applyToBox, aroundPivot, IDENTITY, intersectBox, matrixScale, multiply, originOffset, translated, type Matrix } from './matrix.js'
-import { applyPoseMatrix, has3dPose, planeDepth, poseMatrix, posePoint, project as projectPoint } from './perspective.js'
+import { applyPoseMatrix, behindCamera, has3dPose, hasPerspective, planeDepth, poseMatrix, posePoint, project as projectPoint, type Perspective } from './perspective.js'
 import { maskStats } from './mask-stats.js'
 import { innerInkStrokeReach, outerInkStrokeReach } from './style.js'
 import type { Box, ElementReport, FvgDocument, FvgReport, InlineOwner, Issue, LayoutNode, MeshLayoutNode, TextLayoutNode } from './types.js'
@@ -44,7 +44,7 @@ function translation4(x: number, y: number): Mat4 {
 
 /** 网格在这台 perspective 相机里的投影。toParent 把父级内容坐标变到该 layer。 */
 type MeshView = {
-  perspective: number
+  perspective: Perspective
   vx: number
   vy: number
   mapLayerLocal: (x: number, y: number) => Pt | null
@@ -80,6 +80,24 @@ function meshSamples(node: MeshLayoutNode): Array<[number, number, number]> {
     }
     return pts
   }
+  if (node.mesh.type === 'torus') {
+    const major = node.mesh.r
+    const tube = node.mesh.tube
+    const cx = node.width / 2
+    const cy = node.height / 2
+    const pts: Array<[number, number, number]> = []
+    for (let i = 0; i < 32; i++) {
+      const theta = (i / 32) * Math.PI * 2
+      const ct = Math.cos(theta)
+      const st = Math.sin(theta)
+      for (let j = 0; j < 16; j++) {
+        const phi = (j / 16) * Math.PI * 2
+        const rad = major + tube * Math.cos(phi)
+        pts.push([cx + rad * ct, cy + rad * st, tube * Math.sin(phi)])
+      }
+    }
+    return pts
+  }
   const half = meshHalfDepth(node)
   const pts: Array<[number, number, number]> = []
   for (const u of [0, node.width]) {
@@ -92,7 +110,7 @@ function meshSamples(node: MeshLayoutNode): Array<[number, number, number]> {
 
 function projectMeshInk(node: MeshLayoutNode, view: MeshView, toLayer: Mat4): Box | null {
   const center = applyPoseMatrix(toLayer, node.width / 2, node.height / 2, 0)
-  if (center.z >= view.perspective) return null
+  if (behindCamera(center.z, view.perspective)) return null
   const pts: Pt[] = []
   for (const [u, v, z] of meshSamples(node)) {
     const p = applyPoseMatrix(toLayer, u, v, z)
@@ -252,12 +270,12 @@ function contentToPlane(plane: PlaneSpace, node: LayoutNode, planeRoot: boolean,
 function makeProjector(
   node: LayoutNode,
   mapLayerLocal: (x: number, y: number) => Pt | null,
-  perspective: number,
+  perspective: Perspective,
   vx: number,
   vy: number,
 ): Projector {
   return (u, v) => {
-    if (planeDepth(node) >= perspective) return null
+    if (behindCamera(planeDepth(node), perspective)) return null
     const q = projectPoint(vx, vy, perspective, posePoint(node, u, v))
     if (!q) return null
     return mapLayerLocal(q.x, q.y)
@@ -535,7 +553,7 @@ function walk(
     }
 
     const perspective = node.kind === 'layer' ? node.perspective : undefined
-    const opens = perspective != null && perspective > 0
+    const opens = hasPerspective(perspective)
     const mapLayerLocal = (x: number, y: number): Pt | null => {
       if (childPlane) {
         const [u, v] = apply(childPlane.toPlane, x, y)

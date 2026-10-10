@@ -4,7 +4,8 @@ import { studioAt } from './env-map.js'
 import { solidPaint } from './gradient.js'
 import { parseGlb } from './glb.js'
 import { originOffset } from './matrix.js'
-import { applyPoseMatrix, PERSPECTIVE_AA, resolveSamples } from './perspective.js'
+import { applyPoseMatrix, behindCamera, PERSPECTIVE_AA, resolveSamples, type Perspective } from './perspective.js'
+import { meshIntersections } from './mesh-intersect.js'
 import { roundedBoxGeometry, roundedCylinderGeometry } from './mesh-round.js'
 import { tessellateSvgPath } from './path.js'
 import type { LayerLayoutNode, LayoutNode, MeshLayoutNode } from './types.js'
@@ -14,11 +15,13 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
 /**
  * 网格的三角形光栅。
  * 投影用 `project` 的同一套公式（这里直接算），深度大的像素盖住深度小的。
+ * `perspective="parallel"` 时不除视距，屏幕坐标就是层坐标。
  * 正对镜头的面是 fill，侧面按内置主光和补光变暗。
  * 主光沿固定方向打一张正交深度图：不透明三角形互相挡住这盏光时，主光不计。
  * glb 用文件里的底色乘这套明暗。
  * 写了 stroke 时，缩小抗锯齿之后再按屏幕像素描折棱和轮廓。
- * hidden 只画被这只网格自己挡住的棱，虚线是 6 实 4 空。
+ * 两只都写了 stroke 的网格相互穿过时，交界线算折棱，颜色和宽度跟后写的那只。
+ * hidden 只画被这只网格自己挡住的棱，虚线是 6 实 4 空。交界线被这两只中任意一只挡住时同样算隐藏线。
  * 不写 material 时是磨砂：主光乘 fill。plastic 加高光，metal 和 glass 映一张横向的工作室环境，glass 后画叠色。
  * 同一条折线上的短段接成一条再取虚线相位，圆弧不会接成实线。
  */
@@ -38,7 +41,7 @@ type RasterBitmap = {
 
 export type SoftwareMeshInput = {
   layer: LayerLayoutNode
-  perspective: number
+  perspective: Perspective
   meshes: Array<{ node: MeshLayoutNode; toLayer: Mat4; opacity?: number }>
   planes: Array<{ node: LayoutNode; peeled: LayoutNode; toLayer: Mat4 }>
   scale: number
@@ -169,7 +172,7 @@ function reflectView(v: { x: number; y: number; z: number }, n: { x: number; y: 
   return unit(2 * d * n.x - v.x, 2 * d * n.y - v.y, 2 * d * n.z - v.z)
 }
 
-type ShadeCamera = { x: number; y: number; z: number }
+type ShadeCamera = { x: number; y: number; z: number; parallel?: boolean }
 
 /** 塑料加白高光。金属用 fill 给工作室环境染色。玻璃边缘映出同一张环境，中心透出底下。 */
 function materialBytes(
@@ -186,7 +189,7 @@ function materialBytes(
   camera: ShadeCamera,
 ): [number, number, number, number] {
   const n = shadeNormal(nx, ny, nz, back)
-  const v = unit(camera.x - x, y - camera.y, camera.z - z)
+  const v = camera.parallel ? { x: 0, y: 0, z: 1 } : unit(camera.x - x, y - camera.y, camera.z - z)
   const h = unit(KEY.x + v.x, KEY.y + v.y, KEY.z + v.z)
   const ndoth = Math.max(n.x * h.x + n.y * h.y + n.z * h.z, 0)
   const spec = blocked ? 0 : ndoth ** shininess(batch.roughness)
@@ -199,22 +202,28 @@ function materialBytes(
       batch.a,
     ]
   }
-  const reflect = reflectView(v, n)
-  const env = studioAt(reflect.x, reflect.y, reflect.z, batch.roughness)
-  const envR = env.r
-  const envG = env.g
-  const envB = env.b
-  if (batch.material === 'metal') {
-    const ndotv = clamp01(n.x * v.x + n.y * v.y + n.z * v.z)
-    const fres = (1 - ndotv) ** 5
-    const exposure = blocked ? 0.32 : 0.5 + 0.5 * Math.min(1, shade)
-    const specAdd = spec * 220
-    const tint = (channel: number, envC: number) => {
-      const f = channel / 255
-      return Math.min(255, (f + (1 - f) * fres) * envC * exposure + specAdd * (0.25 + 0.75 * f))
+    const reflect = reflectView(v, n)
+    const env = studioAt(reflect.x, reflect.y, reflect.z, batch.roughness)
+    const envR = env.r
+    const envG = env.g
+    const envB = env.b
+    if (batch.material === 'metal') {
+      const ndotv = clamp01(n.x * v.x + n.y * v.y + n.z * v.z)
+      const fres = (1 - ndotv) ** 5
+      const exposure = blocked ? 0.32 : 0.5 + 0.5 * Math.min(1, shade)
+      const specAdd = spec * 220
+      const envLum = (envR + envG + envB) / 3
+      // 暗部留两成 fill，避免房间暗处变成纯黑。
+      // 灯带之间的暗墙映到水平轮廓上时，再补一截 fill，否则背光一侧会压出一条近黑的边。朝上朝下仍是暗的。
+      const horiz = clamp01(1 - Math.abs(reflect.y) / 0.55)
+      const room = clamp01((130 - envLum) / 70)
+      const fillKeep = 0.2 + 0.35 * horiz * room
+      const tint = (channel: number, envC: number) => {
+        const f = channel / 255
+        return Math.min(255, (f + (1 - f) * fres) * envC * exposure + channel * fillKeep + specAdd * (0.25 + 0.75 * f))
+      }
+      return [byte(tint(batch.r, envR)), byte(tint(batch.g, envG)), byte(tint(batch.b, envB)), batch.a]
     }
-    return [byte(tint(batch.r, envR)), byte(tint(batch.g, envG)), byte(tint(batch.b, envB)), batch.a]
-  }
   const ndotv = clamp01(n.x * v.x + n.y * v.y + n.z * v.z)
   const edge = (1 - ndotv) ** 2.2
   const body = batch.a / 255
@@ -1268,6 +1277,7 @@ function drawTriangle(
   const openShade = flat && batch.shaded ? shadeOf(a.nx, a.ny, a.nz, back, false) : 0
   const shutShade = flat && batch.shaded ? shadeOf(a.nx, a.ny, a.nz, back, true) : 0
   const flatBias = flat && shadow ? shadowBias(shadow, a.nx, a.ny, a.nz) : 0
+  const round = roundSphere(batch)
   const texture = batch.texture
   for (let iy = minY; iy <= maxY; iy++) {
     const py = iy + 0.5
@@ -1295,10 +1305,22 @@ function drawTriangle(
         w1 += e1x
         continue
       }
-      const nx = flat ? a.nx : (w0 * a.nx * a.invW + w1 * b.nx * b.invW + w2 * c.nx * c.invW) / iw
-      const ny = flat ? a.ny : (w0 * a.ny * a.invW + w1 * b.ny * b.invW + w2 * c.ny * c.invW) / iw
-      const nz = flat ? a.nz : (w0 * a.nz * a.invW + w1 * b.nz * b.invW + w2 * c.nz * c.invW) / iw
-      const blocked = shadow !== null && occluded(shadow, x, y, z, nx, ny, nz, flat ? flatBias : undefined)
+      let nx = flat ? a.nx : (w0 * a.nx * a.invW + w1 * b.nx * b.invW + w2 * c.nx * c.invW) / iw
+      let ny = flat ? a.ny : (w0 * a.ny * a.invW + w1 * b.ny * b.invW + w2 * c.ny * c.invW) / iw
+      let nz = flat ? a.nz : (w0 * a.nz * a.invW + w1 * b.nz * b.invW + w2 * c.nz * c.invW) / iw
+      let px = x
+      let py = y
+      let pz = z
+      if (round) {
+        const hit = sphereSurface(camera, round, x, y, z)
+        nx = hit.nx
+        ny = hit.ny
+        nz = hit.nz
+        px = hit.x
+        py = hit.y
+        pz = hit.z
+      }
+      const blocked = shadow !== null && occluded(shadow, px, py, pz, nx, ny, nz, flat ? flatBias : undefined)
       let sr = batch.r
       let sg = batch.g
       let sb = batch.b
@@ -1314,7 +1336,7 @@ function drawTriangle(
         sa = tex.a
       } else if (batch.material !== 'lambert') {
         const shade = flat ? (blocked ? shutShade : openShade) : shadeOf(nx, ny, nz, back, blocked)
-        const painted = materialBytes(batch, nx, ny, nz, back, shade, blocked, x, y, z, camera)
+        const painted = materialBytes(batch, nx, ny, nz, back, shade, blocked, px, py, pz, camera)
         sr = painted[0]
         sg = painted[1]
         sb = painted[2]
@@ -1357,7 +1379,7 @@ function drawTriangle(
   }
 }
 
-function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: number, scale: number): MeshFrame {
+function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: Perspective, scale: number): MeshFrame {
   const vx = layer.width / 2
   const vy = layer.height / 2
   let minX = 0
@@ -1374,10 +1396,9 @@ function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: number
       const u = batch.uvs ? batch.uvs[i * 2]! : 0
       const v = batch.uvs ? batch.uvs[i * 2 + 1]! : 0
       verts.push({ x: p.x, y: p.y, z: p.z, nx: n.x, ny: n.y, nz: n.z, u, v })
-      if (p.z < perspective * (1 - 1e-3)) {
-        const w = 1 - p.z / perspective
-        const x = vx + (p.x - vx) / w
-        const y = vy + (p.y - vy) / w
+      if (perspective === 'parallel' || p.z < perspective * (1 - 1e-3)) {
+        const x = perspective === 'parallel' ? p.x : vx + (p.x - vx) / (1 - p.z / perspective)
+        const y = perspective === 'parallel' ? p.y : vy + (p.y - vy) / (1 - p.z / perspective)
         minX = Math.min(minX, x)
         minY = Math.min(minY, y)
         maxX = Math.max(maxX, x)
@@ -1427,9 +1448,13 @@ function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: number
   depth.fill(-1e30)
   owners.fill(-1)
   const shadow = buildShadowMap(batches, authored, Math.max(layer.width, layer.height) * base * 2)
-  const near = perspective * (1 - 1e-3)
-  const camera: ShadeCamera = { x: vx, y: vy, z: perspective }
+  const near = perspective === 'parallel' ? Number.POSITIVE_INFINITY : perspective * (1 - 1e-3)
+  const camera: ShadeCamera =
+    perspective === 'parallel' ? { x: 0, y: 0, z: 0, parallel: true } : { x: vx, y: vy, z: perspective }
   const toScreen = (v: Vert): ScreenVert => {
+    if (perspective === 'parallel') {
+      return { ...v, sx: (v.x + padL) * pixelScale, sy: (v.y + padT) * pixelScale, invW: 1 }
+    }
     const w = 1 - v.z / perspective
     return {
       ...v,
@@ -1563,11 +1588,12 @@ function meshLineFields(
   owner: number,
 ): Pick<Batch, 'edges' | 'lines' | 'outline' | 'owner'> {
   const lines = lineStyleOf(node, opacity)
-  if (!lines) return { edges: NO_EDGES, lines: null, outline: null, owner }
+  const outline = sphereOutlineOf(node)
+  if (!lines) return { edges: NO_EDGES, lines: null, outline, owner }
   return {
     edges: extractEdges(positions, indices),
     lines,
-    outline: sphereOutlineOf(node),
+    outline,
     owner,
   }
 }
@@ -1578,13 +1604,14 @@ function facesCamera(
   mid: { x: number; y: number; z: number },
   vx: number,
   vy: number,
-  perspective: number,
+  perspective: Perspective,
 ) {
   const n = transformNormal(toLayer, normal[0], normal[1], normal[2])
+  if (perspective === 'parallel') return n.z > 1e-4
   return n.x * (vx - mid.x) + n.y * (vy - mid.y) + n.z * (perspective - mid.z) > 1e-4
 }
 
-function isSilhouette(edge: MeshEdge, verts: Vert[], batch: Batch, vx: number, vy: number, perspective: number) {
+function isSilhouette(edge: MeshEdge, verts: Vert[], batch: Batch, vx: number, vy: number, perspective: Perspective) {
   const a = verts[edge.a]
   const b = verts[edge.b]
   if (!a || !b) return false
@@ -1596,7 +1623,7 @@ function isSilhouette(edge: MeshEdge, verts: Vert[], batch: Batch, vx: number, v
 
 function projectLayer(
   v: Vert,
-  perspective: number,
+  perspective: Perspective,
   vx: number,
   vy: number,
   padL: number,
@@ -1604,6 +1631,9 @@ function projectLayer(
   scaleX: number,
   scaleY: number,
 ) {
+  if (perspective === 'parallel') {
+    return { x: (v.x + padL) * scaleX, y: (v.y + padT) * scaleY, z: v.z }
+  }
   const w = 1 - v.z / perspective
   if (w <= 1e-4) return null
   return {
@@ -1625,6 +1655,7 @@ function classifySample(
   z: number,
   owner: number,
   outline: boolean,
+  owner2 = 0,
 ): 'visible' | 'hidden' | 'skip' {
   const ix = Math.round(x * mapX)
   const iy = Math.round(y * mapY)
@@ -1632,7 +1663,7 @@ function classifySample(
   const di = iy * pw + ix
   const stored = depth[di]!
   if (stored < -1e20 || stored <= z + 1.5) return 'visible'
-  if (owners[di] !== owner) return 'skip'
+  if (owners[di] !== owner && !(owner2 && owners[di] === owner2)) return 'skip'
   // 轮廓贴着自己的表面，深度会略近于这条线，不能当成隐藏线。
   return outline ? 'visible' : 'hidden'
 }
@@ -1642,7 +1673,7 @@ type ScreenSample = { x: number; y: number; z: number; kind: 'visible' | 'hidden
 function sampleSegment(
   a: Vert,
   b: Vert,
-  perspective: number,
+  perspective: Perspective,
   vx: number,
   vy: number,
   padL: number,
@@ -1657,8 +1688,9 @@ function sampleSegment(
   mapY: number,
   owner: number,
   outline: boolean,
+  owner2 = 0,
 ): ScreenSample[] {
-  const near = perspective * (1 - 1e-3)
+  const near = perspective === 'parallel' ? Number.POSITIVE_INFINITY : perspective * (1 - 1e-3)
   let p0 = a
   let p1 = b
   const in0 = p0.z < near
@@ -1689,7 +1721,7 @@ function sampleSegment(
       x: s.x,
       y: s.y,
       z: s.z,
-      kind: classifySample(depth, owners, pw, ph, mapX, mapY, s.x, s.y, s.z, owner, outline),
+      kind: classifySample(depth, owners, pw, ph, mapX, mapY, s.x, s.y, s.z, owner, outline, owner2),
     })
   }
   return out
@@ -1803,7 +1835,25 @@ function chainHidden(runs: PointRun[]): ChainPoint[][] {
   return out
 }
 
-function sphereRing(center: { x: number; y: number; z: number }, radius: number, vx: number, vy: number, perspective: number): Vert[] | null {
+function sphereRing(center: { x: number; y: number; z: number }, radius: number, vx: number, vy: number, perspective: Perspective): Vert[] | null {
+  if (perspective === 'parallel') {
+    const count = 72
+    const ring: Vert[] = []
+    for (let i = 0; i < count; i++) {
+      const ang = (i / count) * Math.PI * 2
+      ring.push({
+        x: center.x + radius * Math.cos(ang),
+        y: center.y + radius * Math.sin(ang),
+        z: center.z,
+        nx: 0,
+        ny: 0,
+        nz: 1,
+        u: 0,
+        v: 0,
+      })
+    }
+    return ring
+  }
   const dx = center.x - vx
   const dy = center.y - vy
   const dz = center.z - perspective
@@ -1837,6 +1887,63 @@ function sphereRing(center: { x: number; y: number; z: number }, radius: number,
   return ring
 }
 
+/** 三角形在球里面。沿视线打到球面，法线和阴影都用这个交点，避免背光轮廓被自己的阴影图吃掉。 */
+function sphereSurface(
+  camera: ShadeCamera,
+  round: { x: number; y: number; z: number; radius: number },
+  x: number,
+  y: number,
+  z: number,
+) {
+  if (camera.parallel) {
+    const dx = x - round.x
+    const dy = y - round.y
+    const rad2 = round.radius * round.radius - dx * dx - dy * dy
+    if (rad2 >= 0) {
+      const span = round.radius
+      return { x, y, z: round.z + Math.sqrt(rad2), nx: dx / span, ny: dy / span, nz: Math.sqrt(rad2) / span }
+    }
+    const fx = x - round.x
+    const fy = y - round.y
+    const fz = z - round.z
+    const flen = Math.hypot(fx, fy, fz) || 1
+    return { x, y, z, nx: fx / flen, ny: fy / flen, nz: fz / flen }
+  }
+  const ocx = camera.x - round.x
+  const ocy = camera.y - round.y
+  const ocz = camera.z - round.z
+  let dx = x - camera.x
+  let dy = y - camera.y
+  let dz = z - camera.z
+  const len = Math.hypot(dx, dy, dz) || 1
+  dx /= len
+  dy /= len
+  dz /= len
+  const b = ocx * dx + ocy * dy + ocz * dz
+  const c = ocx * ocx + ocy * ocy + ocz * ocz - round.radius * round.radius
+  const disc = b * b - c
+  if (disc >= 0) {
+    const s = Math.sqrt(disc)
+    let t = -b - s
+    if (t < 1e-4) t = -b + s
+    if (t > 1e-4) {
+      const hx = camera.x + dx * t
+      const hy = camera.y + dy * t
+      const hz = camera.z + dz * t
+      const nx = hx - round.x
+      const ny = hy - round.y
+      const nz = hz - round.z
+      const hlen = Math.hypot(nx, ny, nz)
+      if (hlen > 1e-4) return { x: hx, y: hy, z: hz, nx: nx / hlen, ny: ny / hlen, nz: nz / hlen }
+    }
+  }
+  const fx = x - round.x
+  const fy = y - round.y
+  const fz = z - round.z
+  const flen = Math.hypot(fx, fy, fz) || 1
+  return { x, y, z, nx: fx / flen, ny: fy / flen, nz: fz / flen }
+}
+
 function roundSphere(batch: Batch): { x: number; y: number; z: number; radius: number } | null {
   const outline = batch.outline
   if (!outline) return null
@@ -1854,7 +1961,15 @@ function roundSphere(batch: Batch): { x: number; y: number; z: number; radius: n
 }
 
 type InkRun = { points: ChainPoint[]; hidden: boolean; kind: 0 | 1 | 2; style: LineStyle }
-type EdgeEnds = { a: string; b: string }
+type EdgeEnds = { a: string; b: string; owners: readonly number[] }
+
+/** 交界线和参与相交的那两只网格自己的棱接在一起，不互相切开。 */
+function joinsParticipant(a: EdgeEnds, b: EdgeEnds) {
+  const seam = a.owners.length > 1 ? a : b.owners.length > 1 ? b : null
+  if (!seam) return false
+  const other = seam === a ? b : a
+  return other.owners.some((id) => seam.owners.includes(id))
+}
 
 function edgeKey(v: { x: number; y: number; z: number }) {
   return `${quantCoord(v.x)},${quantCoord(v.y)},${quantCoord(v.z)}`
@@ -1888,8 +2003,35 @@ function paintSplit(ctx: CanvasRenderingContext2D, run: InkRun, scale: number) {
   }
 }
 
+/** 折线上离 (x, y) 最近的点，沿折线到两端的距离。 */
+function closestAlong(points: ChainPoint[], x: number, y: number) {
+  let best = Infinity
+  let along = 0
+  let walked = 0
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!
+    const b = points[i]!
+    const vx = b.x - a.x
+    const vy = b.y - a.y
+    const len2 = vx * vx + vy * vy
+    const seg = Math.sqrt(len2)
+    let t = 0
+    if (len2 > 1e-8) t = Math.min(1, Math.max(0, ((x - a.x) * vx + (y - a.y) * vy) / len2))
+    const cx = a.x + vx * t
+    const cy = a.y + vy * t
+    const d2 = (x - cx) * (x - cx) + (y - cy) * (y - cy)
+    if (d2 < best) {
+      best = d2
+      along = walked + seg * t
+    }
+    walked += seg
+  }
+  return { dist2: best, along, total: walked }
+}
+
 /**
  * 可见线按 (线宽 / 2 + halo) 盖住更远的线。共用端点的棱不切开，角上仍连着。
+ * 盖住的位置贴着这条线自己的端点时也不切开：线管端面和轮廓只在端点相接。
  * 深度差不到 2 个像素的不算压在前面。
  */
 function cutCrossings(runs: InkRun[], edges: EdgeEnds[], width: number, height: number, scale: number) {
@@ -1898,6 +2040,7 @@ function cutCrossings(runs: InkRun[], edges: EdgeEnds[], width: number, height: 
   const edgeBuf = new Int32Array(width * height)
   zBuf.fill(-1e30)
   edgeBuf.fill(-1)
+  const byEdge = new Map<number, ChainPoint[]>()
   const stamp = (x: number, y: number, z: number, edge: number, radius: number) => {
     const r = Math.ceil(radius)
     const x0 = Math.max(0, Math.floor(x - r))
@@ -1922,7 +2065,12 @@ function cutCrossings(runs: InkRun[], edges: EdgeEnds[], width: number, height: 
     if (run.hidden || !(run.style.halo > 0)) continue
     const radius = (run.style.widths[run.kind] / 2 + run.style.halo) * scale
     if (!(radius > 0)) continue
-    for (const point of run.points) stamp(point.x, point.y, point.z, point.edge, radius)
+    for (const point of run.points) {
+      const list = byEdge.get(point.edge)
+      if (list) list.push(point)
+      else byEdge.set(point.edge, [point])
+      stamp(point.x, point.y, point.z, point.edge, radius)
+    }
   }
   for (const run of runs) {
     for (const point of run.points) {
@@ -1932,10 +2080,20 @@ function cutCrossings(runs: InkRun[], edges: EdgeEnds[], width: number, height: 
       const i = iy * width + ix
       const other = edgeBuf[i]!
       if (other < 0 || !(zBuf[i]! > point.z + 2)) continue
-      if (shareEnds(edges[other]!, edges[point.edge]!)) continue
+      const nearEdge = edges[other]
+      const farEdge = edges[point.edge]
+      if (nearEdge && farEdge && (shareEnds(nearEdge, farEdge) || joinsParticipant(nearEdge, farEdge))) continue
+      const nearPts = byEdge.get(other)
+      if (!nearPts || nearPts.length < 2) continue
+      const hit = closestAlong(nearPts, point.x, point.y)
+      if (hit.along < 3 || hit.total - hit.along < 3) continue
       point.cut = true
     }
   }
+}
+
+function seamVert(point: { x: number; y: number; z: number }): Vert {
+  return { x: point.x, y: point.y, z: point.z, nx: 0, ny: 0, nz: 1, u: 0, v: 0 }
 }
 
 function paintMeshLines(
@@ -1947,7 +2105,7 @@ function paintMeshLines(
   pw: number,
   ph: number,
   layer: LayerLayoutNode,
-  perspective: number,
+  perspective: Perspective,
   padL: number,
   padT: number,
   viewW: number,
@@ -1964,15 +2122,43 @@ function paintMeshLines(
   const mapY = ph / canvas.height
   const edges: EdgeEnds[] = []
   const runs: InkRun[] = []
-  const addEdge = (a: Vert, b: Vert) => {
+  const addEdge = (a: Vert, b: Vert, edgeOwners: readonly number[]) => {
     const id = edges.length
-    edges.push({ a: edgeKey(a), b: edgeKey(b) })
+    edges.push({ a: edgeKey(a), b: edgeKey(b), owners: edgeOwners })
     return id
   }
-  const consume = (a: Vert, b: Vert, style: LineStyle, owner: number, outline: boolean, kind: 0 | 1, hiddenRuns: PointRun[]) => {
-    const edge = addEdge(a, b)
+  const consume = (
+    a: Vert,
+    b: Vert,
+    style: LineStyle,
+    owner: number,
+    outline: boolean,
+    kind: 0 | 1,
+    hiddenRuns: PointRun[],
+    owner2 = 0,
+  ) => {
+    const edge = addEdge(a, b, owner2 ? [owner, owner2] : [owner])
     for (const run of collectRuns(
-      sampleSegment(a, b, perspective, vx, vy, padL, padT, scaleX, scaleY, depth, owners, pw, ph, mapX, mapY, owner, outline),
+      sampleSegment(
+        a,
+        b,
+        perspective,
+        vx,
+        vy,
+        padL,
+        padT,
+        scaleX,
+        scaleY,
+        depth,
+        owners,
+        pw,
+        ph,
+        mapX,
+        mapY,
+        owner,
+        outline,
+        owner2,
+      ),
     )) {
       const points = run.points.map((point) => ({ ...point, edge }))
       if (run.hidden) {
@@ -2005,6 +2191,38 @@ function paintMeshLines(
       for (const chain of chainHidden(hiddenRuns)) runs.push({ points: chain, hidden: true, kind: 2, style })
     }
   })
+  const groups: Array<{ owner: number; style: LineStyle; parts: Array<{ verts: Vert[]; indices: Uint32Array }> }> = []
+  const byOwner = new Map<number, (typeof groups)[number]>()
+  batches.forEach((batch, index) => {
+    const style = batch.lines
+    const verts = authored[index]
+    if (!style || !verts) return
+    let group = byOwner.get(batch.owner)
+    if (!group) {
+      group = { owner: batch.owner, style, parts: [] }
+      byOwner.set(batch.owner, group)
+      groups.push(group)
+    }
+    group.style = style
+    group.parts.push({ verts, indices: batch.indices })
+  })
+  for (let i = 0; i < groups.length; i++) {
+    for (let j = i + 1; j < groups.length; j++) {
+      const earlier = groups[i]!
+      const later = groups[j]!
+      const hiddenRuns: PointRun[] = []
+      for (const left of earlier.parts) {
+        for (const right of later.parts) {
+          for (const segment of meshIntersections(left.verts, left.indices, right.verts, right.indices)) {
+            consume(seamVert(segment.a), seamVert(segment.b), later.style, later.owner, false, 1, hiddenRuns, earlier.owner)
+          }
+        }
+      }
+      if (later.style.hiddenCss) {
+        for (const chain of chainHidden(hiddenRuns)) runs.push({ points: chain, hidden: true, kind: 2, style: later.style })
+      }
+    }
+  }
   cutCrossings(runs, edges, canvas.width, canvas.height, scale)
   for (const run of runs) paintSplit(ctx, run, scale)
   ctx.setLineDash([])
@@ -2091,7 +2309,7 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
     const node = instance.node
     if (node.width <= 0 && node.mesh.type !== 'extrude') continue
     const o = originOffset(node.origin, node.width, node.height)
-    if (applyPoseMatrix(instance.toLayer, o.x, o.y, 0).z >= perspective) continue
+    if (behindCamera(applyPoseMatrix(instance.toLayer, o.x, o.y, 0).z, perspective)) continue
     const owner = nextOwner++
     const opacity = (instance.opacity ?? 1) * node.opacity
     if (node.mesh.type === 'model') {

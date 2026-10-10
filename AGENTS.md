@@ -48,17 +48,19 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 | 公式用 `<math>`，不要写进文字盒子 | `<p>因此<math><mi>x</mi></math></p>` | `<div style="display:flex"><span>因此</span><math><mi>x</mi></math></div>` | `invalid-child` |
 | 公式只用带 MATH 表的字体 | `<math style="font-family:Kai">` | 不写 `font-family`，字母和运算符用 `STIXTwoMath`。说明文字用 `<mtext>`，跟外面的字体走 | `invalid-attr` |
 | 整层裁切用 `<mask>`，里面直接写形状或 `<img>` | 把 mask 写成属性，或放进 flex | `<layer><mask><circle cx="160" cy="90" r="90" /></mask>…</layer>`。省略 `fill` 为不透明白 | `invalid-child` |
+| 抠完要贴纸边或发光轮廓 | 把 `shadow` 写在子元素上，或让父层描边套住没抠的矩形 | 把 `shadow`、`glow`、外侧 `stroke` 写在蒙版所在的 `layer` 上。轮廓跟着留下的形状，可以伸出蒙版。父层的描边和阴影也跟着这块轮廓 | |
+| `<preview>` 的 `show` | 把它当成不认识的属性 | `<preview of="#cut" show="overlay checker black white edges" />`。`show` 和 `of` 只在 `preview` 上合法 | |
 | 蒙版加减用 `op`，不要写 CSS | `mask-image`、`mask-composite` | `<mask><rect … /><circle op="subtract" /></mask>`。默认 `add`。分组用 `<g>` | `invalid-attr` |
 | 蒙版读黑白图或编号 | `<img mask-mode="luminance">` | `<img channel="luma">`、`<img pick="3 5">`。只写在 mask 里 | `invalid-attr` |
 | 羽化和反选写在 `<mask>` 上 | `<rect feather="8">` | `<mask feather="8" invert="true">` | `invalid-attr` |
 | 预览写在标记里 | 只靠命令行开关 | `<preview of="#cut" show="overlay checker black white edges" />`。正常成片不画，`render --preview` 才出拼图 | `invalid-attr` |
 | 蒙版缓存用 `derive` | 把抠图结果写回原图 | `<img src="photo.jpg" derive="subject" />`。没有缓存报 `missing-mask`，哈希对不上报 `stale-mask` | `missing-mask`、`stale-mask` |
-| 透视写在父 `layer`，转动和 `z` 写在子元素 | `<rect perspective="900" rotateY="20">` | `<layer perspective="900"><rect rotateY="20" z="40" /></layer>` | `invalid-attr`、`flatten-3d` |
+| 透视写在父 `layer`，转动和 `z` 写在子元素 | `<rect perspective="900" rotateY="20">` | `<layer perspective="900"><rect rotateY="20" z="40" /></layer>`。平行投影写 `perspective="parallel"` | `invalid-attr`、`flatten-3d` |
 | 球体、圆柱、圆环、线管、长方体、拉伸和 glb 放在带 `perspective` 的 layer 里 | `<sphere r="40">` 没有视距 | `<layer perspective="700"><sphere cx="80" cy="80" r="40" /></layer>`。圆柱 `<cylinder cx cy r height>`，圆环 `<torus cx cy r tube>`，线管 `<tube d r>`。`box` 的 `rx` 圆棱，`round` 选边；圆柱的 `rx` 圆口，`round` 写 `top` 或 `bottom`。`model` 只写 `src`，尺寸写在外包 layer | `flatten-3d`、`missing-model` |
 
 根节点 `<layer width height background>` 上的 `background` 是画布底色，只有这一处可以写。没写时不铺底色，PNG 里空出来的像素是透明的。要白底写 `background="#ffffff"`。
 
-带 `perspective` 的 layer 里，没有网格时直接子元素按中心深度从远到近画，深度相同按文档顺序。出现 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 时这一层改用深度缓冲，近的盖住远的。不在透视里时 `z` 不改变顺序，并报 `flatten-3d`。
+带 `perspective` 的 layer 里，没有网格时直接子元素按中心深度从远到近画，深度相同按文档顺序。出现 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 时这一层改用深度缓冲，近的盖住远的。`perspective="parallel"` 是平行投影，视线平行于 z，没有近大远小，也没有镜头平面。不在透视里时 `z` 不改变顺序，并报 `flatten-3d`。
 
 flex 的 `align-items` 默认 `center`（CSS 里是 `stretch`）。**column 忘写 `align-items` 会全部居中**：较窄的子项在交叉轴居中，和容器同宽的子项看起来仍贴着起点。左对齐写 `align-items:flex-start`。横排按文字基线对齐写 `align-items:baseline`（图片、`layer`、形状对齐到下边缘）。同一行被基线撑高后，`center` 和 `end` 的子项按新的行盒再排，`start` 仍贴着行的起点。竖排写了 `baseline` 按 `flex-start`。`letter-spacing` 可以写 `em`，按写这条声明的元素自己的字号换算后再继承。`justify-content` 只管本层主轴，写在子项上改不了它在父级交叉轴上的位置。`align-content` 默认 `flex-start`，管的是 `flex-wrap` 之后的多行，不是一行里的子项。`flex-wrap` 可以写 `wrap` 或 `wrap-reverse`。
 
@@ -101,7 +103,7 @@ export default canvas.create(
 - 动画导出 `composition`（见 SPEC 第 13 章）。文件头写 `/** @jsxImportSource flexlayer */`，标签不用 import。`flexlayer check` / `render` 会执行它。`--emit out.layer` 把展开结果写回 `.layer`。`draw={(ctx, el) => ...}` 里只用 `ctx` 和 `el`，否则 `--emit` 报 `emit-draw`，并且不写出 `<draw>`。不要用 `Math.random` 或 `Date.now`。可重复的随机数用 `random(seed)` 或 `noise`。例子：`examples/slide.tsx`。
 - 要从字体取出某个字的轮廓，`import { glyph } from 'flexlayer'`。`glyph('春眠', { font: 'Kai', size: 120, weight: 700 })` 同步按码位返回数组，每项有 `text`、`d`、`font`、`size`、`weight`、字宽 `width`、字身高度 `height`、`baseline`、`ink` 和 `missing`。`d` 的原点在字身左上角，y 向下，单位是像素。字宽和字身高度来自字体，不来自路径外接框。缺字（`😀`、`𠀀`）`missing` 为 `true`，`d` 是同一个缺字方框。可变字体只出默认字重。见 SPEC 5.4。
 - 要检查一张抠图结果或黑白蒙版，`import { analyzeImage } from 'flexlayer'`。`await analyzeImage('photo.subject.png')` 返回 `width`、`height`、`channel`、留下的比例 `area`、外接矩形 `ink`、碎片数 `pieces`、最大几块 `parts`、洞数 `holes`、软边宽度 `softEdge` 和轮廓 `d`。坐标是图片像素。有透明像素时看 alpha，否则看亮度，可以用 `channel` 指定。`d` 直接写进 `<mask><path d /></mask>`；单独画出来要写 `stroke="none"`。和 `glyph` 一样不进渲染，同一张图只算一次。见 SPEC 第 6 章。
-- 抠主体用仓库里的 `packages/select`（包名 `flexlayer-select`），不要把模型放进渲染器。`npx flexlayer-select cutout photo.jpg --preset portrait` 写出 `photo.subject.png` 和 `photo.cutout.json`。标记里写 `<img src="photo.jpg" derive="subject" />`。没装这个包时，`flexlayer select` 只提示安装命令。
+- 抠主体用仓库里的 `packages/select`（包名 `flexlayer-select`），不要把模型放进渲染器，也不要写 `npm install flexlayer-select`：这个包不在 npm 上。在 `packages/select` 里执行 `npm ci && npm run build`。第一次下载的模型是 fp16，大约 470MB，不是 940MB 的 fp32。`npx flexlayer-select cutout photo.jpg --preset portrait` 写出 `photo.subject.png` 和 `photo.cutout.json`。标记里写 `<img src="photo.jpg" derive="subject" />`。没装这个包时，`flexlayer select` 只提示这条安装路径。
 
 ```ts
 import { renderLayer } from 'flexlayer'

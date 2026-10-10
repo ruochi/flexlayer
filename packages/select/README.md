@@ -2,10 +2,12 @@
 
 从一张本地图片里抠出主体，写成 Flex Layer 能直接用的蒙版。渲染器不跑模型，只读这里写出来的缓存。
 
-模型是 [BiRefNet](https://huggingface.co/onnx-community/BiRefNet_512x512-ONNX) 的 ONNX 版（MIT）。第一次使用时下载到 `~/.cache/flexlayer/models`。`@huggingface/transformers` 是可选依赖，没装时 `cutout` 会提示安装命令。
+模型是 [BiRefNet](https://huggingface.co/onnx-community/BiRefNet_512x512-ONNX) 的 ONNX 版（MIT）。这个包不在 npm 上，要从本仓库安装。第一次 `cutout` 下载 fp16 权重到 `~/.cache/flexlayer/models`，大约 470MB。fp32 大约 940MB，这里不用。`@huggingface/transformers` 是可选依赖，`npm ci` 会装上。
 
 ```bash
-npm install flexlayer-select
+cd packages/select
+npm ci
+npm run build
 npx flexlayer-select cutout photo.jpg --preset portrait
 ```
 

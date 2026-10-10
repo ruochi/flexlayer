@@ -431,6 +431,56 @@ describe('文字样式', () => {
     expect(Math.abs(retina.red.userMinX - full.red.userMinX)).toBeLessThan(4)
   })
 
+  it('行内 span 和继承来的渐变按整段取样，不在每个字上重新开始', async () => {
+    const monotonic = async (source: string) => {
+      const { png, report } = await renderFvg(source)
+      expect(report.issues.filter((issue) => issue.level === 'error')).toEqual([])
+      const img = await loadImage(png)
+      const canvas = createCanvas(img.width, img.height)
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, 0, 0)
+      const { data, width, height } = ctx.getImageData(0, 0, img.width, img.height)
+      const colored = (i: number) => {
+        const r = data[i]!
+        const g = data[i + 1]!
+        const b = data[i + 2]!
+        const a = data[i + 3]!
+        return a > 40 && g < 80 && (r > 80 || b > 80)
+      }
+      let row = 0
+      let best = 0
+      for (let y = 0; y < height; y++) {
+        let n = 0
+        for (let x = 0; x < width; x++) if (colored((y * width + x) * 4)) n++
+        if (n > best) {
+          best = n
+          row = y
+        }
+      }
+      const samples: Array<{ x: number; r: number; b: number }> = []
+      for (let x = 0; x < width; x++) {
+        const i = (row * width + x) * 4
+        if (!colored(i)) continue
+        samples.push({ x, r: data[i]!, b: data[i + 2]! })
+      }
+      expect(samples.length).toBeGreaterThan(40)
+      const at = (t: number) => samples[Math.min(samples.length - 1, Math.round((samples.length - 1) * t))]!
+      const left = at(0.08)
+      const mid = at(0.5)
+      const right = at(0.92)
+      expect(left.r).toBeGreaterThan(left.b + 40)
+      expect(right.b).toBeGreaterThan(right.r + 40)
+      expect(left.r).toBeGreaterThan(mid.r + 20)
+      expect(mid.r).toBeGreaterThan(right.r + 20)
+    }
+    await monotonic(
+      `<layer width="720" height="120" background="#ffffff" safe="0"><p style="font-size:64px; white-space:nowrap">前<span style="fill:linear-gradient(to right, #ff0000, #0000ff)">春眠 WORD</span>后</p></layer>`,
+    )
+    await monotonic(
+      `<layer width="720" height="140" background="#ffffff" safe="0"><div style="font-size:64px"><p style="white-space:nowrap; fill:linear-gradient(to right, #ff0000, #0000ff)">春眠 WORD</p></div></layer>`,
+    )
+  })
+
   it('行内渐变背景左红右蓝', async () => {
     const { png, report } = await renderFvg(
       `<layer width="360" height="90" background="#ffffff" safe="0"><p style="font-size:40px; white-space:nowrap">AA<span style="background:linear-gradient(to right, #ff0000, #0000ff)">WORD</span></p></layer>`,
