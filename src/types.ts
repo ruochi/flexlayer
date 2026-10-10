@@ -193,6 +193,18 @@ export type InkOffset = {
   bottom: number
 }
 
+/** 按这一层布局盒里的像素量。`area`、`softEdge` 是这一层自己的像素，不乘 `scale`。 */
+export type MaskReport = {
+  /** 留下的比例，0 到 1。半透明按 alpha 折算。 */
+  area: number
+  /** 留下来的部分在画布上的外接矩形。全部藏起来时是 null。在透视平面上不写。 */
+  ink?: Rect | null
+  /** alpha 不低于一半的连通块个数，八连通。 */
+  pieces: number
+  /** 软边的平均宽度，像素。硬边接近 0 到 1。 */
+  softEdge: number
+}
+
 export type ElementReport = {
   path: string
   id?: string
@@ -217,6 +229,8 @@ export type ElementReport = {
   screenScale?: number
   /** 阴影、光晕、图层模糊或玻璃可能占用的范围。没有外扩效果时不写。 */
   effect?: Rect
+  /** 这一层写了 `<mask>` 时，蒙版画成位图之后量出来的数。 */
+  mask?: MaskReport
   /** 逐层相乘后的有效透明度。 */
   opacity: number
   fontSize?: number

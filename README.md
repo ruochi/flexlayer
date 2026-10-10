@@ -143,6 +143,22 @@ const root = h(
 await renderLayer(root)
 ```
 
+分析一张抠图结果：留下多少、碎成几块、有几个洞、边有多软，并描出轮廓 `d`。坐标是图片像素：
+
+```ts
+import { analyzeImage, h, renderLayer } from 'flexlayer'
+
+const cut = await analyzeImage('photo.subject.png')
+if (cut.pieces > 1) console.warn(`主体碎成了 ${cut.pieces} 块`, cut.parts)
+const root = h(
+  'layer',
+  { width: String(cut.width), height: String(cut.height) },
+  h('mask', {}, h('path', { d: cut.d })),
+  h('img', { src: 'photo.jpg', style: `width:${cut.width}px; height:${cut.height}px` }),
+)
+await renderLayer(root)
+```
+
 按帧生成一组 PNG 和一张联系表：
 
 ```ts

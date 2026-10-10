@@ -6,7 +6,7 @@ import { ensureBuiltinFontsSync, fontReady, registerFontPath, resolveFontSrcSync
 import { fontFamiliesOf, measureLayer, noteMeasuredSize, parseSafe, prepareAssetsSync, type MeasureEnv } from './layout.js'
 import type { FvgNode } from './parse.js'
 import { divHasFlowBreak, isDisplayFlex } from './rules.js'
-import { placedElements, type PlacedElement } from './placed-elements.js'
+import { placedElements, placedRootMask, type PlacedElement, type PlacedMask } from './placed-elements.js'
 import { placedText, type PlacedText } from './placed-text.js'
 import { parseNumber, parseOrigin, parseScale, readAnchor } from './style.js'
 import { isTextBoxTag } from './text.js'
@@ -38,7 +38,7 @@ export function layerBaseDir(): string {
   for (const line of stack.split('\n')) {
     const file = fileFromStack(line)
     if (!file) continue
-    if (/[/\\](src|dist)[/\\]canvas\.[cm]?[jt]s/.test(file)) continue
+    if (/[/\\](src|dist)[/\\](canvas|analyze-image)\.[cm]?[jt]s/.test(file)) continue
     if (file.includes('/node_modules/') || file.includes('\\node_modules\\')) continue
     if (file.includes('flexlayer-')) continue
     return dirname(file)
@@ -57,7 +57,7 @@ export type LayerBox = {
   height: number
 }
 
-export type { PlacedElement } from './placed-elements.js'
+export type { PlacedElement, PlacedMask } from './placed-elements.js'
 export type { PlacedChar, PlacedLine, PlacedText } from './placed-text.js'
 
 export type CreatedLayer = FvgNode & LayerBox & {
@@ -77,6 +77,11 @@ export type CreatedLayer = FvgNode & LayerBox & {
    * 坐标和 `text` 同一套，相对布局盒左上角。
    */
   elements: PlacedElement[]
+  /**
+   * 这一层自己写了 `<mask>` 时才有。先把蒙版画成位图，再量面积、外接矩形、碎片数和软边宽度。
+   * 嵌套层的蒙版在 `elements` 对应那一项的 `mask` 里。
+   */
+  mask?: PlacedMask
 }
 
 function parseAnchor(raw: string | undefined, fallback: Anchor = 'top-left'): Anchor {
@@ -188,12 +193,16 @@ export function create(node: FvgNode): CreatedLayer {
     width: laid.width,
     height: laid.height,
   }
-  return Object.assign(node, box, {
+  const created = Object.assign(node, box, {
     rotatedBox: rotatedBoxOf(node, box),
     issues,
     text: placedText(laid),
     elements: placedElements(laid),
-  })
+  }) as CreatedLayer
+  const mask = placedRootMask(laid)
+  if (mask) created.mask = mask
+  else delete created.mask
+  return created
 }
 
 /** 只写一个数时仍写回一个数。已经是两个数时，两个都乘上比例，不把 `-1 1` 收成一个数。 */

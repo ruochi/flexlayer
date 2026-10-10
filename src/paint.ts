@@ -908,6 +908,35 @@ function applyLayerMask(canvas: Canvas, shapes: LayoutNode[], k: number, origin:
   cctx.restore()
 }
 
+export type MaskRaster = {
+  /** 位图的像素宽高。 */
+  width: number
+  height: number
+  /** 一个位图像素等于多少个 layer 局部像素的倒数。大图会缩小来画。 */
+  scale: number
+  /** 每个像素的 alpha，逐行排列。 */
+  alpha: Uint8ClampedArray
+}
+
+const MASK_RASTER_LIMIT = 4_000_000
+
+/** 和绘制时同一套形状和图片，在 layer 布局盒里画成 alpha 位图。原点是 layer 左上角。 */
+export function rasterizeMask(shapes: LayoutNode[], width: number, height: number): MaskRaster | null {
+  if (!(width > 0) || !(height > 0)) return null
+  const scale = Math.min(1, Math.sqrt(MASK_RASTER_LIMIT / (width * height)))
+  const pw = Math.max(1, Math.ceil(width * scale))
+  const ph = Math.max(1, Math.ceil(height * scale))
+  const canvas = createCanvas(pw, ph)
+  const ctx = canvas.getContext('2d') as PaintCtx
+  ctx.setTransform(scale, 0, 0, scale, 0, 0)
+  const state: PaintState = { canvasWidth: pw, canvasHeight: ph, frame: 0, fps: 30, issues: [] }
+  for (const shape of shapes) paintNode(ctx, shape, false, 0, state)
+  const rgba = ctx.getImageData(0, 0, pw, ph).data
+  const alpha = new Uint8ClampedArray(pw * ph)
+  for (let i = 0; i < alpha.length; i++) alpha[i] = rgba[i * 4 + 3]!
+  return { width: pw, height: ph, scale, alpha }
+}
+
 function nodeDeviceBounds(ctx: PaintCtx, node: LayoutNode, padDevice: number) {
   const matrix = ctx.getTransform()
   const corners = [

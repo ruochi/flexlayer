@@ -130,7 +130,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 检查和绘制都按屏幕上的实际大小。`scale` 和 `view` 叠出来的倍数写在报告的 `screenScale`（两轴绝对值的几何平均，等于 1 不写）。最小字号拿 `font-size × screenScale` 和 `min(画布宽, 画布高) / 1080 × 24` 比。1080p 横屏和竖屏都是 24px。阴影、光晕、模糊的外扩同样乘这个倍数。`--debug` 的布局框和着墨框保持 1 屏幕像素，不跟着放大。网格光栅按这个倍数提高分辨率，推近后笔画仍然清楚。
 
-`<mask>` 裁的是这一层合成完的画面，包括阴影、模糊、调色和颗粒。它写在 `layer` 里面，和要裁的内容并列。自己不画出来，不占布局，不把层撑大，不出现在报告里，也不触发 `overflow-canvas`。被它挡住的内容同样不报 `overflow-canvas` 或 `effect-clipped`：报告里的 `ink` 先和 mask 形状的外接范围求交。一层最多一个，多出来的 `warn` 并忽略。坐标和同层的图形一样，原点在 layer 左上角。
+`<mask>` 裁的是这一层合成完的画面，包括阴影、模糊、调色和颗粒。它写在 `layer` 里面，和要裁的内容并列。自己不画出来，不占布局，不把层撑大，里面的形状不进报告的元素表，也不触发 `overflow-canvas`。蒙版画成位图之后量出来的面积、外接矩形、碎片数和软边宽度写在这一层的 `mask` 字段上，见第 10 章和第 15 章。被它挡住的内容同样不报 `overflow-canvas` 或 `effect-clipped`：报告里的 `ink` 先和 mask 形状的外接范围求交。一层最多一个，多出来的 `warn` 并忽略。坐标和同层的图形一样，原点在 layer 左上角。
 
 里面直接写 `rect`、`circle`、`ellipse`、`polygon`、`path`，也可以放 `img`（用图片自己的 alpha）。`line`、`arrow`、`polyline`、`curve`、文字、`div`、嵌套 `layer` 会 `warn` 并忽略。空的 `mask` 报 `empty-mask`，并且不生效。
 
@@ -328,6 +328,43 @@ const chars = await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })
 | `border-radius`、`opacity`、`padding`、`background`、`border` | 同其它 HTML。圆角会裁切图片 |
 
 图片可以放进 `display:flex`，默认不缩小。在 layer 里默认落在 `(0, 0)`；要指定位置就外包一层 `layer`，把 `x`、`y`、`anchor` 写在那一层上。`canvas.create` 会按 `src` 准备图片。读不到文件时报 `missing-image`，`hint` 说明路径。写了宽高的盒子仍然占位。缺 `src` 报 `invalid-attr`。
+
+### 分析 analyzeImage
+
+`.tsx` 里可以先读一张图，量出它留下了多少、碎成几块，并描出轮廓。和 `glyph` 一样是程序接口，不是标签，也不进渲染：先拿到数和路径，再决定怎么摆、怎么裁。常用来检查抠图结果或黑白蒙版。
+
+```ts
+import { analyzeImage } from 'flexlayer'
+
+const cut = await analyzeImage('photo.subject.png')
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `src` | 传进来的路径 |
+| `width`、`height` | 图片像素尺寸 |
+| `channel` | 实际分析的通道，`alpha` 或 `luma` |
+| `hasAlpha` | 图里有没有不透明度低于 255 的像素 |
+| `area` | 留下的比例，0 到 1。半透明按值折算 |
+| `ink` | 值大于 0 的外接矩形，字段是 `x`、`y`、`width`、`height`。整张为 0 时是 `null` |
+| `pieces` | 实心部分的八连通块个数 |
+| `parts` | 最大的几块，按面积从大到小，最多 64 块。每块有 `area` 和 `ink` |
+| `holes` | 实心部分里的洞的个数 |
+| `softEdge` | 软边平均宽度，像素。等于半透明像素数除以实心区域的边界长度，硬边接近 0 到 1 |
+| `d` | 实心部分的轮廓，SVG 路径。外圈和洞的绕向相反 |
+
+坐标都是图片像素，原点在左上角，y 向下。值不低于 `threshold` 的像素算实心，碎片、洞和轮廓都按它切。轮廓用移动方块描出，交点按值插值，再按 `tolerance` 化简；对角相连的两个实心像素算同一块，和 `pieces` 一致。
+
+| 选项 | 说明 |
+| --- | --- |
+| `channel` | `auto`（默认）：图里有透明像素时看 alpha，否则看亮度。抠图结果用 `alpha`，没有透明通道的黑白蒙版用 `luma`。亮度乘过 alpha |
+| `threshold` | 1 到 255，默认 128 |
+| `tolerance` | 化简允许偏离的像素，默认 0.5。写 0 不化简 |
+| `baseDir` | 相对路径从这里找。默认是调用方源文件所在目录，和 `<img src>` 一样 |
+
+`d` 写进 `<mask><path d /></mask>` 就是同一块蒙版，`mask` 里的 `path` 不描边。单独画出来时写 `<path d fill="#fff" stroke="none">`，因为 `path` 默认带 4 像素描边。图片画在页面上时如果缩放过，把 `d` 放进写了 `scale` 的 `layer`，或者按显示尺寸换算 `ink`。
+
+同一张图、同一组选项在一个进程里只算一次，返回的是副本，改了不影响下一次。读不到图片、或选项写错时抛错。
 
 ### 图标
 
@@ -674,6 +711,7 @@ registerFilter({
 - `box`：布局盒子（含 padding 和 border），只累加平移。`rotate`、`scale` 和透视都不改变它。旋转之后 `box.x` 仍是没转之前的左上角。
 - `ink`：同一元素转完、缩完之后真正落在画布上的着墨外接矩形。落在带 `perspective` 的平面上时，改成投影后的外接矩形。并和祖先里 `overflow="hidden"` 的 layer、以及 `<mask>` 的外接范围求过交集。文字是字形的真实边界，形状是布局盒子变换后的范围。做像素对位看 `ink`，不要看 `box`。`overflow-canvas` 看的也是这个投影后的 `ink`。线条的中心线落在画布边上时，描边半径探出去不算超出；中心线本身越出画布仍然算。
 - `effect`：阴影、光晕、图层模糊或玻璃可能占用的范围，字段同 `box`。没有这些外扩效果时不写。已经被 `overflow="hidden"` 或 `<mask>` 裁掉的部分不算在里面。这个范围画出画布时报 `effect-clipped`。
+- `mask`：写了 `<mask>` 的 `layer` 才有。先用和绘制相同的形状、图片把蒙版画成位图，只看这一层的布局盒里面，再量这几个数：`area` 是留下的比例（0 到 1，半透明按 alpha 折算）；`ink` 是 alpha 大于 0 的部分在画布上的外接矩形，全部藏起来时是 `null`，在透视平面上不写；`pieces` 是 alpha 不低于一半的连通块个数（八连通）；`softEdge` 是软边的平均宽度，等于半透明像素数除以实心区域的边界长度，硬边接近 0 到 1，羽化越宽越大。`area` 和 `softEdge` 按这一层自己的像素算，不乘 `scale`。布局盒超过四百万像素时缩小来画，结果换算回原来的像素。
 - `quad`：有透视投影时才有。投影后的四个角，画布坐标，顺序为左上、右上、右下、左下。用来看斜着的平面实际落在哪儿。
 - `opacity`：从根到该元素逐层相乘后的透明度。
 - `inline`：带 `id` 的行内标签才有，为 true。`box` 和 `ink` 都是这段文字变换后的外接矩形，见第 5 章。不参与安全区、最小字号和文字重叠检查。
@@ -897,6 +935,22 @@ for await (const { frame, png, report } of renderFrames(scene, { from: 0, to: 30
 | `id` | 写了 `id` 才有 |
 | `box` | 布局盒，字段是 `left`、`top`、`right`、`bottom`、`width`、`height`。不含这一元素自己的 `rotate` |
 | `ink` | 这一元素自己的 `rotate`、`scale` 之后的外接矩形，字段和 `box` 相同。线条含描边。没有旋转、缩放和描边外扩时与 `box` 重合。`layer` 的 `ink` 是子树着墨。`flex` 的 `ink` 是 padding 里面的内容区 |
+| `mask` | 写了 `<mask>` 的 `layer` 才有。`area`、`pieces`、`softEdge` 和报告里的 `mask` 相同（第 10 章）。`ink` 是留下来的部分的外接矩形，字段和 `box` 相同，全部藏起来时是 `null` |
+
+根层自己写了 `<mask>` 时，返回值上也有 `mask`，字段同上，坐标和 `elements` 同一套。和 `glyph()` 一样，这些数来自先画出来的结果：蒙版先画成位图再量，所以图片的 alpha、渐变和形状的 `rotate` 都算在里面。
+
+```tsx
+const cut = canvas.create(
+  <layer width={1080} height={1350}>
+    <mask><img src="photo.subject.png" style="width:1080px; height:1350px" /></mask>
+    <img src="photo.jpg" style="width:1080px; height:1350px; object-fit:cover" />
+  </layer>,
+)
+if (cut.mask && cut.mask.pieces > 1) {
+  // 主体碎成了几块，回去修蒙版
+}
+const title = canvas.create(<layer x={60} y={(cut.mask?.ink?.top ?? 0) + 40}>…</layer>)
+```
 
 要躲开转过的图形，用 `ink`，不要用 `box`。圆的圆心是 `box` 的中心。只写了宽或只写了高、从而整层按比例缩放时，这些坐标已经乘上缩放，落在返回的宽高里面。
 

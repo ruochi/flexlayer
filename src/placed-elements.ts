@@ -1,6 +1,13 @@
 import { applyToBox, aroundPivot, IDENTITY, multiply, originOffset, translated, type Matrix } from './matrix.js'
 import type { LayerBox } from './canvas.js'
+import { maskStats, type MaskStats } from './mask-stats.js'
 import type { Box, LayoutNode } from './types.js'
+
+/**
+ * 带 `<mask>` 的 layer 才有。`area`、`pieces`、`softEdge` 按这一层自己的像素量。
+ * `ink` 是留下来的部分的外接矩形，和 `box` 同一套坐标。
+ */
+export type PlacedMask = Omit<MaskStats, 'ink'> & { ink: LayerBox | null }
 
 /**
  * 一个排进去的元素。坐标相对创建出来的这一层布局盒左上角，和 `text` 同一套：
@@ -22,6 +29,8 @@ export type PlacedElement = {
    * 线条含描边。没有这些时和 `box` 重合。祖先的旋转不算。
    */
   ink: LayerBox
+  /** 这一层写了 `<mask>` 时，蒙版画成位图之后的面积、外接矩形、碎片数和软边宽度。 */
+  mask?: PlacedMask
 }
 
 /** 只计入缩放。旋转留在节点上，和文字坐标同一套，避免把水平基线折成斜线。 */
@@ -76,7 +85,21 @@ function pushElement(node: LayoutNode, space: Matrix, found: PlacedElement[]) {
     ink: mapLocal(node, space, node.ink, true),
   }
   if (node.id) entry.id = node.id
+  const mask = placedMaskOf(node, (ink) => mapLocal(node, space, ink, false))
+  if (mask) entry.mask = mask
   found.push(entry)
+}
+
+function placedMaskOf(node: LayoutNode, place: (ink: Box) => LayerBox): PlacedMask | undefined {
+  if (node.kind !== 'layer' || !node.mask?.length) return undefined
+  const stats = maskStats(node.mask, node.width, node.height)
+  if (!stats) return undefined
+  return { ...stats, ink: stats.ink ? place(stats.ink) : null }
+}
+
+/** 根层自己的 mask。坐标和 `elements` 同一套，根层的缩放已经算进去。 */
+export function placedRootMask(root: LayoutNode): PlacedMask | undefined {
+  return placedMaskOf(root, (ink) => layerBox(applyToBox(nodePose(root, 0, 0), ink)))
 }
 
 function visit(node: LayoutNode, space: Matrix, isRoot: boolean, found: PlacedElement[]) {
