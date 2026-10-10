@@ -189,12 +189,13 @@ function oneGlyph(ch: string, face: OutlineFont, size: number, box: FontBox): Gl
 /**
  * 从字体取出每个字的轮廓。按码位拆开，空字符串返回空数组。
  * 字宽和字身高度来自字体，不来自路径的外接框。
+ * 同步返回。目录里的字体第一次用时会下载，下完直接给出数组，可以写在 `canvas.create` 前面。
  */
-export async function glyph(text: string, options: GlyphOptions = {}): Promise<Glyph[]> {
+export function glyph(text: string, options: GlyphOptions = {}): Glyph[] {
   const size = options.size ?? 40
   if (!(size > 0) || !Number.isFinite(size)) throw new Error('size 要是正数')
   if (options.weight != null && !Number.isFinite(options.weight)) throw new Error('weight 要是数字')
-  const face = await resolveOutlineFont(options.font, options.weight)
+  const face = resolveOutlineFont(options.font, options.weight)
   const box = fontBox(face, size)
   return Array.from(text).map((ch) => oneGlyph(ch, face, size, box))
 }

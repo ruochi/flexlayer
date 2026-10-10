@@ -26,7 +26,7 @@ beforeAll(async () => {
 describe('glyph', () => {
   it('从楷体取出春的轮廓，原点在字身顶上', async () => {
     if (!ready) return
-    const [chun] = await glyph('春', { font: 'Kai', size: 200 })
+    const [chun] = glyph('春', { font: 'Kai', size: 200 })
     expect(chun).toBeDefined()
     if (!chun) return
     expect(chun.text).toBe('春')
@@ -59,7 +59,7 @@ describe('glyph', () => {
 
   it('同一字体的字身一样高，标点的着墨更小', async () => {
     if (!ready) return
-    const [chun, comma, latin] = await glyph('春，A', { font: 'Kai', size: 200 })
+    const [chun, comma, latin] = glyph('春，A', { font: 'Kai', size: 200 })
     expect([chun, comma, latin].map((item) => item?.text)).toEqual(['春', '，', 'A'])
     expect(comma!.height).toBe(chun!.height)
     expect(comma!.baseline).toBe(chun!.baseline)
@@ -70,7 +70,7 @@ describe('glyph', () => {
 
   it('空格有字宽，没有轮廓', async () => {
     if (!ready) return
-    const [space] = await glyph(' ', { font: 'Kai', size: 200 })
+    const [space] = glyph(' ', { font: 'Kai', size: 200 })
     expect(space!.d).toBe('')
     expect(space!.missing).toBe(false)
     expect(space!.ink).toBeNull()
@@ -80,8 +80,8 @@ describe('glyph', () => {
 
   it('春眠可以指定字重', async () => {
     if (!ready) return
-    const chars = await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })
-    const [regular] = await glyph('春', { font: 'Kai', size: 120 })
+    const chars = glyph('春眠', { font: 'Kai', size: 120, weight: 700 })
+    const [regular] = glyph('春', { font: 'Kai', size: 120 })
     expect(chars.map((item) => item.text)).toEqual(['春', '眠'])
     expect(chars.every((item) => item.font === 'Kai' && item.size === 120 && item.weight === 700)).toBe(true)
     expect(chars[0]!.d).not.toBe(regular!.d)
@@ -90,8 +90,8 @@ describe('glyph', () => {
 
   it('粗楷和常规楷的轮廓不同', async () => {
     if (!ready) return
-    const [regular] = await glyph('春', { font: '楷体', size: 160 })
-    const [bold] = await glyph('春', { font: 'Kai', size: 160, weight: 700 })
+    const [regular] = glyph('春', { font: '楷体', size: 160 })
+    const [bold] = glyph('春', { font: 'Kai', size: 160, weight: 700 })
     expect(regular!.font).toBe('Kai')
     expect(regular!.weight).toBe(400)
     expect(bold!.weight).toBe(700)
@@ -101,8 +101,8 @@ describe('glyph', () => {
 
   it('默认字号是 40，再取一次得到同一条路径', async () => {
     if (!ready) return
-    const [first] = await glyph('春', { font: 'Kai' })
-    const [second] = await glyph('春', { font: 'Kai', size: 40 })
+    const [first] = glyph('春', { font: 'Kai' })
+    const [second] = glyph('春', { font: 'Kai', size: 40 })
     expect(first!.size).toBe(40)
     expect(first!.width).toBe(40)
     expect(second!.d).toBe(first!.d)
@@ -110,23 +110,23 @@ describe('glyph', () => {
 
   it('可变字体只出默认字重', async () => {
     if (!ready) return
-    const [chun] = await glyph('春')
+    const [chun] = glyph('春')
     expect(chun!.font).toBe('ChillDuanSans')
     expect(chun!.weight).toBe(300)
-    await expect(glyph('春', { weight: 800 })).rejects.toThrow(/默认字重 300/)
+    expect(() => glyph('春', { weight: 800 })).toThrow(/默认字重 300/)
   })
 
   it('不认识的字体直接报错', async () => {
     if (!ready) return
-    await expect(glyph('春', { font: 'NoSuchFont' })).rejects.toThrow(/字体未注册: NoSuchFont/)
-    await expect(glyph('春', { font: 'Kai', size: 0 })).rejects.toThrow(/size 要是正数/)
+    expect(() => glyph('春', { font: 'NoSuchFont' })).toThrow(/字体未注册: NoSuchFont/)
+    expect(() => glyph('春', { font: 'Kai', size: 0 })).toThrow(/size 要是正数/)
   })
 
   it('一个 emoji 算一个字，缺字可以看出来', async () => {
     if (!ready) return
-    const emoji = await glyph('😀', { font: 'Kai', size: 100 })
-    const rare = await glyph('𠀀', { font: 'Kai', size: 100 })
-    const [chun] = await glyph('春', { font: 'Kai', size: 100 })
+    const emoji = glyph('😀', { font: 'Kai', size: 100 })
+    const rare = glyph('𠀀', { font: 'Kai', size: 100 })
+    const [chun] = glyph('春', { font: 'Kai', size: 100 })
     expect(emoji).toHaveLength(1)
     expect(emoji[0]!.text).toBe('😀')
     expect(emoji[0]!.missing).toBe(true)
@@ -134,14 +134,14 @@ describe('glyph', () => {
     expect(emoji[0]!.d).toBe(rare[0]!.d)
     expect(emoji[0]!.d).not.toBe(chun!.d)
     expect(chun!.missing).toBe(false)
-    const [bad] = await glyph('\uFFFE', { font: 'Kai', size: 100 })
+    const [bad] = glyph('\uFFFE', { font: 'Kai', size: 100 })
     expect(bad!.missing).toBe(true)
     expect(bad!.d).toBe(emoji[0]!.d)
   })
 
   it('取出来的路径可以画进 layer', async () => {
     if (!ready) return
-    const [chun] = await glyph('春', { font: 'Kai', size: 120 })
+    const [chun] = glyph('春', { font: 'Kai', size: 120 })
     const { report } = await renderLayer(
       `<layer width="200" height="240" background="#111111"><path d="${chun!.d}" fill="#f4ecdf" /></layer>`,
     )
@@ -158,7 +158,7 @@ describe('glyph', () => {
     await writeFile(
       file,
       `import { glyph } from 'flexlayer'
-      const [chun] = await glyph('春', { font: 'Kai', size: 80 })
+      const [chun] = glyph('春', { font: 'Kai', size: 80 })
       export default (
         <layer width="200" height="200" background="#111111">
           <path d={chun.d} fill="#f4ecdf" />
@@ -182,7 +182,7 @@ describe('glyph', () => {
     await writeFile(
       file,
       `import { glyph } from 'flexlayer'
-      const [chun] = await glyph('春', { font: 'PosterKai', size: 48 })
+      const [chun] = glyph('春', { font: 'PosterKai', size: 48 })
       export default (
         <layer width="80" height="80" background="#111111">
           <font family="PosterKai" src="${src}" />

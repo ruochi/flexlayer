@@ -291,12 +291,12 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 ### 5.4 轮廓 glyph
 
-`.tsx` 里可以从字体取出每个字的轮廓。这是程序接口，不是标签。
+`.tsx` 里可以从字体取出每个字的轮廓。它是同步的程序接口，不是标签。目录里的字体第一次用时会下载，下完直接返回数组，所以可以写在 `canvas.create` 前面。
 
 ```ts
 import { glyph } from 'flexlayer'
 
-const chars = await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })
+const chars = glyph('春眠', { font: 'Kai', size: 120, weight: 700 })
 ```
 
 `glyph` 按码位拆开，返回数组。每个字有：

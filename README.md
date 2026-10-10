@@ -125,12 +125,12 @@ const root = h(
 await renderLayer(root)
 ```
 
-从字体取出某个字的轮廓。`d` 的原点在字身左上角，字宽和字身高度来自字体：
+从字体取出某个字的轮廓，调用后直接得到数组。`d` 的原点在字身左上角，字宽和字身高度来自字体：
 
 ```ts
 import { glyph, h, renderLayer } from 'flexlayer'
 
-const [chun] = await glyph('春', { font: 'Kai', size: 200, weight: 700 })
+const [chun] = glyph('春', { font: 'Kai', size: 200, weight: 700 })
 const root = h(
   'layer',
   { width: '640', height: '360', background: '#111111' },
