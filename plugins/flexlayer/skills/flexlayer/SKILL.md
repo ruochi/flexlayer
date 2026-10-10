@@ -113,6 +113,7 @@ export default canvas.create(
 - `ink`：旋转缩放或透视之后的着墨范围。判断 `overflow-canvas` 看 `ink`。
 - `quad`：透视平面投影后的四个角。
 - `effect`：阴影、光晕、模糊或玻璃可能占用的范围。`effect-clipped` 表示画出了画布。
+- `mask`：写了 `<mask>` 的 layer 才有。`area` 是留下的比例，`ink` 是留下来的外接矩形，`pieces` 是碎片数，`softEdge` 是软边宽度。`canvas.create` 的返回值和 `elements` 上也有。
 
 元素跑出画布就改位置、缩小，或用 `view` 取景。光晕被裁切就缩小 `glow` 或挪开元素。短行居中、长行看起来贴左，是竖排没写 `align-items:flex-start`。
 

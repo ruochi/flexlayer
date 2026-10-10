@@ -1,6 +1,7 @@
 import { filtersInPaintOrder, getFilter } from './filter.js'
 import { apply, applyToBox, aroundPivot, IDENTITY, intersectBox, matrixScale, multiply, originOffset, translated, type Matrix } from './matrix.js'
 import { applyPoseMatrix, has3dPose, planeDepth, poseMatrix, posePoint, project as projectPoint } from './perspective.js'
+import { maskStats } from './mask-stats.js'
 import { innerInkStrokeReach, outerInkStrokeReach } from './style.js'
 import type { Box, ElementReport, FvgDocument, FvgReport, InlineOwner, Issue, LayoutNode, MeshLayoutNode, TextLayoutNode } from './types.js'
 import { boxToRect, emptyBox, translateBox, unionBoxes } from './types.js'
@@ -470,6 +471,13 @@ function walk(
   const inset = node.kind === 'flex' ? node.padding.left + (node.border?.width ?? 0) : 0
   const insetY = node.kind === 'flex' ? node.padding.top + (node.border?.width ?? 0) : 0
   const childMatrix = multiply(matrix, translated(node.x + inset, node.y + insetY))
+  if (node.kind === 'layer' && node.mask?.length) {
+    const stats = maskStats(node.mask, node.width, node.height)
+    if (stats) {
+      const { ink: maskInk, ...rest } = stats
+      entry.mask = plane ? rest : { ...rest, ink: maskInk ? boxToRect(applyToBox(childMatrix, maskInk)) : null }
+    }
+  }
   let effectClip = clip
   if (!plane && ownMask) effectClip = tighten(effectClip, applyToBox(childMatrix, ownMask))
   effects.push(plane ? { plane: true, box: planeEffect } : { plane: false, clip: effectClip })

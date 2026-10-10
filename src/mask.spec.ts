@@ -2,7 +2,9 @@ import { createCanvas, loadImage, type CanvasRenderingContext2D } from '@napi-rs
 import { beforeAll, describe, expect, it } from 'vitest'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { canvas } from './canvas.js'
 import { initFontsForMeasure } from './fonts.js'
+import { h } from './h.js'
 import { layoutSource } from './layout.js'
 import { checkFvg, renderFvg } from './render.js'
 
@@ -258,6 +260,105 @@ describe('mask', () => {
 
     const styled = await checkFvg(`<layer width="40" height="40"><rect x="15" y="15" width="10" height="10" style="mask: url(#a)" /></layer>`)
     expect(styled.issues.some((issue) => issue.message.includes('style'))).toBe(true)
+  })
+
+  it('canvas.create 量出 mask 的面积、外接矩形和碎片数', () => {
+    const layer = canvas.create(
+      h(
+        'layer',
+        { x: '10', y: '10', width: '100', height: '50' },
+        h('mask', {}, h('rect', { x: '0', y: '0', width: '20', height: '50' }), h('rect', { x: '60', y: '10', width: '30', height: '20' })),
+        h('rect', { x: '0', y: '0', width: '100', height: '50', fill: '#f00' }),
+      ),
+    )
+    expect(layer.mask).toBeDefined()
+    expect(layer.mask!.area).toBeCloseTo((20 * 50 + 30 * 20) / (100 * 50), 3)
+    expect(layer.mask!.pieces).toBe(2)
+    expect(layer.mask!.softEdge).toBeLessThan(1)
+    expect(layer.mask!.ink).toMatchObject({ left: 0, top: 0, right: 90, bottom: 50 })
+  })
+
+  it('没有 mask 时不写，全藏起来时 ink 是 null', () => {
+    const plain = canvas.create(h('layer', { width: '20', height: '20' }, h('rect', { width: '20', height: '20', fill: '#fff' })))
+    expect(plain.mask).toBeUndefined()
+    const hidden = canvas.create(
+      h(
+        'layer',
+        { width: '20', height: '20' },
+        h('mask', {}, h('rect', { x: '0', y: '0', width: '20', height: '20', fill: '#fff0' })),
+        h('rect', { width: '20', height: '20', fill: '#fff' }),
+      ),
+    )
+    expect(hidden.mask).toMatchObject({ area: 0, ink: null, pieces: 0, softEdge: 0 })
+  })
+
+  it('渐变 mask 的软边比实心圆宽得多', () => {
+    const soft = canvas.create(
+      h(
+        'layer',
+        { width: '40', height: '40' },
+        h('mask', {}, h('rect', { x: '0', y: '0', width: '40', height: '40', fill: 'linear-gradient(to bottom, #fff, #fff0)' })),
+        h('rect', { width: '40', height: '40', fill: '#fff' }),
+      ),
+    )
+    const hard = canvas.create(
+      h(
+        'layer',
+        { width: '40', height: '40' },
+        h('mask', {}, h('circle', { cx: '20', cy: '20', r: '15' })),
+        h('rect', { width: '40', height: '40', fill: '#fff' }),
+      ),
+    )
+    expect(soft.mask!.area).toBeCloseTo(0.5, 1)
+    expect(soft.mask!.softEdge).toBeGreaterThan(20)
+    expect(hard.mask!.pieces).toBe(1)
+    expect(hard.mask!.softEdge).toBeLessThan(2)
+  })
+
+  it('图片的 alpha 也算进统计', () => {
+    const src = pngDataUrl(40, 40, (ctx) => {
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, 10, 40)
+      ctx.fillRect(30, 0, 10, 40)
+    })
+    const layer = canvas.create(
+      h(
+        'layer',
+        { width: '40', height: '40' },
+        h('mask', {}, h('img', { src, style: 'width:40px; height:40px' })),
+        h('rect', { width: '40', height: '40', fill: '#fff' }),
+      ),
+    )
+    expect(layer.mask!.area).toBeCloseTo(0.5, 2)
+    expect(layer.mask!.pieces).toBe(2)
+  })
+
+  it('嵌套层的 mask 在 elements 里，ink 跟着这一层的位置和缩放', () => {
+    const page = canvas.create(
+      h(
+        'layer',
+        { width: '200', height: '200' },
+        h(
+          'layer',
+          { id: 'cut', x: '40', y: '20', width: '50', height: '50', scale: '2', origin: 'top-left' },
+          h('mask', {}, h('rect', { x: '10', y: '10', width: '20', height: '20' })),
+          h('rect', { width: '50', height: '50', fill: '#fff' }),
+        ),
+      ),
+    )
+    expect(page.mask).toBeUndefined()
+    const cut = page.elements.find((el) => el.id === 'cut')
+    expect(cut?.mask?.area).toBeCloseTo(400 / 2500, 3)
+    expect(cut?.mask?.ink).toMatchObject({ left: 60, top: 40, right: 100, bottom: 80 })
+  })
+
+  it('报告里带 mask 的 layer 写出统计，ink 是画布坐标', async () => {
+    const report = await checkFvg(
+      `<layer width="100" height="100"><layer id="cut" x="20" y="30" width="40" height="40"><mask><rect x="0" y="0" width="20" height="40" /></mask><rect width="40" height="40" fill="#fff" /></layer></layer>`,
+    )
+    const cut = report.elements.find((el) => el.id === 'cut')
+    expect(cut?.mask).toMatchObject({ area: 0.5, pieces: 1, ink: { x: 20, y: 30, width: 20, height: 40 } })
+    expect(report.elements.find((el) => el.tag === 'rect')?.mask).toBeUndefined()
   })
 
   it('symbol 里的 mask 跟着 use 生效', async () => {

@@ -86,7 +86,7 @@ export default canvas.create(
 )
 ```
 
-只写宽或只写高、且没有会换行的文字时，另一边按比例放缩，这个比例乘进已有的 `scale`。`scale` 可以写两个数，例如 `scale="1.2 0.8"` 或 `scale="-1 1"`；原来只有一个数时仍写回一个数。宽高都写了就是盒子。返回的节点带 `left`、`top`、`right`、`bottom`，这是没转之前的布局盒。转完之后的外接矩形在 `rotatedBox`，接着摆下一块用 `rotatedBox.bottom`。文字在 `text` 里，按节点分组，每一行有盒子和 `baseline`，字在 `lines[].chars`。一个字是只有一个字的一行。每个排进去的元素在 `elements` 里，带 `path`、`tag`、布局盒 `box` 和转完之后的 `ink`，坐标和 `text` 同一套；贴着某个圆或矩形摆下一块时用 `box`，躲开转过的图形用 `ink`。底色用铺满的 `<rect fill>`。形状用 SVG 的 `x y width height` 或 `cx cy rx ry`。`<g transform>` 把几笔收成一组。`<arrow>` 是内置组件。自定义标签用 `canvas.component` 注册，类型写在 `declare module 'flexlayer/jsx-runtime'` 里。声明的属性就是回调参数的类型，返回值可以是一个元素或数组。自定义字体先 `canvas.font(family, src)`，或把 `<font>` 写进正在量的那一层；相对路径按源文件目录解析。量到的盒子和最终排版不一致时报 `measure-mismatch`。例子：`examples/poster.tsx`、`examples/hello.tsx`、`examples/html-layer.tsx`。规范见 SPEC 第 15 章。
+只写宽或只写高、且没有会换行的文字时，另一边按比例放缩，这个比例乘进已有的 `scale`。`scale` 可以写两个数，例如 `scale="1.2 0.8"` 或 `scale="-1 1"`；原来只有一个数时仍写回一个数。宽高都写了就是盒子。返回的节点带 `left`、`top`、`right`、`bottom`，这是没转之前的布局盒。转完之后的外接矩形在 `rotatedBox`，接着摆下一块用 `rotatedBox.bottom`。文字在 `text` 里，按节点分组，每一行有盒子和 `baseline`，字在 `lines[].chars`。一个字是只有一个字的一行。每个排进去的元素在 `elements` 里，带 `path`、`tag`、布局盒 `box` 和转完之后的 `ink`，坐标和 `text` 同一套；贴着某个圆或矩形摆下一块时用 `box`，躲开转过的图形用 `ink`。写了 `<mask>` 的层带 `mask`（根层在返回值上，嵌套层在 `elements` 那一项上）：和 `glyph` 一样先画出来再量，蒙版画成位图之后给出留下的比例 `area`、外接矩形 `ink`、碎片数 `pieces` 和软边宽度 `softEdge`。底色用铺满的 `<rect fill>`。形状用 SVG 的 `x y width height` 或 `cx cy rx ry`。`<g transform>` 把几笔收成一组。`<arrow>` 是内置组件。自定义标签用 `canvas.component` 注册，类型写在 `declare module 'flexlayer/jsx-runtime'` 里。声明的属性就是回调参数的类型，返回值可以是一个元素或数组。自定义字体先 `canvas.font(family, src)`，或把 `<font>` 写进正在量的那一层；相对路径按源文件目录解析。量到的盒子和最终排版不一致时报 `measure-mismatch`。例子：`examples/poster.tsx`、`examples/hello.tsx`、`examples/html-layer.tsx`。规范见 SPEC 第 15 章。
 
 字体、图片、配色和效果名用 [docs/RESOURCES.md](docs/RESOURCES.md)。`font-family="Song"` 这种目录里的名字会自己下载，不要编造字体文件地址，也不要把 `fonts.googleapis.com` 的 CSS 地址写进 `<font src>`。
 
@@ -149,6 +149,7 @@ npx tsx src/cli.ts render scene.layer -o scene.png --report scene.json
 - **`ink`**：旋转、缩放之后的着墨外接矩形。有透视时是投影后的外接矩形。像素对位和 `overflow-canvas` 看它，不看 `box`。
 - **`quad`**：透视平面投影后的四个角（左上、右上、右下、左下）。斜着的平面落在哪儿看这里。
 - **`effect`**：阴影、光晕、图层模糊或玻璃可能占用的范围。没有这些外扩效果时不写这个字段。`effect-clipped` 表示它画出了画布。`overflow="hidden"` 和 `<mask>` 已经裁掉的部分不算。
+- **`mask`**：写了 `<mask>` 的 layer 才有。`area` 是留下的比例，`ink` 是留下来的部分在画布上的外接矩形，`pieces` 是碎成几块，`softEdge` 是软边平均宽度（硬边接近 0 到 1）。抠图蒙版碎成多块、或者软边宽得不正常时看这里。
 - **`issues`**：见 [SPEC.md 的问题码表](SPEC.md)。**error 必须修**，warn 视需求修。`grade` 回显的是预设展开后的参数。动画抽查合并后，`frame` 是第一次出现的帧，`frames` 是区间。
 
 ## 5. 工作流
