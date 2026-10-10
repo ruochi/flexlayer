@@ -621,4 +621,148 @@ describe('软件光栅', () => {
     expect(messages.some((message) => message.includes('halo 只写在网格上'))).toBe(true)
     expect(messages.some((message) => message.includes('最多三个数'))).toBe(true)
   })
+
+  function seamLayer(options: { box?: boolean; cylinder?: boolean; hidden?: boolean; sphere?: boolean }) {
+    const box = options.box ? 'stroke="#222222" stroke-width="2"' : ''
+    const cylinder = options.cylinder
+      ? `stroke="#d100ff" stroke-width="5"${options.hidden ? ' hidden="#00c8a0"' : ''}`
+      : ''
+    const sphere = options.sphere ? '<sphere cx="100" cy="148" r="18" z="180" fill="#2255ee" />' : ''
+    return `
+      <layer width="240" height="240" background="#ffffff" perspective="900">
+        <layer x="20" y="10" width="200" height="220" rotateX="62">
+          <box x="30" y="40" width="140" height="140" depth="80" fill="#f2f2f2" ${box} />
+          <cylinder cx="100" cy="110" r="36" height="220" fill="#e7d3a8" ${cylinder} />
+        </layer>
+        ${sphere}
+      </layer>
+    `
+  }
+
+  async function colorMask(source: string, paint: (r: number, g: number, b: number) => boolean) {
+    const { png } = await render(source)
+    const img = await loadImage(png)
+    const canvas = createCanvas(img.width, img.height)
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    const data = ctx.getImageData(0, 0, img.width, img.height).data
+    const mask = new Uint8Array(img.width * img.height)
+    for (let i = 0; i < mask.length; i++) {
+      const p = i * 4
+      if (paint(data[p] ?? 0, data[p + 1] ?? 0, data[p + 2] ?? 0)) mask[i] = 1
+    }
+    return { mask, width: img.width, height: img.height, data }
+  }
+
+  const isSeam = (r: number, g: number, b: number) => r > 160 && b > 160 && g < 90
+  const isHiddenSeam = (r: number, g: number, b: number) => g > 140 && r < 90 && b > 80
+  const isSphere = (r: number, g: number, b: number) => b > 180 && r < 80 && g < 140
+
+  function boundsOf(mask: Uint8Array, width: number, height: number) {
+    let minX = width
+    let minY = height
+    let maxX = 0
+    let maxY = 0
+    let count = 0
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (!mask[y * width + x]) continue
+        count++
+        minX = Math.min(minX, x)
+        minY = Math.min(minY, y)
+        maxX = Math.max(maxX, x)
+        maxY = Math.max(maxY, y)
+      }
+    }
+    return { count, minX, minY, maxX, maxY }
+  }
+
+  it('圆柱穿过长方体时描出交界线，圆柱自己的折棱还在', async () => {
+    const both = await colorMask(seamLayer({ box: true, cylinder: true }), isSeam)
+    const cylinder = await colorMask(seamLayer({ cylinder: true }), isSeam)
+    let kept = 0
+    let own = 0
+    const extra = new Uint8Array(both.mask.length)
+    for (let i = 0; i < both.mask.length; i++) {
+      if (cylinder.mask[i]) {
+        own++
+        if (both.mask[i]) kept++
+      } else if (both.mask[i]) extra[i] = 1
+    }
+    const seam = boundsOf(extra, both.width, both.height)
+    expect(own).toBeGreaterThan(200)
+    expect(kept / own).toBeGreaterThan(0.9)
+    expect(seam.count).toBeGreaterThan(200)
+    expect(seam.maxX - seam.minX).toBeGreaterThan(50)
+    expect(seam.maxY - seam.minY).toBeGreaterThan(20)
+  })
+
+  it('只有一只写了 stroke 时不画交界线', async () => {
+    const alone = `
+      <layer width="240" height="240" background="#ffffff" perspective="900">
+        <layer x="20" y="10" width="200" height="220" rotateX="62">
+          <box x="30" y="40" width="140" height="140" depth="80" fill="#f2f2f2" stroke="#d100ff" stroke-width="2" />
+        </layer>
+      </layer>
+    `
+    const covered = `
+      <layer width="240" height="240" background="#ffffff" perspective="900">
+        <layer x="20" y="10" width="200" height="220" rotateX="62">
+          <box x="30" y="40" width="140" height="140" depth="80" fill="#f2f2f2" stroke="#d100ff" stroke-width="2" />
+          <cylinder cx="100" cy="110" r="36" height="220" fill="#e7d3a8" />
+        </layer>
+      </layer>
+    `
+    const box = await colorMask(alone, isSeam)
+    const pair = await colorMask(covered, isSeam)
+    let added = 0
+    let kept = 0
+    for (let y = 0; y < pair.height; y++) {
+      for (let x = 0; x < pair.width; x++) {
+        if (!pair.mask[y * pair.width + x]) continue
+        kept++
+        let near = false
+        for (let dy = -2; dy <= 2 && !near; dy++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            const xx = x + dx
+            const yy = y + dy
+            if (xx < 0 || yy < 0 || xx >= box.width || yy >= box.height) continue
+            if (box.mask[yy * box.width + xx]) near = true
+          }
+        }
+        if (!near) added++
+      }
+    }
+    expect(kept).toBeGreaterThan(80)
+    expect(added).toBe(0)
+  })
+
+  it('交界线被自己挡住的一段是虚线，被第三只球挡住的部分不画', async () => {
+    const open = await colorMask(seamLayer({ box: true, cylinder: true, hidden: true }), isSeam)
+    const openHidden = await colorMask(seamLayer({ box: true, cylinder: true, hidden: true }), isHiddenSeam)
+    const cylinderInk = await colorMask(seamLayer({ cylinder: true, hidden: true }), isSeam)
+    const cylinderHidden = await colorMask(seamLayer({ cylinder: true, hidden: true }), isHiddenSeam)
+    const blocked = await colorMask(seamLayer({ box: true, cylinder: true, hidden: true, sphere: true }), isSeam)
+    let hiddenSeam = 0
+    for (let i = 0; i < openHidden.mask.length; i++) {
+      if (openHidden.mask[i] && !cylinderHidden.mask[i]) hiddenSeam++
+    }
+    expect(hiddenSeam).toBeGreaterThan(200)
+    let covered = 0
+    let still = 0
+    for (let i = 0; i < open.mask.length; i++) {
+      if (!open.mask[i] || cylinderInk.mask[i]) continue
+      const p = i * 4
+      if (isSphere(blocked.data[p] ?? 0, blocked.data[p + 1] ?? 0, blocked.data[p + 2] ?? 0)) covered++
+      else if (blocked.mask[i]) still++
+    }
+    expect(covered).toBeGreaterThan(40)
+    expect(still).toBeGreaterThan(40)
+    for (let i = 0; i < blocked.mask.length; i++) {
+      const p = i * 4
+      if (!isSphere(blocked.data[p] ?? 0, blocked.data[p + 1] ?? 0, blocked.data[p + 2] ?? 0)) continue
+      expect(blocked.mask[i]).toBe(0)
+      expect(blocked.data[p + 1]).toBeLessThan(140)
+    }
+  })
 })
