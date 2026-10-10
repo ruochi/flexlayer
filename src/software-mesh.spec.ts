@@ -381,6 +381,66 @@ describe('软件光栅', () => {
     expect(white).toBeGreaterThan(10)
   })
 
+  it('圆柱背面的弧是虚线，不是实线', async () => {
+    const { png } = await render(`
+      <layer width="280" height="220" background="#ffffff" perspective="800">
+        <extrude x="40" y="30" d="M40 80 A 40 40 0 1 1 120 80 A 40 40 0 1 1 40 80 Z" depth="56" fill="none" stroke="#000000" stroke-width="3" hidden="#ff00ff" rotateX="62" />
+      </layer>
+    `)
+    const img = await loadImage(png)
+    const canvas = createCanvas(img.width, img.height)
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    const data = ctx.getImageData(0, 0, img.width, img.height).data
+    const magentaAt = new Uint8Array(img.width * img.height)
+    let magenta = 0
+    let black = 0
+    for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+      const r = data[i] ?? 0
+      const g = data[i + 1] ?? 0
+      const b = data[i + 2] ?? 0
+      if (r < 30 && g < 30 && b < 30) black++
+      if (r > 200 && b > 200 && g < 80) {
+        magenta++
+        magentaAt[p] = 1
+      }
+    }
+    const seen = new Uint8Array(magentaAt.length)
+    let largest = 0
+    let dashes = 0
+    const stack: number[] = []
+    for (let start = 0; start < magentaAt.length; start++) {
+      if (!magentaAt[start] || seen[start]) continue
+      let size = 0
+      stack.push(start)
+      seen[start] = 1
+      while (stack.length > 0) {
+        const p = stack.pop()!
+        size++
+        const x = p % img.width
+        const y = (p - x) / img.width
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue
+            const nx = x + dx
+            const ny = y + dy
+            if (nx < 0 || ny < 0 || nx >= img.width || ny >= img.height) continue
+            const n = ny * img.width + nx
+            if (!magentaAt[n] || seen[n]) continue
+            seen[n] = 1
+            stack.push(n)
+          }
+        }
+      }
+      if (size > largest) largest = size
+      if (size > 8) dashes++
+    }
+    expect(black).toBeGreaterThan(20)
+    expect(magenta).toBeGreaterThan(40)
+    expect(dashes).toBeGreaterThan(3)
+    expect(largest).toBeLessThan(80)
+  })
+
   it('前面的球体盖住后面盒子的棱', async () => {
     const { png } = await render(`
       <layer width="200" height="200" background="#ffffff" perspective="600">

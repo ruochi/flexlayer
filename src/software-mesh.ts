@@ -19,6 +19,7 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
  * 写了 stroke 时，缩小抗锯齿之后再按屏幕像素描折棱和轮廓。
  * hidden 只画被这只网格自己挡住的棱，虚线是 6 实 4 空。
  * 不写 material 时是磨砂：主光乘 fill。plastic 加高光，metal 反射固定天空，glass 后画叠色。
+ * 同一条折线上的短段接成一条再取虚线相位，圆弧不会接成实线。
  */
 
 const MAX_RASTER_SIDE = 8192
@@ -1701,12 +1702,19 @@ function sampleSegment(
   return out
 }
 
-function paintRun(ctx: CanvasRenderingContext2D, points: ScreenSample[], hidden: boolean, style: LineStyle, scale: number) {
+function paintRun(
+  ctx: CanvasRenderingContext2D,
+  points: Array<{ x: number; y: number }>,
+  hidden: boolean,
+  style: LineStyle,
+  scale: number,
+) {
   if (points.length < 2) return
   ctx.beginPath()
   ctx.moveTo(points[0]!.x, points[0]!.y)
   for (let i = 1; i < points.length; i++) ctx.lineTo(points[i]!.x, points[i]!.y)
   ctx.setLineDash(hidden ? [6 * scale, 4 * scale] : [])
+  ctx.lineDashOffset = 0
   ctx.lineCap = hidden ? 'butt' : 'round'
   ctx.lineJoin = 'round'
   ctx.lineWidth = style.width * scale
@@ -1714,12 +1722,16 @@ function paintRun(ctx: CanvasRenderingContext2D, points: ScreenSample[], hidden:
   ctx.stroke()
 }
 
-function paintSamples(ctx: CanvasRenderingContext2D, samples: ScreenSample[], style: LineStyle, scale: number) {
+type PointRun = { points: Array<{ x: number; y: number }> }
+
+function collectRuns(samples: ScreenSample[]): Array<PointRun & { hidden: boolean }> {
+  const out: Array<PointRun & { hidden: boolean }> = []
   let run: ScreenSample[] = []
   let mode: ScreenSample['kind'] | null = null
   const flush = () => {
-    if (mode === 'visible') paintRun(ctx, run, false, style, scale)
-    else if (mode === 'hidden' && style.hiddenCss) paintRun(ctx, run, true, style, scale)
+    if (run.length >= 2 && (mode === 'visible' || mode === 'hidden')) {
+      out.push({ points: run.map((p) => ({ x: p.x, y: p.y })), hidden: mode === 'hidden' })
+    }
     run = []
   }
   for (const sample of samples) {
@@ -1736,6 +1748,63 @@ function paintSamples(ctx: CanvasRenderingContext2D, samples: ScreenSample[], st
     if (mode !== 'skip') run.push(sample)
   }
   flush()
+  return out
+}
+
+/** 端点重合的隐藏段合成一条折线，虚线相位才能沿圆弧走下去。 */
+function chainHidden(runs: PointRun[]): Array<Array<{ x: number; y: number }>> {
+  const n = runs.length
+  if (n === 0) return []
+  const used = new Array<boolean>(n).fill(false)
+  const keyOf = (p: { x: number; y: number }) => `${Math.round(p.x * 4)}|${Math.round(p.y * 4)}`
+  const at = new Map<string, number[]>()
+  const pushAt = (p: { x: number; y: number }, i: number) => {
+    const k = keyOf(p)
+    const list = at.get(k)
+    if (list) list.push(i)
+    else at.set(k, [i])
+  }
+  for (let i = 0; i < n; i++) {
+    const pts = runs[i]!.points
+    pushAt(pts[0]!, i)
+    const last = pts[pts.length - 1]!
+    if (keyOf(last) !== keyOf(pts[0]!)) pushAt(last, i)
+  }
+  const orient = (points: Array<{ x: number; y: number }>, tip: { x: number; y: number }) =>
+    keyOf(points[0]!) === keyOf(tip) ? points : [...points].reverse()
+  const out: Array<Array<{ x: number; y: number }>> = []
+  for (let seed = 0; seed < n; seed++) {
+    if (used[seed]) continue
+    used[seed] = true
+    let points = runs[seed]!.points.slice()
+    const grow = (forward: boolean) => {
+      for (;;) {
+        const tip = forward ? points[points.length - 1]! : points[0]!
+        const prev = forward ? points[Math.max(0, points.length - 2)]! : points[Math.min(1, points.length - 1)]!
+        const cands = (at.get(keyOf(tip)) ?? []).filter((i) => !used[i])
+        if (cands.length === 0) return
+        let best = cands[0]!
+        let bestDot = -Infinity
+        for (const i of cands) {
+          const seq = orient(runs[i]!.points, tip)
+          const next = seq[Math.min(1, seq.length - 1)]!
+          const dot = (tip.x - prev.x) * (next.x - tip.x) + (tip.y - prev.y) * (next.y - tip.y)
+          if (dot > bestDot) {
+            bestDot = dot
+            best = i
+          }
+        }
+        used[best] = true
+        const seq = orient(runs[best]!.points, tip)
+        if (forward) points = points.concat(seq.slice(1))
+        else points = seq.slice(0, -1).reverse().concat(points)
+      }
+    }
+    grow(true)
+    grow(false)
+    out.push(points)
+  }
+  return out
 }
 
 function sphereRing(center: { x: number; y: number; z: number }, radius: number, vx: number, vy: number, perspective: number): Vert[] | null {
@@ -1812,33 +1881,38 @@ function paintMeshLines(
   const vy = layer.height / 2
   const mapX = pw / canvas.width
   const mapY = ph / canvas.height
-  const stroke = (a: Vert, b: Vert, style: LineStyle, owner: number, outline: boolean) => {
-    paintSamples(
-      ctx,
+  const consume = (a: Vert, b: Vert, style: LineStyle, owner: number, outline: boolean, hiddenRuns: PointRun[]) => {
+    for (const run of collectRuns(
       sampleSegment(a, b, perspective, vx, vy, padL, padT, scaleX, scaleY, depth, owners, pw, ph, mapX, mapY, owner, outline),
-      style,
-      scale,
-    )
+    )) {
+      if (run.hidden) {
+        if (style.hiddenCss) hiddenRuns.push({ points: run.points })
+      } else paintRun(ctx, run.points, false, style, scale)
+    }
   }
   batches.forEach((batch, index) => {
     const style = batch.lines
     if (!style) return
     const verts = authored[index]
     if (!verts) return
+    const hiddenRuns: PointRun[] = []
     const round = roundSphere(batch)
     if (batch.outline && round) {
       const ring = sphereRing(round, round.radius, vx, vy, perspective)
       if (!ring) return
-      for (let i = 0; i < ring.length; i++) stroke(ring[i]!, ring[(i + 1) % ring.length]!, style, batch.owner, true)
-      return
+      for (let i = 0; i < ring.length; i++) consume(ring[i]!, ring[(i + 1) % ring.length]!, style, batch.owner, true, hiddenRuns)
+    } else {
+      for (const edge of batch.edges) {
+        const silhouette = isSilhouette(edge, verts, batch, vx, vy, perspective)
+        if (!edge.crease && !silhouette) continue
+        const a = verts[edge.a]
+        const b = verts[edge.b]
+        if (!a || !b) continue
+        consume(a, b, style, batch.owner, !edge.crease && silhouette, hiddenRuns)
+      }
     }
-    for (const edge of batch.edges) {
-      const silhouette = isSilhouette(edge, verts, batch, vx, vy, perspective)
-      if (!edge.crease && !silhouette) continue
-      const a = verts[edge.a]
-      const b = verts[edge.b]
-      if (!a || !b) continue
-      stroke(a, b, style, batch.owner, !edge.crease && silhouette)
+    if (style.hiddenCss) {
+      for (const chain of chainHidden(hiddenRuns)) paintRun(ctx, chain, true, style, scale)
     }
   })
   ctx.setLineDash([])
