@@ -79,7 +79,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 `z` 的前后只在带 `perspective` 的那一层生效。这一层没有 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 时，直接子元素按中心深度从远到近绘制，深度相同保持文档顺序。出现这些网格时，这一层改成一台三维场景，网格和带姿态的平面放进同一个深度缓冲：更靠近观众（`z` 更大）的面盖住更远的面，不透明的面写入深度。嵌套 `layer` 自己没有 `perspective` 时，里面的网格和平面仍算进外层这台场景。
 
-同一层里如果出现 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude` 或 `model`，这一层改成一台三维场景，和带姿态的平面共用这一个 `perspective`。没有这些标签时，像素和上面的平面透视一致。`sphere` 写 `cx` `cy` `r`，布局盒子是边长 `2r` 的正方形，圆心就是这个点。`box` 写 `x` `y` `width` `height` `depth`，布局只看宽高，`x` `y` 是左上角。`rx` 是棱上的圆角半径。不写 `round` 时 12 条棱都圆。`round` 挑选棱：`all`；`x`、`y`、`z` 是平行于宽、高、厚度的四条；`front`、`back`、`left`、`right`、`top`、`bottom` 是这一面的四条；单条写成 `front-top` 或 `top-front`，两个方向不分先后。`top` 是画面上方。三条棱都圆的角是一块球面。只有两条圆时，圆角收到它们的交线，第三条棱仍是直角。只写 `round` 不写正的 `rx`，名字不认识，或没有选中棱，报 `invalid-attr`，圆角不生效。半径大于棱能让开的距离时收小，并报 `invalid-attr`。布局盒子不因 `rx` 改变。`cylinder` 写 `cx` `cy` `r` `height`，轴沿画面竖直方向，`height` 是这段长度，圆截面在朝向镜头的方向上鼓出 `r`。布局盒子宽 `2r`、高 `height`，`cx` `cy` 是盒子中心。没写 `height` 时报 `invalid-attr`，并退回 `2r`。`rx` 圆两端圆口。不写 `round` 时上下都圆；`round="top"` 或 `"bottom"` 只圆一端。半径要小于 `r`，两端都圆时还不能大于 `height` 的一半，否则收小并报 `invalid-attr`。`torus` 写 `cx` `cy` `r` `tube`，环躺在所在平面里。`r` 是环心到管心的半径，`tube` 是管半径，要小于 `r` 才有孔。布局盒子是边长 `2(r+tube)` 的正方形，圆心是 `cx` `cy`。没写 `tube`，或 `tube` 不小于 `r`，报 `invalid-attr`，并退回 `r/4`。`tube` 的 `d` 是中心线，语法和 `path` 相同，`r` 是管半径。开口的子路径两端是平的圆盖；写了 `Z` 的闭合成环。分开的子路径是分开的管子。布局盒子是中心线包围盒四边各扩 `r`，`x` `y` 是这个盒子的左上角。没写 `r` 时报 `invalid-attr`，并退回 8。`extrude` 的 `d` 和 `path` 相同，沿 z 挤出 `depth`，厚度以所在平面为中心。`d` 里分开的子路径是分开的实体；包在外圈里面的才是洞。`model` 只写 `src`，指向一个 `.glb`；位置和宽高写在外包的 `layer` 上，模型按 contain 居中放进这个盒子，文件里的相机忽略。单位都是像素。没写 `depth` 时报 `invalid-attr`，并退回宽高里较小的一边。面用 `fill`，默认 `#000000`。`fill="none"` 不填色，深度仍写入，后面的棱不会穿出来。正对镜头的面就是这个颜色，侧面更暗；`model` 的面色来自文件，不看 `fill`，再乘这套明暗。`material` 写在网格上。不写时是 `matte`，磨砂塑料，只有明暗、没有高光。写成 `material="matte"` 是同一个。`plastic` 在这套明暗上加一块白色高光。`metal` 几乎不漫反射，`fill` 给一张固定的工作室环境染色。灯带是横的，左右亮度不一样，不是上亮下暗；粗糙度把这张图模糊。`glass` 等不透明的物体画完再叠上，`fill` 的透明度是中心的颜色，掠过边缘映出同一张环境，并且不投主光的影子。粗糙度写在名字后面，0 到 1，例如 `material="metal 0.35"`；不写时塑料 0.4、金属 0.25、玻璃 0.08。磨砂不看粗糙度。层上的 `glass` 仍是平面透镜。`material` 写在别的标签上，或名字不认识，报 `invalid-attr`，并退回磨砂。渐变 `fill` 只用第一个颜色，并报 `invalid-attr`。`stroke` 写在这个网格上时描可见的折棱和轮廓；不写就不描。`stroke-width` 是屏幕像素。写一个数时轮廓、折棱和隐藏线一样粗；`stroke-width="3 2 1"` 依次是轮廓、折棱、隐藏线；写两个数时隐藏线用折棱的宽度。写了 `stroke` 没写宽度时三档都是 2。超过三个数、负数或解析失败报 `invalid-attr`，并退回 2。`halo="3"` 写在网格上：这只网格的可见线从更远的线前面经过时，远处那条线在交叉处两侧各断开 3 个屏幕像素。不写就不断开。没写 `stroke`，或写在别的标签上，报 `invalid-attr`。共用一个角的棱不会被彼此断开。`hidden` 是被这只网格自己的面挡住的棱的颜色，按屏幕像素画成 6 实、4 空的虚线，短段接成一条再取相位；被别的网格或平面挡住的部分不画。不写 `hidden` 就不画隐藏线。只写 `hidden` 或 `stroke-width`、没写 `stroke`，报 `invalid-attr`。`hidden` 写在别的标签上同样报 `invalid-attr`。球没有折棱，`stroke` 只画轮廓圆。圆柱描上下圆边和轮廓，圆环描轮廓，线管描轮廓以及两端圆盖的折棱。写了 `rx` 的棱和口缘与相邻面相切，不再是折棱。这些线在 4 倍缩小之后再描。父 `layer` 不负责把整层改成线框。`shadow` 和 `glow` 写在网格上也会报 `invalid-attr`，不绘制。网格可以画出它所在 layer 的盒子，和平面一样；投影后的 `ink` 超出画布时报 `overflow-canvas`。`overflow="hidden"` 仍裁在这一层里。网格没有落在 `perspective` 里时报 `flatten-3d`，并且不绘制。`src` 缺失、不是 `.glb` 或读不到时报 `missing-model`。这一层按 4 倍分辨率绘制，再按预乘 alpha 平均缩回，和透视平面同一套抗锯齿。网格用自带的三角形光栅绘制。同一台透视场景里，不透明的网格和平面会沿内置主光互相投下硬边影子；被挡住时主光不计，只留环境光和补光。这里的同一台场景不限于同一个父标签：没有自己 `perspective` 的嵌套 `layer` 里的 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 和平面，仍算进外层这台场景，影子会投到父层的地板上，也会挡住父层的物体。嵌套 `layer` 自己写了 `perspective` 时是另一台场景，不共用这张影子。属性 `shadow` 仍是平面上的偏移暗边。`Scene3D` 仍不使用。
+同一层里如果出现 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude` 或 `model`，这一层改成一台三维场景，和带姿态的平面共用这一个 `perspective`。没有这些标签时，像素和上面的平面透视一致。`sphere` 写 `cx` `cy` `r`，布局盒子是边长 `2r` 的正方形，圆心就是这个点。`box` 写 `x` `y` `width` `height` `depth`，布局只看宽高，`x` `y` 是左上角。`rx` 是棱上的圆角半径。不写 `round` 时 12 条棱都圆。`round` 挑选棱：`all`；`x`、`y`、`z` 是平行于宽、高、厚度的四条；`front`、`back`、`left`、`right`、`top`、`bottom` 是这一面的四条；单条写成 `front-top` 或 `top-front`，两个方向不分先后。`top` 是画面上方。三条棱都圆的角是一块球面。只有两条圆时，圆角收到它们的交线，第三条棱仍是直角。只写 `round` 不写正的 `rx`，名字不认识，或没有选中棱，报 `invalid-attr`，圆角不生效。半径大于棱能让开的距离时收小，并报 `invalid-attr`。布局盒子不因 `rx` 改变。`cylinder` 写 `cx` `cy` `r` `height`，轴沿画面竖直方向，`height` 是这段长度，圆截面在朝向镜头的方向上鼓出 `r`。布局盒子宽 `2r`、高 `height`，`cx` `cy` 是盒子中心。没写 `height` 时报 `invalid-attr`，并退回 `2r`。`rx` 圆两端圆口。不写 `round` 时上下都圆；`round="top"` 或 `"bottom"` 只圆一端。半径要小于 `r`，两端都圆时还不能大于 `height` 的一半，否则收小并报 `invalid-attr`。`torus` 写 `cx` `cy` `r` `tube`，环躺在所在平面里。`r` 是环心到管心的半径，`tube` 是管半径，要小于 `r` 才有孔。布局盒子是边长 `2(r+tube)` 的正方形，圆心是 `cx` `cy`。倾斜之后的 `ink` 按环面取样，不用这个正方形的四个角。没写 `tube`，或 `tube` 不小于 `r`，报 `invalid-attr`，并退回 `r/4`。`tube` 的 `d` 是中心线，语法和 `path` 相同，`r` 是管半径。开口的子路径两端是平的圆盖；写了 `Z` 的闭合成环。分开的子路径是分开的管子。布局盒子是中心线包围盒四边各扩 `r`，`x` `y` 是这个盒子的左上角。没写 `r` 时报 `invalid-attr`，并退回 8。`extrude` 的 `d` 和 `path` 相同，沿 z 挤出 `depth`，厚度以所在平面为中心。`d` 里分开的子路径是分开的实体；包在外圈里面的才是洞。`model` 只写 `src`，指向一个 `.glb`；位置和宽高写在外包的 `layer` 上，模型按 contain 居中放进这个盒子，文件里的相机忽略。单位都是像素。没写 `depth` 时报 `invalid-attr`，并退回宽高里较小的一边。面用 `fill`，默认 `#000000`。`fill="none"` 不填色，深度仍写入，后面的棱不会穿出来。正对镜头的面就是这个颜色，侧面更暗；`model` 的面色来自文件，不看 `fill`，再乘这套明暗。`material` 写在网格上。不写时是 `matte`，磨砂塑料，只有明暗、没有高光。写成 `material="matte"` 是同一个。`plastic` 在这套明暗上加一块白色高光。`metal` 几乎不漫反射，`fill` 给一张固定的工作室环境染色。灯带是横的，左右亮度不一样，不是上亮下暗；粗糙度把这张图模糊。`glass` 等不透明的物体画完再叠上，`fill` 的透明度是中心的颜色，掠过边缘映出同一张环境，并且不投主光的影子。粗糙度写在名字后面，0 到 1，例如 `material="metal 0.35"`；不写时塑料 0.4、金属 0.25、玻璃 0.08。磨砂不看粗糙度。层上的 `glass` 仍是平面透镜。`material` 写在别的标签上，或名字不认识，报 `invalid-attr`，并退回磨砂。渐变 `fill` 只用第一个颜色，并报 `invalid-attr`。`stroke` 写在这个网格上时描可见的折棱和轮廓；不写就不描。`stroke-width` 是屏幕像素。写一个数时轮廓、折棱和隐藏线一样粗；`stroke-width="3 2 1"` 依次是轮廓、折棱、隐藏线；写两个数时隐藏线用折棱的宽度。写了 `stroke` 没写宽度时三档都是 2。超过三个数、负数或解析失败报 `invalid-attr`，并退回 2。`halo="3"` 写在网格上：这只网格的可见线从更远的线前面经过时，远处那条线在交叉处两侧各断开 3 个屏幕像素。不写就不断开。没写 `stroke`，或写在别的标签上，报 `invalid-attr`。共用一个角的棱不会被彼此断开。线管端面和自己的轮廓只在端点相接，不是交叉，不会被切开。同一只网格上，前面的棱仍然会在真正交叉的地方把后面的棱断开。`hidden` 是被这只网格自己的面挡住的棱的颜色，按屏幕像素画成 6 实、4 空的虚线，短段接成一条再取相位；被别的网格或平面挡住的部分不画。不写 `hidden` 就不画隐藏线。只写 `hidden` 或 `stroke-width`、没写 `stroke`，报 `invalid-attr`。`hidden` 写在别的标签上同样报 `invalid-attr`。球没有折棱，`stroke` 只画轮廓圆。圆柱描上下圆边和轮廓，圆环描轮廓，线管描轮廓以及两端圆盖的折棱。写了 `rx` 的棱和口缘与相邻面相切，不再是折棱。这些线在 4 倍缩小之后再描。父 `layer` 不负责把整层改成线框。`shadow` 和 `glow` 写在网格上也会报 `invalid-attr`，不绘制。网格可以画出它所在 layer 的盒子，和平面一样；投影后的 `ink` 超出画布时报 `overflow-canvas`。`overflow="hidden"` 仍裁在这一层里。网格没有落在 `perspective` 里时报 `flatten-3d`，并且不绘制。`src` 缺失、不是 `.glb` 或读不到时报 `missing-model`。这一层按 4 倍分辨率绘制，再按预乘 alpha 平均缩回，和透视平面同一套抗锯齿。网格用自带的三角形光栅绘制。同一台透视场景里，不透明的网格和平面会沿内置主光互相投下硬边影子；被挡住时主光不计，只留环境光和补光。这里的同一台场景不限于同一个父标签：没有自己 `perspective` 的嵌套 `layer` 里的 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 和平面，仍算进外层这台场景，影子会投到父层的地板上，也会挡住父层的物体。嵌套 `layer` 自己写了 `perspective` 时是另一台场景，不共用这张影子。属性 `shadow` 仍是平面上的偏移暗边。`Scene3D` 仍不使用。
 
 属性归属（由 [src/schema.ts](src/schema.ts) 生成，不要手改两行标记之间的表）：
 
@@ -130,7 +130,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 检查和绘制都按屏幕上的实际大小。`scale` 和 `view` 叠出来的倍数写在报告的 `screenScale`（两轴绝对值的几何平均，等于 1 不写）。最小字号拿 `font-size × screenScale` 和 `min(画布宽, 画布高) / 1080 × 24` 比。1080p 横屏和竖屏都是 24px。阴影、光晕、模糊的外扩同样乘这个倍数。`--debug` 的布局框和着墨框保持 1 屏幕像素，不跟着放大。网格光栅按这个倍数提高分辨率，推近后笔画仍然清楚。
 
-`<mask>` 裁的是这一层合成完的画面，包括阴影、模糊、调色和颗粒。它写在 `layer` 里面，和要裁的内容并列。自己不画出来，不占布局，不把层撑大，里面的形状不进报告的元素表，也不触发 `overflow-canvas`。蒙版画成位图之后量出来的面积、外接矩形、碎片数、软边宽度，以及每一步运算，写在这一层的 `mask` 字段上，见第 10 章和第 15 章。被它挡住的内容同样不报 `overflow-canvas` 或 `effect-clipped`：报告里的 `ink` 先和 mask 形状的外接范围求交。一层最多一个，多出来的 `warn` 并忽略。坐标和同层的图形一样，原点在 layer 左上角。
+`<mask>` 裁的是这一层合成完的画面，包括子元素的阴影、模糊、调色和颗粒。这一层自己的 `shadow`、`glow` 和外侧或居中的 `ink-stroke` 按蒙版留下的轮廓来画，可以伸出蒙版，用来做贴纸边和发光轮廓。写在父层上的描边和阴影也跟着这块轮廓，不跟着没抠过的矩形。内侧描边仍留在蒙版里面。它写在 `layer` 里面，和要裁的内容并列。自己不画出来，不占布局，不把层撑大，里面的形状不进报告的元素表，也不触发 `overflow-canvas`。蒙版画成位图之后量出来的面积、外接矩形、碎片数、软边宽度，以及每一步运算，写在这一层的 `mask` 字段上，见第 10 章和第 15 章。被它挡住的内容同样不报 `overflow-canvas` 或 `effect-clipped`：报告里的 `ink` 先和 mask 形状的外接范围求交。一层最多一个，多出来的 `warn` 并忽略。坐标和同层的图形一样，原点在 layer 左上角。
 
 里面直接写 `rect`、`circle`、`ellipse`、`polygon`、`path`，也可以放 `img` 或 `<g>`。`line`、`arrow`、`polyline`、`curve`、文字、`div`、嵌套 `layer` 会 `warn` 并忽略。空的 `mask` 报 `empty-mask`，并且不生效。
 
@@ -267,7 +267,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 | 属性 | 说明 |
 | --- | --- |
-| `font-size`、`font-weight`、`font-family`、`color`、`letter-spacing` | 同 CSS，行内标签也可以写。`color` 可以是纯色，也可以是第 8 章的渐变。写在文字盒子上时，整段按这一层的盒子取样；写在行内标签上时，只铺这一段的行盒。`letter-spacing` 可以写 `0`、`2px` 或 `0.05em`。`em` 按写这条声明的元素自己的字号换算，再按像素继承；子元素改了字号不会把父级的 `em` 重算 |
+| `font-size`、`font-weight`、`font-family`、`color`、`letter-spacing` | 同 CSS，行内标签也可以写。`color` 可以是纯色，也可以是第 8 章的渐变。写在文字盒子上时，整段按这一层的盒子取样；从外层 `div` 或 `layer` 继承来的渐变同样按文字盒子取样。写在行内标签上时，只铺这一段的行盒，这一段里的汉字和英文单词共用这一段，不各自重新开始。`letter-spacing` 可以写 `0`、`2px` 或 `0.05em`。`em` 按写这条声明的元素自己的字号换算，再按像素继承；子元素改了字号不会把父级的 `em` 重算 |
 | （字重规则） | `ChillDuanSans` 按可变字重绘制，字重轴约 300 到 800，中间的字重不会收成 400 和 700 两档。登记了多档文件的字体取最近的一档。只登记了一档的字体，例如 `Brush`、`Bebas`，请求别的字重仍用这一档。自带 `<font>` 且文件没有字重轴的，按 400 |
 | `writing-mode` | `horizontal-tb`（默认）或 `vertical-rl`。竖排时字从上到下，列从右到左，`letter-spacing` 是字与字之间的额外间距 |
 | `line-height` | 倍数（`1.4`）或像素（`24px`）。`normal` 按 1.2。单行默认 1.2，多行默认 1.4。`%`、`em` 等报 `invalid-attr`。像素行高按像素继承，不跟子元素的字号再乘一次 |
@@ -376,7 +376,7 @@ const cut = await analyzeImage('photo.subject.png')
 
 ### 抠图 flexlayer-select
 
-渲染器不跑模型。抠主体在单独的包 `flexlayer-select` 里：用 BiRefNet 的 ONNX 版（`onnx-community/BiRefNet_512x512-ONNX`，MIT）写出和原图一样大的缓存，再用上面的 `analyzeImage` 自检。模型第一次使用时下载到 `~/.cache/flexlayer/models`。`@huggingface/transformers` 是这个包的可选依赖，根包不加。
+渲染器不跑模型。`analyzeImage` 只量一张已经抠好的图，不生成遮罩。生成遮罩在单独的包 `flexlayer-select` 里：用 BiRefNet 的 ONNX 版（`onnx-community/BiRefNet_512x512-ONNX`，MIT）写出和原图一样大的缓存，再用上面的 `analyzeImage` 自检。这个包不在 npm 上。在仓库里进入 `packages/select`，执行 `npm ci && npm run build`。模型第一次使用时下载到 `~/.cache/flexlayer/models`，用的是 fp16，大约 470MB；fp32 大约 940MB，这里不用。`@huggingface/transformers` 是这个包的可选依赖，根包不加。
 
 ```bash
 npx flexlayer-select cutout photo.jpg --preset portrait
@@ -388,7 +388,7 @@ npx flexlayer-select cutout photo.jpg --preset portrait
 npx flexlayer-select apply photo.jpg --add 2 --subtract 1
 ```
 
-这会在 `<mask>` 里加上 `derive="regions"` 的 `img`，`pick` 是编号，`op` 是 `add` 或 `subtract`。标记里的 `<preview>` 不进成片，用 `--preview` 才出拼图。缓存给第 4 章的 `derive` 读。没装这个包时，`flexlayer select` 只提示安装命令。
+这会在 `<mask>` 里加上 `derive="regions"` 的 `img`，`pick` 是编号，`op` 是 `add` 或 `subtract`。标记里的 `<preview>` 不进成片，用 `--preview` 才出拼图。缓存给第 4 章的 `derive` 读。没装这个包时，`flexlayer select` 只提示在 `packages/select` 里安装，不指向 npm。
 
 ### 图标
 
@@ -457,7 +457,7 @@ npx flexlayer-select apply photo.jpg --add 2 --subtract 1
 
 ## 8. 填充 paint
 
-`fill`、`stroke`、画布 `background`、HTML 的 `background`、文字的 `color`，以及第 9 章里的 `overlay`、`grade-mask`，共用这一套写法。色标位置是元素自己的 0 到 1，也可以写百分比，不是布局用的百分比。文字盒子上的 `color` 渐变按这个盒子取样，行内标签自己的 `color` 按这一段的行盒取样。渲染倍率不是 1 时（例如导出 `@2x`），渐变文字仍落在同一套用户坐标上。
+`fill`、`stroke`、画布 `background`、HTML 的 `background`、文字的 `color`，以及第 9 章里的 `overlay`、`grade-mask`，共用这一套写法。色标位置是元素自己的 0 到 1，也可以写百分比，不是布局用的百分比。文字盒子上的 `color` 渐变按这个盒子取样，从外层继承来的也一样。行内标签自己的 `color` 按这一段的行盒取样，不在每个字或每个词上重新开始。渲染倍率不是 1 时（例如导出 `@2x`），渐变文字仍落在同一套用户坐标上。
 
 ```html
 <rect x="0" y="0" width="720" height="960" fill="linear-gradient(to bottom, #0c1424, #1a3352 55%, #6e7c72)" />
@@ -501,7 +501,7 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 
 效果只影响绘制，不改变布局盒子。**一律按着墨（墨迹 / alpha）计算，不按布局盒子**：文字跟字形，形状跟实际画出来的填充和描边，`fill="none"` 只留描边，不把中间填上。`layer` / `flex` 的 `shadow` 和 `glow` 跟着这一层实际画出来的子树，不跟空的布局盒子；这一层若是三维场景，就跟着已经画好的那张画面。其余效果里，layer 只算自身边框，flex 只算自身背景和边框。`blur` / `filter` / `blend` 作用在已绘制像素上。
 
-绘制顺序只此一份：`backdrop-blur` / `glass` 取样 → `shadow` → `glow` → 本体（`overflow="hidden"` 在这里裁子元素）→ `inner-shadow` → `inner-glow` → `overlay` → `noise`。若有 `blur`、`filter`、`grade`、其它已注册滤镜或 `<mask>`，先画进离屏，依次做像素滤镜（含 `grade`，`order` 小的在前）、`blur` / 画布滤镜（含 `filter`），有像素滤镜时再叠 `noise`，然后按 `<mask>` 的 alpha 裁掉，再贴回。画布底色不进 `<mask>`。写了像素滤镜时颗粒不被染色。同时写了 `blur` 与 `filter` 时，图层模糊以 `blur` 为准，并报 `info`。`glass` 与 `backdrop-blur` 同时出现时以 `glass` 为准，并报 `info`。
+绘制顺序只此一份：`backdrop-blur` / `glass` 取样 → `shadow` → `glow` → 本体（`overflow="hidden"` 在这里裁子元素）→ `inner-shadow` → `inner-glow` → `overlay` → `noise`。若有 `blur`、`filter`、`grade`、其它已注册滤镜或 `<mask>`，先画进离屏，依次做像素滤镜（含 `grade`，`order` 小的在前）、`blur` / 画布滤镜（含 `filter`），有像素滤镜时再叠 `noise`，然后按 `<mask>` 的 alpha 裁掉。蒙版层自己的外阴影、外发光和外侧描边不进这次裁切，裁完之后按留下的轮廓再画；子元素的阴影仍在离屏里，会被蒙版裁掉。最后贴回。画布底色不进 `<mask>`。写了像素滤镜时颗粒不被染色。同时写了 `blur` 与 `filter` 时，图层模糊以 `blur` 为准，并报 `info`。`glass` 与 `backdrop-blur` 同时出现时以 `glass` 为准，并报 `info`。
 
 每个效果都按同一套字段描述：归属、语法、是否复用 paint、作用范围、在上面这条顺序里的位置、报告与问题码、图格。实现取舍见 [docs/EFFECTS.md](docs/EFFECTS.md)。图在 [docs/GALLERY.md](docs/GALLERY.md)。
 
@@ -801,7 +801,7 @@ flexlayer render scene.tsx --rgba -                              # 原始像素�
 flexlayer check scene.tsx --frames 120-300 --step 5              # 检查这一段，每 5 帧一抽
 flexlayer check scene.tsx --frames all                           # 检查每一帧
 flexlayer render scene.layer --preview out.png                  # 按 <preview> 另写一张选区拼图
-flexlayer select cutout photo.jpg --preset portrait             # 转给 flexlayer-select。没安装时提示安装命令
+flexlayer select cutout photo.jpg --preset portrait             # 转给 flexlayer-select。没安装时提示在 packages/select 里构建
 ```
 
 `.tsx`、`.jsx`、`.ts`、`.js` 会先执行，并做类型检查，类型错误记为 `type-error`。标准库和 Node 的类型由渲染器自带，不依赖文件旁边的 `node_modules`。`import ... from 'node:fs'` 可以类型检查。不认识的属性名和 `.layer` 一样保留给 `draw`，不算 `type-error`。属性放错位置同样由检查报 `invalid-attr`，不记成类型错误。`import './x.tsx'` 这种带扩展名的引用可以通过。有类型错误时仍然出图，退出码为 1。文件里写 `/** @jsxImportSource flexlayer */`，标签和属性与 `.layer` 相同。默认导出一个 `<layer>` 节点，或返回该节点的函数。命名导出 `composition`（或默认导出）可以是第 13 章的 `Composition`。执行结果是同一棵节点树，后面的布局、问题码和绘制都不变。推荐用 `canvas.create(<layer>…</layer>)` 量好再摆。`create` 是同步的，准备在进程里记住，多帧不会重新开始。见第 15 章。`check` 在没有 `--frame` 和 `--frames` 时抽查第 0 帧、中间一帧和最后一帧。`--frames all` 检查每一帧，`--frames 120-300` 检查这一段（含两端），`--frames 12` 只检查这一帧，`--step N` 是步长。`--emit` 把树写回 `.layer`；`draw` 函数若用了外部变量，记 `emit-draw`，并且不写出 `<draw>`。帧数超过 300 且没有 `--frame`、`--frames` 或 `--rgba` 时不渲染联系表。`--frames <目录>` 边渲染边写 `frame-0000.png` 这种文件，文件名是帧号。`--from`、`--to` 含端点。`--rgba -` 按帧把不预乘的原始像素连续写到标准输出，日志改走标准错误，并在标准错误打出一行 `ffmpeg -f rawvideo -pix_fmt rgba -s WxH -r fps -i -`。`--rgba` 后面写成文件路径时，像素写入该文件。flexlayer 不调用 ffmpeg。多帧渲染打印的问题是全部帧合并后的结果。

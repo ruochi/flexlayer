@@ -1,7 +1,10 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-/** 512 输入的 ONNX 版，MIT。完整版大约九百兆，这里不用。 */
+/**
+ * 512 输入的 ONNX，MIT。
+ * fp32 权重大约 940MB。这里用 fp16，大约 470MB。
+ */
 export const MODEL_ID = 'onnx-community/BiRefNet_512x512-ONNX'
 
 type RawImageLike = {
@@ -45,7 +48,7 @@ async function loadModel(mod: TransformersModule) {
   if (!loaded) {
     mod.env.cacheDir = join(homedir(), '.cache', 'flexlayer', 'models')
     loaded = Promise.all([
-      mod.AutoModel.from_pretrained(MODEL_ID, { dtype: 'fp32' }),
+      mod.AutoModel.from_pretrained(MODEL_ID, { dtype: 'fp16' }),
       mod.AutoProcessor.from_pretrained(MODEL_ID),
     ])
       .then(([model, processor]) => ({ model, processor }))

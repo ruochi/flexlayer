@@ -194,12 +194,49 @@ type PaintBox = { x: number; y: number; width: number; height: number }
 /** 单行蒙版的设备像素上限。更大时退回直接填充，避免一张离屏盖住整页。 */
 const TEXT_MASK_LIMIT = 8192
 
+function samePaint(a: string | undefined, b: string | undefined): boolean {
+  return (a ?? '').trim() === (b ?? '').trim()
+}
+
+/**
+ * 文字盒子上的颜色，包括从外层继承来的，按整个盒子取样。
+ * 行内标签自己的颜色按这一段在本行上的行盒取样，汉字和英文单词不各自重开一段。
+ */
 function textColorBox(node: TextLayoutNode, color: string, fragment: PaintBox): PaintBox {
-  const declared = node.style.color?.trim()
-  if (declared && declared === color.trim() && node.width > 0 && node.height > 0) {
+  const computed = node.computed.color?.trim()
+  if (computed && samePaint(computed, color) && node.width > 0 && node.height > 0) {
     return { x: node.x, y: node.y, width: node.width, height: node.height }
   }
   return fragment
+}
+
+function runBox(
+  segments: Array<{ x: number; width: number; style: { color: string; background?: string } }>,
+  index: number,
+  key: 'color' | 'background',
+  contentX: number,
+  offsetX: number,
+  lineTop: number,
+  lineHeight: number,
+): PaintBox {
+  const value = segments[index]!.style[key]
+  let start = index
+  while (start > 0 && samePaint(segments[start - 1]!.style[key], value)) start--
+  let end = index + 1
+  while (end < segments.length && samePaint(segments[end]!.style[key], value)) end++
+  let minX = Infinity
+  let maxX = -Infinity
+  for (let i = start; i < end; i++) {
+    const x = contentX + offsetX + segments[i]!.x
+    minX = Math.min(minX, x)
+    maxX = Math.max(maxX, x + segments[i]!.width)
+  }
+  return {
+    x: Number.isFinite(minX) ? minX : contentX + offsetX,
+    y: lineTop,
+    width: Math.max((Number.isFinite(maxX) ? maxX : minX + 1) - minX, 1),
+    height: Math.max(lineHeight, 1),
+  }
 }
 
 /**
@@ -300,24 +337,21 @@ function drawTextNode(ctx: CanvasRenderingContext2D, node: TextLayoutNode, inkCo
     if (node.textAlign === 'center') offsetX = (innerW - line.width) / 2
     if (node.textAlign === 'right') offsetX = innerW - line.width
     const lineTop = contentY + line.y
-    for (const seg of line.segments) {
+    for (let segIndex = 0; segIndex < line.segments.length; segIndex++) {
+      const seg = line.segments[segIndex]!
       const x = contentX + offsetX + seg.x
-      const fragment: PaintBox = {
-        x,
-        y: lineTop,
-        width: Math.max(seg.width, 1),
-        height: Math.max(line.height, 1),
-      }
+      const colorRun = runBox(line.segments, segIndex, 'color', contentX, offsetX, lineTop, line.height)
+      const backgroundRun = runBox(line.segments, segIndex, 'background', contentX, offsetX, lineTop, line.height)
       const background = seg.style.background
       if (!inkColor && background && background !== 'transparent' && background !== 'none' && seg.width > 0 && line.height > 0) {
-        ctx.fillStyle = paintOf(ctx, background, fragment.x, fragment.y, fragment.width, fragment.height)
+        ctx.fillStyle = paintOf(ctx, background, backgroundRun.x, backgroundRun.y, backgroundRun.width, backgroundRun.height)
         ctx.fillRect(x, lineTop, seg.width, line.height)
       }
       if (!seg.text) continue
       applyCanvasFont(ctx, seg.style.fontFamily, seg.style.fontWeight, seg.style.fontSize, seg.style.fontStyle)
       ctx.letterSpacing = `${seg.style.letterSpacing}px`
       const color = inkColor ?? seg.style.color
-      const box = inkColor ? fragment : textColorBox(node, seg.style.color, fragment)
+      const box = inkColor ? colorRun : textColorBox(node, seg.style.color, colorRun)
       fillTextPaint(ctx, seg.text, x, contentY + line.baselineY, color, box, seg.style.fontSize)
       if (seg.style.underline) {
         const y = contentY + line.baselineY + Math.max(1, seg.style.fontSize * 0.12)
@@ -712,8 +746,8 @@ function drawNodeInk(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: nu
   }
 }
 
-/** layer overlay：自身 chrome + 子树着墨（子元素局部坐标）。 */
-function drawSubtreeInk(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: number, ink = SILHOUETTE) {
+/** layer overlay：自身 chrome + 子树着墨（子元素局部坐标）。不看这一层自己的 mask。 */
+function drawUnmaskedSubtree(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: number, ink = SILHOUETTE) {
   if (node.kind === 'group') {
     ctx.save()
     ctx.transform(node.svg.a, node.svg.b, node.svg.c, node.svg.d, node.svg.e, node.svg.f)
@@ -729,6 +763,53 @@ function drawSubtreeInk(ctx: CanvasRenderingContext2D, node: LayoutNode, spread:
   ctx.translate(node.x + insetX, node.y + insetY)
   for (const ch of node.children) drawSubtreeInk(ctx, ch, spread, ink)
   ctx.restore()
+}
+
+/**
+ * 蒙版留下的轮廓。先画没裁过的子树，再套 mask，最后按 spread 胀缩。
+ * 父层的描边和阴影跟着这块轮廓，不跟着没抠过的矩形。
+ */
+function drawMaskedLayerInk(ctx: CanvasRenderingContext2D, node: LayerLayoutNode, spread: number, ink = SILHOUETTE) {
+  const masks = node.mask
+  if (!masks || masks.length === 0) {
+    drawUnmaskedSubtree(ctx, node, spread, ink)
+    return
+  }
+  const k = Math.max(transformScale(ctx), 1e-3)
+  const w = Math.max(1, Math.ceil(node.width * k))
+  const h = Math.max(1, Math.ceil(node.height * k))
+  const canvas = createCanvas(w, h)
+  const octx = canvas.getContext('2d') as PaintCtx
+  octx.setTransform(k, 0, 0, k, -node.x * k, -node.y * k)
+  drawUnmaskedSubtree(octx, node, 0, '#ffffff')
+  applyLayerMask(
+    canvas,
+    masks,
+    k,
+    0,
+    0,
+    { canvasWidth: w, canvasHeight: h, frame: 0, fps: 30, issues: [] },
+    node.maskFeather ?? 0,
+    node.maskInvert ?? false,
+  )
+  octx.setTransform(1, 0, 0, 1, 0, 0)
+  octx.globalCompositeOperation = 'source-in'
+  octx.fillStyle = ink
+  octx.fillRect(0, 0, w, h)
+  const blit = (dctx: PaintCtx) => {
+    dctx.drawImage(canvas, node.x, node.y, node.width, node.height)
+  }
+  if (Math.abs(spread) < 1e-3) blit(ctx as PaintCtx)
+  else paintDilatedInk(ctx as PaintCtx, spread, ink, { x: node.x, y: node.y, width: node.width, height: node.height }, blit)
+}
+
+/** layer overlay：自身 chrome + 子树着墨。写了 mask 的层用蒙版之后的轮廓。 */
+function drawSubtreeInk(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: number, ink = SILHOUETTE) {
+  if (node.kind === 'layer' && node.mask && node.mask.length > 0) {
+    drawMaskedLayerInk(ctx, node, spread, ink)
+    return
+  }
+  drawUnmaskedSubtree(ctx, node, spread, ink)
 }
 
 function transformScale(ctx: CanvasRenderingContext2D): number {
@@ -1331,6 +1412,16 @@ function groupInkBounds(node: LayoutNode): Box | null {
 
 /** 画本节点墨迹。Layer / flex 合并子树；`<g>` 只把子路径变进这棵子树，不单独描边。 */
 function drawInkMask(ctx: PaintCtx, node: LayoutNode, isTop: boolean) {
+  if (node.kind === 'layer' && node.mask && node.mask.length > 0) {
+    ctx.save()
+    if (!isTop) {
+      applyNodeTransform(ctx, node)
+      ctx.globalAlpha *= node.opacity
+    }
+    drawMaskedLayerInk(ctx, node, 0, '#ffffff')
+    ctx.restore()
+    return
+  }
   ctx.save()
   if (!isTop) {
     applyNodeTransform(ctx, node)
@@ -1390,20 +1481,26 @@ function collectStrokeBands(layers: InkStrokeSpec[], phase: 'outer' | 'inner'): 
   return bands.filter((band) => band.outer > band.inner + 1e-3)
 }
 
-function paintInkStrokes(ctx: PaintCtx, node: LayoutNode, phase: 'outer' | 'inner') {
+function paintInkStrokes(
+  ctx: PaintCtx,
+  node: LayoutNode,
+  phase: 'outer' | 'inner',
+  source?: { bounds: Box; draw: (ctx: PaintCtx) => void },
+) {
   const layers = node.inkStroke
   if (!layers?.length) return
   const bands = collectStrokeBands(layers, phase)
   if (bands.length === 0) return
   const subtree = node.kind === 'layer' || node.kind === 'flex'
-  const base = subtree ? groupInkBounds(node) : leafInkBounds(node)
+  const base = source?.bounds ?? (subtree ? groupInkBounds(node) : leafInkBounds(node))
   if (!base || base.width <= 0 || base.height <= 0) return
   const reach = phase === 'outer' ? outerInkStrokeReach(layers) : 2
   const pad = Math.ceil(Math.max(reach, 2)) + 2
   const raster = rasterizeUser(
     { x: base.x - pad, y: base.y - pad, width: base.width + pad * 2, height: base.height + pad * 2 },
     (octx) => {
-      if (subtree) drawInkMask(octx, node, true)
+      if (source) source.draw(octx)
+      else if (subtree) drawInkMask(octx, node, true)
       else drawNodeInk(octx, node, 0, '#ffffff')
     },
   )
@@ -1786,7 +1883,7 @@ function paintNodeEffectsAndBody(
   debug: boolean,
   t: number,
   state: PaintState,
-  opts: { sampleBackdrop: boolean; skipNoise?: boolean },
+  opts: { sampleBackdrop: boolean; skipNoise?: boolean; skipOwnOuter?: boolean },
 ) {
   // glass 未写 shadow 时补一层柔和投影，接近系统控件浮起感
   const drawShadow = () => {
@@ -1808,10 +1905,10 @@ function paintNodeEffectsAndBody(
     paintGlass(ctx, node, node.glass, drawShadow)
   } else {
     if (opts.sampleBackdrop && node.backdropBlur) paintBackdropBlur(ctx, node, node.backdropBlur)
-    drawShadow()
+    if (!opts.skipOwnOuter) drawShadow()
   }
-  if (node.glow) paintGlow(ctx, state, node, node.glow, (spread) => drawEffectInk(ctx, node, spread, state))
-  paintInkStrokes(ctx, node, 'outer')
+  if (!opts.skipOwnOuter && node.glow) paintGlow(ctx, state, node, node.glow, (spread) => drawEffectInk(ctx, node, spread, state))
+  if (!opts.skipOwnOuter) paintInkStrokes(ctx, node, 'outer')
   paintBody(ctx, node, debug, t, state)
   paintInkStrokes(ctx, node, 'inner')
   if (node.innerShadow) {
@@ -1901,6 +1998,52 @@ function canvasFilterCss(node: LayoutNode): string {
   return parts.join(' ')
 }
 
+function hasOwnOuter(node: LayoutNode): boolean {
+  if (node.shadow || node.glow) return true
+  return node.inkStroke?.some((layer) => layer.position === 'outside' || layer.position === 'center') ?? false
+}
+
+/** 蒙版裁完之后，用留下的轮廓画这一层自己的阴影、光晕和外侧描边。 */
+function compositeMaskedOuter(
+  body: Canvas,
+  node: LayoutNode,
+  k: number,
+  effectPad: number,
+  tw: number,
+  th: number,
+  state: PaintState,
+): Canvas {
+  const sil = createCanvas(body.width, body.height)
+  const sctx = sil.getContext('2d')
+  sctx.drawImage(body, 0, 0)
+  sctx.globalCompositeOperation = 'source-in'
+  sctx.fillStyle = SILHOUETTE
+  sctx.fillRect(0, 0, sil.width, sil.height)
+  const out = createCanvas(body.width, body.height)
+  const octx = out.getContext('2d') as PaintCtx
+  octx.setTransform(k, 0, 0, k, 0, 0)
+  octx.translate(-node.x + effectPad, -node.y + effectPad)
+  const bounds = { x: node.x - effectPad, y: node.y - effectPad, width: tw, height: th }
+  const drawSil = (spread: number) => {
+    const blit = (dctx: PaintCtx) => {
+      dctx.drawImage(sil, node.x - effectPad, node.y - effectPad, tw, th)
+    }
+    if (Math.abs(spread) < 1e-3) blit(octx)
+    else paintDilatedInk(octx, spread, SILHOUETTE, bounds, blit)
+  }
+  if (node.shadow) drawEffect(octx, state, node, shadowEffect(node.shadow), drawSil)
+  if (node.glow) paintGlow(octx, state, node, node.glow, drawSil)
+  paintInkStrokes(octx, node, 'outer', {
+    bounds,
+    draw: (dctx) => {
+      dctx.drawImage(sil, node.x - effectPad, node.y - effectPad, tw, th)
+    },
+  })
+  octx.setTransform(1, 0, 0, 1, 0, 0)
+  octx.drawImage(body, 0, 0)
+  return out
+}
+
 function paintWithLayerFilter(ctx: PaintCtx, node: LayoutNode, debug: boolean, t: number, state: PaintState) {
   const blur = node.blur ?? 0
   const pixel = orderedFilters(node.filters, 'pixel')
@@ -1924,9 +2067,14 @@ function paintWithLayerFilter(ctx: PaintCtx, node: LayoutNode, debug: boolean, t
   octx.translate(-node.x + effectPad, -node.y + effectPad)
   // 有 mask 时玻璃必须画进离屏，采样仍来自主画布，最后和阴影、模糊一起被裁掉
   const sampleHere = masks != null && (node.glass != null || node.backdropBlur != null)
+  const deferOuter = masks != null && node.glass == null && hasOwnOuter(node)
   if (sampleHere) copyParentUnderlay(ctx, octx)
-  // 有像素滤镜时颗粒在调色之后再叠，不被染色
-  paintNodeEffectsAndBody(octx, node, debug, t, state, { sampleBackdrop: sampleHere, skipNoise: pixel.length > 0 })
+  // 有像素滤镜时颗粒在调色之后再叠，不被染色。蒙版层自己的外扩效果等裁完再画。
+  paintNodeEffectsAndBody(octx, node, debug, t, state, {
+    sampleBackdrop: sampleHere,
+    skipNoise: pixel.length > 0,
+    skipOwnOuter: deferOuter,
+  })
   if (pixel.length) applyPixelFilters(off, pixel, k, effectPad, effectPad, node.width, node.height)
   if (!masks) {
     ctx.save()
@@ -1955,6 +2103,7 @@ function paintWithLayerFilter(ctx: PaintCtx, node: LayoutNode, debug: boolean, t
     nctx.restore()
   }
   applyLayerMask(target, masks, k, effectPad, t, state, node.kind === 'layer' ? node.maskFeather ?? 0 : 0, node.kind === 'layer' ? node.maskInvert ?? false : false)
+  if (deferOuter) target = compositeMaskedOuter(target, node, k, effectPad, tw, th, state)
   ctx.save()
   ctx.filter = 'none'
   ctx.drawImage(target, node.x - effectPad, node.y - effectPad, tw, th)

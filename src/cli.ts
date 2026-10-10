@@ -158,7 +158,7 @@ async function forwardSelect(argv: string[]) {
   } catch (err) {
     const missing = err instanceof Error && /flexlayer-select|Cannot find package|ERR_MODULE_NOT_FOUND/.test(`${err.message} ${(err as NodeJS.ErrnoException).code ?? ''}`)
     if (!missing) throw err
-    throw new Error('没有安装 flexlayer-select。在仓库里进入 packages/select 执行 npm install，或 npm install flexlayer-select')
+    throw new Error('没有安装 flexlayer-select。这个包不在 npm 上。在仓库里进入 packages/select，执行 npm ci && npm run build')
   }
 }
 

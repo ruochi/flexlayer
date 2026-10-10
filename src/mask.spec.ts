@@ -504,6 +504,71 @@ describe('mask', () => {
     expect(layer?.mask?.ops?.[1]?.changed).toBe(0)
   })
 
+  it('蒙版层自己的描边和阴影跟着留下的轮廓，父层也一样', async () => {
+    const sticker = await renderFvg(`
+      <layer width="140" height="110" background="#000000">
+        <layer x="20" y="20" width="70" height="60" ink-stroke="6 #ffffff">
+          <mask><circle cx="35" cy="30" r="18" /></mask>
+          <rect x="0" y="0" width="70" height="60" fill="#2244ff" />
+        </layer>
+      </layer>
+    `)
+    const center = await pixelAt(sticker.png, 55, 50)
+    const rim = await pixelAt(sticker.png, 55, 28)
+    const outsideRect = await pixelAt(sticker.png, 96, 50)
+    expect(center[2]).toBeGreaterThan(180)
+    expect(rim[0]).toBeGreaterThan(200)
+    expect(rim[1]).toBeGreaterThan(200)
+    expect(rim[2]).toBeGreaterThan(200)
+    expect(outsideRect[0]).toBeLessThan(20)
+
+    const shadow = await renderFvg(`
+      <layer width="140" height="90" background="#000000">
+        <layer x="10" y="10" width="60" height="60" shadow="28 0 0 #ff0000">
+          <mask><circle cx="30" cy="30" r="18" /></mask>
+          <rect x="0" y="0" width="60" height="60" fill="#ffffff" />
+        </layer>
+      </layer>
+    `)
+    const body = await pixelAt(shadow.png, 40, 40)
+    const cast = await pixelAt(shadow.png, 82, 40)
+    const rectCast = await pixelAt(shadow.png, 96, 40)
+    expect(body[0]).toBeGreaterThan(200)
+    expect(cast[0]).toBeGreaterThan(150)
+    expect(rectCast[0]).toBeLessThan(30)
+
+    const parent = await renderFvg(`
+      <layer width="160" height="120" background="#000000" ink-stroke="6 #ff0000">
+        <layer x="20" y="20" width="80" height="60">
+          <mask><circle cx="40" cy="30" r="20" /></mask>
+          <rect x="0" y="0" width="80" height="60" fill="#ffffff" />
+        </layer>
+      </layer>
+    `)
+    const hole = await pixelAt(parent.png, 36, 50)
+    const rectRim = await pixelAt(parent.png, 16, 50)
+    const kept = await pixelAt(parent.png, 60, 50)
+    expect(hole[0]).toBeGreaterThan(150)
+    expect(rectRim[0]).toBeLessThan(30)
+    expect(kept[0]).toBeGreaterThan(200)
+  })
+
+  it('preview 的 show 不是不认识的属性', async () => {
+    const report = await checkFvg(`
+      <layer width="80" height="40">
+        <layer id="cut" width="40" height="40">
+          <mask><circle cx="20" cy="20" r="16" /></mask>
+          <rect width="40" height="40" fill="#fff" />
+        </layer>
+        <preview of="#cut" show="overlay checker black white edges" />
+      </layer>
+    `)
+    expect(report.issues.filter((issue) => issue.message.includes('不认识的属性'))).toEqual([])
+    const typo = await checkFvg(`<layer width="40" height="40"><rect x="0" y="0" width="20" height="20" fill="#fff" show="1" /></layer>`)
+    const hit = typo.issues.find((issue) => issue.message.includes('不认识的属性 show'))
+    expect(hit?.hint).toContain('shadow')
+  })
+
   it('preview 不进成片，--preview 的叠色图能看出选区', async () => {
     const source = `
       <layer width="40" height="40" background="#000000">

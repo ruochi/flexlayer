@@ -80,6 +80,24 @@ function meshSamples(node: MeshLayoutNode): Array<[number, number, number]> {
     }
     return pts
   }
+  if (node.mesh.type === 'torus') {
+    const major = node.mesh.r
+    const tube = node.mesh.tube
+    const cx = node.width / 2
+    const cy = node.height / 2
+    const pts: Array<[number, number, number]> = []
+    for (let i = 0; i < 32; i++) {
+      const theta = (i / 32) * Math.PI * 2
+      const ct = Math.cos(theta)
+      const st = Math.sin(theta)
+      for (let j = 0; j < 16; j++) {
+        const phi = (j / 16) * Math.PI * 2
+        const rad = major + tube * Math.cos(phi)
+        pts.push([cx + rad * ct, cy + rad * st, tube * Math.sin(phi)])
+      }
+    }
+    return pts
+  }
   const half = meshHalfDepth(node)
   const pts: Array<[number, number, number]> = []
   for (const u of [0, node.width]) {

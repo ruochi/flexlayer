@@ -608,6 +608,44 @@ describe('软件光栅', () => {
     expect(doubled.gap).toBeGreaterThan(opened.gap * 1.6)
   })
 
+  it('halo 不会把线管端面和自己的轮廓切开', async () => {
+    const { png } = await render(`
+      <layer width="320" height="180" background="#ffffff" perspective="1200">
+        <tube x="30" y="40" d="M0 50 H240" r="24" fill="none" stroke="#111111" stroke-width="3" halo="8" />
+      </layer>
+    `)
+    const img = await loadImage(png)
+    const canvas = createCanvas(img.width, img.height)
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    const data = ctx.getImageData(0, 0, img.width, img.height).data
+    const darkAt = (x: number, y: number) => {
+      const i = (y * img.width + x) * 4
+      const r = data[i] ?? 255
+      const g = data[i + 1] ?? 255
+      const b = data[i + 2] ?? 255
+      return r < 80 && g < 80 && b < 80
+    }
+    let maxX = 0
+    for (let y = 0; y < img.height; y++) {
+      for (let x = 0; x < img.width; x++) if (darkAt(x, y)) maxX = Math.max(maxX, x)
+    }
+    const ys: number[] = []
+    for (let y = 0; y < img.height; y++) {
+      for (let x = maxX - 2; x <= maxX; x++) {
+        if (darkAt(x, y)) {
+          ys.push(y)
+          break
+        }
+      }
+    }
+    expect(ys.length).toBeGreaterThan(20)
+    let gap = 0
+    for (let i = 1; i < ys.length; i++) gap = Math.max(gap, ys[i]! - ys[i - 1]! - 1)
+    expect(gap).toBeLessThanOrEqual(2)
+    expect(ys[ys.length - 1]! - ys[0]!).toBeGreaterThan(36)
+  })
+
   it('halo 不配 stroke、写在平面上，或 stroke-width 超过三个数，会警告', async () => {
     const report = await checkFvg(`
       <layer width="180" height="140" perspective="400">

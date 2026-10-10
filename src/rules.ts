@@ -263,6 +263,14 @@ export function legacyCenterIssues(node: FvgNode, path: string): Issue[] {
 
 const KNOWN_ATTRS = new Set<string>([...ATTR_ORDER, ...ATTRS.map((attr) => attr.name), 'style'])
 
+/** 这些属性只在对应标签上合法，不进总表，也不要被当成别的属性的笔误。 */
+const TAG_LOCAL_ATTRS: Record<string, readonly string[]> = {
+  preview: ['of', 'show'],
+  mask: ['feather', 'invert'],
+  img: ['channel', 'pick', 'derive'],
+  image: ['channel', 'pick', 'derive'],
+}
+
 /** 超过 2 的距离直接记成 3，调用方只关心是否落在阈值里。 */
 function editDistance(a: string, b: string): number {
   if (a === b) return 0
@@ -322,6 +330,8 @@ function attrCandidates(node: FvgNode): Iterable<string> {
 /** 和这个标签上可能出现的属性编辑距离不超过 2 时，返回最近的名字。并列超过 3 个就不当成拼写。 */
 export function suggestAttrs(raw: string, node?: FvgNode): string[] {
   if (!raw.trim() || KNOWN_ATTRS.has(raw)) return []
+  const local = node ? TAG_LOCAL_ATTRS[node.tag.toLowerCase()] : undefined
+  if (local?.includes(raw.trim())) return []
   return suggestNames(raw, node ? attrCandidates(node) : KNOWN_ATTRS)
 }
 
