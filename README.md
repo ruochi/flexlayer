@@ -148,7 +148,7 @@ await renderLayer(root)
 ```ts
 import { analyzeImage, h, renderLayer } from 'flexlayer'
 
-const cut = await analyzeImage('photo.subject.png')
+const cut = analyzeImage('photo.subject.png')
 if (cut.pieces > 1) console.warn(`主体碎成了 ${cut.pieces} 块`, cut.parts)
 const root = h(
   'layer',
