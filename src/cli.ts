@@ -10,7 +10,7 @@ import type { Composition, FrameInput } from './frame.js'
 import { createContactSheet, renderFrames } from './frame.js'
 import { loadLayerFile, type LoadedLayer } from './load-source.js'
 import { formatIssueLine } from './report.js'
-import { checkFvg, renderFvg } from './render.js'
+import { checkFvg, renderFvg, renderPreview } from './render.js'
 import { typecheckLayerFile } from './typecheck.js'
 import type { FvgNode } from './parse.js'
 import type { FvgReport, Issue } from './types.js'
@@ -19,15 +19,17 @@ const CONTACT_LIMIT = 300
 
 function usage(): never {
   console.error(`用法:
-  flexlayer render <file.layer|file.tsx> [-o out.png] [--report out.json] [--scale 0.5] [--debug] [--emit out.layer] [--frame N] [--frames dir] [--from N] [--to N] [--step N] [--rgba -|file]
+  flexlayer render <file.layer|file.tsx> [-o out.png] [--report out.json] [--scale 0.5] [--debug] [--preview out.png] [--emit out.layer] [--frame N] [--frames dir] [--from N] [--to N] [--step N] [--rgba -|file]
   flexlayer check <file.layer|file.tsx> [--report out.json] [--emit out.layer] [--frame N] [--frames all|A-B|N] [--step N]
+  flexlayer select …   转给 flexlayer-select。没安装时提示安装命令
 
 .tsx / .jsx / .ts / .js 会先执行，得到和 .layer 相同的节点树。
 Composition 用 --frame N 渲染一帧；不写时，范围内帧数不超过 ${CONTACT_LIMIT} 就输出联系表。
 --frames <目录> 边渲染边写出 PNG。--from、--to 含端点，--step 是步长。
 --rgba - 把不预乘的原始像素写到标准输出，日志改走标准错误。写成文件路径则写入该文件。
 check 不写 --frames 时抽查第 0 帧、中间一帧和最后一帧。--frames all 或 --frames 120-300 检查这一段。
---emit 把展开后的节点写回 .layer。`)
+--emit 把展开后的节点写回 .layer。
+--preview 按文档里的 <preview> 另写一张选区预览，正常成片不包含它。`)
   process.exit(2)
 }
 
@@ -46,6 +48,7 @@ function parseArgs(argv: string[]) {
   let step: number | undefined
   let scale = 1
   let debug = false
+  let preview: string | undefined
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i]!
     const next = () => {
@@ -57,6 +60,7 @@ function parseArgs(argv: string[]) {
     else if (a === '--report') report = next()
     else if (a === '--scale') scale = Number(next())
     else if (a === '--debug') debug = true
+    else if (a === '--preview') preview = next()
     else if (a === '--emit') emit = next()
     else if (a === '--frames') framesArg = next()
     else if (a === '--rgba') rgba = next()
@@ -71,11 +75,11 @@ function parseArgs(argv: string[]) {
   if (to != null && (!Number.isInteger(to) || to < 0)) usage()
   if (step != null && (!Number.isInteger(step) || step < 1)) usage()
   if (!Number.isFinite(scale) || scale <= 0) usage()
-  if (cmd === 'check' && (rgba || from != null || to != null)) usage()
+  if (cmd === 'check' && (rgba || from != null || to != null || preview)) usage()
   if (frame != null && (framesArg != null || rgba != null || from != null || to != null || step != null)) usage()
   if (cmd === 'render' && rgba != null && framesArg != null) usage()
   if (cmd === 'check' && step != null && framesArg == null) usage()
-  return { cmd, file, out, report, emit, framesArg, rgba, frame, from, to, step, scale, debug }
+  return { cmd, file, out, report, emit, framesArg, rgba, frame, from, to, step, scale, debug, preview }
 }
 
 function frameInput(frame: number, fps: number): FrameInput {
@@ -145,13 +149,31 @@ function outPng(abs: string, out: string | undefined) {
   return out ?? abs.replace(/\.(tsx|jsx|ts|js|layer|fvg)$/i, '.png')
 }
 
+async function forwardSelect(argv: string[]) {
+  const name = 'flexlayer-select'
+  try {
+    const mod = (await import(name)) as { runSelect?: (argv: string[]) => Promise<void> }
+    if (!mod.runSelect) throw new Error('flexlayer-select 没有 runSelect')
+    await mod.runSelect(argv)
+  } catch (err) {
+    const missing = err instanceof Error && /flexlayer-select|Cannot find package|ERR_MODULE_NOT_FOUND/.test(`${err.message} ${(err as NodeJS.ErrnoException).code ?? ''}`)
+    if (!missing) throw err
+    throw new Error('没有安装 flexlayer-select。在仓库里进入 packages/select 执行 npm install，或 npm install flexlayer-select')
+  }
+}
+
 async function main() {
+  if (process.argv[2] === 'select') {
+    await forwardSelect(process.argv.slice(3))
+    return
+  }
   const args = parseArgs(process.argv.slice(2))
   const abs = resolve(args.file)
   const loaded: LoadedLayer = await loadLayerFile(abs)
   const baseDir = dirname(abs)
   const typeIssues = typecheckLayerFile(abs)
 
+  if (args.preview && loaded.kind === 'composition') throw new Error('--preview 只用于单帧 .layer 或 .tsx')
   if (args.frame != null && loaded.kind !== 'composition') usage()
   if ((args.framesArg || args.rgba || args.from != null || args.to != null || args.step != null) && loaded.kind !== 'composition') usage()
   if (args.emit && loaded.kind === 'markup') throw new Error('--emit 只用于 .tsx 等会展开的源文件')
@@ -305,6 +327,13 @@ async function main() {
   attachFileIssues(report)
   const outPath = outPng(abs, args.out)
   await writeFile(outPath, png)
+  if (args.preview) {
+    const sheet = await renderPreview(source, { baseDir, scale: args.scale })
+    if (!sheet) throw new Error('没有 <preview>。写成 <preview of="#id" show="overlay checker black white edges" />')
+    await mkdir(dirname(resolve(args.preview)), { recursive: true })
+    await writeFile(args.preview, sheet)
+    say(`✓ ${args.preview}  选区预览`)
+  }
   printIssues(report)
   say(`✓ ${outPath}  ${report.width}×${report.height}  ${report.elements.length} 个元素`)
   if (args.report) await writeFile(args.report, JSON.stringify(report, null, 2))

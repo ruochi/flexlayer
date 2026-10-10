@@ -718,6 +718,29 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
       ),
     )
   }
+  const cssMaskKeys = [
+    'mask-image',
+    'mask-mode',
+    'mask-composite',
+    'mask-size',
+    'mask-position',
+    'mask-repeat',
+    'mask-clip',
+    'mask-origin',
+    'mask-type',
+  ]
+  const cssMask = cssMaskKeys.filter((key) => present(attrs, key) || (styleMap[key] != null && styleMap[key]!.trim() !== ''))
+  if (cssMask.length > 0) {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        `${cssMask.join('、')} 是 CSS 蒙版，这里不使用`,
+        '蒙版写成 <mask>。加减用 op，读黑白图用 channel="luma"',
+      ),
+    )
+  }
   const styleMask = styleMap.mask
   if (node.tag !== 'layer' && styleMask != null && styleMask.trim() !== '') {
     out.push(

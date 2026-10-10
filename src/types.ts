@@ -193,6 +193,16 @@ export type InkOffset = {
   bottom: number
 }
 
+export type MaskOp = 'add' | 'subtract' | 'intersect' | 'xor'
+
+/** 蒙版里的一步运算。`changed` 是这一步改变的面积占这一层布局盒的比例。 */
+export type MaskOpReport = {
+  op: MaskOp
+  changed: number
+  path: string
+  source?: string
+}
+
 /** 按这一层布局盒里的像素量。`area`、`softEdge` 是这一层自己的像素，不乘 `scale`。 */
 export type MaskReport = {
   /** 留下的比例，0 到 1。半透明按 alpha 折算。 */
@@ -203,6 +213,16 @@ export type MaskReport = {
   pieces: number
   /** 软边的平均宽度，像素。硬边接近 0 到 1。 */
   softEdge: number
+  /** 每一步运算。没有子步骤时不写。 */
+  ops?: MaskOpReport[]
+}
+
+/** `<preview of="#id">`。正常渲染不画，`--preview` 才出图。 */
+export type PreviewSpec = {
+  of: string
+  show: Array<'overlay' | 'checker' | 'black' | 'white' | 'edges'>
+  path: string
+  source?: string
 }
 
 export type ElementReport = {
@@ -340,6 +360,8 @@ export type LayoutNodeBase = {
   /** 着墨相对布局盒子的四边内缩，取旋转和缩放之前的值。 */
   inkOffset?: InkOffset
   opacity: number
+  /** 蒙版里这一笔和已有结果的运算。不在蒙版里时没有。 */
+  maskOp?: MaskOp
   rotate: number
   /** 绕水平轴，度。正角度让盒子上边远离观众。没有祖先 perspective 时不投影。 */
   rotateX?: number
@@ -395,6 +417,10 @@ export type LayerLayoutNode = LayoutNodeBase & {
    * 绘制时只取 alpha，不进入 children，不参与布局。
    */
   mask?: LayoutNode[]
+  /** 蒙版羽化半径，像素。 */
+  maskFeather?: number
+  /** 蒙版反选。 */
+  maskInvert?: boolean
   /** 舞台坐标里被取的矩形。这一层的宽高是屏幕上的取景窗。 */
   view?: ViewRect
 }
@@ -427,6 +453,10 @@ export type ImageLayoutNode = LayoutNodeBase & {
   bitmap: Canvas | Image | null
   objectFit: 'fill' | 'contain' | 'cover' | 'none'
   objectPosition: { x: number; y: number }
+  /** 蒙版里读这张图的哪个通道。 */
+  maskChannel?: 'alpha' | 'luma'
+  /** 蒙版里只保留这些编号。编号图的灰度值就是编号。 */
+  maskPick?: number[]
 }
 
 export type ShapeLayoutNode = LayoutNodeBase & {
@@ -498,6 +528,8 @@ export type FvgDocument = {
   safe: { top: number; right: number; bottom: number; left: number }
   root: LayerLayoutNode
   issues: Issue[]
+  /** `<preview>`。正常渲染不画。 */
+  previews?: PreviewSpec[]
   /** path → `file:line:column`。只有从 JSX 进来的树才有。 */
   sources?: Map<string, string>
 }

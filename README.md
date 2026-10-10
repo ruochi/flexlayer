@@ -159,6 +159,8 @@ const root = h(
 await renderLayer(root)
 ```
 
+抠主体在单独的包里，渲染器只读它写出的缓存。`npx flexlayer-select cutout photo.jpg --preset portrait` 得到 `photo.subject.png`。标记里写 `<img src="photo.jpg" derive="subject" />`，不要改原图。
+
 按帧生成一组 PNG 和一张联系表：
 
 ```ts

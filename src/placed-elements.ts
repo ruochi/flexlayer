@@ -92,7 +92,10 @@ function pushElement(node: LayoutNode, space: Matrix, found: PlacedElement[]) {
 
 function placedMaskOf(node: LayoutNode, place: (ink: Box) => LayerBox): PlacedMask | undefined {
   if (node.kind !== 'layer' || !node.mask?.length) return undefined
-  const stats = maskStats(node.mask, node.width, node.height)
+  const stats = maskStats(node.mask, node.width, node.height, {
+    feather: node.maskFeather,
+    invert: node.maskInvert,
+  })
   if (!stats) return undefined
   return { ...stats, ink: stats.ink ? place(stats.ink) : null }
 }

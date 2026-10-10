@@ -16,6 +16,7 @@ const KNOWN_TAGS = new Set([
   'symbol',
   'use',
   'mask',
+  'preview',
   'div',
   'h1',
   'h2',

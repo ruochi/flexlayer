@@ -361,6 +361,7 @@ function walk(
   planeRoot: boolean,
   meshView: MeshView | undefined,
   inkSlack: number[],
+  maskIssues: Issue[],
 ) {
   const absX = ox + node.x
   const absY = oy + node.y
@@ -472,7 +473,12 @@ function walk(
   const insetY = node.kind === 'flex' ? node.padding.top + (node.border?.width ?? 0) : 0
   const childMatrix = multiply(matrix, translated(node.x + inset, node.y + insetY))
   if (node.kind === 'layer' && node.mask?.length) {
-    const stats = maskStats(node.mask, node.width, node.height)
+    const stats = maskStats(node.mask, node.width, node.height, {
+      feather: node.maskFeather,
+      invert: node.maskInvert,
+      issues: maskIssues,
+      path: node.path,
+    })
     if (stats) {
       const { ink: maskInk, ...rest } = stats
       entry.mask = plane ? rest : { ...rest, ink: maskInk ? boxToRect(applyToBox(childMatrix, maskInk)) : null }
@@ -491,7 +497,7 @@ function walk(
     if (node.inlines) {
       const base = multiply(matrix, translated(node.x, node.y))
       for (const image of node.inlines) {
-        walk(image, base, opacity, absX, absY, clip, elements, effects, plane, false, meshView, inkSlack)
+        walk(image, base, opacity, absX, absY, clip, elements, effects, plane, false, meshView, inkSlack, maskIssues)
       }
     }
   }
@@ -499,7 +505,7 @@ function walk(
   if (node.kind === 'group') {
     const childMatrix = multiply(matrix, node.svg)
     for (const ch of node.children) {
-      walk(ch, childMatrix, opacity, ox, oy, clip, elements, effects, undefined, false, meshView, inkSlack)
+      walk(ch, childMatrix, opacity, ox, oy, clip, elements, effects, undefined, false, meshView, inkSlack, maskIssues)
     }
     return
   }
@@ -573,11 +579,12 @@ function walk(
           true,
           childMesh,
           inkSlack,
+          maskIssues,
         )
       } else if (childPlane) {
-        walk(ch, contentMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, childPlane, false, childMesh, inkSlack)
+        walk(ch, contentMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, childPlane, false, childMesh, inkSlack, maskIssues)
       } else {
-        walk(ch, contentMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, undefined, false, childMesh, inkSlack)
+        walk(ch, contentMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, undefined, false, childMesh, inkSlack, maskIssues)
       }
     }
     let union: Box | null = null
@@ -640,9 +647,10 @@ export function buildReport(doc: FvgDocument): FvgReport {
   const elements: ElementReport[] = []
   const effects: EffectRecord[] = []
   const inkSlack: number[] = []
-  walk(doc.root, IDENTITY, 1, 0, 0, undefined, elements, effects, undefined, false, undefined, inkSlack)
+  const maskIssues: Issue[] = []
+  walk(doc.root, IDENTITY, 1, 0, 0, undefined, elements, effects, undefined, false, undefined, inkSlack, maskIssues)
 
-  const issues: Issue[] = [...doc.issues]
+  const issues: Issue[] = [...doc.issues, ...maskIssues]
   const visible = elements.filter((el) => el.opacity >= VISIBLE_OPACITY && hasArea(el.ink))
 
   for (let index = 0; index < elements.length; index++) {
@@ -767,6 +775,9 @@ const EXPECT_CODES = new Set([
   'invalid-attr',
   'invalid-child',
   'empty-mask',
+  'mask-op-noop',
+  'missing-mask',
+  'stale-mask',
   'invalid-draw',
   'missing-image',
   'missing-icon',

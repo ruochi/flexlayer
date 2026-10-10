@@ -130,13 +130,21 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 检查和绘制都按屏幕上的实际大小。`scale` 和 `view` 叠出来的倍数写在报告的 `screenScale`（两轴绝对值的几何平均，等于 1 不写）。最小字号拿 `font-size × screenScale` 和 `min(画布宽, 画布高) / 1080 × 24` 比。1080p 横屏和竖屏都是 24px。阴影、光晕、模糊的外扩同样乘这个倍数。`--debug` 的布局框和着墨框保持 1 屏幕像素，不跟着放大。网格光栅按这个倍数提高分辨率，推近后笔画仍然清楚。
 
-`<mask>` 裁的是这一层合成完的画面，包括阴影、模糊、调色和颗粒。它写在 `layer` 里面，和要裁的内容并列。自己不画出来，不占布局，不把层撑大，里面的形状不进报告的元素表，也不触发 `overflow-canvas`。蒙版画成位图之后量出来的面积、外接矩形、碎片数和软边宽度写在这一层的 `mask` 字段上，见第 10 章和第 15 章。被它挡住的内容同样不报 `overflow-canvas` 或 `effect-clipped`：报告里的 `ink` 先和 mask 形状的外接范围求交。一层最多一个，多出来的 `warn` 并忽略。坐标和同层的图形一样，原点在 layer 左上角。
+`<mask>` 裁的是这一层合成完的画面，包括阴影、模糊、调色和颗粒。它写在 `layer` 里面，和要裁的内容并列。自己不画出来，不占布局，不把层撑大，里面的形状不进报告的元素表，也不触发 `overflow-canvas`。蒙版画成位图之后量出来的面积、外接矩形、碎片数、软边宽度，以及每一步运算，写在这一层的 `mask` 字段上，见第 10 章和第 15 章。被它挡住的内容同样不报 `overflow-canvas` 或 `effect-clipped`：报告里的 `ink` 先和 mask 形状的外接范围求交。一层最多一个，多出来的 `warn` 并忽略。坐标和同层的图形一样，原点在 layer 左上角。
 
-里面直接写 `rect`、`circle`、`ellipse`、`polygon`、`path`，也可以放 `img`（用图片自己的 alpha）。`line`、`arrow`、`polyline`、`curve`、文字、`div`、嵌套 `layer` 会 `warn` 并忽略。空的 `mask` 报 `empty-mask`，并且不生效。
+里面直接写 `rect`、`circle`、`ellipse`、`polygon`、`path`，也可以放 `img` 或 `<g>`。`line`、`arrow`、`polyline`、`curve`、文字、`div`、嵌套 `layer` 会 `warn` 并忽略。空的 `mask` 报 `empty-mask`，并且不生效。
 
-没写 `fill` 时按 `#fff` 画满。实心形状是硬边；`fill` 的 alpha 和渐变里的透明处是软边。颜色不算，只看 alpha。没画到的像素藏起来。多个形状按书写顺序叠上，后写的盖住先写的；半透明不会把底下挖空。要挖洞，用带洞的 `path`。形状自己的 `rotate`、`scale` 仍然有效。
+没写 `fill` 时按 `#fff` 画满。实心形状是硬边；`fill` 的 alpha 和渐变里的透明处是软边。颜色不算，只看 alpha。没画到的像素藏起来。每一项先画进自己的缓冲，再按 `op` 合成。默认 `add`，后写的盖住先写的，和以前只叠形状一样；半透明不会把底下挖空。`subtract` 从已有选区里挖掉，`intersect` 只留重叠，`xor` 留下只出现在一边的部分。要挖洞也可以用带洞的 `path`。`<g>` 先把里面的步骤合成一组，再按这一组自己的 `op` 贴上。形状自己的 `rotate`、`scale` 仍然有效。`op` 写在 mask 外面报 `invalid-attr`。
+
+`img` 默认用自己的 alpha。`channel="luma"` 改读亮度，用来认黑白蒙版。`pick="3 5"` 只留下灰度值正好是这些编号的像素，0 是背景；写了 `pick` 又没写 `channel` 时按亮度读，并且不做平滑，避免边上冒出别的编号。这两个属性只写在 mask 里的 `img` 上。`derive="subject"`、`derive="mask"` 或 `derive="regions"` 不直接画 `src`，改读旁边的缓存：`photo.jpg` 对应 `photo.subject.png` 和 `photo.cutout.json`。缓存没有时报 `missing-mask`（error），`hint` 是要跑的命令。原图哈希和配方对不上时报 `stale-mask`（warn），文件还在就先画出来。网址和 data URL 不能 `derive`。
+
+`<mask feather="8" invert="true">` 在全部步骤之后做。`feather` 是羽化半径，单位像素。`invert` 反选。写在别的标签上会 `warn`。
+
+`mask-image`、`mask-mode`、`mask-composite` 这类 CSS 写法报 `invalid-attr`，不生效。蒙版写成 `<mask>`，加减用 `op`，读黑白图用 `channel="luma"`。
 
 写了画布底色就先铺好，不进 `mask`。没写 `background` 时不铺色，空出来的像素在 PNG 里是透明的。根 `layer` 的 `grade` 仍作用整幅画布，包括已经铺上的底色；完全透明的像素不参与调色。`grade-mask` 只控制调色强度。`mask` 放进 flex、写在图形或 HTML 上、写成属性或写进 `style`，都会 `warn` 并忽略。
+
+`<preview of="#person" show="overlay checker black white edges" />` 和 `symbol` 一样，正常成片里不画，也不进元素表。它只能作为 `layer` 的直接子元素。`of` 指向带 `id` 的 `layer`，`#` 可以不写。`show` 不写就是这五项都要。`flexlayer render scene.layer --preview out.png` 另写一张拼图：叠色图把没选中的地方盖上半透明红，并画上坐标格；成片分别放在棋盘格、黑底和白底上；`edges` 把软边最宽的几处放大。`check` 和多帧不要带 `--preview`。
 
 ```html
 <layer width="320" height="180">
@@ -365,6 +373,22 @@ const cut = await analyzeImage('photo.subject.png')
 `d` 写进 `<mask><path d /></mask>` 就是同一块蒙版，`mask` 里的 `path` 不描边。单独画出来时写 `<path d fill="#fff" stroke="none">`，因为 `path` 默认带 4 像素描边。图片画在页面上时如果缩放过，把 `d` 放进写了 `scale` 的 `layer`，或者按显示尺寸换算 `ink`。
 
 同一张图、同一组选项在一个进程里只算一次，返回的是副本，改了不影响下一次。读不到图片、或选项写错时抛错。
+
+### 抠图 flexlayer-select
+
+渲染器不跑模型。抠主体在单独的包 `flexlayer-select` 里：用 BiRefNet 的 ONNX 版（`onnx-community/BiRefNet_512x512-ONNX`，MIT）写出和原图一样大的缓存，再用上面的 `analyzeImage` 自检。模型第一次使用时下载到 `~/.cache/flexlayer/models`。`@huggingface/transformers` 是这个包的可选依赖，根包不加。
+
+```bash
+npx flexlayer-select cutout photo.jpg --preset portrait
+```
+
+`photo.jpg` 旁边得到 `photo.subject.png`（前景去色，alpha 是选区）、`photo.mask.png`、`photo.regions.png`（灰度值就是编号，0 是背景）、`photo.questions.json`、`photo.cutout.json`（原图哈希、模型、预设和自检）和 `photo.cutout.layer`。预设：`portrait` 留下头发软边并丢掉脚下的暗影子，`product` 把影子写成 `photo.shadow.png`，`flat` 按 128 硬切。编号题记着 `id`、`area`、`where`、`now`、`ask`。作答后：
+
+```bash
+npx flexlayer-select apply photo.jpg --add 2 --subtract 1
+```
+
+这会在 `<mask>` 里加上 `derive="regions"` 的 `img`，`pick` 是编号，`op` 是 `add` 或 `subtract`。标记里的 `<preview>` 不进成片，用 `--preview` 才出拼图。缓存给第 4 章的 `derive` 读。没装这个包时，`flexlayer select` 只提示安装命令。
 
 ### 图标
 
@@ -711,7 +735,7 @@ registerFilter({
 - `box`：布局盒子（含 padding 和 border），只累加平移。`rotate`、`scale` 和透视都不改变它。旋转之后 `box.x` 仍是没转之前的左上角。
 - `ink`：同一元素转完、缩完之后真正落在画布上的着墨外接矩形。落在带 `perspective` 的平面上时，改成投影后的外接矩形。并和祖先里 `overflow="hidden"` 的 layer、以及 `<mask>` 的外接范围求过交集。文字是字形的真实边界，形状是布局盒子变换后的范围。做像素对位看 `ink`，不要看 `box`。`overflow-canvas` 看的也是这个投影后的 `ink`。线条的中心线落在画布边上时，描边半径探出去不算超出；中心线本身越出画布仍然算。
 - `effect`：阴影、光晕、图层模糊或玻璃可能占用的范围，字段同 `box`。没有这些外扩效果时不写。已经被 `overflow="hidden"` 或 `<mask>` 裁掉的部分不算在里面。这个范围画出画布时报 `effect-clipped`。
-- `mask`：写了 `<mask>` 的 `layer` 才有。先用和绘制相同的形状、图片把蒙版画成位图，只看这一层的布局盒里面，再量这几个数：`area` 是留下的比例（0 到 1，半透明按 alpha 折算）；`ink` 是 alpha 大于 0 的部分在画布上的外接矩形，全部藏起来时是 `null`，在透视平面上不写；`pieces` 是 alpha 不低于一半的连通块个数（八连通）；`softEdge` 是软边的平均宽度，等于半透明像素数除以实心区域的边界长度，硬边接近 0 到 1，羽化越宽越大。`area` 和 `softEdge` 按这一层自己的像素算，不乘 `scale`。布局盒超过四百万像素时缩小来画，结果换算回原来的像素。
+- `mask`：写了 `<mask>` 的 `layer` 才有。先用和绘制相同的形状、图片、运算、羽化和反选把蒙版画成位图，只看这一层的布局盒里面，再量这几个数：`area` 是留下的比例（0 到 1，半透明按 alpha 折算）；`ink` 是 alpha 大于 0 的部分在画布上的外接矩形，全部藏起来时是 `null`，在透视平面上不写；`pieces` 是 alpha 不低于一半的连通块个数（八连通）；`softEdge` 是软边的平均宽度，等于半透明像素数除以实心区域的边界长度，硬边接近 0 到 1，羽化越宽越大。`ops` 是每一步：`op`、`changed`（这一步改变的面积占布局盒的比例）、`path`，写了 `source` 时也带上。没有子步骤时不写 `ops`。`changed` 为 0 时报 `mask-op-noop`。`area` 和 `softEdge` 按这一层自己的像素算，不乘 `scale`。布局盒超过四百万像素时缩小来画，结果换算回原来的像素。
 - `quad`：有透视投影时才有。投影后的四个角，画布坐标，顺序为左上、右上、右下、左下。用来看斜着的平面实际落在哪儿。
 - `opacity`：从根到该元素逐层相乘后的透明度。
 - `inline`：带 `id` 的行内标签才有，为 true。`box` 和 `ink` 都是这段文字变换后的外接矩形，见第 5 章。不参与安全区、最小字号和文字重叠检查。
@@ -734,6 +758,9 @@ registerFilter({
 | `invalid-attr` | warn | 属性放错了位置，或两种写法混用。和已知属性编辑距离不超过 2 的名字也记在这里，`hint` 给出正确写法；候选按标签收窄，过短或没有共同开头的不推荐。其余不认识的属性名不报，留给 `draw`。`style` 里不支持或写错的声明也记在这里。`anchor` 写错、路径 `d` 无法解析同样是这个码；路径失败时跳过这一笔，不中断整张图 |
 | `invalid-child` | warn | 非法子元素：线条或 `g` 放进 flex 容器，文字盒子（`h1`–`h3`、`p`、`span`，以及只含文字的 `div`）里放了 `h1`–`h3`、`p`、`div`、`layer`、`g` 或 `math`，`mask` 放错位置或一层写了多个。含这些子元素的 `div` 按块级竖排，不报这条。文字盒子里的 `<img>` 跟文字排在同一段里，不报这条 |
 | `empty-mask` | warn | `mask` 里没有可用的形状或图片，不生效 |
+| `mask-op-noop` | warn | 蒙版的某一步没有改变选区。`changed` 为 0 |
+| `missing-mask` | error | `derive` 的缓存不存在，或 `src` 不是本地图片，或缓存文件读不了 |
+| `stale-mask` | warn | 缓存还在，但原图哈希和 `*.cutout.json` 里的 `srcHash` 对不上。先按现有文件画 |
 | `invalid-draw` | error / warn | `<draw>` 语法错误或运行出错（error），或内容为空（warn）。运行出错带上源码位置，其余内容照常绘制 |
 | `missing-image` | warn | `img` 的 `src` 读不到 |
 | `missing-icon` | warn | `class="material-symbols-outlined"`（或 `font-family` 指到 `Symbols`）里的名字不是 Material Symbols 的图标名 |
@@ -773,9 +800,13 @@ flexlayer render scene.tsx --frames out/ --from 0 --to 90        # 边渲染边�
 flexlayer render scene.tsx --rgba -                              # 原始像素写到标准输出
 flexlayer check scene.tsx --frames 120-300 --step 5              # 检查这一段，每 5 帧一抽
 flexlayer check scene.tsx --frames all                           # 检查每一帧
+flexlayer render scene.layer --preview out.png                  # 按 <preview> 另写一张选区拼图
+flexlayer select cutout photo.jpg --preset portrait             # 转给 flexlayer-select。没安装时提示安装命令
 ```
 
 `.tsx`、`.jsx`、`.ts`、`.js` 会先执行，并做类型检查，类型错误记为 `type-error`。标准库和 Node 的类型由渲染器自带，不依赖文件旁边的 `node_modules`。`import ... from 'node:fs'` 可以类型检查。不认识的属性名和 `.layer` 一样保留给 `draw`，不算 `type-error`。属性放错位置同样由检查报 `invalid-attr`，不记成类型错误。`import './x.tsx'` 这种带扩展名的引用可以通过。有类型错误时仍然出图，退出码为 1。文件里写 `/** @jsxImportSource flexlayer */`，标签和属性与 `.layer` 相同。默认导出一个 `<layer>` 节点，或返回该节点的函数。命名导出 `composition`（或默认导出）可以是第 13 章的 `Composition`。执行结果是同一棵节点树，后面的布局、问题码和绘制都不变。推荐用 `canvas.create(<layer>…</layer>)` 量好再摆。`create` 是同步的，准备在进程里记住，多帧不会重新开始。见第 15 章。`check` 在没有 `--frame` 和 `--frames` 时抽查第 0 帧、中间一帧和最后一帧。`--frames all` 检查每一帧，`--frames 120-300` 检查这一段（含两端），`--frames 12` 只检查这一帧，`--step N` 是步长。`--emit` 把树写回 `.layer`；`draw` 函数若用了外部变量，记 `emit-draw`，并且不写出 `<draw>`。帧数超过 300 且没有 `--frame`、`--frames` 或 `--rgba` 时不渲染联系表。`--frames <目录>` 边渲染边写 `frame-0000.png` 这种文件，文件名是帧号。`--from`、`--to` 含端点。`--rgba -` 按帧把不预乘的原始像素连续写到标准输出，日志改走标准错误，并在标准错误打出一行 `ffmpeg -f rawvideo -pix_fmt rgba -s WxH -r fps -i -`。`--rgba` 后面写成文件路径时，像素写入该文件。flexlayer 不调用 ffmpeg。多帧渲染打印的问题是全部帧合并后的结果。
+
+`--preview` 只用于单帧。文档里没有 `<preview>` 时报错，不改已经写出的成片。`flexlayer select` 把后面的参数转给 `flexlayer-select`，见第 6 章。
 
 默认字体寒蝉端黑体，以及 [docs/RESOURCES.md](docs/RESOURCES.md) 里的其它字体，首次使用时自动下载到 `~/.cache/flexlayer/fonts`。
 
@@ -935,7 +966,7 @@ for await (const { frame, png, report } of renderFrames(scene, { from: 0, to: 30
 | `id` | 写了 `id` 才有 |
 | `box` | 布局盒，字段是 `left`、`top`、`right`、`bottom`、`width`、`height`。不含这一元素自己的 `rotate` |
 | `ink` | 这一元素自己的 `rotate`、`scale` 之后的外接矩形，字段和 `box` 相同。线条含描边。没有旋转、缩放和描边外扩时与 `box` 重合。`layer` 的 `ink` 是子树着墨。`flex` 的 `ink` 是 padding 里面的内容区 |
-| `mask` | 写了 `<mask>` 的 `layer` 才有。`area`、`pieces`、`softEdge` 和报告里的 `mask` 相同（第 10 章）。`ink` 是留下来的部分的外接矩形，字段和 `box` 相同，全部藏起来时是 `null` |
+| `mask` | 写了 `<mask>` 的 `layer` 才有。`area`、`pieces`、`softEdge`、`ops` 和报告里的 `mask` 相同（第 10 章）。`ink` 是留下来的部分的外接矩形，字段和 `box` 相同，全部藏起来时是 `null` |
 
 根层自己写了 `<mask>` 时，返回值上也有 `mask`，字段同上，坐标和 `elements` 同一套。和 `glyph()` 一样，这些数来自先画出来的结果：蒙版先画成位图再量，所以图片的 alpha、渐变和形状的 `rotate` 都算在里面。
 
