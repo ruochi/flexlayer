@@ -1223,8 +1223,8 @@ function readMeshLines(node: FvgNode, ctx: LayoutContext): { stroke: string; str
   return { stroke, strokeWidth, hidden }
 }
 
-const MESH_MATERIALS = new Set(['plastic', 'metal', 'glass'])
-const MESH_ROUGHNESS = { plastic: 0.4, metal: 0.25, glass: 0.08 }
+const MESH_MATERIALS = new Set(['matte', 'plastic', 'metal', 'glass'])
+const MESH_ROUGHNESS = { matte: 1, plastic: 0.4, metal: 0.25, glass: 0.08 }
 
 function readMeshMaterial(raw: string | undefined, ctx: LayoutContext, tag: string): MeshMaterial | undefined {
   if (raw == null) return undefined
@@ -1238,7 +1238,7 @@ function readMeshMaterial(raw: string | undefined, ctx: LayoutContext, tag: stri
       code: 'invalid-attr',
       path: ctx.pathPrefix,
       message: `${tag} 不认识的 material: ${raw.trim()}`,
-      hint: '写成 plastic、metal 或 glass，粗糙度跟在后面，例如 material="metal 0.35"',
+      hint: '写成 matte、plastic、metal 或 glass。不写是磨砂。粗糙度跟在后面，例如 material="metal 0.35"',
     })
     return undefined
   }

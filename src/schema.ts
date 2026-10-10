@@ -166,7 +166,7 @@ export const ATTRS: AttrDef[] = [
   { name: 'fill', docGroup: 'graphic' },
   { name: 'stroke', docGroup: 'graphic' },
   { name: 'hidden', docGroup: 'graphic' },
-  { name: 'material', docGroup: 'graphic', syntax: 'plastic | metal | glass [roughness]', example: 'metal 0.35' },
+  { name: 'material', docGroup: 'graphic', syntax: 'matte | plastic | metal | glass [roughness]', example: 'metal 0.35' },
   { name: 'transform', docGroup: 'graphic' },
   { name: 'src', docGroup: 'image' },
   { name: 'data', docGroup: 'data', jsxType: 'unknown', example: '{"values":[3,5,8]}' },

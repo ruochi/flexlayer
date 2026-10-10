@@ -218,7 +218,7 @@ export namespace JSX {
         'stroke-width'?: number | string
         /** 被这只球自己挡住的棱。要和 stroke 一起写 */
         hidden?: string
-        /** plastic、metal、glass，可跟 0 到 1 的粗糙度 */
+        /** matte、plastic、metal、glass。不写是磨砂。粗糙度跟在名字后面 */
         material?: string
         rotate?: number | string
         rotateX?: number | string
@@ -242,7 +242,7 @@ export namespace JSX {
         stroke?: string
         'stroke-width'?: number | string
         hidden?: string
-        /** plastic、metal、glass，可跟 0 到 1 的粗糙度 */
+        /** matte、plastic、metal、glass。不写是磨砂。粗糙度跟在名字后面 */
         material?: string
         rotate?: number | string
         rotateX?: number | string
@@ -261,7 +261,7 @@ export namespace JSX {
         stroke?: string
         'stroke-width'?: number | string
         hidden?: string
-        /** plastic、metal、glass，可跟 0 到 1 的粗糙度 */
+        /** matte、plastic、metal、glass。不写是磨砂。粗糙度跟在名字后面 */
         material?: string
         rotate?: number | string
         rotateX?: number | string
@@ -279,7 +279,7 @@ export namespace JSX {
         stroke?: string
         'stroke-width'?: number | string
         hidden?: string
-        /** plastic、metal、glass，可跟 0 到 1 的粗糙度 */
+        /** matte、plastic、metal、glass。不写是磨砂。粗糙度跟在名字后面 */
         material?: string
         rotate?: number | string
         rotateX?: number | string

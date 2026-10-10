@@ -469,9 +469,9 @@ export type MeshSpec =
   | { type: 'tube'; d: string; r: number }
   | { type: 'model'; src: string; file?: string; span?: { x: number; y: number; z: number } }
 
-/** 网格表面。不写时仍是主光乘 fill。粗糙度 0 到 1，越大高光和反射越散。 */
+/** 网格表面。不写时是 matte：磨砂塑料，主光乘 fill，没有高光。粗糙度 0 到 1，越大高光和反射越散。磨砂不看粗糙度。 */
 export type MeshMaterial = {
-  kind: 'plastic' | 'metal' | 'glass'
+  kind: 'matte' | 'plastic' | 'metal' | 'glass'
   roughness: number
 }
 

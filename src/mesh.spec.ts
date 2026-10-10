@@ -371,7 +371,32 @@ describe('网格绘制', () => {
     expect(messages.some((message) => message.includes('hidden 只写在网格上'))).toBe(true)
   })
 
-  it('塑料高光比原来的明暗更亮，背光一面仍暗', async () => {
+  it('matte 是默认磨砂，和没写 material 是同一张图', async () => {
+    const paint = (material: string) =>
+      renderFvg(
+        `<layer width="180" height="180" background="#101010" perspective="700"><sphere cx="90" cy="90" r="50" fill="#888888"${material} /></layer>`,
+      )
+    const plain = await imageOf((await paint('')).png)
+    const matte = await imageOf((await paint(' material="matte"')).png)
+    const rough = await imageOf((await paint(' material="matte 0.2"')).png)
+    let mismatch = 0
+    for (let y = 0; y < plain.height; y++) {
+      for (let x = 0; x < plain.width; x++) {
+        const a = plain.at(x, y)
+        const b = matte.at(x, y)
+        const c = rough.at(x, y)
+        if (a[0] !== b[0] || a[1] !== b[1] || a[2] !== b[2] || a[3] !== b[3]) mismatch++
+        if (a[0] !== c[0] || a[1] !== c[1] || a[2] !== c[2] || a[3] !== c[3]) mismatch++
+      }
+    }
+    expect(mismatch).toBe(0)
+    const named = await checkFvg(
+      `<layer width="120" height="120" perspective="400"><sphere cx="60" cy="60" r="20" fill="#fff" material="matte" /></layer>`,
+    )
+    expect(named.issues.filter((issue) => issue.code === 'invalid-attr')).toEqual([])
+  }, 30000)
+
+  it('塑料高光比磨砂更亮，背光一面仍暗', async () => {
     const paint = (material: string) =>
       renderFvg(
         `<layer width="180" height="180" background="#101010" perspective="700"><sphere cx="90" cy="90" r="50" fill="#888888"${material} /></layer>`,
@@ -389,13 +414,13 @@ describe('网格绘制', () => {
       renderFvg(
         `<layer width="180" height="180" background="#101010" perspective="700"><sphere cx="90" cy="90" r="50" fill="#cc2222"${material} /></layer>`,
       )
-    const lambert = await imageOf((await paint('')).png)
+    const matte = await imageOf((await paint(' material="matte"')).png)
     const metal = await imageOf((await paint(' material="metal 0.2"')).png)
     const lum = (image: ImageSample, x: number, y: number) => image.at(x, y).reduce((sum, channel, index) => (index < 3 ? sum + channel : sum), 0)
     const metalSpan = lum(metal, 90, 70) - lum(metal, 90, 110)
-    const lambertSpan = lum(lambert, 90, 70) - lum(lambert, 90, 110)
-    expect(metalSpan).toBeGreaterThan(lambertSpan + 40)
-    expect(lum(metal, 90, 110)).toBeLessThan(lum(lambert, 90, 110) - 40)
+    const matteSpan = lum(matte, 90, 70) - lum(matte, 90, 110)
+    expect(metalSpan).toBeGreaterThan(matteSpan + 40)
+    expect(lum(metal, 90, 110)).toBeLessThan(lum(matte, 90, 110) - 40)
     const peak = brightest(metal)
     expect(peak.rgba[0]).toBeGreaterThan(peak.rgba[1]! + 40)
   }, 30000)

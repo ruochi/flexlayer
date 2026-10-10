@@ -18,7 +18,7 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
  * glb 用文件里的底色乘这套明暗。
  * 写了 stroke 时，缩小抗锯齿之后再按屏幕像素描折棱和轮廓。
  * hidden 只画被这只网格自己挡住的棱，虚线是 6 实 4 空。
- * material 在这套明暗上加塑料高光、金属反射或玻璃叠色。天空渐变是固定的。
+ * 不写 material 时是磨砂：主光乘 fill。plastic 加高光，metal 反射固定天空，glass 后画叠色。
  */
 
 const MAX_RASTER_SIDE = 8192
@@ -76,7 +76,7 @@ type Batch = {
   doubleSided: boolean
   shaded: boolean
   depthWrite: boolean
-  /** lambert 是原来的明暗。glass 不写主光阴影，半透明时不写深度。 */
+  /** lambert 是默认磨砂（matte）和平面的明暗。glass 不写主光阴影，半透明时不写深度。 */
   material: 'lambert' | 'plastic' | 'metal' | 'glass'
   roughness: number
   texture: Uint8ClampedArray | null
@@ -1911,6 +1911,12 @@ function planeBatch(plane: SoftwareMeshInput['planes'][number], raster: Software
   }
 }
 
+/** 磨砂和没写 material 走同一套明暗。平面也用这套。 */
+function shadeMaterial(kind: NonNullable<MeshLayoutNode['material']>['kind'] | undefined): Batch['material'] {
+  if (!kind || kind === 'matte') return 'lambert'
+  return kind
+}
+
 export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
   const { layer, perspective, meshes, planes, scale, raster } = input
   const batches: Batch[] = []
@@ -1936,7 +1942,7 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
           doubleSided: prim.doubleSided,
           shaded: true,
           depthWrite: node.material?.kind === 'glass' && prim.color[3] < 255 ? false : prim.color[3] >= 255,
-          material: node.material?.kind ?? 'lambert',
+          material: shadeMaterial(node.material?.kind),
           roughness: node.material?.roughness ?? 1,
           texture: null,
           tw: 0,
@@ -1967,7 +1973,7 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
       doubleSided: node.mesh.type === 'extrude',
       shaded: !fillNone,
       depthWrite: glass && a < 255 ? false : fillNone || a >= 255,
-      material: node.material?.kind ?? 'lambert',
+      material: shadeMaterial(node.material?.kind),
       roughness: node.material?.roughness ?? 1,
       texture: null,
       tw: 0,

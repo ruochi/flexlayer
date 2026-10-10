@@ -325,7 +325,7 @@ export function suggestAttrs(raw: string, node?: FvgNode): string[] {
   return suggestNames(raw, node ? attrCandidates(node) : KNOWN_ATTRS)
 }
 
-/** `material` 是网格的塑料、金属或玻璃，不写在平面上。层上的 `glass` 仍是透镜。 */
+/** `material` 是网格的磨砂、塑料、金属或玻璃，不写在平面上。层上的 `glass` 仍是透镜。 */
 export function materialAttrIssues(node: FvgNode, path: string): Issue[] {
   if (!present(node.attrs, 'material')) return []
   if (isMeshTag(node.tag)) return []
@@ -335,7 +335,7 @@ export function materialAttrIssues(node: FvgNode, path: string): Issue[] {
       'invalid-attr',
       path,
       'material 只写在网格上',
-      'sphere、box、extrude、model 用 plastic、metal 或 glass，例如 material="metal 0.35"',
+      '网格用 matte、plastic、metal 或 glass。不写是磨砂，例如 material="metal 0.35"',
     ),
   ]
 }
