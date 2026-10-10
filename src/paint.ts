@@ -198,32 +198,29 @@ function samePaint(a: string | undefined, b: string | undefined): boolean {
   return (a ?? '').trim() === (b ?? '').trim()
 }
 
-/**
- * 文字盒子上的颜色，包括从外层继承来的，按整个盒子取样。
- * 行内标签自己的颜色按这一段在本行上的行盒取样，汉字和英文单词不各自重开一段。
- */
-function textColorBox(node: TextLayoutNode, color: string, fragment: PaintBox): PaintBox {
-  const computed = node.computed.color?.trim()
-  if (computed && samePaint(computed, color) && node.width > 0 && node.height > 0) {
+/** 写在文字盒子上的 fill 按整段盒子取样；行内自己的 fill 用调用方给出的行盒。 */
+function textPaintBox(node: TextLayoutNode, paint: string, fragment: PaintBox): PaintBox {
+  const declared = node.style.fill?.trim()
+  if (declared && samePaint(declared, paint) && node.width > 0 && node.height > 0) {
     return { x: node.x, y: node.y, width: node.width, height: node.height }
   }
   return fragment
 }
 
 function runBox(
-  segments: Array<{ x: number; width: number; style: { color: string; background?: string } }>,
+  segments: Array<{ x: number; width: number; style: { color: string; background?: string; fill?: string } }>,
   index: number,
-  key: 'color' | 'background',
+  valueAt: (style: { color: string; background?: string; fill?: string }) => string | undefined,
   contentX: number,
   offsetX: number,
   lineTop: number,
   lineHeight: number,
 ): PaintBox {
-  const value = segments[index]!.style[key]
+  const value = valueAt(segments[index]!.style)
   let start = index
-  while (start > 0 && samePaint(segments[start - 1]!.style[key], value)) start--
+  while (start > 0 && samePaint(valueAt(segments[start - 1]!.style), value)) start--
   let end = index + 1
-  while (end < segments.length && samePaint(segments[end]!.style[key], value)) end++
+  while (end < segments.length && samePaint(valueAt(segments[end]!.style), value)) end++
   let minX = Infinity
   let maxX = -Infinity
   for (let i = start; i < end; i++) {
@@ -340,8 +337,8 @@ function drawTextNode(ctx: CanvasRenderingContext2D, node: TextLayoutNode, inkCo
     for (let segIndex = 0; segIndex < line.segments.length; segIndex++) {
       const seg = line.segments[segIndex]!
       const x = contentX + offsetX + seg.x
-      const colorRun = runBox(line.segments, segIndex, 'color', contentX, offsetX, lineTop, line.height)
-      const backgroundRun = runBox(line.segments, segIndex, 'background', contentX, offsetX, lineTop, line.height)
+      const glyphRun = runBox(line.segments, segIndex, (style) => style.fill?.trim() || style.color, contentX, offsetX, lineTop, line.height)
+      const backgroundRun = runBox(line.segments, segIndex, (style) => style.background, contentX, offsetX, lineTop, line.height)
       const background = seg.style.background
       if (!inkColor && background && background !== 'transparent' && background !== 'none' && seg.width > 0 && line.height > 0) {
         ctx.fillStyle = paintOf(ctx, background, backgroundRun.x, backgroundRun.y, backgroundRun.width, backgroundRun.height)
@@ -350,8 +347,8 @@ function drawTextNode(ctx: CanvasRenderingContext2D, node: TextLayoutNode, inkCo
       if (!seg.text) continue
       applyCanvasFont(ctx, seg.style.fontFamily, seg.style.fontWeight, seg.style.fontSize, seg.style.fontStyle)
       ctx.letterSpacing = `${seg.style.letterSpacing}px`
-      const color = inkColor ?? seg.style.color
-      const box = inkColor ? colorRun : textColorBox(node, seg.style.color, colorRun)
+      const color = inkColor ?? seg.style.fill ?? seg.style.color
+      const box = inkColor ? glyphRun : textPaintBox(node, color, glyphRun)
       fillTextPaint(ctx, seg.text, x, contentY + line.baselineY, color, box, seg.style.fontSize)
       if (seg.style.underline) {
         const y = contentY + line.baselineY + Math.max(1, seg.style.fontSize * 0.12)
@@ -1444,11 +1441,11 @@ function drawInkMask(ctx: PaintCtx, node: LayoutNode, isTop: boolean) {
 
 /**
  * 阴影 / 光晕的轮廓 = 本体 ∪ 外侧描边，再按 spread 胀缩。
- * Layer / flex 上的描边先合并子树再膨胀，重叠的字不会各留一圈。
+ * layer、flex、g 上的描边先合并子树再膨胀，重叠的字不会各留一圈。
  */
 function drawEffectInk(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: number, state?: PaintState) {
   const extra = outerInkStrokeReach(node.inkStroke)
-  if ((node.kind === 'layer' || node.kind === 'flex') && extra > 0) {
+  if ((node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') && extra > 0) {
     const bounds = groupInkBounds(node)
     if (!bounds) return
     paintDilatedInk(ctx as PaintCtx, spread + extra, SILHOUETTE, bounds, (octx) => drawInkMask(octx, node, true))
@@ -1491,7 +1488,7 @@ function paintInkStrokes(
   if (!layers?.length) return
   const bands = collectStrokeBands(layers, phase)
   if (bands.length === 0) return
-  const subtree = node.kind === 'layer' || node.kind === 'flex'
+  const subtree = node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group'
   const base = source?.bounds ?? (subtree ? groupInkBounds(node) : leafInkBounds(node))
   if (!base || base.width <= 0 || base.height <= 0) return
   const reach = phase === 'outer' ? outerInkStrokeReach(layers) : 2

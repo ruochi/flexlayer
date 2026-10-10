@@ -507,7 +507,7 @@ describe('mask', () => {
   it('蒙版层自己的描边和阴影跟着留下的轮廓，父层也一样', async () => {
     const sticker = await renderFvg(`
       <layer width="140" height="110" background="#000000">
-        <layer x="20" y="20" width="70" height="60" ink-stroke="6 #ffffff">
+        <layer x="20" y="20" width="70" height="60" stroke="6 #ffffff">
           <mask><circle cx="35" cy="30" r="18" /></mask>
           <rect x="0" y="0" width="70" height="60" fill="#2244ff" />
         </layer>
@@ -538,7 +538,7 @@ describe('mask', () => {
     expect(rectCast[0]).toBeLessThan(30)
 
     const parent = await renderFvg(`
-      <layer width="160" height="120" background="#000000" ink-stroke="6 #ff0000">
+      <layer width="160" height="120" background="#000000" stroke="6 #ff0000">
         <layer x="20" y="20" width="80" height="60">
           <mask><circle cx="40" cy="30" r="20" /></mask>
           <rect x="0" y="0" width="80" height="60" fill="#ffffff" />

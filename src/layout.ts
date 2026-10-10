@@ -19,6 +19,7 @@ import { classAttr, ICON_FONT_FAMILY, symbolsClassOf } from './icons.js'
 import { materialize } from './components.js'
 import { catmullRomPath } from './curve.js'
 import { isGradient, parseGradient, solidPaint } from './gradient.js'
+import { isGradientPaint } from './gradientField.js'
 import { glbSpan, resolveModelFile } from './glb.js'
 import { readBoxFillet, readCylinderFillet } from './mesh-round.js'
 import { openSvgPath, translateSvgPath } from './path.js'
@@ -32,6 +33,7 @@ import {
   parseGlass,
   parseGlow,
   parseInkStroke,
+  strokeTakesInk,
   parseNoise,
   parseLineHeight,
   parseLetterSpacing,
@@ -190,6 +192,9 @@ function track(ctx: LayoutContext, path: string, node: FvgNode) {
 }
 
 const DEFAULT_SHADOW_COLOR = '#00000066'
+/** 文字、图片、layer 只写了颜料、没写宽度时，沿墨迹外侧描这么宽。 */
+const INK_PAINT_WIDTH = 4
+const STROKE_HINT = '写成 6 #000 outside，或 stroke="#000" stroke-width="6"'
 
 type EffectFields = {
   shadow?: ShadowSpec
@@ -230,7 +235,61 @@ function pushFilterIssues(ctx: LayoutContext, issues: FilterIssue[]) {
   }
 }
 
-function readEffects(src: EffectSource, ctx: LayoutContext, glowColor: string): EffectFields {
+function rejectLegacyInkStroke(src: EffectSource, ctx: LayoutContext) {
+  const legacy = src['ink-stroke']
+  if (legacy == null || legacy.trim() === '' || legacy.trim().toLowerCase() === 'none') return
+  ctx.issues.push({
+    level: 'warn',
+    code: 'invalid-attr',
+    path: ctx.pathPrefix,
+    message: 'ink-stroke 已并入 stroke',
+    hint: '改成 stroke="6 #000 outside"。文字写 style="stroke:6 #000 outside"',
+  })
+}
+
+function readStrokeEffect(src: EffectSource, ctx: LayoutContext, out: EffectFields, mode: 'geometric' | 'ink' | 'mesh') {
+  rejectLegacyInkStroke(src, ctx)
+  const raw = src.stroke
+  if (raw == null || raw.trim() === '' || raw.trim().toLowerCase() === 'none') return
+  if (mode === 'mesh') {
+    if (strokeTakesInk(raw)) warnInvalid(ctx, 'stroke', raw, '网格的 stroke 是折线颜色，例如 stroke="#1c1915" stroke-width="2"')
+    return
+  }
+  const parsed = parseInkStroke(raw)
+  if (parsed) {
+    const badGradient = parsed.some((layer) => isGradient(layer.color) && !parseGradient(layer.color))
+    if (badGradient) warnInvalid(ctx, 'stroke', raw, STROKE_HINT)
+    else out.inkStroke = parsed
+    return
+  }
+  if (strokeTakesInk(raw)) {
+    warnInvalid(ctx, 'stroke', raw, STROKE_HINT)
+    return
+  }
+  if (mode !== 'ink') return
+  if (isGradient(raw) && !parseGradient(raw)) {
+    warnInvalid(ctx, 'stroke', raw, STROKE_HINT)
+    return
+  }
+  const widthRaw = src['stroke-width']
+  let width = INK_PAINT_WIDTH
+  if (widthRaw != null && widthRaw.trim() !== '') {
+    const parsedWidth = parsePx(widthRaw)
+    if (parsedWidth == null || parsedWidth < 0) {
+      warnInvalid(ctx, 'stroke-width', widthRaw, '写成 6 或 6px')
+      return
+    }
+    width = parsedWidth
+  }
+  if (width > 0) out.inkStroke = [{ width, color: raw.trim(), position: 'outside' }]
+}
+
+function readEffects(
+  src: EffectSource,
+  ctx: LayoutContext,
+  glowColor: string,
+  strokeMode: 'geometric' | 'ink' | 'mesh' = 'geometric',
+): EffectFields {
   const out: EffectFields = {}
   const shadowRaw = src.shadow
   const parsedShadow = parseShadow(shadowRaw)
@@ -261,15 +320,7 @@ function readEffects(src: EffectSource, ctx: LayoutContext, glowColor: string): 
     warnInvalid(ctx, 'inner-glow', innerGlowRaw, '写成 24 #f3ead4，顺序是 blur spread color')
   }
 
-  const inkRaw = src['ink-stroke']
-  const parsedInk = parseInkStroke(inkRaw)
-  if (parsedInk) {
-    const badGradient = parsedInk.some((layer) => isGradient(layer.color) && !parseGradient(layer.color))
-    if (badGradient) warnInvalid(ctx, 'ink-stroke', inkRaw!, '写成 6 #000 outside')
-    else out.inkStroke = parsedInk
-  } else if (inkRaw && inkRaw.trim() !== 'none') {
-    warnInvalid(ctx, 'ink-stroke', inkRaw, '写成 6 #000 outside')
-  }
+  readStrokeEffect(src, ctx, out, strokeMode)
 
   const blurRaw = src.blur
   const parsedBlur = parseBlurRadius(blurRaw)
@@ -418,6 +469,62 @@ function scalePair(raw: string | undefined): { scaleX: number; scaleY: number } 
   return { scaleX: scale.x, scaleY: scale.y }
 }
 
+/** `color` / `background-color` 只收纯色。渐变返回 undefined，并报 invalid-attr。 */
+function solidColor(raw: string | undefined, ctx: LayoutContext, label: string): string | undefined {
+  const value = raw?.trim()
+  if (!value) return undefined
+  if (!isGradient(value)) return value
+  ctx.issues.push({
+    level: 'warn',
+    code: 'invalid-attr',
+    path: ctx.pathPrefix,
+    message: `${label} 只收纯色`,
+    hint:
+      label === 'background-color'
+        ? '渐变写 background: linear-gradient(to right, #ff0000, #0000ff)'
+        : '写成 #112233。字形渐变写 fill: linear-gradient(to right, #ff0000, #0000ff)',
+  })
+  return undefined
+}
+
+/**
+ * HTML `background` 收纯色和 CSS 渐变。`background-color` 只收纯色。
+ * 矩阵 `gradient()` 不进这两个属性。
+ */
+function cssBackground(style: Record<string, string>, ctx: LayoutContext): string | undefined {
+  const shorthand = style.background?.trim()
+  if (shorthand) {
+    if (isGradientPaint(shorthand)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `background 不收矩阵渐变: ${shorthand}`,
+        hint: '盒子用 linear-gradient(...) 或 radial-gradient(...)。矩阵渐变写 fill',
+      })
+      return undefined
+    }
+    if (isGradient(shorthand) && !parseGradient(shorthand)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `无法解析 background: ${shorthand}`,
+        hint: '写成 #ffe08a，或 linear-gradient(to right, #ff0000, #0000ff)',
+      })
+      return undefined
+    }
+    return shorthand
+  }
+  return solidColor(style['background-color'], ctx, 'background-color')
+}
+
+function applyCssBackground(appearance: { background?: string }, style: Record<string, string>, ctx: LayoutContext) {
+  const background = cssBackground(style, ctx)
+  if (background) appearance.background = background
+  else delete appearance.background
+}
+
 function readHtmlAppearance(style: Record<string, string>) {
   return {
     padding: parseEdges(style.padding) ?? ZERO_EDGES,
@@ -482,7 +589,8 @@ function inheritTextContext(ctx: LayoutContext, tag: string, style: Record<strin
   const next: LayoutContext = { ...ctx }
   const family = style['font-family']?.trim()
   if (family) next.fontFamily = family
-  if (style.color?.trim()) next.color = style.color.trim()
+  const color = solidColor(style.color, ctx, 'color')
+  if (color) next.color = color
   const fontSize = parsePx(style['font-size'])
   if (fontSize != null) next.fontSize = fontSize
   else if (isHeadingTag(tag)) next.fontSize = defaultFontSizeForTag(tag)
@@ -502,7 +610,7 @@ function withLayerText(ctx: LayoutContext, node: FvgNode): LayoutContext {
   const next: LayoutContext = { ...ctx }
   const family = node.attrs['font-family']?.trim()
   if (family) next.fontFamily = family
-  const color = node.attrs.color?.trim()
+  const color = solidColor(node.attrs.color, ctx, 'color')
   if (color) next.color = color
   const fontSize = parsePx(node.attrs['font-size'])
   if (fontSize != null) next.fontSize = fontSize
@@ -526,7 +634,8 @@ function computeDrawStyle(node: FvgNode, ctx: LayoutContext, style: Record<strin
       ? 700
       : ctx.fontWeight ?? (isTextBoxTag(node.tag) ? defaultFontWeightForTag(tag) : 400))
   const fontFamily = style['font-family']?.trim() || ctx.fontFamily
-  const color = style.color ?? ctx.color
+  const fromStyle = style.color?.trim()
+  const color = fromStyle && !isGradient(fromStyle) ? fromStyle : isGradient(ctx.color) ? '#111111' : ctx.color
   const opacity = isHtmlTag(node.tag) ? parseNumber(style.opacity) ?? 1 : parseNumber(node.attrs.opacity) ?? 1
   return { color, fontFamily, fontSize, fontWeight, opacity }
 }
@@ -577,7 +686,7 @@ function layoutCustomDraw(node: FvgNode, ctx: LayoutContext): CustomLayoutNode |
     height: h,
     ink: { x: 0, y: 0, width: w, height: h },
     ...appearance,
-    ...readEffects(node.attrs, ctx, solidPaint(appearance.background, ctx.color)),
+    ...readEffects(node.attrs, ctx, solidPaint(appearance.background, ctx.color), 'ink'),
     ...layoutDrawMeta(node, ctx),
   }
 }
@@ -755,29 +864,64 @@ function normalizeLineGeometry(geom: LineGeometry, box: Box): LineGeometry {
 function sanitizeTextPaints(segments: TextSegment[], ctx: LayoutContext): TextSegment[] {
   return segments.map((seg) => {
     let color = seg.style.color
+    let fill = seg.style.fill
     let background = seg.style.background
-    if (isGradient(color) && !parseGradient(color)) {
+    const prop = seg.style.backgroundProp
+    if (isGradient(color)) {
       ctx.issues.push({
         level: 'warn',
         code: 'invalid-attr',
         path: ctx.pathPrefix,
-        message: `无法解析 color: ${color}`,
-        hint: '写成 #112233，或 linear-gradient(to right, #ff0000, #0000ff)',
+        message: `color 只收纯色: ${color}`,
+        hint: '写成 #112233。字形渐变写 fill: linear-gradient(to right, #ff0000, #0000ff)',
       })
-      color = ctx.color
+      color = isGradient(ctx.color) ? '#111111' : ctx.color
     }
-    if (background && background !== 'transparent' && background !== 'none' && isGradient(background) && !parseGradient(background)) {
+    if (fill && isGradient(fill) && !parseGradient(fill)) {
       ctx.issues.push({
         level: 'warn',
         code: 'invalid-attr',
         path: ctx.pathPrefix,
-        message: `无法解析 background: ${background}`,
-        hint: '写成 #ffe08a，或 linear-gradient(to right, #ff0000, #0000ff)',
+        message: `无法解析 fill: ${fill}`,
+        hint: '写成 #112233、linear-gradient(to right, #ff0000, #0000ff)，或 gradient(#112233, #ff8800)',
       })
-      background = undefined
+      fill = undefined
     }
-    if (color === seg.style.color && background === seg.style.background) return seg
+    if (background && background !== 'transparent' && background !== 'none') {
+      if (prop === 'background-color' && isGradient(background)) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: ctx.pathPrefix,
+          message: `background-color 只收纯色: ${background}`,
+          hint: '渐变写 background: linear-gradient(to right, #ff0000, #0000ff)',
+        })
+        background = undefined
+      } else if (isGradientPaint(background)) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: ctx.pathPrefix,
+          message: `background 不收矩阵渐变: ${background}`,
+          hint: '盒子用 linear-gradient(...) 或 radial-gradient(...)。矩阵渐变写 fill',
+        })
+        background = undefined
+      } else if (isGradient(background) && !parseGradient(background)) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: ctx.pathPrefix,
+          message: `无法解析 background: ${background}`,
+          hint: '写成 #ffe08a，或 linear-gradient(to right, #ff0000, #0000ff)',
+        })
+        background = undefined
+      }
+    }
+    if (color === seg.style.color && fill === seg.style.fill && background === seg.style.background && !prop) return seg
     const style = { ...seg.style, color }
+    delete style.backgroundProp
+    if (fill) style.fill = fill
+    else delete style.fill
     if (background) style.background = background
     else delete style.background
     return { ...seg, style }
@@ -795,7 +939,8 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
     parseFontWeight(style['font-weight']) ??
     (isHeadingTag(tag) || tag === 'strong' || tag === 'b' ? 700 : ctx.fontWeight ?? defaultFontWeightForTag(tag))
   const fontFamily = style['font-family']?.trim() || (symbols ? ICON_FONT_FAMILY : ctx.fontFamily)
-  const color = readPaint(style.color ?? ctx.color, ctx.color, ctx, 'color')
+  const declaredColor = style.color?.trim()
+  const color = declaredColor && !isGradient(declaredColor) ? declaredColor : isGradient(ctx.color) ? '#111111' : ctx.color
   const letterSpacing = parseLetterSpacing(style['letter-spacing'], fontSize) ?? ctx.letterSpacing ?? 0
   const images: ImageLayoutNode[] = []
   const segments = extractTextSegments(
@@ -843,6 +988,7 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
   const lineHeightRatio = specifiedLine == null ? fallbackRatio : specifiedLine.unit === 'ratio' ? specifiedLine.value : fontSize > 0 ? specifiedLine.value / fontSize : fallbackRatio
 
   const appearance = readHtmlAppearance(style)
+  applyCssBackground(appearance, style, ctx)
   const innerPadX = appearance.padding.left + appearance.padding.right + (appearance.border?.width ?? 0) * 2
   const innerPadY = appearance.padding.top + appearance.padding.bottom + (appearance.border?.width ?? 0) * 2
 
@@ -912,7 +1058,7 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
     textLayout,
     textAlign,
     ...(images.length ? { inlines: images } : {}),
-    ...readEffects(style, ctx, color),
+    ...readEffects(style, ctx, color, 'ink'),
     ...layoutDrawMeta(node, ctx),
   }
 }
@@ -943,7 +1089,7 @@ function layoutImage(node: FvgNode, ctx: LayoutContext): ImageLayoutNode {
   warnNestedMasks(node, ctx)
   const style = parseStyle(node.attrs.style)
   const appearance = readHtmlAppearance(style)
-  if (appearance.background) appearance.background = readPaint(appearance.background, 'transparent', ctx, 'background')
+  applyCssBackground(appearance, style, ctx)
   if (isDisplayFlex(node.attrs.style)) {
     ctx.issues.push({
       level: 'warn',
@@ -1042,7 +1188,7 @@ function layoutImage(node: FvgNode, ctx: LayoutContext): ImageLayoutNode {
       objectPosition,
       ...maskImageFields(node, ctx),
       ...appearance,
-      ...readEffects(style, ctx, ctx.color),
+      ...readEffects(style, ctx, ctx.color, 'ink'),
       ...layoutDrawMeta(node, ctx),
     },
     0,
@@ -1097,9 +1243,10 @@ function layoutShape(node: FvgNode, ctx: LayoutContext, _defaultStroke: string):
   }
   const fillFallback = ctx.fillDefault ?? ctx.paintFill ?? '#000000'
   const fill = readPaint(node.attrs.fill ?? fillFallback, fillFallback, ctx, 'fill')
-  const strokeFallback = ctx.fillDefault != null ? 'none' : (node.attrs.stroke ?? ctx.paintStroke ?? 'none')
-  const stroke = readPaint(node.attrs.stroke ?? strokeFallback, strokeFallback, ctx, 'stroke')
-  const strokeWidth = parseNumber(node.attrs['stroke-width']) ?? 1
+  const distanceStroke = strokeTakesInk(node.attrs.stroke)
+  const strokeFallback = ctx.fillDefault != null ? 'none' : (distanceStroke ? (ctx.paintStroke ?? 'none') : (node.attrs.stroke ?? ctx.paintStroke ?? 'none'))
+  const stroke = distanceStroke ? 'none' : readPaint(node.attrs.stroke ?? strokeFallback, strokeFallback, ctx, 'stroke')
+  const strokeWidth = distanceStroke ? 0 : (parseNumber(node.attrs['stroke-width']) ?? 1)
   const dash = readDash(node.attrs['stroke-dasharray'], ctx)
   const ink = { x: 0, y: 0, width: w, height: h }
   const rx = parseNumber(node.attrs.rx)
@@ -1207,7 +1354,7 @@ function readDepth(raw: string | undefined, fallback: number, ctx: LayoutContext
 }
 
 function readMeshLines(node: FvgNode, ctx: LayoutContext): { stroke: string; strokeWidths: [number, number, number]; hidden: string; halo: number } {
-  const rawStroke = node.attrs.stroke
+  const rawStroke = strokeTakesInk(node.attrs.stroke) ? undefined : node.attrs.stroke
   const rawHidden = node.attrs.hidden
   const rawWidth = node.attrs['stroke-width']
   const strokeWritten = rawStroke != null && rawStroke.trim() !== '' && rawStroke.trim() !== 'none'
@@ -1542,7 +1689,7 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
     const span = resolved.file ? glbSpan(resolved.file) ?? undefined : undefined
     mesh = { type: 'model', src, ...(resolved.file ? { file: resolved.file } : {}), ...(span ? { span } : {}) }
   }
-  const effects = readEffects(node.attrs, ctx, solidPaint(fill, ctx.color))
+  const effects = readEffects(node.attrs, ctx, solidPaint(fill, ctx.color), 'mesh')
   if (isGradient(node.attrs.fill)) {
     ctx.issues.push({
       level: 'warn',
@@ -1620,12 +1767,13 @@ function layoutLineNode(node: FvgNode, ctx: LayoutContext, defaultStroke: string
   } else {
     geom = { kind: 'path', d: node.attrs.d ?? '' }
   }
-  const strokeWidth = parseNumber(node.attrs['stroke-width']) ?? 4
+  const distanceStroke = strokeTakesInk(node.attrs.stroke)
+  const strokeWidth = distanceStroke ? 0 : (parseNumber(node.attrs['stroke-width']) ?? 4)
   const dash = readDash(node.attrs['stroke-dasharray'], ctx)
   const strokeFallback = ctx.fillDefault != null ? 'none' : (ctx.paintStroke ?? defaultStroke)
-  const stroke = readPaint(node.attrs.stroke ?? strokeFallback, strokeFallback, ctx, 'stroke')
+  const stroke = distanceStroke ? 'none' : readPaint(node.attrs.stroke ?? strokeFallback, strokeFallback, ctx, 'stroke')
   const fillFallback = ctx.fillDefault ?? ctx.paintFill ?? 'none'
-  const fillRaw = node.attrs.fill === 'inherit' ? (node.attrs.stroke ?? strokeFallback) : (node.attrs.fill ?? fillFallback)
+  const fillRaw = node.attrs.fill === 'inherit' ? (distanceStroke ? strokeFallback : (node.attrs.stroke ?? strokeFallback)) : (node.attrs.fill ?? fillFallback)
   let fill = readPaint(fillRaw, fillFallback, ctx, 'fill')
   const curveClosed = node.tag === 'curve' && isClosedFlag(node.attrs.closed)
   if (node.tag === 'curve' && !curveClosed && fill !== 'none') {
@@ -1990,7 +2138,7 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
   const childCtx = inheritTextContext(ctx, node.tag, style)
   const direction = flexDirectionOf(style)
   const appearance = readHtmlAppearance(style)
-  if (appearance.background) appearance.background = readPaint(appearance.background, 'transparent', ctx, 'background')
+  applyCssBackground(appearance, style, ctx)
   const gap = parsePx(style.gap)
   const columnGap = parsePx(style['column-gap']) ?? gap ?? 0
   const rowGap = parsePx(style['row-gap']) ?? gap ?? 0
@@ -2182,7 +2330,7 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
     ...appearance,
     direction,
     children: laidChildren,
-    ...readEffects(style, ctx, solidPaint(appearance.background, ctx.color)),
+    ...readEffects(style, ctx, solidPaint(appearance.background, ctx.color), 'ink'),
     ...layoutDrawMeta(node, ctx),
   }
 }
@@ -2234,7 +2382,7 @@ function layoutUse(node: FvgNode, ctx: LayoutContext): LayerLayoutNode | null {
   const appearance = readAttrAppearance(node.attrs)
   // use 与 layer 一样不填背景；色块用 rect / HTML / <draw>
   appearance.background = undefined
-  const effects = readEffects(node.attrs, ctx, solidPaint(appearance.border?.color, ctx.color))
+  const effects = readEffects(node.attrs, ctx, solidPaint(appearance.border?.color, ctx.color), 'ink')
   const filters = mergeFilters(laid.filters, effects.filters)
   return {
     ...laid,
@@ -2623,7 +2771,7 @@ function layoutGroup(node: FvgNode, ctx: LayoutContext): GroupLayoutNode {
   const inherited: LayoutContext = {
     ...ctx,
     paintFill: node.attrs.fill ?? ctx.paintFill,
-    paintStroke: node.attrs.stroke ?? ctx.paintStroke,
+    paintStroke: strokeTakesInk(node.attrs.stroke) ? ctx.paintStroke : (node.attrs.stroke ?? ctx.paintStroke),
   }
   const children: LayoutNode[] = []
   const childFvg = node.children.filter((c) => typeof c !== 'string') as FvgNode[]
@@ -3037,7 +3185,7 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
       hint: '在 layer 里写 <mask>…</mask>，不要写进 style',
     })
   }
-  const effects = readEffects(node.attrs, ctx, solidPaint(appearance.border?.color, ctx.color))
+  const effects = readEffects(node.attrs, ctx, solidPaint(appearance.border?.color, ctx.color), 'ink')
   const filters = mergeFilters(effects.filters, layerFilters.filters)
   let view = readLayerView(node, layerW, layerH, ctx)
   if (view && perspective != null) {
@@ -3296,7 +3444,7 @@ export function layoutSync(rootNode: FvgNode, assets: LayoutAssets): FvgDocument
   const attrs = rootNode.attrs
   const width = parseNumber(attrs.width) ?? 1080
   const height = parseNumber(attrs.height) ?? 1920
-  const color = attrs.color ?? '#111111'
+  let color = attrs.color?.trim() || '#111111'
   const fontFamily = attrs['font-family'] ?? 'ChillDuanSans'
   const safe = parseSafe(attrs.safe, width, height)
   const maxContentWidth = width - safe.left - safe.right
@@ -3335,9 +3483,34 @@ export function layoutSync(rootNode: FvgNode, assets: LayoutAssets): FvgDocument
     previews: [],
   }
   track(paintCtx, 'layer', rootNode)
-  // 没写 background 时不铺底色，PNG 里空出来的像素保持透明。
+  if (isGradient(color)) {
+    issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: 'layer',
+      message: 'color 只收纯色',
+      hint: '写成 #112233。字形渐变写 fill: linear-gradient(to right, #ff0000, #0000ff)',
+    })
+    color = '#111111'
+    paintCtx.color = '#111111'
+  }
+  // 没写 background 时不铺底色，PNG 里空出来的像素保持透明。画布底色只收纯色。
   const rawBackground = attrs.background?.trim() ?? ''
-  const background = rawBackground ? readPaint(rawBackground, '#ffffff', paintCtx, 'background') : 'transparent'
+  let background = 'transparent'
+  if (rawBackground) {
+    if (isGradient(rawBackground)) {
+      issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: 'layer',
+        message: '画布 background 只收纯色',
+        hint: '整页渐变用铺满的 <rect fill="linear-gradient(...)">',
+      })
+      background = '#ffffff'
+    } else {
+      background = rawBackground
+    }
+  }
   const root = layoutLayer(rootNode, paintCtx)
 
   root.width = width

@@ -27,6 +27,8 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 | 规则 | 错误写法 | 正确写法 | 问题码 |
 | --- | --- | --- | --- |
 | HTML 用 `style`，`layer` 和图形用属性 | `<p font-size="40">`、`<circle style="fill:#fff">` | `<p style="font-size:40px">`、`<circle fill="#fff">` | `invalid-attr` |
+| 字形渐变写 `fill`，`color` 只写纯色 | `<p style="color:linear-gradient(...)">` | `<p style="fill:linear-gradient(to right, #2f7bff, #b423c4)">`。底板渐变写 `background`，`background-color` 只写纯色 | `invalid-attr` |
+| 描边只写 `stroke` | `ink-stroke="6 #000"` | 形状 `stroke="#fff" stroke-width="4"` 居中。沿墨迹写 `stroke="6 #000 outside"`。文字 `style="stroke:#000; stroke-width:6"` | `invalid-attr` |
 | 标签一律小写 | `<Circle>`、`<Row>` | `<circle>`、`<div style="display:flex">`。大写标签会渲染并报 `info` | `non-canonical` |
 | 嵌套 `layer` / `use` 不写 `background` | `<layer background="#fff">` | `<rect fill="#fff">`、HTML `background`，或 `<draw>` | `invalid-attr` |
 | 排布用 `div` 的 `display:flex` | `<Column>` | `<div style="display:flex; flex-direction:column">` | `unknown-tag` |
@@ -46,7 +48,7 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 | 公式用 `<math>`，不要写进文字盒子 | `<p>因此<math><mi>x</mi></math></p>` | `<div style="display:flex"><span>因此</span><math><mi>x</mi></math></div>` | `invalid-child` |
 | 公式只用带 MATH 表的字体 | `<math style="font-family:Kai">` | 不写 `font-family`，字母和运算符用 `STIXTwoMath`。说明文字用 `<mtext>`，跟外面的字体走 | `invalid-attr` |
 | 整层裁切用 `<mask>`，里面直接写形状或 `<img>` | 把 mask 写成属性，或放进 flex | `<layer><mask><circle cx="160" cy="90" r="90" /></mask>…</layer>`。省略 `fill` 为不透明白 | `invalid-child` |
-| 抠完要贴纸边或发光轮廓 | 把 `shadow` 写在子元素上，或让父层描边套住没抠的矩形 | 把 `shadow`、`glow`、外侧 `ink-stroke` 写在蒙版所在的 `layer` 上。轮廓跟着留下的形状，可以伸出蒙版。父层的描边和阴影也跟着这块轮廓 | |
+| 抠完要贴纸边或发光轮廓 | 把 `shadow` 写在子元素上，或让父层描边套住没抠的矩形 | 把 `shadow`、`glow`、外侧 `stroke` 写在蒙版所在的 `layer` 上。轮廓跟着留下的形状，可以伸出蒙版。父层的描边和阴影也跟着这块轮廓 | |
 | `<preview>` 的 `show` | 把它当成不认识的属性 | `<preview of="#cut" show="overlay checker black white edges" />`。`show` 和 `of` 只在 `preview` 上合法 | |
 | 蒙版加减用 `op`，不要写 CSS | `mask-image`、`mask-composite` | `<mask><rect … /><circle op="subtract" /></mask>`。默认 `add`。分组用 `<g>` | `invalid-attr` |
 | 蒙版读黑白图或编号 | `<img mask-mode="luminance">` | `<img channel="luma">`、`<img pick="3 5">`。只写在 mask 里 | `invalid-attr` |

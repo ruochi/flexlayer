@@ -60,7 +60,6 @@ describe('属性注册表', () => {
       'glow',
       'inner-shadow',
       'inner-glow',
-      'ink-stroke',
       'blur',
       'backdrop-blur',
       'glass',

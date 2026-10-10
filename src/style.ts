@@ -267,8 +267,8 @@ function splitTopLevelCommas(value: string): string[] {
 }
 
 /**
- * `ink-stroke`: `<宽度> <颜色或渐变> [outside|inside|center] [, 下一层…]`。
- * 多层从内到外，宽度是到墨迹的总距离。`none` 与无法解析都返回 undefined。
+ * `stroke` 的距离写法：`<宽度> <颜色或渐变> [outside|inside|center] [, 下一层…]`。
+ * 多层从内到外，宽度是到墨迹的总距离。纯色描边、`none` 与无法解析都返回 undefined。
  */
 export function parseInkStroke(value: string | undefined): InkStrokeValue[] | undefined {
   if (!value || value.trim() === 'none') return undefined
@@ -292,6 +292,15 @@ export function parseInkStroke(value: string | undefined): InkStrokeValue[] | un
     out.push({ width, color, position })
   }
   return out
+}
+
+/** 第一个词是正的宽度时，`stroke` 按墨迹距离描。纯色留给几何描边。 */
+export function strokeTakesInk(value: string | undefined): boolean {
+  if (!value || value.trim() === '' || value.trim().toLowerCase() === 'none') return false
+  if (parseInkStroke(value)) return true
+  const token = value.trim().split(/\s+/)[0] ?? ''
+  const width = parsePx(token)
+  return width != null && width > 0
 }
 
 /** 外侧描边伸出去的最大距离。center 只算外半。 */
@@ -673,6 +682,8 @@ const QUIET_STYLE = new Set([
   'glow',
   'inner-shadow',
   'inner-glow',
+  'stroke',
+  'stroke-width',
   'ink-stroke',
   'blur',
   'backdrop-blur',
@@ -701,6 +712,7 @@ const STYLE_CHECKS: Record<string, (value: string) => StyleDiagnostic | null> = 
   'font-weight': (value) => (parseFontWeight(value) == null ? { hint: '写成 400、700，或 normal、bold' } : null),
   'font-family': () => null,
   color: () => null,
+  fill: () => null,
   'letter-spacing': (value) => (parseLetterSpacing(value, 16) == null ? { hint: '写成 0、2px 或 0.05em' } : null),
   'line-height': (value) => (parseLineHeight(value) == null ? { hint: '写成倍数 1.4，或像素 24px' } : null),
   'text-align': (value) => keywordHint(value, ['left', 'center', 'right', 'start', 'end'], '写成 left、center 或 right'),

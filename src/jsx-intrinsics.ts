@@ -72,8 +72,6 @@ type FvgEffects = {
   'inner-shadow'?: string
   /** 28 #7ec8ff */
   'inner-glow'?: string
-  /** 6 #000 outside */
-  'ink-stroke'?: string
   /** 6 */
   blur?: number | string
   /** 16 */
