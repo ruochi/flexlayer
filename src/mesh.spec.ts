@@ -19,6 +19,41 @@ async function pixelAt(png: Buffer, x: number, y: number) {
   return ctx.getImageData(x, y, 1, 1).data
 }
 
+type ImageSample = {
+  width: number
+  height: number
+  at: (x: number, y: number) => Uint8ClampedArray
+}
+
+async function imageOf(png: Buffer): Promise<ImageSample> {
+  const img = await loadImage(png)
+  const canvas = createCanvas(img.width, img.height)
+  const ctx = canvas.getContext('2d')
+  ctx.drawImage(img, 0, 0)
+  const image = ctx.getImageData(0, 0, img.width, img.height)
+  return {
+    width: img.width,
+    height: img.height,
+    at: (x, y) => image.data.subarray((y * img.width + x) * 4, (y * img.width + x) * 4 + 4),
+  }
+}
+
+function brightest(image: ImageSample) {
+  let sum = -1
+  let rgba = image.at(0, 0)
+  for (let y = 0; y < image.height; y++) {
+    for (let x = 0; x < image.width; x++) {
+      const pixel = image.at(x, y)
+      const next = pixel[0]! + pixel[1]! + pixel[2]!
+      if (next > sum) {
+        sum = next
+        rgba = pixel
+      }
+    }
+  }
+  return { sum, rgba }
+}
+
 describe('网格布局', () => {
   it('sphere 的盒子是边长 2r 的正方形，box 的布局不计 depth', async () => {
     const report = await checkFvg(`
@@ -334,6 +369,80 @@ describe('网格绘制', () => {
     expect(messages.some((message) => message.includes('hidden 要和 stroke'))).toBe(true)
     expect(messages.some((message) => message.includes('stroke-width 要和 stroke'))).toBe(true)
     expect(messages.some((message) => message.includes('hidden 只写在网格上'))).toBe(true)
+  })
+
+  it('塑料高光比原来的明暗更亮，背光一面仍暗', async () => {
+    const paint = (material: string) =>
+      renderFvg(
+        `<layer width="180" height="180" background="#101010" perspective="700"><sphere cx="90" cy="90" r="50" fill="#888888"${material} /></layer>`,
+      )
+    const plain = await imageOf((await paint('')).png)
+    const plastic = await imageOf((await paint(' material="plastic"')).png)
+    expect(brightest(plastic).sum).toBeGreaterThan(240 * 3 - 30)
+    expect(brightest(plain).sum).toBeLessThan(160 * 3)
+    const shade = (image: ImageSample, x: number, y: number) => image.at(x, y)[0]!
+    expect(Math.abs(shade(plastic, 110, 120) - shade(plain, 110, 120))).toBeLessThan(20)
+  }, 30000)
+
+  it('金属朝上亮、朝下暗，亮处仍带着 fill', async () => {
+    const paint = (material: string) =>
+      renderFvg(
+        `<layer width="180" height="180" background="#101010" perspective="700"><sphere cx="90" cy="90" r="50" fill="#cc2222"${material} /></layer>`,
+      )
+    const lambert = await imageOf((await paint('')).png)
+    const metal = await imageOf((await paint(' material="metal 0.2"')).png)
+    const lum = (image: ImageSample, x: number, y: number) => image.at(x, y).reduce((sum, channel, index) => (index < 3 ? sum + channel : sum), 0)
+    const metalSpan = lum(metal, 90, 70) - lum(metal, 90, 110)
+    const lambertSpan = lum(lambert, 90, 70) - lum(lambert, 90, 110)
+    expect(metalSpan).toBeGreaterThan(lambertSpan + 40)
+    expect(lum(metal, 90, 110)).toBeLessThan(lum(lambert, 90, 110) - 40)
+    const peak = brightest(metal)
+    expect(peak.rgba[0]).toBeGreaterThan(peak.rgba[1]! + 40)
+  }, 30000)
+
+  it('玻璃透出后面的颜色，边缘更白，前面的不透明球盖住它', async () => {
+    const { png } = await renderFvg(`
+      <layer width="180" height="180" background="#000000" perspective="700">
+        <rect x="10" y="10" width="160" height="160" fill="#ff0000" />
+        <sphere cx="90" cy="90" r="50" fill="#ffffff66" material="glass" />
+      </layer>
+    `)
+    const glass = await imageOf(png)
+    const outside = glass.at(40, 40)
+    const center = glass.at(90, 90)
+    expect(outside[0]).toBeGreaterThan(240)
+    expect(outside[1]).toBeLessThan(8)
+    expect(center[0]).toBeGreaterThan(240)
+    expect(center[1]).toBeGreaterThan(50)
+    expect(center[1]).toBeLessThan(160)
+    expect(brightest(glass).rgba[1]).toBeGreaterThan(center[1]! + 60)
+
+    const covered = await renderFvg(`
+      <layer width="180" height="180" background="#000000" perspective="700">
+        <sphere cx="90" cy="90" r="50" fill="#ffffff66" material="glass" />
+        <sphere cx="90" cy="90" r="18" z="40" fill="#2244ff" />
+      </layer>
+    `)
+    const front = await pixelAt(covered.png, 90, 90)
+    expect(front[2]).toBeGreaterThan(front[0]! + 20)
+  }, 30000)
+
+  it('不认识的 material、写在平面上、粗糙度越界都会警告', async () => {
+    const report = await checkFvg(`
+      <layer width="200" height="160" perspective="500">
+        <sphere cx="40" cy="40" r="16" material="wood" />
+        <sphere cx="100" cy="40" r="16" material="metal 2" />
+        <rect x="20" y="90" width="40" height="40" fill="#fff" material="plastic" />
+      </layer>
+    `)
+    const messages = report.issues.filter((issue) => issue.code === 'invalid-attr').map((issue) => issue.message)
+    expect(messages.some((message) => message.includes('不认识的 material'))).toBe(true)
+    expect(messages.some((message) => message.includes('粗糙度'))).toBe(true)
+    expect(messages.some((message) => message.includes('material 只写在网格上'))).toBe(true)
+    const ok = await checkFvg(
+      `<layer width="120" height="120" perspective="400"><sphere cx="60" cy="60" r="20" fill="#fff" material="metal, rough 0.35" /></layer>`,
+    )
+    expect(ok.issues.filter((issue) => issue.code === 'invalid-attr')).toEqual([])
   })
 
   it('网格上的渐变、shadow、glow 会警告', async () => {

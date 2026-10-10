@@ -18,6 +18,7 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
  * glb 用文件里的底色乘这套明暗。
  * 写了 stroke 时，缩小抗锯齿之后再按屏幕像素描折棱和轮廓。
  * hidden 只画被这只网格自己挡住的棱，虚线是 6 实 4 空。
+ * material 在这套明暗上加塑料高光、金属反射或玻璃叠色。天空渐变是固定的。
  */
 
 const MAX_RASTER_SIDE = 8192
@@ -75,6 +76,9 @@ type Batch = {
   doubleSided: boolean
   shaded: boolean
   depthWrite: boolean
+  /** lambert 是原来的明暗。glass 不写主光阴影，半透明时不写深度。 */
+  material: 'lambert' | 'plastic' | 'metal' | 'glass'
+  roughness: number
   texture: Uint8ClampedArray | null
   tw: number
   th: number
@@ -128,6 +132,106 @@ function lightBasis() {
 function lit(x: number, y: number, z: number, blocked = false) {
   const key = blocked ? 0 : 0.85 * Math.max(x * KEY.x + y * KEY.y + z * KEY.z, 0)
   return 0.5 + key + 0.3 * Math.max(x * FILL_LIGHT.x + y * FILL_LIGHT.y + z * FILL_LIGHT.z, 0)
+}
+
+const SKY_DOWN = { r: 36, g: 40, b: 48 }
+const SKY_HORIZON = { r: 148, g: 174, b: 196 }
+const SKY_UP = { r: 246, g: 247, b: 250 }
+
+function clamp01(n: number) {
+  if (n <= 0) return 0
+  if (n >= 1) return 1
+  return n
+}
+
+function shininess(roughness: number) {
+  return 2 ** (8 * (1 - clamp01(roughness)))
+}
+
+function mixByte(a: number, b: number, t: number) {
+  return a + (b - a) * t
+}
+
+/** 反射方向的 y 朝上为亮、朝下为暗。粗糙度把方向往地平线收。 */
+function skyAt(up: number, roughness: number) {
+  const spread = up * (1 - clamp01(roughness) * 0.9)
+  const t = clamp01(spread * 0.5 + 0.5)
+  const [a, b, k] = t < 0.5 ? [SKY_DOWN, SKY_HORIZON, t * 2] : [SKY_HORIZON, SKY_UP, (t - 0.5) * 2]
+  return { r: mixByte(a.r, b.r, k), g: mixByte(a.g, b.g, k), b: mixByte(a.b, b.b, k) }
+}
+
+function shadeNormal(nx: number, ny: number, nz: number, back: boolean) {
+  let x = nx
+  let y = -ny
+  let z = nz
+  const len = Math.hypot(x, y, z) || 1
+  x /= len
+  y /= len
+  z /= len
+  if (back) {
+    x = -x
+    y = -y
+    z = -z
+  }
+  return { x, y, z }
+}
+
+function reflectView(v: { x: number; y: number; z: number }, n: { x: number; y: number; z: number }) {
+  const d = v.x * n.x + v.y * n.y + v.z * n.z
+  return unit(2 * d * n.x - v.x, 2 * d * n.y - v.y, 2 * d * n.z - v.z)
+}
+
+type ShadeCamera = { x: number; y: number; z: number }
+
+/** 塑料加白高光，金属用 fill 给固定天空染色，玻璃按掠射角变白并透出底下。 */
+function materialBytes(
+  batch: Batch,
+  nx: number,
+  ny: number,
+  nz: number,
+  back: boolean,
+  shade: number,
+  blocked: boolean,
+  x: number,
+  y: number,
+  z: number,
+  camera: ShadeCamera,
+): [number, number, number, number] {
+  const n = shadeNormal(nx, ny, nz, back)
+  const v = unit(camera.x - x, y - camera.y, camera.z - z)
+  const h = unit(KEY.x + v.x, KEY.y + v.y, KEY.z + v.z)
+  const ndoth = Math.max(n.x * h.x + n.y * h.y + n.z * h.z, 0)
+  const spec = blocked ? 0 : ndoth ** shininess(batch.roughness)
+  if (batch.material === 'plastic') {
+    const add = spec * 255 * 0.95
+    return [
+      byte(Math.min(255, batch.r * shade + add)),
+      byte(Math.min(255, batch.g * shade + add)),
+      byte(Math.min(255, batch.b * shade + add)),
+      batch.a,
+    ]
+  }
+  if (batch.material === 'metal') {
+    const sky = skyAt(reflectView(v, n).y, batch.roughness)
+    const ndotv = clamp01(n.x * v.x + n.y * v.y + n.z * v.z)
+    const fres = (1 - ndotv) ** 5
+    const exposure = blocked ? 0.32 : 0.5 + 0.5 * Math.min(1, shade)
+    const specAdd = spec * 220
+    const tint = (channel: number, skyC: number) => {
+      const f = channel / 255
+      return Math.min(255, (f + (1 - f) * fres) * skyC * exposure + specAdd * (0.25 + 0.75 * f))
+    }
+    return [byte(tint(batch.r, sky.r)), byte(tint(batch.g, sky.g)), byte(tint(batch.b, sky.b)), batch.a]
+  }
+  const ndotv = clamp01(n.x * v.x + n.y * v.y + n.z * v.z)
+  const edge = (1 - ndotv) ** 2.2
+  const body = batch.a / 255
+  const alpha = body + (1 - body) * edge * 0.9
+  const whiten = edge * 0.8
+  const lit = (0.72 + 0.28 * Math.min(1, shade)) * (blocked ? 0.72 : 1)
+  const specAdd = spec * 255
+  const chan = (c: number) => Math.min(255, (c * lit * (1 - whiten) + 255 * whiten) + specAdd)
+  return [byte(chan(batch.r)), byte(chan(batch.g)), byte(chan(batch.b)), byte(alpha * 255)]
 }
 
 function shadeOf(nx: number, ny: number, nz: number, back: boolean, blocked = false) {
@@ -1046,6 +1150,7 @@ function buildShadowMap(batches: Batch[], authored: Vert[][], pixels: number): S
     }
   }
   batches.forEach((batch, batchIndex) => {
+    if (batch.material === 'glass') return
     if (!batch.texture && batch.a < 128) return
     const verts = authored[batchIndex]!
     const indices = batch.indices
@@ -1141,6 +1246,7 @@ function drawTriangle(
   c: ScreenVert,
   batch: Batch,
   shadow: ShadowMap | null,
+  camera: ShadeCamera,
 ) {
   const area = (b.sx - a.sx) * (c.sy - a.sy) - (b.sy - a.sy) * (c.sx - a.sx)
   if (Math.abs(area) < 1e-8) return
@@ -1214,6 +1320,13 @@ function drawTriangle(
         sg = byte(tex.g * dim)
         sb = byte(tex.b * dim)
         sa = tex.a
+      } else if (batch.material !== 'lambert') {
+        const shade = flat ? (blocked ? shutShade : openShade) : shadeOf(nx, ny, nz, back, blocked)
+        const painted = materialBytes(batch, nx, ny, nz, back, shade, blocked, x, y, z, camera)
+        sr = painted[0]
+        sg = painted[1]
+        sb = painted[2]
+        sa = painted[3]
       } else if (batch.shaded) {
         const shade = flat ? (blocked ? shutShade : openShade) : shadeOf(nx, ny, nz, back, blocked)
         sr = byte(batch.r * shade)
@@ -1323,6 +1436,7 @@ function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: number
   owners.fill(-1)
   const shadow = buildShadowMap(batches, authored, Math.max(layer.width, layer.height) * base * 2)
   const near = perspective * (1 - 1e-3)
+  const camera: ShadeCamera = { x: vx, y: vy, z: perspective }
   const toScreen = (v: Vert): ScreenVert => {
     const w = 1 - v.z / perspective
     return {
@@ -1332,7 +1446,8 @@ function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: number
       invW: 1 / w,
     }
   }
-  batches.forEach((batch, batchIndex) => {
+  const paintBatch = (batchIndex: number) => {
+    const batch = batches[batchIndex]!
     const verts = authored[batchIndex]!
     const indices = batch.indices
     for (let i = 0; i < indices.length; i += 3) {
@@ -1342,10 +1457,23 @@ function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: number
         const a = clipped[0]!
         const b = clipped[k]!
         const c = clipped[k + 1]!
-        drawTriangle(color, depth, owners, pw, ph, toScreen(a), toScreen(b), toScreen(c), batch, shadow)
+        drawTriangle(color, depth, owners, pw, ph, toScreen(a), toScreen(b), toScreen(c), batch, shadow, camera)
       }
     }
+  }
+  const solid: number[] = []
+  const glass: number[] = []
+  batches.forEach((batch, index) => {
+    if (batch.material === 'glass') glass.push(index)
+    else solid.push(index)
   })
+  glass.sort((a, b) => {
+    const za = authored[a]!.reduce((sum, vert) => sum + vert.z, 0)
+    const zb = authored[b]!.reduce((sum, vert) => sum + vert.z, 0)
+    return za - zb
+  })
+  for (const index of solid) paintBatch(index)
+  for (const index of glass) paintBatch(index)
   const hi = createCanvas(pw, ph)
   const image = hi.getContext('2d').createImageData(pw, ph)
   image.data.set(color)
@@ -1768,6 +1896,8 @@ function planeBatch(plane: SoftwareMeshInput['planes'][number], raster: Software
     doubleSided: true,
     shaded: false,
     depthWrite: true,
+    material: 'lambert',
+    roughness: 1,
     texture: solid ? null : pixels.data,
     tw: solid ? 0 : painted.canvas.width,
     th: solid ? 0 : painted.canvas.height,
@@ -1805,7 +1935,9 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
           a: byte(prim.color[3] * (instance.opacity ?? 1)),
           doubleSided: prim.doubleSided,
           shaded: true,
-          depthWrite: prim.color[3] >= 255,
+          depthWrite: node.material?.kind === 'glass' && prim.color[3] < 255 ? false : prim.color[3] >= 255,
+          material: node.material?.kind ?? 'lambert',
+          roughness: node.material?.roughness ?? 1,
           texture: null,
           tw: 0,
           th: 0,
@@ -1819,8 +1951,10 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
     }
     const geometry = geometryOf(node)
     if (!geometry) continue
-    const fillNone = node.fill === 'none' || node.fill === 'transparent'
-    const [r, g, b, a] = fillNone ? [0, 0, 0, 0] : fillBytes(node.fill, opacity)
+    const glass = node.material?.kind === 'glass'
+    const clear = node.fill === 'none' || node.fill === 'transparent'
+    const fillNone = clear && !glass
+    const [r, g, b, a] = fillNone ? [0, 0, 0, 0] : clear ? [255, 255, 255, 0] : fillBytes(node.fill, opacity)
     batches.push({
       positions: geometry.positions,
       normals: geometry.normals,
@@ -1832,7 +1966,9 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
       a,
       doubleSided: node.mesh.type === 'extrude',
       shaded: !fillNone,
-      depthWrite: fillNone || a >= 255,
+      depthWrite: glass && a < 255 ? false : fillNone || a >= 255,
+      material: node.material?.kind ?? 'lambert',
+      roughness: node.material?.roughness ?? 1,
       texture: null,
       tw: 0,
       th: 0,

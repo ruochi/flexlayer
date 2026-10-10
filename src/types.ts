@@ -469,10 +469,17 @@ export type MeshSpec =
   | { type: 'tube'; d: string; r: number }
   | { type: 'model'; src: string; file?: string; span?: { x: number; y: number; z: number } }
 
+/** 网格表面。不写时仍是主光乘 fill。粗糙度 0 到 1，越大高光和反射越散。 */
+export type MeshMaterial = {
+  kind: 'plastic' | 'metal' | 'glass'
+  roughness: number
+}
+
 export type MeshLayoutNode = LayoutNodeBase & {
   kind: 'mesh'
   mesh: MeshSpec
   fill: string
+  material?: MeshMaterial
   /** 可见折棱和轮廓。`none` 不描。 */
   stroke: string
   /** 屏幕像素。写了 stroke 没写宽度时是 2。 */
