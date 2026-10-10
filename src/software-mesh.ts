@@ -5,6 +5,7 @@ import { solidPaint } from './gradient.js'
 import { parseGlb } from './glb.js'
 import { originOffset } from './matrix.js'
 import { applyPoseMatrix, PERSPECTIVE_AA, resolveSamples } from './perspective.js'
+import { meshIntersections } from './mesh-intersect.js'
 import { roundedBoxGeometry, roundedCylinderGeometry } from './mesh-round.js'
 import { tessellateSvgPath } from './path.js'
 import type { LayerLayoutNode, LayoutNode, MeshLayoutNode } from './types.js'
@@ -18,7 +19,8 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
  * 主光沿固定方向打一张正交深度图：不透明三角形互相挡住这盏光时，主光不计。
  * glb 用文件里的底色乘这套明暗。
  * 写了 stroke 时，缩小抗锯齿之后再按屏幕像素描折棱和轮廓。
- * hidden 只画被这只网格自己挡住的棱，虚线是 6 实 4 空。
+ * 两只都写了 stroke 的网格相互穿过时，交界线算折棱，颜色和宽度跟后写的那只。
+ * hidden 只画被这只网格自己挡住的棱，虚线是 6 实 4 空。交界线被这两只中任意一只挡住时同样算隐藏线。
  * 不写 material 时是磨砂：主光乘 fill。plastic 加高光，metal 和 glass 映一张横向的工作室环境，glass 后画叠色。
  * 同一条折线上的短段接成一条再取虚线相位，圆弧不会接成实线。
  */
@@ -1645,6 +1647,7 @@ function classifySample(
   z: number,
   owner: number,
   outline: boolean,
+  owner2 = 0,
 ): 'visible' | 'hidden' | 'skip' {
   const ix = Math.round(x * mapX)
   const iy = Math.round(y * mapY)
@@ -1652,7 +1655,7 @@ function classifySample(
   const di = iy * pw + ix
   const stored = depth[di]!
   if (stored < -1e20 || stored <= z + 1.5) return 'visible'
-  if (owners[di] !== owner) return 'skip'
+  if (owners[di] !== owner && !(owner2 && owners[di] === owner2)) return 'skip'
   // 轮廓贴着自己的表面，深度会略近于这条线，不能当成隐藏线。
   return outline ? 'visible' : 'hidden'
 }
@@ -1677,6 +1680,7 @@ function sampleSegment(
   mapY: number,
   owner: number,
   outline: boolean,
+  owner2 = 0,
 ): ScreenSample[] {
   const near = perspective * (1 - 1e-3)
   let p0 = a
@@ -1709,7 +1713,7 @@ function sampleSegment(
       x: s.x,
       y: s.y,
       z: s.z,
-      kind: classifySample(depth, owners, pw, ph, mapX, mapY, s.x, s.y, s.z, owner, outline),
+      kind: classifySample(depth, owners, pw, ph, mapX, mapY, s.x, s.y, s.z, owner, outline, owner2),
     })
   }
   return out
@@ -1917,7 +1921,15 @@ function roundSphere(batch: Batch): { x: number; y: number; z: number; radius: n
 }
 
 type InkRun = { points: ChainPoint[]; hidden: boolean; kind: 0 | 1 | 2; style: LineStyle }
-type EdgeEnds = { a: string; b: string }
+type EdgeEnds = { a: string; b: string; owners: readonly number[] }
+
+/** 交界线和参与相交的那两只网格自己的棱接在一起，不互相切开。 */
+function joinsParticipant(a: EdgeEnds, b: EdgeEnds) {
+  const seam = a.owners.length > 1 ? a : b.owners.length > 1 ? b : null
+  if (!seam) return false
+  const other = seam === a ? b : a
+  return other.owners.some((id) => seam.owners.includes(id))
+}
 
 function edgeKey(v: { x: number; y: number; z: number }) {
   return `${quantCoord(v.x)},${quantCoord(v.y)},${quantCoord(v.z)}`
@@ -2030,7 +2042,7 @@ function cutCrossings(runs: InkRun[], edges: EdgeEnds[], width: number, height: 
       if (other < 0 || !(zBuf[i]! > point.z + 2)) continue
       const nearEdge = edges[other]
       const farEdge = edges[point.edge]
-      if (nearEdge && farEdge && shareEnds(nearEdge, farEdge)) continue
+      if (nearEdge && farEdge && (shareEnds(nearEdge, farEdge) || joinsParticipant(nearEdge, farEdge))) continue
       const nearPts = byEdge.get(other)
       if (!nearPts || nearPts.length < 2) continue
       const hit = closestAlong(nearPts, point.x, point.y)
@@ -2038,6 +2050,10 @@ function cutCrossings(runs: InkRun[], edges: EdgeEnds[], width: number, height: 
       point.cut = true
     }
   }
+}
+
+function seamVert(point: { x: number; y: number; z: number }): Vert {
+  return { x: point.x, y: point.y, z: point.z, nx: 0, ny: 0, nz: 1, u: 0, v: 0 }
 }
 
 function paintMeshLines(
@@ -2066,15 +2082,43 @@ function paintMeshLines(
   const mapY = ph / canvas.height
   const edges: EdgeEnds[] = []
   const runs: InkRun[] = []
-  const addEdge = (a: Vert, b: Vert) => {
+  const addEdge = (a: Vert, b: Vert, edgeOwners: readonly number[]) => {
     const id = edges.length
-    edges.push({ a: edgeKey(a), b: edgeKey(b) })
+    edges.push({ a: edgeKey(a), b: edgeKey(b), owners: edgeOwners })
     return id
   }
-  const consume = (a: Vert, b: Vert, style: LineStyle, owner: number, outline: boolean, kind: 0 | 1, hiddenRuns: PointRun[]) => {
-    const edge = addEdge(a, b)
+  const consume = (
+    a: Vert,
+    b: Vert,
+    style: LineStyle,
+    owner: number,
+    outline: boolean,
+    kind: 0 | 1,
+    hiddenRuns: PointRun[],
+    owner2 = 0,
+  ) => {
+    const edge = addEdge(a, b, owner2 ? [owner, owner2] : [owner])
     for (const run of collectRuns(
-      sampleSegment(a, b, perspective, vx, vy, padL, padT, scaleX, scaleY, depth, owners, pw, ph, mapX, mapY, owner, outline),
+      sampleSegment(
+        a,
+        b,
+        perspective,
+        vx,
+        vy,
+        padL,
+        padT,
+        scaleX,
+        scaleY,
+        depth,
+        owners,
+        pw,
+        ph,
+        mapX,
+        mapY,
+        owner,
+        outline,
+        owner2,
+      ),
     )) {
       const points = run.points.map((point) => ({ ...point, edge }))
       if (run.hidden) {
@@ -2107,6 +2151,38 @@ function paintMeshLines(
       for (const chain of chainHidden(hiddenRuns)) runs.push({ points: chain, hidden: true, kind: 2, style })
     }
   })
+  const groups: Array<{ owner: number; style: LineStyle; parts: Array<{ verts: Vert[]; indices: Uint32Array }> }> = []
+  const byOwner = new Map<number, (typeof groups)[number]>()
+  batches.forEach((batch, index) => {
+    const style = batch.lines
+    const verts = authored[index]
+    if (!style || !verts) return
+    let group = byOwner.get(batch.owner)
+    if (!group) {
+      group = { owner: batch.owner, style, parts: [] }
+      byOwner.set(batch.owner, group)
+      groups.push(group)
+    }
+    group.style = style
+    group.parts.push({ verts, indices: batch.indices })
+  })
+  for (let i = 0; i < groups.length; i++) {
+    for (let j = i + 1; j < groups.length; j++) {
+      const earlier = groups[i]!
+      const later = groups[j]!
+      const hiddenRuns: PointRun[] = []
+      for (const left of earlier.parts) {
+        for (const right of later.parts) {
+          for (const segment of meshIntersections(left.verts, left.indices, right.verts, right.indices)) {
+            consume(seamVert(segment.a), seamVert(segment.b), later.style, later.owner, false, 1, hiddenRuns, earlier.owner)
+          }
+        }
+      }
+      if (later.style.hiddenCss) {
+        for (const chain of chainHidden(hiddenRuns)) runs.push({ points: chain, hidden: true, kind: 2, style: later.style })
+      }
+    }
+  }
   cutCrossings(runs, edges, canvas.width, canvas.height, scale)
   for (const run of runs) paintSplit(ctx, run, scale)
   ctx.setLineDash([])
