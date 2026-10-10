@@ -288,7 +288,7 @@ function variationWeight(family: string): { def: number } | null {
  * 轮廓用哪一个字体文件。
  * 内置宋体、楷体按最近的字重文件选。可变字体的轮廓只在默认字重上，请求其它字重会抛错。
  */
-export async function resolveOutlineFont(family: string | undefined, weight: number | undefined): Promise<OutlineFont> {
+export function resolveOutlineFont(family: string | undefined, weight: number | undefined): OutlineFont {
   ensureDefaultFontSync()
   const requested = family?.trim() || DEFAULT_FONT_FAMILY
   const builtin = builtinFont(requested)
