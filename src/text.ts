@@ -59,7 +59,7 @@ export function defaultFontWeightForTag(tag: string): number {
   return tag === 'h1' || tag === 'h2' || tag === 'h3' ? 700 : 400
 }
 
-function mergeStyle(base: TextRunStyle, styleMap: Record<string, string>): TextRunStyle {
+function mergeStyle(base: TextRunStyle, styleMap: Record<string, string>, inline: boolean): TextRunStyle {
   const next = { ...base }
   const fs = parsePx(styleMap['font-size'])
   if (fs != null) next.fontSize = fs
@@ -69,6 +69,10 @@ function mergeStyle(base: TextRunStyle, styleMap: Record<string, string>): TextR
   if (styleMap.color) next.color = styleMap.color.trim()
   const ls = parseLetterSpacing(styleMap['letter-spacing'], next.fontSize)
   if (ls != null) next.letterSpacing = ls
+  if (inline) {
+    const background = styleMap.background ?? styleMap['background-color']
+    if (background) next.background = background.trim()
+  }
   return next
 }
 
@@ -174,7 +178,7 @@ function walkInline(
     if (tag === 'em' || tag === 'i') segStyle = { ...segStyle, fontStyle: 'italic' }
     if (tag === 'u') segStyle = { ...segStyle, underline: true }
     const declared = parseStyleAttr(child.attrs.style)
-    segStyle = mergeStyle(segStyle, declared)
+    segStyle = mergeStyle(segStyle, declared, true)
     segStyle = applySymbolsClass(segStyle, classAttr(child.attrs), {
       family: Boolean(declared['font-family']),
       spacing: declared['letter-spacing'] != null,
@@ -204,7 +208,7 @@ export function extractTextSegments(
   }
   const tag = node.tag.toLowerCase()
   const declared = parseStyleAttr(node.attrs.style)
-  let style = mergeStyle(base, declared)
+  let style = mergeStyle(base, declared, false)
   if (tag === 'strong' || tag === 'b') style = { ...style, fontWeight: 700 }
   if (tag === 'em' || tag === 'i') style = { ...style, fontStyle: 'italic' }
   if (tag === 'u') style = { ...style, underline: true }
@@ -676,6 +680,7 @@ function layoutVertical(opts: LayoutTextOptions): TextLayoutResult {
         segments: [{ text: glyph.text, style: glyph.drawStyle, x: glyphX, width: glyph.width, owner: glyph.owner }],
         width: contentWidth,
         height: lineH,
+        y,
         baselineY,
         ink: lineInk,
       })
@@ -787,6 +792,7 @@ export function layoutText(opts: LayoutTextOptions): TextLayoutResult {
       segments: segOut.filter((seg) => seg.text !== '\uFFFC'),
       width: lineW,
       height: lineH,
+      y,
       baselineY,
       ink: resolvedInk,
       ...(atoms.length ? { atoms } : {}),

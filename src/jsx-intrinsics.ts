@@ -41,7 +41,7 @@ type FvgPositioned = FvgGraphic & {
   'anchor-box'?: string
 }
 
-/** circle、ellipse、sphere 的圆心。 */
+/** circle、ellipse、sphere、cylinder、torus 的圆心。 */
 type FvgCenter = {
   cx?: number | string
   cy?: number | string
@@ -233,6 +233,77 @@ export namespace JSX {
         'stroke-width'?: number | string
         /** 被这只球自己挡住的棱。要和 stroke 一起写 */
         hidden?: string
+        /** 可见线在交叉处把更远的线断开，屏幕像素 */
+        halo?: number | string
+        /** matte、plastic、metal、glass。不写是磨砂。粗糙度跟在名字后面 */
+        material?: string
+        rotate?: number | string
+        rotateX?: number | string
+        rotateY?: number | string
+        z?: number | string
+        scale?: number | string
+        opacity?: number | string
+      }
+    /** 竖直圆柱。轴沿画面上下，圆截面朝镜头鼓出 r。 */
+    cylinder: FvgPositioned &
+      FvgCenter &
+      FvgEffects & {
+        r?: number | string
+        /** 沿画面竖直方向的长度 */
+        height?: number | string
+        /** 上下圆口的圆角半径。不写 round 时两端都圆 */
+        rx?: number | string
+        /** top、bottom 或 all。不写是两端 */
+        round?: string
+        fill?: string
+        stroke?: string
+        'stroke-width'?: number | string
+        hidden?: string
+        /** 可见线在交叉处把更远的线断开，屏幕像素 */
+        halo?: number | string
+        /** matte、plastic、metal、glass。不写是磨砂。粗糙度跟在名字后面 */
+        material?: string
+        rotate?: number | string
+        rotateX?: number | string
+        rotateY?: number | string
+        z?: number | string
+        scale?: number | string
+        opacity?: number | string
+      }
+    /** 躺在所在平面里的圆环。r 是环心到管心，tube 是管半径。 */
+    torus: FvgPositioned &
+      FvgCenter &
+      FvgEffects & {
+        r?: number | string
+        tube?: number | string
+        fill?: string
+        stroke?: string
+        'stroke-width'?: number | string
+        hidden?: string
+        /** 可见线在交叉处把更远的线断开，屏幕像素 */
+        halo?: number | string
+        /** matte、plastic、metal、glass。不写是磨砂。粗糙度跟在名字后面 */
+        material?: string
+        rotate?: number | string
+        rotateX?: number | string
+        rotateY?: number | string
+        z?: number | string
+        scale?: number | string
+        opacity?: number | string
+      }
+    /** 沿路径扫出的圆管。d 是中心线，r 是管半径。 */
+    tube: FvgPositioned &
+      FvgEffects & {
+        d?: string
+        r?: number | string
+        fill?: string
+        stroke?: string
+        'stroke-width'?: number | string
+        hidden?: string
+        /** 可见线在交叉处把更远的线断开，屏幕像素 */
+        halo?: number | string
+        /** matte、plastic、metal、glass。不写是磨砂。粗糙度跟在名字后面 */
+        material?: string
         rotate?: number | string
         rotateX?: number | string
         rotateY?: number | string
@@ -245,11 +316,18 @@ export namespace JSX {
         width?: number | string
         height?: number | string
         depth?: number | string
+        /** 棱的圆角半径。不写 round 时 12 条棱都圆 */
+        rx?: number | string
+        /** 哪些棱。front、x、front-top；不写是全部 */
+        round?: string
         fill?: string
         stroke?: string
         'stroke-width'?: number | string
         /** 被挡住的棱。要和 stroke 一起写 */
         hidden?: string
+        /** 可见线在交叉处把更远的线断开，屏幕像素 */
+        halo?: number | string
+        material?: string
         rotate?: number | string
         rotateX?: number | string
         rotateY?: number | string
@@ -265,6 +343,9 @@ export namespace JSX {
         stroke?: string
         'stroke-width'?: number | string
         hidden?: string
+        /** 可见线在交叉处把更远的线断开，屏幕像素 */
+        halo?: number | string
+        material?: string
         rotate?: number | string
         rotateX?: number | string
         rotateY?: number | string
@@ -279,6 +360,9 @@ export namespace JSX {
       stroke?: string
       'stroke-width'?: number | string
       hidden?: string
+      /** 可见线在交叉处把更远的线断开，屏幕像素 */
+      halo?: number | string
+      material?: string
     }
     curve: FvgGraphic & FvgLinePaint & { points?: string; closed?: boolean | string }
     h1: FvgHtml

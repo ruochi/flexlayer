@@ -4,6 +4,7 @@ import { solidPaint } from './gradient.js'
 import { parseGlb } from './glb.js'
 import { originOffset } from './matrix.js'
 import { applyPoseMatrix, PERSPECTIVE_AA, resolveSamples } from './perspective.js'
+import { roundedBoxGeometry, roundedCylinderGeometry } from './mesh-round.js'
 import { tessellateSvgPath } from './path.js'
 import type { LayerLayoutNode, LayoutNode, MeshLayoutNode } from './types.js'
 
@@ -17,6 +18,8 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
  * glb 用文件里的底色乘这套明暗。
  * 写了 stroke 时，缩小抗锯齿之后再按屏幕像素描折棱和轮廓。
  * hidden 只画被这只网格自己挡住的棱，虚线是 6 实 4 空。
+ * 不写 material 时是磨砂：主光乘 fill。plastic 加高光，metal 反射固定天空，glass 后画叠色。
+ * 同一条折线上的短段接成一条再取虚线相位，圆弧不会接成实线。
  */
 
 const MAX_RASTER_SIDE = 8192
@@ -52,7 +55,9 @@ type MeshEdge = {
 type LineStyle = {
   css: string
   hiddenCss: string | null
-  width: number
+  /** 屏幕像素：轮廓、折棱、隐藏线。 */
+  widths: [number, number, number]
+  halo: number
 }
 
 /** 球心在网格坐标里。半径均匀时画解析轮廓，否则退回三角网的轮廓边。 */
@@ -74,6 +79,9 @@ type Batch = {
   doubleSided: boolean
   shaded: boolean
   depthWrite: boolean
+  /** lambert 是默认磨砂（matte）和平面的明暗。glass 不写主光阴影，半透明时不写深度。 */
+  material: 'lambert' | 'plastic' | 'metal' | 'glass'
+  roughness: number
   texture: Uint8ClampedArray | null
   tw: number
   th: number
@@ -127,6 +135,106 @@ function lightBasis() {
 function lit(x: number, y: number, z: number, blocked = false) {
   const key = blocked ? 0 : 0.85 * Math.max(x * KEY.x + y * KEY.y + z * KEY.z, 0)
   return 0.5 + key + 0.3 * Math.max(x * FILL_LIGHT.x + y * FILL_LIGHT.y + z * FILL_LIGHT.z, 0)
+}
+
+const SKY_DOWN = { r: 36, g: 40, b: 48 }
+const SKY_HORIZON = { r: 148, g: 174, b: 196 }
+const SKY_UP = { r: 246, g: 247, b: 250 }
+
+function clamp01(n: number) {
+  if (n <= 0) return 0
+  if (n >= 1) return 1
+  return n
+}
+
+function shininess(roughness: number) {
+  return 2 ** (8 * (1 - clamp01(roughness)))
+}
+
+function mixByte(a: number, b: number, t: number) {
+  return a + (b - a) * t
+}
+
+/** 反射方向的 y 朝上为亮、朝下为暗。粗糙度把方向往地平线收。 */
+function skyAt(up: number, roughness: number) {
+  const spread = up * (1 - clamp01(roughness) * 0.9)
+  const t = clamp01(spread * 0.5 + 0.5)
+  const [a, b, k] = t < 0.5 ? [SKY_DOWN, SKY_HORIZON, t * 2] : [SKY_HORIZON, SKY_UP, (t - 0.5) * 2]
+  return { r: mixByte(a.r, b.r, k), g: mixByte(a.g, b.g, k), b: mixByte(a.b, b.b, k) }
+}
+
+function shadeNormal(nx: number, ny: number, nz: number, back: boolean) {
+  let x = nx
+  let y = -ny
+  let z = nz
+  const len = Math.hypot(x, y, z) || 1
+  x /= len
+  y /= len
+  z /= len
+  if (back) {
+    x = -x
+    y = -y
+    z = -z
+  }
+  return { x, y, z }
+}
+
+function reflectView(v: { x: number; y: number; z: number }, n: { x: number; y: number; z: number }) {
+  const d = v.x * n.x + v.y * n.y + v.z * n.z
+  return unit(2 * d * n.x - v.x, 2 * d * n.y - v.y, 2 * d * n.z - v.z)
+}
+
+type ShadeCamera = { x: number; y: number; z: number }
+
+/** 塑料加白高光，金属用 fill 给固定天空染色，玻璃按掠射角变白并透出底下。 */
+function materialBytes(
+  batch: Batch,
+  nx: number,
+  ny: number,
+  nz: number,
+  back: boolean,
+  shade: number,
+  blocked: boolean,
+  x: number,
+  y: number,
+  z: number,
+  camera: ShadeCamera,
+): [number, number, number, number] {
+  const n = shadeNormal(nx, ny, nz, back)
+  const v = unit(camera.x - x, y - camera.y, camera.z - z)
+  const h = unit(KEY.x + v.x, KEY.y + v.y, KEY.z + v.z)
+  const ndoth = Math.max(n.x * h.x + n.y * h.y + n.z * h.z, 0)
+  const spec = blocked ? 0 : ndoth ** shininess(batch.roughness)
+  if (batch.material === 'plastic') {
+    const add = spec * 255 * 0.95
+    return [
+      byte(Math.min(255, batch.r * shade + add)),
+      byte(Math.min(255, batch.g * shade + add)),
+      byte(Math.min(255, batch.b * shade + add)),
+      batch.a,
+    ]
+  }
+  if (batch.material === 'metal') {
+    const sky = skyAt(reflectView(v, n).y, batch.roughness)
+    const ndotv = clamp01(n.x * v.x + n.y * v.y + n.z * v.z)
+    const fres = (1 - ndotv) ** 5
+    const exposure = blocked ? 0.32 : 0.5 + 0.5 * Math.min(1, shade)
+    const specAdd = spec * 220
+    const tint = (channel: number, skyC: number) => {
+      const f = channel / 255
+      return Math.min(255, (f + (1 - f) * fres) * skyC * exposure + specAdd * (0.25 + 0.75 * f))
+    }
+    return [byte(tint(batch.r, sky.r)), byte(tint(batch.g, sky.g)), byte(tint(batch.b, sky.b)), batch.a]
+  }
+  const ndotv = clamp01(n.x * v.x + n.y * v.y + n.z * v.z)
+  const edge = (1 - ndotv) ** 2.2
+  const body = batch.a / 255
+  const alpha = body + (1 - body) * edge * 0.9
+  const whiten = edge * 0.8
+  const lit = (0.72 + 0.28 * Math.min(1, shade)) * (blocked ? 0.72 : 1)
+  const specAdd = spec * 255
+  const chan = (c: number) => Math.min(255, (c * lit * (1 - whiten) + 255 * whiten) + specAdd)
+  return [byte(chan(batch.r)), byte(chan(batch.g)), byte(chan(batch.b)), byte(alpha * 255)]
 }
 
 function shadeOf(nx: number, ny: number, nz: number, back: boolean, blocked = false) {
@@ -454,6 +562,15 @@ function buildBox(node: MeshLayoutNode) {
   const hw = node.width / 2
   const hh = node.height / 2
   const hd = node.mesh.depth / 2
+  if (node.mesh.rx > 0 && node.mesh.edges.length > 0 && hw > 0 && hh > 0 && hd > 0) {
+    const built = roundedBoxGeometry(hw, hh, hd, node.mesh.rx, node.mesh.edges)
+    centerMesh(node, built.positions)
+    return {
+      positions: Float32Array.from(built.positions),
+      normals: Float32Array.from(built.normals),
+      indices: Uint32Array.from(built.indices),
+    }
+  }
   const positions: number[] = []
   const normals: number[] = []
   const indices: number[] = []
@@ -473,6 +590,225 @@ function buildBox(node: MeshLayoutNode) {
     positions[i]! += tx
     positions[i + 1]! += ty
   }
+  return { positions: Float32Array.from(positions), normals: Float32Array.from(normals), indices: Uint32Array.from(indices) }
+}
+
+type Vec3 = { x: number; y: number; z: number }
+
+function vec3(x: number, y: number, z: number): Vec3 {
+  return { x, y, z }
+}
+
+function centerMesh(node: MeshLayoutNode, positions: number[]) {
+  const o = originOffset(node.origin, node.width, node.height)
+  const tx = node.width / 2 - o.x
+  const ty = -(node.height / 2 - o.y)
+  for (let i = 0; i < positions.length; i += 3) {
+    positions[i]! += tx
+    positions[i + 1]! += ty
+  }
+}
+
+function addDisk(positions: number[], normals: number[], indices: number[], center: Vec3, ring: Vec3[], normal: Vec3, reverse: boolean) {
+  const base = positions.length / 3
+  positions.push(center.x, center.y, center.z)
+  normals.push(normal.x, normal.y, normal.z)
+  for (const v of ring) {
+    positions.push(v.x, v.y, v.z)
+    normals.push(normal.x, normal.y, normal.z)
+  }
+  const radial = ring.length - 1
+  for (let k = 0; k < radial; k++) {
+    const i0 = base + 1 + k
+    const i1 = base + 2 + k
+    if (reverse) indices.push(base, i1, i0)
+    else indices.push(base, i0, i1)
+  }
+}
+
+/** 轴沿画面竖直方向。圆截面在 xz，朝镜头的一侧法线是 +z。 */
+function buildCylinder(node: MeshLayoutNode) {
+  if (node.mesh.type !== 'cylinder') return null
+  const radius = node.mesh.r
+  const half = node.mesh.height / 2
+  if (!(radius > 0) || !(half > 0)) return null
+  if (node.mesh.rx > 0 && node.mesh.rims.length > 0) {
+    const built = roundedCylinderGeometry(radius, half, node.mesh.rx, node.mesh.rims)
+    centerMesh(node, built.positions)
+    return {
+      positions: Float32Array.from(built.positions),
+      normals: Float32Array.from(built.normals),
+      indices: Uint32Array.from(built.indices),
+    }
+  }
+  const segments = 48
+  const positions: number[] = []
+  const normals: number[] = []
+  const indices: number[] = []
+  for (let iy = 0; iy <= 1; iy++) {
+    const y = iy === 0 ? half : -half
+    for (let ix = 0; ix <= segments; ix++) {
+      const theta = (ix / segments) * Math.PI * 2
+      const nx = Math.cos(theta)
+      const nz = Math.sin(theta)
+      positions.push(radius * nx, y, radius * nz)
+      normals.push(nx, 0, nz)
+    }
+  }
+  const cols = segments + 1
+  for (let ix = 0; ix < segments; ix++) {
+    const a = ix
+    const b = ix + cols
+    indices.push(a, a + 1, b, a + 1, b + 1, b)
+  }
+  const top: Vec3[] = []
+  const bottom: Vec3[] = []
+  for (let ix = 0; ix <= segments; ix++) {
+    const theta = (ix / segments) * Math.PI * 2
+    const x = radius * Math.cos(theta)
+    const z = radius * Math.sin(theta)
+    top.push(vec3(x, half, z))
+    bottom.push(vec3(x, -half, z))
+  }
+  addDisk(positions, normals, indices, vec3(0, half, 0), top, vec3(0, 1, 0), true)
+  addDisk(positions, normals, indices, vec3(0, -half, 0), bottom, vec3(0, -1, 0), false)
+  centerMesh(node, positions)
+  return { positions: Float32Array.from(positions), normals: Float32Array.from(normals), indices: Uint32Array.from(indices) }
+}
+
+/** 环躺在 xy 平面。r 是环心到管心，tube 是管半径。 */
+function buildTorus(node: MeshLayoutNode) {
+  if (node.mesh.type !== 'torus') return null
+  const major = node.mesh.r
+  const tube = node.mesh.tube
+  if (!(major > 0) || !(tube > 0) || tube >= major) return null
+  const tubular = 48
+  const radial = 24
+  const positions: number[] = []
+  const normals: number[] = []
+  const indices: number[] = []
+  for (let iy = 0; iy <= radial; iy++) {
+    const psi = (iy / radial) * Math.PI * 2
+    const cy = Math.cos(psi)
+    const sy = Math.sin(psi)
+    for (let ix = 0; ix <= tubular; ix++) {
+      const phi = (ix / tubular) * Math.PI * 2
+      const cx = Math.cos(phi)
+      const sx = Math.sin(phi)
+      positions.push((major + tube * cy) * cx, (major + tube * cy) * sx, tube * sy)
+      normals.push(cy * cx, cy * sx, sy)
+    }
+  }
+  const cols = tubular + 1
+  for (let iy = 0; iy < radial; iy++) {
+    for (let ix = 0; ix < tubular; ix++) {
+      const a = iy * cols + ix
+      const b = a + cols
+      indices.push(a, a + 1, b, a + 1, b + 1, b)
+    }
+  }
+  centerMesh(node, positions)
+  return { positions: Float32Array.from(positions), normals: Float32Array.from(normals), indices: Uint32Array.from(indices) }
+}
+
+function tangentOf(points: Vec3[], index: number, closed: boolean): Vec3 {
+  const n = points.length
+  const curr = points[index]!
+  const prev = closed ? points[(index - 1 + n) % n]! : points[Math.max(0, index - 1)]!
+  const next = closed ? points[(index + 1) % n]! : points[Math.min(n - 1, index + 1)]!
+  let x = next.x - prev.x
+  let y = next.y - prev.y
+  let z = next.z - prev.z
+  if (x * x + y * y + z * z < 1e-8) {
+    x = curr.x - prev.x
+    y = curr.y - prev.y
+    z = curr.z - prev.z
+  }
+  if (x * x + y * y + z * z < 1e-8) {
+    x = next.x - curr.x
+    y = next.y - curr.y
+    z = next.z - curr.z
+  }
+  return unit(x, y, z)
+}
+
+function tubeFrame(tangent: Vec3): { n: Vec3; b: Vec3 } | null {
+  const up = Math.abs(tangent.z) < 0.9 ? vec3(0, 0, 1) : vec3(0, 1, 0)
+  const side = cross(up, tangent)
+  const n = unit(side.x, side.y, side.z)
+  if (n.x === 0 && n.y === 0 && n.z === 0) return null
+  const bin = cross(tangent, n)
+  return { n, b: unit(bin.x, bin.y, bin.z) }
+}
+
+/** 圆截面沿路径扫出一根管子。路径在所在平面，y 向下。 */
+function buildTube(node: MeshLayoutNode) {
+  if (node.mesh.type !== 'tube') return null
+  const radius = node.mesh.r
+  if (!(radius > 0)) return null
+  const o = originOffset(node.origin, node.width, node.height)
+  const rings = tessellateSvgPath(node.mesh.d, 12, Math.PI / 20)
+  const positions: number[] = []
+  const normals: number[] = []
+  const indices: number[] = []
+  const radial = 16
+  for (const ring of rings) {
+    const points = dedupe(ring.points).map((p) => vec3(p.x - o.x, -(p.y - o.y), 0))
+    const closed = ring.closed && points.length >= 3
+    if (points.length < 2) continue
+    const frames: Array<{ n: Vec3; b: Vec3; t: Vec3 }> = []
+    let broken = false
+    for (let i = 0; i < points.length; i++) {
+      const t = tangentOf(points, i, closed)
+      const frame = tubeFrame(t)
+      if (!frame) {
+        broken = true
+        break
+      }
+      frames.push({ ...frame, t })
+    }
+    if (broken || frames.length !== points.length) continue
+    const base = positions.length / 3
+    const cols = radial + 1
+    const samples: Vec3[][] = []
+    for (let i = 0; i < points.length; i++) {
+      const frame = frames[i]!
+      const p = points[i]!
+      const row: Vec3[] = []
+      for (let k = 0; k <= radial; k++) {
+        const ang = (k / radial) * Math.PI * 2
+        const c = Math.cos(ang)
+        const s = Math.sin(ang)
+        const nx = c * frame.n.x + s * frame.b.x
+        const ny = c * frame.n.y + s * frame.b.y
+        const nz = c * frame.n.z + s * frame.b.z
+        const vertex = vec3(p.x + radius * nx, p.y + radius * ny, p.z + radius * nz)
+        row.push(vertex)
+        positions.push(vertex.x, vertex.y, vertex.z)
+        normals.push(nx, ny, nz)
+      }
+      samples.push(row)
+    }
+    const rows = points.length
+    const segCount = closed ? rows : rows - 1
+    for (let i = 0; i < segCount; i++) {
+      const i0 = base + i * cols
+      const i1 = base + ((i + 1) % rows) * cols
+      for (let k = 0; k < radial; k++) {
+        const a = i0 + k
+        const b = i1 + k
+        indices.push(a, a + 1, b, a + 1, b + 1, b)
+      }
+    }
+    if (!closed) {
+      const last = points.length - 1
+      const startT = frames[0]!.t
+      const endT = frames[last]!.t
+      addDisk(positions, normals, indices, points[0]!, samples[0]!, vec3(-startT.x, -startT.y, -startT.z), true)
+      addDisk(positions, normals, indices, points[last]!, samples[last]!, endT, false)
+    }
+  }
+  if (indices.length === 0) return null
   return { positions: Float32Array.from(positions), normals: Float32Array.from(normals), indices: Uint32Array.from(indices) }
 }
 
@@ -676,6 +1012,9 @@ function buildModel(node: MeshLayoutNode) {
 function geometryOf(node: MeshLayoutNode) {
   if (node.mesh.type === 'sphere') return buildSphere(node)
   if (node.mesh.type === 'box') return buildBox(node)
+  if (node.mesh.type === 'cylinder') return buildCylinder(node)
+  if (node.mesh.type === 'torus') return buildTorus(node)
+  if (node.mesh.type === 'tube') return buildTube(node)
   if (node.mesh.type === 'extrude') return buildExtrude(node)
   return null
 }
@@ -814,6 +1153,7 @@ function buildShadowMap(batches: Batch[], authored: Vert[][], pixels: number): S
     }
   }
   batches.forEach((batch, batchIndex) => {
+    if (batch.material === 'glass') return
     if (!batch.texture && batch.a < 128) return
     const verts = authored[batchIndex]!
     const indices = batch.indices
@@ -909,6 +1249,7 @@ function drawTriangle(
   c: ScreenVert,
   batch: Batch,
   shadow: ShadowMap | null,
+  camera: ShadeCamera,
 ) {
   const area = (b.sx - a.sx) * (c.sy - a.sy) - (b.sy - a.sy) * (c.sx - a.sx)
   if (Math.abs(area) < 1e-8) return
@@ -982,6 +1323,13 @@ function drawTriangle(
         sg = byte(tex.g * dim)
         sb = byte(tex.b * dim)
         sa = tex.a
+      } else if (batch.material !== 'lambert') {
+        const shade = flat ? (blocked ? shutShade : openShade) : shadeOf(nx, ny, nz, back, blocked)
+        const painted = materialBytes(batch, nx, ny, nz, back, shade, blocked, x, y, z, camera)
+        sr = painted[0]
+        sg = painted[1]
+        sb = painted[2]
+        sa = painted[3]
       } else if (batch.shaded) {
         const shade = flat ? (blocked ? shutShade : openShade) : shadeOf(nx, ny, nz, back, blocked)
         sr = byte(batch.r * shade)
@@ -1091,6 +1439,7 @@ function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: number
   owners.fill(-1)
   const shadow = buildShadowMap(batches, authored, Math.max(layer.width, layer.height) * base * 2)
   const near = perspective * (1 - 1e-3)
+  const camera: ShadeCamera = { x: vx, y: vy, z: perspective }
   const toScreen = (v: Vert): ScreenVert => {
     const w = 1 - v.z / perspective
     return {
@@ -1100,7 +1449,8 @@ function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: number
       invW: 1 / w,
     }
   }
-  batches.forEach((batch, batchIndex) => {
+  const paintBatch = (batchIndex: number) => {
+    const batch = batches[batchIndex]!
     const verts = authored[batchIndex]!
     const indices = batch.indices
     for (let i = 0; i < indices.length; i += 3) {
@@ -1110,10 +1460,23 @@ function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: number
         const a = clipped[0]!
         const b = clipped[k]!
         const c = clipped[k + 1]!
-        drawTriangle(color, depth, owners, pw, ph, toScreen(a), toScreen(b), toScreen(c), batch, shadow)
+        drawTriangle(color, depth, owners, pw, ph, toScreen(a), toScreen(b), toScreen(c), batch, shadow, camera)
       }
     }
+  }
+  const solid: number[] = []
+  const glass: number[] = []
+  batches.forEach((batch, index) => {
+    if (batch.material === 'glass') glass.push(index)
+    else solid.push(index)
   })
+  glass.sort((a, b) => {
+    const za = authored[a]!.reduce((sum, vert) => sum + vert.z, 0)
+    const zb = authored[b]!.reduce((sum, vert) => sum + vert.z, 0)
+    return za - zb
+  })
+  for (const index of solid) paintBatch(index)
+  for (const index of glass) paintBatch(index)
   const hi = createCanvas(pw, ph)
   const image = hi.getContext('2d').createImageData(pw, ph)
   image.data.set(color)
@@ -1130,7 +1493,8 @@ function rgbaCss(r: number, g: number, b: number, a: number) {
 }
 
 function lineStyleOf(node: MeshLayoutNode, opacity: number): LineStyle | null {
-  if (node.stroke === 'none' || !(node.strokeWidth > 0)) return null
+  const widths = node.strokeWidths
+  if (node.stroke === 'none' || !(Math.max(widths[0], widths[1], widths[2]) > 0)) return null
   const [r, g, b, a] = fillBytes(node.stroke, opacity)
   if (a <= 0) return null
   let hiddenCss: string | null = null
@@ -1138,7 +1502,7 @@ function lineStyleOf(node: MeshLayoutNode, opacity: number): LineStyle | null {
     const [hr, hg, hb, ha] = fillBytes(node.hidden, opacity)
     if (ha > 0) hiddenCss = rgbaCss(hr, hg, hb, ha)
   }
-  return { css: rgbaCss(r, g, b, a), hiddenCss, width: node.strokeWidth }
+  return { css: rgbaCss(r, g, b, a), hiddenCss, widths, halo: node.halo }
 }
 
 function sphereOutlineOf(node: MeshLayoutNode): SphereOutline | null {
@@ -1284,7 +1648,7 @@ function classifySample(
   return outline ? 'visible' : 'hidden'
 }
 
-type ScreenSample = { x: number; y: number; kind: 'visible' | 'hidden' | 'skip' }
+type ScreenSample = { x: number; y: number; z: number; kind: 'visible' | 'hidden' | 'skip' }
 
 function sampleSegment(
   a: Vert,
@@ -1335,31 +1699,46 @@ function sampleSegment(
     out.push({
       x: s.x,
       y: s.y,
+      z: s.z,
       kind: classifySample(depth, owners, pw, ph, mapX, mapY, s.x, s.y, s.z, owner, outline),
     })
   }
   return out
 }
 
-function paintRun(ctx: CanvasRenderingContext2D, points: ScreenSample[], hidden: boolean, style: LineStyle, scale: number) {
-  if (points.length < 2) return
+function paintRun(
+  ctx: CanvasRenderingContext2D,
+  points: Array<{ x: number; y: number }>,
+  hidden: boolean,
+  css: string,
+  width: number,
+  scale: number,
+  dashOffset = 0,
+) {
+  if (points.length < 2 || !(width > 0)) return
   ctx.beginPath()
   ctx.moveTo(points[0]!.x, points[0]!.y)
   for (let i = 1; i < points.length; i++) ctx.lineTo(points[i]!.x, points[i]!.y)
   ctx.setLineDash(hidden ? [6 * scale, 4 * scale] : [])
+  ctx.lineDashOffset = hidden ? dashOffset : 0
   ctx.lineCap = hidden ? 'butt' : 'round'
   ctx.lineJoin = 'round'
-  ctx.lineWidth = style.width * scale
-  ctx.strokeStyle = hidden ? style.hiddenCss! : style.css
+  ctx.lineWidth = width * scale
+  ctx.strokeStyle = css
   ctx.stroke()
 }
 
-function paintSamples(ctx: CanvasRenderingContext2D, samples: ScreenSample[], style: LineStyle, scale: number) {
+type ChainPoint = { x: number; y: number; z: number; edge: number; cut?: boolean }
+type PointRun = { points: ChainPoint[] }
+
+function collectRuns(samples: ScreenSample[]): Array<{ points: Array<{ x: number; y: number; z: number }>; hidden: boolean }> {
+  const out: Array<{ points: Array<{ x: number; y: number; z: number }>; hidden: boolean }> = []
   let run: ScreenSample[] = []
   let mode: ScreenSample['kind'] | null = null
   const flush = () => {
-    if (mode === 'visible') paintRun(ctx, run, false, style, scale)
-    else if (mode === 'hidden' && style.hiddenCss) paintRun(ctx, run, true, style, scale)
+    if (run.length >= 2 && (mode === 'visible' || mode === 'hidden')) {
+      out.push({ points: run.map((p) => ({ x: p.x, y: p.y, z: p.z })), hidden: mode === 'hidden' })
+    }
     run = []
   }
   for (const sample of samples) {
@@ -1376,6 +1755,63 @@ function paintSamples(ctx: CanvasRenderingContext2D, samples: ScreenSample[], st
     if (mode !== 'skip') run.push(sample)
   }
   flush()
+  return out
+}
+
+/** 端点重合的隐藏段合成一条折线，虚线相位才能沿圆弧走下去。 */
+function chainHidden(runs: PointRun[]): ChainPoint[][] {
+  const n = runs.length
+  if (n === 0) return []
+  const used = new Array<boolean>(n).fill(false)
+  const keyOf = (p: { x: number; y: number }) => `${Math.round(p.x * 4)}|${Math.round(p.y * 4)}`
+  const at = new Map<string, number[]>()
+  const pushAt = (p: { x: number; y: number }, i: number) => {
+    const k = keyOf(p)
+    const list = at.get(k)
+    if (list) list.push(i)
+    else at.set(k, [i])
+  }
+  for (let i = 0; i < n; i++) {
+    const pts = runs[i]!.points
+    pushAt(pts[0]!, i)
+    const last = pts[pts.length - 1]!
+    if (keyOf(last) !== keyOf(pts[0]!)) pushAt(last, i)
+  }
+  const orient = (points: ChainPoint[], tip: { x: number; y: number }) =>
+    keyOf(points[0]!) === keyOf(tip) ? points : [...points].reverse()
+  const out: ChainPoint[][] = []
+  for (let seed = 0; seed < n; seed++) {
+    if (used[seed]) continue
+    used[seed] = true
+    let points = runs[seed]!.points.slice()
+    const grow = (forward: boolean) => {
+      for (;;) {
+        const tip = forward ? points[points.length - 1]! : points[0]!
+        const prev = forward ? points[Math.max(0, points.length - 2)]! : points[Math.min(1, points.length - 1)]!
+        const cands = (at.get(keyOf(tip)) ?? []).filter((i) => !used[i])
+        if (cands.length === 0) return
+        let best = cands[0]!
+        let bestDot = -Infinity
+        for (const i of cands) {
+          const seq = orient(runs[i]!.points, tip)
+          const next = seq[Math.min(1, seq.length - 1)]!
+          const dot = (tip.x - prev.x) * (next.x - tip.x) + (tip.y - prev.y) * (next.y - tip.y)
+          if (dot > bestDot) {
+            bestDot = dot
+            best = i
+          }
+        }
+        used[best] = true
+        const seq = orient(runs[best]!.points, tip)
+        if (forward) points = points.concat(seq.slice(1))
+        else points = seq.slice(0, -1).reverse().concat(points)
+      }
+    }
+    grow(true)
+    grow(false)
+    out.push(points)
+  }
+  return out
 }
 
 function sphereRing(center: { x: number; y: number; z: number }, radius: number, vx: number, vy: number, perspective: number): Vert[] | null {
@@ -1428,6 +1864,91 @@ function roundSphere(batch: Batch): { x: number; y: number; z: number; radius: n
   return { x: c.x, y: c.y, z: c.z, radius: mean }
 }
 
+type InkRun = { points: ChainPoint[]; hidden: boolean; kind: 0 | 1 | 2; style: LineStyle }
+type EdgeEnds = { a: string; b: string }
+
+function edgeKey(v: { x: number; y: number; z: number }) {
+  return `${quantCoord(v.x)},${quantCoord(v.y)},${quantCoord(v.z)}`
+}
+
+function shareEnds(a: EdgeEnds, b: EdgeEnds) {
+  return a.a === b.a || a.a === b.b || a.b === b.a || a.b === b.b
+}
+
+/** 从折线起点走到 index 的屏幕长度，断口也算，虚线相位才能接上。 */
+function prefixLength(points: ChainPoint[], index: number) {
+  let length = 0
+  for (let i = 1; i <= index; i++) {
+    length += Math.hypot(points[i]!.x - points[i - 1]!.x, points[i]!.y - points[i - 1]!.y)
+  }
+  return length
+}
+
+function paintSplit(ctx: CanvasRenderingContext2D, run: InkRun, scale: number) {
+  const width = run.style.widths[run.kind]
+  const css = run.hidden ? run.style.hiddenCss : run.style.css
+  if (!css || !(width > 0)) return
+  const points = run.points
+  let i = 0
+  while (i < points.length) {
+    while (i < points.length && points[i]!.cut) i++
+    const start = i
+    while (i < points.length && !points[i]!.cut) i++
+    const slice = points.slice(start, i)
+    if (slice.length >= 2) paintRun(ctx, slice, run.hidden, css, width, scale, run.hidden ? prefixLength(points, start) : 0)
+  }
+}
+
+/**
+ * 可见线按 (线宽 / 2 + halo) 盖住更远的线。共用端点的棱不切开，角上仍连着。
+ * 深度差不到 2 个像素的不算压在前面。
+ */
+function cutCrossings(runs: InkRun[], edges: EdgeEnds[], width: number, height: number, scale: number) {
+  if (!runs.some((run) => !run.hidden && run.style.halo > 0)) return
+  const zBuf = new Float32Array(width * height)
+  const edgeBuf = new Int32Array(width * height)
+  zBuf.fill(-1e30)
+  edgeBuf.fill(-1)
+  const stamp = (x: number, y: number, z: number, edge: number, radius: number) => {
+    const r = Math.ceil(radius)
+    const x0 = Math.max(0, Math.floor(x - r))
+    const y0 = Math.max(0, Math.floor(y - r))
+    const x1 = Math.min(width - 1, Math.ceil(x + r))
+    const y1 = Math.min(height - 1, Math.ceil(y + r))
+    const r2 = radius * radius
+    for (let yy = y0; yy <= y1; yy++) {
+      const dy = yy - y
+      for (let xx = x0; xx <= x1; xx++) {
+        const dx = xx - x
+        if (dx * dx + dy * dy > r2) continue
+        const i = yy * width + xx
+        if (z > zBuf[i]!) {
+          zBuf[i] = z
+          edgeBuf[i] = edge
+        }
+      }
+    }
+  }
+  for (const run of runs) {
+    if (run.hidden || !(run.style.halo > 0)) continue
+    const radius = (run.style.widths[run.kind] / 2 + run.style.halo) * scale
+    if (!(radius > 0)) continue
+    for (const point of run.points) stamp(point.x, point.y, point.z, point.edge, radius)
+  }
+  for (const run of runs) {
+    for (const point of run.points) {
+      const ix = Math.round(point.x)
+      const iy = Math.round(point.y)
+      if (ix < 0 || iy < 0 || ix >= width || iy >= height) continue
+      const i = iy * width + ix
+      const other = edgeBuf[i]!
+      if (other < 0 || !(zBuf[i]! > point.z + 2)) continue
+      if (shareEnds(edges[other]!, edges[point.edge]!)) continue
+      point.cut = true
+    }
+  }
+}
+
 function paintMeshLines(
   canvas: Canvas,
   batches: Batch[],
@@ -1452,35 +1973,51 @@ function paintMeshLines(
   const vy = layer.height / 2
   const mapX = pw / canvas.width
   const mapY = ph / canvas.height
-  const stroke = (a: Vert, b: Vert, style: LineStyle, owner: number, outline: boolean) => {
-    paintSamples(
-      ctx,
+  const edges: EdgeEnds[] = []
+  const runs: InkRun[] = []
+  const addEdge = (a: Vert, b: Vert) => {
+    const id = edges.length
+    edges.push({ a: edgeKey(a), b: edgeKey(b) })
+    return id
+  }
+  const consume = (a: Vert, b: Vert, style: LineStyle, owner: number, outline: boolean, kind: 0 | 1, hiddenRuns: PointRun[]) => {
+    const edge = addEdge(a, b)
+    for (const run of collectRuns(
       sampleSegment(a, b, perspective, vx, vy, padL, padT, scaleX, scaleY, depth, owners, pw, ph, mapX, mapY, owner, outline),
-      style,
-      scale,
-    )
+    )) {
+      const points = run.points.map((point) => ({ ...point, edge }))
+      if (run.hidden) {
+        if (style.hiddenCss) hiddenRuns.push({ points })
+      } else runs.push({ points, hidden: false, kind, style })
+    }
   }
   batches.forEach((batch, index) => {
     const style = batch.lines
     if (!style) return
     const verts = authored[index]
     if (!verts) return
+    const hiddenRuns: PointRun[] = []
     const round = roundSphere(batch)
     if (batch.outline && round) {
       const ring = sphereRing(round, round.radius, vx, vy, perspective)
       if (!ring) return
-      for (let i = 0; i < ring.length; i++) stroke(ring[i]!, ring[(i + 1) % ring.length]!, style, batch.owner, true)
-      return
+      for (let i = 0; i < ring.length; i++) consume(ring[i]!, ring[(i + 1) % ring.length]!, style, batch.owner, true, 0, hiddenRuns)
+    } else {
+      for (const edge of batch.edges) {
+        const silhouette = isSilhouette(edge, verts, batch, vx, vy, perspective)
+        if (!edge.crease && !silhouette) continue
+        const a = verts[edge.a]
+        const b = verts[edge.b]
+        if (!a || !b) continue
+        consume(a, b, style, batch.owner, !edge.crease && silhouette, silhouette ? 0 : 1, hiddenRuns)
+      }
     }
-    for (const edge of batch.edges) {
-      const silhouette = isSilhouette(edge, verts, batch, vx, vy, perspective)
-      if (!edge.crease && !silhouette) continue
-      const a = verts[edge.a]
-      const b = verts[edge.b]
-      if (!a || !b) continue
-      stroke(a, b, style, batch.owner, !edge.crease && silhouette)
+    if (style.hiddenCss) {
+      for (const chain of chainHidden(hiddenRuns)) runs.push({ points: chain, hidden: true, kind: 2, style })
     }
   })
+  cutCrossings(runs, edges, canvas.width, canvas.height, scale)
+  for (const run of runs) paintSplit(ctx, run, scale)
   ctx.setLineDash([])
 }
 
@@ -1536,6 +2073,8 @@ function planeBatch(plane: SoftwareMeshInput['planes'][number], raster: Software
     doubleSided: true,
     shaded: false,
     depthWrite: true,
+    material: 'lambert',
+    roughness: 1,
     texture: solid ? null : pixels.data,
     tw: solid ? 0 : painted.canvas.width,
     th: solid ? 0 : painted.canvas.height,
@@ -1547,6 +2086,12 @@ function planeBatch(plane: SoftwareMeshInput['planes'][number], raster: Software
     lines: null,
     outline: null,
   }
+}
+
+/** 磨砂和没写 material 走同一套明暗。平面也用这套。 */
+function shadeMaterial(kind: NonNullable<MeshLayoutNode['material']>['kind'] | undefined): Batch['material'] {
+  if (!kind || kind === 'matte') return 'lambert'
+  return kind
 }
 
 export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
@@ -1573,7 +2118,9 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
           a: byte(prim.color[3] * (instance.opacity ?? 1)),
           doubleSided: prim.doubleSided,
           shaded: true,
-          depthWrite: prim.color[3] >= 255,
+          depthWrite: node.material?.kind === 'glass' && prim.color[3] < 255 ? false : prim.color[3] >= 255,
+          material: shadeMaterial(node.material?.kind),
+          roughness: node.material?.roughness ?? 1,
           texture: null,
           tw: 0,
           th: 0,
@@ -1587,8 +2134,10 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
     }
     const geometry = geometryOf(node)
     if (!geometry) continue
-    const fillNone = node.fill === 'none' || node.fill === 'transparent'
-    const [r, g, b, a] = fillNone ? [0, 0, 0, 0] : fillBytes(node.fill, opacity)
+    const glass = node.material?.kind === 'glass'
+    const clear = node.fill === 'none' || node.fill === 'transparent'
+    const fillNone = clear && !glass
+    const [r, g, b, a] = fillNone ? [0, 0, 0, 0] : clear ? [255, 255, 255, 0] : fillBytes(node.fill, opacity)
     batches.push({
       positions: geometry.positions,
       normals: geometry.normals,
@@ -1600,7 +2149,9 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
       a,
       doubleSided: node.mesh.type === 'extrude',
       shaded: !fillNone,
-      depthWrite: fillNone || a >= 255,
+      depthWrite: glass && a < 255 ? false : fillNone || a >= 255,
+      material: shadeMaterial(node.material?.kind),
+      roughness: node.material?.roughness ?? 1,
       texture: null,
       tw: 0,
       th: 0,

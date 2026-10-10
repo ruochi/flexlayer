@@ -52,17 +52,40 @@ export function layoutScale(node: LayoutNode): number {
 
 const VIEW_SLACK = 0.51
 
+/** 绕自己的 origin 做 rotate、scale。没有这些时是单位变换。 */
+function poseOf(node: LayoutNode): Matrix | null {
+  if (node.rotate === 0 && node.scaleX === 1 && node.scaleY === 1) return null
+  const pivot = originOffset(node.origin, node.width, node.height)
+  return aroundPivot(node.x + pivot.x, node.y + pivot.y, node.rotate, node.scaleX, node.scaleY)
+}
+
 /** 布局盒子绕 origin 做完 rotate、scale 之后的四个角，顺序是左上、右上、右下、左下。 */
 function childQuad(child: LayoutNode): Array<[number, number]> | null {
   if (child.width <= 1e-3 || child.height <= 1e-3) return null
-  const pivot = originOffset(child.origin, child.width, child.height)
-  const pose = aroundPivot(child.x + pivot.x, child.y + pivot.y, child.rotate, child.scaleX, child.scaleY)
-  return [
-    apply(pose, child.x, child.y),
-    apply(pose, child.x + child.width, child.y),
-    apply(pose, child.x + child.width, child.y + child.height),
-    apply(pose, child.x, child.y + child.height),
+  const corners: Array<[number, number]> = [
+    [child.x, child.y],
+    [child.x + child.width, child.y],
+    [child.x + child.width, child.y + child.height],
+    [child.x, child.y + child.height],
   ]
+  const pose = poseOf(child)
+  return pose ? corners.map(([x, y]) => apply(pose, x, y)) : corners
+}
+
+/**
+ * 盖住镜头的四边形。`<g>` 用 SVG transform 之后每个形状自己的四边形。
+ * 组自己的 rotate、scale 再绕外接矩形的 origin 做一次。
+ */
+function coverageQuads(node: LayoutNode): Array<Array<[number, number]>> {
+  if (node.kind !== 'group') {
+    const quad = childQuad(node)
+    return quad ? [quad] : []
+  }
+  const mapped = node.children
+    .flatMap((child) => coverageQuads(child))
+    .map((quad) => quad.map(([x, y]) => apply(node.svg, x, y)))
+  const pose = poseOf(node)
+  return pose ? mapped.map((quad) => quad.map(([x, y]) => apply(pose, x, y))) : mapped
 }
 
 /** 凸多边形，边向内或向外绕一圈都可以。点落在边上算在里面。 */
@@ -85,10 +108,7 @@ function pointInConvex(point: [number, number], corners: Array<[number, number]>
  * 镜头四角各向内收 0.51px 再测，贴边的取景不算超出。多个子元素时，每个角落在其中一块里即可。
  */
 export function viewExceeds(view: ViewRect, children: LayoutNode[]): boolean {
-  const quads = children.flatMap((child) => {
-    const quad = childQuad(child)
-    return quad ? [quad] : []
-  })
+  const quads = children.flatMap((child) => coverageQuads(child))
   if (quads.length === 0) return true
   const dx = Math.min(VIEW_SLACK, view.width / 2)
   const dy = Math.min(VIEW_SLACK, view.height / 2)

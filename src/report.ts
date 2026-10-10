@@ -1,4 +1,5 @@
 import { filtersInPaintOrder, getFilter } from './filter.js'
+import { MESH_TAGS } from './tags.js'
 import { apply, applyToBox, aroundPivot, IDENTITY, intersectBox, matrixScale, multiply, originOffset, translated, type Matrix } from './matrix.js'
 import { applyPoseMatrix, has3dPose, planeDepth, poseMatrix, posePoint, project as projectPoint } from './perspective.js'
 import { maskStats } from './mask-stats.js'
@@ -53,7 +54,8 @@ type MeshView = {
 
 function meshHalfDepth(node: MeshLayoutNode): number {
   const mesh = node.mesh
-  if (mesh.type === 'sphere') return mesh.r
+  if (mesh.type === 'sphere' || mesh.type === 'cylinder' || mesh.type === 'tube') return mesh.r
+  if (mesh.type === 'torus') return mesh.tube
   if (mesh.type === 'box' || mesh.type === 'extrude') return mesh.depth / 2
   if (!mesh.span || node.width <= 0 || node.height <= 0) return 0
   const sx = mesh.span.x > 1e-6 ? node.width / mesh.span.x : Infinity
@@ -103,8 +105,6 @@ function projectMeshInk(node: MeshLayoutNode, view: MeshView, toLayer: Mat4): Bo
   if (!box) return null
   return clipInk(box, view.canvasClip)
 }
-
-const MESH_TAGS = new Set(['sphere', 'box', 'extrude', 'model'])
 
 function inkOverlap(a: Box, b: Box): boolean {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y

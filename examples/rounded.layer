@@ -1,0 +1,6 @@
+<layer width="960" height="540" background="#0f1115" perspective="900">
+  <box x="50" y="150" width="200" height="150" depth="110" rx="28" fill="#e8b04a" rotateY="-32" rotateX="16" />
+  <box x="300" y="160" width="180" height="140" depth="90" rx="24" round="front" fill="#4CC3D9" rotateY="34" rotateX="14" />
+  <box x="530" y="170" width="170" height="130" depth="80" rx="22" round="z" fill="#EF2D5E" rotateY="-18" />
+  <cylinder cx="820" cy="260" r="58" height="180" rx="18" fill="#7dce8a" rotateX="56" />
+</layer>

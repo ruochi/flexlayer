@@ -168,6 +168,50 @@ describe('行内空白', () => {
     expect(ink(600)).not.toBe(ink(700))
   })
 
+  it('行内背景记在片段上，段落背景不抄进去', async () => {
+    if (!hasFont) return
+    const doc = await layoutSource(
+      `<layer width="400" height="80" safe="0"><p style="background:#eeeeee">AA<span style="background-color:#ff0000"><em>BB</em></span>CC</p></layer>`,
+      process.cwd(),
+    )
+    const node = doc.root.children[0]
+    expect(node?.kind).toBe('text')
+    if (!node || node.kind !== 'text') return
+    const line = node.textLayout.lines[0]!
+    expect(line.y).toBe(0)
+    const bb = line.segments.find((seg) => seg.text.includes('B'))
+    expect(bb?.style.background).toBe('#ff0000')
+    expect(line.segments.find((seg) => seg.text.includes('A'))?.style.background).toBeUndefined()
+    expect(node.background).toBe('#eeeeee')
+  })
+
+  it('竖排字距算进行顶', () => {
+    if (!hasFont) return
+    const r = layoutText({
+      segments: [{ text: '竖排', style: { ...baseStyle, letterSpacing: 10 } }],
+      writingMode: 'vertical-rl',
+      lineHeightRatio: 1,
+      fontSize: 40,
+    })
+    expect(r.lines[0]!.y).toBe(0)
+    expect(r.lines[1]!.y).toBeCloseTo(r.lines[0]!.height + 10)
+  })
+
+  it('解析不了的行内渐变降回纯色，并丢掉背景', async () => {
+    if (!hasFont) return
+    const doc = await layoutSource(
+      `<layer width="240" height="80" safe="0" color="#112233"><p>A<span style="color:gradient(nope); background:gradient(nope)">B</span></p></layer>`,
+      process.cwd(),
+    )
+    const node = doc.root.children[0]
+    expect(node?.kind).toBe('text')
+    if (!node || node.kind !== 'text') return
+    const bb = node.textLayout.lines[0]!.segments.find((seg) => seg.text.includes('B'))
+    expect(bb?.style.color).toBe('#112233')
+    expect(bb?.style.background).toBeUndefined()
+    expect(doc.issues.filter((issue) => issue.code === 'invalid-attr').length).toBeGreaterThanOrEqual(2)
+  })
+
   it('不是 100 倍数的字重仍按这个字号排', () => {
     if (!hasFont) return
     const width = (weight: number) => {

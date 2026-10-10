@@ -20,6 +20,7 @@ import { materialize } from './components.js'
 import { catmullRomPath } from './curve.js'
 import { isGradient, parseGradient, solidPaint } from './gradient.js'
 import { glbSpan, resolveModelFile } from './glb.js'
+import { readBoxFillet, readCylinderFillet } from './mesh-round.js'
 import { openSvgPath, translateSvgPath } from './path.js'
 import { perspectiveIssues } from './perspective.js'
 import {
@@ -57,7 +58,7 @@ import {
 } from './text.js'
 import { applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset, translated } from './matrix.js'
 import { layoutMath } from './math/layout.js'
-import { asBlockFlow, checkChildAttrs, checkTextBoxChildren, hasTwoPoint, hiddenAttrIssues, isDisplayFlex, isHtmlTag, legacyCenterIssues, originValueIssues, rowColumnHint, styleIssues, typoAttrIssues } from './rules.js'
+import { asBlockFlow, checkChildAttrs, checkTextBoxChildren, haloAttrIssues, hasTwoPoint, hiddenAttrIssues, isDisplayFlex, isHtmlTag, legacyCenterIssues, materialAttrIssues, originValueIssues, rowColumnHint, styleIssues, typoAttrIssues } from './rules.js'
 import { fitViewAspect, parseView, viewExceeds } from './view.js'
 import { canonicalTag, FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag } from './tags.js'
 import { boundsOf, parseSvgTransform } from './svg-transform.js'
@@ -84,12 +85,14 @@ import type {
   LineLayoutNode,
   MeshLayoutNode,
   MaskOp,
+  MeshMaterial,
   NoiseSpec,
   PreviewSpec,
   OverlaySpec,
   ShadowSpec,
   ShapeLayoutNode,
   TextLayoutNode,
+  TextSegment,
 } from './types.js'
 import { emptyBox, unionBoxes } from './types.js'
 import { formatSourceLoc } from './source-loc.js'
@@ -731,7 +734,7 @@ function lineInk(box: Box, strokeWidth: number): Box {
 
 function usesOwnCoords(node: FvgNode, kind: LayoutNode['kind']): boolean {
   if (kind === 'line' || kind === 'group') return true
-  if (node.tag === 'circle' || node.tag === 'ellipse' || node.tag === 'sphere') return true
+  if (node.tag === 'circle' || node.tag === 'ellipse' || node.tag === 'sphere' || node.tag === 'cylinder' || node.tag === 'torus') return true
   if (node.tag === 'rect') return true
   return kind === 'custom' && hasTwoPoint(node.attrs)
 }
@@ -749,6 +752,38 @@ function normalizeLineGeometry(geom: LineGeometry, box: Box): LineGeometry {
   return geom
 }
 
+function sanitizeTextPaints(segments: TextSegment[], ctx: LayoutContext): TextSegment[] {
+  return segments.map((seg) => {
+    let color = seg.style.color
+    let background = seg.style.background
+    if (isGradient(color) && !parseGradient(color)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `无法解析 color: ${color}`,
+        hint: '写成 #112233，或 linear-gradient(to right, #ff0000, #0000ff)',
+      })
+      color = ctx.color
+    }
+    if (background && background !== 'transparent' && background !== 'none' && isGradient(background) && !parseGradient(background)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `无法解析 background: ${background}`,
+        hint: '写成 #ffe08a，或 linear-gradient(to right, #ff0000, #0000ff)',
+      })
+      background = undefined
+    }
+    if (color === seg.style.color && background === seg.style.background) return seg
+    const style = { ...seg.style, color }
+    if (background) style.background = background
+    else delete style.background
+    return { ...seg, style }
+  })
+}
+
 function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: number): TextLayoutNode {
   warnNestedMasks(node, ctx)
   const style = parseStyle(node.attrs.style)
@@ -760,7 +795,7 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
     parseFontWeight(style['font-weight']) ??
     (isHeadingTag(tag) || tag === 'strong' || tag === 'b' ? 700 : ctx.fontWeight ?? defaultFontWeightForTag(tag))
   const fontFamily = style['font-family']?.trim() || (symbols ? ICON_FONT_FAMILY : ctx.fontFamily)
-  const color = style.color ?? ctx.color
+  const color = readPaint(style.color ?? ctx.color, ctx.color, ctx, 'color')
   const letterSpacing = parseLetterSpacing(style['letter-spacing'], fontSize) ?? ctx.letterSpacing ?? 0
   const images: ImageLayoutNode[] = []
   const segments = extractTextSegments(
@@ -784,6 +819,7 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
       for (const note of notes) ctx.issues.push({ ...note, path: notePath })
     },
   )
+  const paintedSegments = sanitizeTextPaints(segments, ctx)
   const nowrap = style['white-space'] === 'nowrap' || (symbols != null && !style['white-space'])
   const textWrap = style['text-wrap'] === 'wrap' ? 'wrap' : 'balance'
   const fixedW = parsePx(style.width)
@@ -811,7 +847,7 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
   const innerPadY = appearance.padding.top + appearance.padding.bottom + (appearance.border?.width ?? 0) * 2
 
   const textLayout = layoutText({
-    segments,
+    segments: paintedSegments,
     fixedWidth: fixedW != null ? Math.max(0, fixedW - innerPadX) : undefined,
     fixedHeight: fixedH != null ? Math.max(0, fixedH - innerPadY) : undefined,
     maxWidth: vertical ? undefined : maxW,
@@ -1111,6 +1147,39 @@ function pathBoundsOf(d: string, ctx: LayoutContext | undefined): Box {
   return { x: 0, y: 0, width: 0, height: 0 }
 }
 
+function readPositiveAttr(
+  raw: string | undefined,
+  fallback: number,
+  ctx: LayoutContext,
+  tag: string,
+  attr: string,
+  example: string,
+): number {
+  const fb = fallback > 0 ? fallback : 1
+  if (raw == null || raw.trim() === '') {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `${tag} 缺少 ${attr}，已用 ${fb}`,
+      hint: example,
+    })
+    return fb
+  }
+  const parsed = parseNumber(raw)
+  if (parsed == null || !(parsed > 0)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 ${attr}: ${raw}`,
+      hint: example,
+    })
+    return fb
+  }
+  return parsed
+}
+
 function readDepth(raw: string | undefined, fallback: number, ctx: LayoutContext, tag: string): number {
   const fb = fallback > 0 ? fallback : 1
   if (raw == null || raw.trim() === '') {
@@ -1137,7 +1206,7 @@ function readDepth(raw: string | undefined, fallback: number, ctx: LayoutContext
   return parsed
 }
 
-function readMeshLines(node: FvgNode, ctx: LayoutContext): { stroke: string; strokeWidth: number; hidden: string } {
+function readMeshLines(node: FvgNode, ctx: LayoutContext): { stroke: string; strokeWidths: [number, number, number]; hidden: string; halo: number } {
   const rawStroke = node.attrs.stroke
   const rawHidden = node.attrs.hidden
   const rawWidth = node.attrs['stroke-width']
@@ -1179,19 +1248,27 @@ function readMeshLines(node: FvgNode, ctx: LayoutContext): { stroke: string; str
       hidden = solidPaint(readPaint(rawHidden!, '#000000', ctx, 'hidden'), '#000000')
     }
   }
-  let strokeWidth = 2
+  const fallbackWidths: [number, number, number] = [2, 2, 2]
+  let strokeWidths = fallbackWidths
   if (rawWidth != null && rawWidth.trim() !== '') {
-    const parsed = parseNumber(rawWidth)
-    if (parsed == null || parsed < 0) {
+    const parts = rawWidth.trim().split(/\s+/)
+    const nums = parts.map((part) => parseNumber(part))
+    if (parts.length > 3 || nums.some((n) => n == null || n < 0)) {
       ctx.issues.push({
         level: 'warn',
         code: 'invalid-attr',
         path: ctx.pathPrefix,
-        message: `${node.tag} 的 stroke-width 需要非负像素`,
-        hint: '例如 stroke-width="2"',
+        message:
+          parts.length > 3
+            ? `${node.tag} 的 stroke-width 最多三个数：轮廓、折棱、隐藏线`
+            : `${node.tag} 的 stroke-width 需要非负像素`,
+        hint: '例如 stroke-width="3 2 1"。写一个数时三档相同，写两个数时隐藏线用折棱的宽度',
       })
     } else {
-      strokeWidth = parsed
+      const outline = nums[0]!
+      const crease = nums[1] ?? outline
+      const hiddenWidth = nums[2] ?? crease
+      strokeWidths = [outline, crease, hiddenWidth]
     }
     if (!strokeWritten) {
       ctx.issues.push({
@@ -1203,7 +1280,79 @@ function readMeshLines(node: FvgNode, ctx: LayoutContext): { stroke: string; str
       })
     }
   }
-  return { stroke, strokeWidth, hidden }
+  let halo = 0
+  const rawHalo = node.attrs.halo
+  if (rawHalo != null && rawHalo.trim() !== '') {
+    const parsed = parseNumber(rawHalo)
+    if (parsed == null || parsed < 0) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${node.tag} 的 halo 需要非负像素`,
+        hint: '例如 halo="3"',
+      })
+    } else {
+      halo = parsed
+    }
+    if (!strokeWritten) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${node.tag} 的 halo 要和 stroke 一起写`,
+        hint: '例如 stroke="#1c1915" halo="3"',
+      })
+    }
+  }
+  return { stroke, strokeWidths, hidden, halo }
+}
+
+const MESH_MATERIALS = new Set(['matte', 'plastic', 'metal', 'glass'])
+const MESH_ROUGHNESS = { matte: 1, plastic: 0.4, metal: 0.25, glass: 0.08 }
+
+function readMeshMaterial(raw: string | undefined, ctx: LayoutContext, tag: string): MeshMaterial | undefined {
+  if (raw == null) return undefined
+  const text = raw.trim().toLowerCase()
+  if (text === '' || text === 'none') return undefined
+  const parts = text.split(/[\s,]+/).filter((part) => part.length > 0 && part !== 'rough')
+  const name = parts[0] ?? ''
+  if (!MESH_MATERIALS.has(name)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `${tag} 不认识的 material: ${raw.trim()}`,
+      hint: '写成 matte、plastic、metal 或 glass。不写是磨砂。粗糙度跟在后面，例如 material="metal 0.35"',
+    })
+    return undefined
+  }
+  const kind = name as MeshMaterial['kind']
+  let roughness = MESH_ROUGHNESS[kind]
+  if (parts.length > 1) {
+    const value = Number(parts[1])
+    if (!Number.isFinite(value)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${tag} 的 material 粗糙度无法解析: ${parts[1]}`,
+        hint: '粗糙度是 0 到 1，例如 material="plastic 0.4"',
+      })
+    } else {
+      if (value < 0 || value > 1) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: ctx.pathPrefix,
+          message: `${tag} 的 material 粗糙度要在 0 到 1`,
+          hint: '例如 material="metal 0.35"',
+        })
+      }
+      roughness = Math.min(1, Math.max(0, value))
+    }
+  }
+  return { kind, roughness }
 }
 
 function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
@@ -1246,7 +1395,17 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
       })
     }
     const depth = readDepth(node.attrs.depth, Math.min(width, height), ctx, 'box')
-    mesh = { type: 'box', depth }
+    const fillet = readBoxFillet(node.attrs.rx, node.attrs.round, width, height, depth)
+    for (const issue of fillet.issues) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: issue.message,
+        hint: issue.hint,
+      })
+    }
+    mesh = { type: 'box', depth, rx: fillet.rx, edges: fillet.edges }
   } else if (node.tag === 'extrude') {
     const d = node.attrs.d ?? ''
     if (!d.trim()) {
@@ -1263,6 +1422,109 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
     height = box.height
     const depth = readDepth(node.attrs.depth, Math.min(width, height), ctx, 'extrude')
     mesh = { type: 'extrude', d: translateSvgPath(d, -box.x, -box.y), depth }
+  } else if (node.tag === 'cylinder') {
+    const r = parseNumber(node.attrs.r) ?? 0
+    if (!(r > 0)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'cylinder 需要正的 r',
+        hint: '例如 <cylinder cx="180" cy="260" r="40" height="120" />',
+      })
+    }
+    const radius = Math.max(0, r)
+    const length = readPositiveAttr(
+      node.attrs.height,
+      radius * 2,
+      ctx,
+      'cylinder',
+      'height',
+      '例如 <cylinder cx="180" cy="260" r="40" height="120" />',
+    )
+    const cx = parseNumber(node.attrs.cx) ?? 0
+    const cy = parseNumber(node.attrs.cy) ?? 0
+    width = radius * 2
+    height = length
+    x = cx - radius
+    y = cy - length / 2
+    const fillet = readCylinderFillet(node.attrs.rx, node.attrs.round, radius, length)
+    for (const issue of fillet.issues) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: issue.message,
+        hint: issue.hint,
+      })
+    }
+    mesh = { type: 'cylinder', r: radius, height: length, rx: fillet.rx, rims: fillet.rims }
+  } else if (node.tag === 'torus') {
+    const r = parseNumber(node.attrs.r) ?? 0
+    if (!(r > 0)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'torus 需要正的 r',
+        hint: '例如 <torus cx="200" cy="200" r="70" tube="16" />',
+      })
+    }
+    const radius = Math.max(0, r)
+    const fallback = radius > 0 ? radius / 4 : 1
+    const rawTube = node.attrs.tube
+    const parsedTube = rawTube == null || rawTube.trim() === '' ? null : parseNumber(rawTube)
+    const missingTube = rawTube == null || rawTube.trim() === ''
+    const badTube = !missingTube && (parsedTube == null || !(parsedTube > 0))
+    const tooBig = parsedTube != null && parsedTube > 0 && radius > 0 && parsedTube >= radius
+    let tube = parsedTube != null && parsedTube > 0 ? parsedTube : fallback
+    if (missingTube || badTube || tooBig) {
+      const message = tooBig
+        ? 'torus 的 tube 要小于 r，否则没有孔'
+        : missingTube
+          ? `torus 缺少 tube，已用 ${fallback}`
+          : `无法解析 tube: ${rawTube}`
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message,
+        hint: 'r 是环心到管心的半径，tube 是管半径，例如 tube="16"',
+      })
+      tube = fallback
+    }
+    const outer = radius + tube
+    const cx = parseNumber(node.attrs.cx) ?? 0
+    const cy = parseNumber(node.attrs.cy) ?? 0
+    width = height = outer * 2
+    x = cx - outer
+    y = cy - outer
+    mesh = { type: 'torus', r: radius, tube }
+  } else if (node.tag === 'tube') {
+    const d = node.attrs.d ?? ''
+    if (!d.trim()) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'tube 缺少 d',
+        hint: 'd 是中心线，和 path 一样，例如 <tube d="M0 40 C80 40 80 120 160 80" r="8" />',
+      })
+    }
+    const box = pathBoundsOf(d, ctx)
+    if (d.trim() && box.width <= 0 && box.height <= 0) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'tube 的路径至少要有一段',
+        hint: 'd 写成有长度的中心线，闭合的管子加上 Z',
+      })
+    }
+    const radius = readPositiveAttr(node.attrs.r, 8, ctx, 'tube', 'r', '例如 <tube d="M0 0 H120" r="8" />')
+    width = box.width + radius * 2
+    height = box.height + radius * 2
+    mesh = { type: 'tube', d: translateSvgPath(d, -box.x + radius, -box.y + radius), r: radius }
   } else {
     const src = node.attrs.src ?? ''
     const resolved = resolveModelFile(src, ctx.baseDir)
@@ -1308,6 +1570,7 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
       hint: 'glow 写在平面上；网格用 fill 和 stroke',
     })
   }
+  const material = readMeshMaterial(node.attrs.material, ctx, node.tag)
   return {
     kind: 'mesh',
     path: ctx.pathPrefix,
@@ -1321,6 +1584,7 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
     ...appearance,
     mesh,
     fill,
+    ...(material ? { material } : {}),
     ...readMeshLines(node, ctx),
     ...effects,
     ...layoutDrawMeta(node, ctx),
@@ -1615,12 +1879,28 @@ function contentBaseline(node: LayoutNode): number {
   return node.height
 }
 
+function crossPlace(align: string | undefined): 'start' | 'center' | 'end' {
+  switch ((align ?? 'center').trim().toLowerCase()) {
+    case 'start':
+    case 'flex-start':
+    case 'stretch':
+      return 'start'
+    case 'end':
+    case 'flex-end':
+      return 'end'
+    default:
+      return 'center'
+  }
+}
+
 /**
  * 横排里写了 baseline 的子项，按第一行基线对齐。
  * Yoga 先把它们排在行的起点，这里再挪。行被撑高时，后面的行一起下移。
+ * 同一行里居中或靠底的子项按新的行盒重排，靠起点的仍贴着行顶。
  */
-function alignFlexBaselines(children: LayoutNode[], baseline: boolean[]) {
+function alignFlexBaselines(children: LayoutNode[], baseline: boolean[], crossAlign: Array<string | undefined>) {
   const originY = children.map((child) => child.y)
+  const originBottom = children.map((child, i) => originY[i]! + child.height)
   const groups: number[][] = []
   for (let i = 0; i < children.length; i++) {
     if (!baseline[i]) continue
@@ -1631,29 +1911,77 @@ function alignFlexBaselines(children: LayoutNode[], baseline: boolean[]) {
   }
   groups.sort((a, b) => originY[a[0]!]! - originY[b[0]!]!)
 
-  const growths: Array<{ bottom: number; extra: number }> = []
+  const lineOf = new Array<number>(children.length).fill(-1)
+  const lineSpan = groups.map((group) => ({
+    top: Math.min(...group.map((i) => originY[i]!)),
+    bottom: Math.max(...group.map((i) => originBottom[i]!)),
+  }))
+  groups.forEach((group, gi) => {
+    for (const i of group) lineOf[i] = gi
+  })
+  for (let i = 0; i < children.length; i++) {
+    if (baseline[i] || lineSpan.length === 0) continue
+    let best = -1
+    let bestOverlap = 0
+    for (let gi = 0; gi < lineSpan.length; gi++) {
+      const span = lineSpan[gi]!
+      const overlap = Math.min(originBottom[i]!, span.bottom) - Math.max(originY[i]!, span.top)
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap
+        best = gi
+      }
+    }
+    if (best >= 0 && bestOverlap > 0.5) lineOf[i] = best
+  }
+  for (let i = 0; i < children.length; i++) {
+    const gi = lineOf[i]!
+    if (gi < 0 || baseline[i]) continue
+    const span = lineSpan[gi]!
+    span.top = Math.min(span.top, originY[i]!)
+    span.bottom = Math.max(span.bottom, originBottom[i]!)
+  }
+
+  const growths: Array<{ bottom: number; extra: number; top: number; newTop: number; newBottom: number }> = []
   let carried = 0
-  for (const group of groups) {
+  for (let gi = 0; gi < groups.length; gi++) {
+    const group = groups[gi]!
+    const span = lineSpan[gi]!
     const top = Math.min(...group.map((i) => originY[i]!)) + carried
     const lineAscent = Math.max(...group.map((i) => contentBaseline(children[i]!)))
-    const originBottom = Math.max(...group.map((i) => originY[i]! + children[i]!.height))
     for (const i of group) {
       const ascent = contentBaseline(children[i]!)
       children[i]!.y = top + (lineAscent - ascent)
     }
-    const newBottom = Math.max(...group.map((i) => children[i]!.y + children[i]!.height))
-    const extra = Math.max(0, newBottom - (originBottom + carried))
-    growths.push({ bottom: originBottom, extra })
+    const baselineBottom = Math.max(...group.map((i) => children[i]!.y + children[i]!.height))
+    const shiftedBottom = span.bottom + carried
+    const newBottom = Math.max(baselineBottom, shiftedBottom)
+    const extra = Math.max(0, newBottom - shiftedBottom)
+    growths.push({ bottom: span.bottom, extra, top: span.top, newTop: top, newBottom })
     carried += extra
   }
 
   for (let i = 0; i < children.length; i++) {
     if (baseline[i]) continue
-    let push = 0
-    for (const growth of growths) {
-      if (originY[i]! >= growth.bottom - 1) push += growth.extra
+    const gi = lineOf[i]!
+    if (gi < 0) {
+      let push = 0
+      for (const growth of growths) {
+        if (originY[i]! >= growth.bottom - 1) push += growth.extra
+      }
+      children[i]!.y = originY[i]! + push
+      continue
     }
-    children[i]!.y = originY[i]! + push
+    const growth = growths[gi]!
+    const prev = growths.slice(0, gi).reduce((sum, item) => sum + item.extra, 0)
+    if (growth.extra <= 0.5) {
+      children[i]!.y = originY[i]! + prev
+      continue
+    }
+    const height = children[i]!.height
+    const place = crossPlace(crossAlign[i])
+    if (place === 'end') children[i]!.y = growth.newBottom - height
+    else if (place === 'start') children[i]!.y = growth.newTop + (originY[i]! - growth.top)
+    else children[i]!.y = growth.newTop + (growth.newBottom - growth.newTop - height) / 2
   }
 }
 
@@ -1815,6 +2143,7 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
     alignFlexBaselines(
       laidChildren,
       measures.map((m) => isBaselineAlign(m.crossAlign)),
+      measures.map((m) => m.crossAlign),
     )
   }
 
@@ -2758,6 +3087,8 @@ function noteAttrTypos(node: FvgNode, path: string, issues: Issue[]) {
   const concrete = materialize(node)
   issues.push(...typoAttrIssues(concrete, path))
   issues.push(...hiddenAttrIssues(concrete, path))
+  issues.push(...haloAttrIssues(concrete, path))
+  issues.push(...materialAttrIssues(concrete, path))
   if (isHtmlTag(concrete.tag) || isTextBoxTag(concrete.tag)) issues.push(...styleIssues(concrete, path))
   let index = 0
   for (const child of concrete.children) {

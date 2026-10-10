@@ -200,7 +200,7 @@ function usesAttributes(node: FvgNode): boolean {
   )
 }
 
-const LEGACY_CENTER_TAGS = new Set(['layer', 'use', 'rect', 'box', 'extrude'])
+const LEGACY_CENTER_TAGS = new Set(['layer', 'use', 'rect', 'box', 'extrude', 'tube'])
 
 function fmtHint(n: number): string {
   const rounded = Math.round(n * 1000) / 1000
@@ -246,7 +246,7 @@ function legacyCenterHint(attrs: Record<string, string>): string {
   return '改成 x、y，表示左上角。原先的 cx、cy 是定位点，anchor 默认 center'
 }
 
-/** layer、use、rect、box、extrude 上的 cx、cy 已忽略。hint 给出等价的 x、y。 */
+/** layer、use、rect、box、extrude、tube 上的 cx、cy 已忽略。hint 给出等价的 x、y。 */
 export function legacyCenterIssues(node: FvgNode, path: string): Issue[] {
   if (!LEGACY_CENTER_TAGS.has(node.tag)) return []
   if (!present(node.attrs, 'cx') && !present(node.attrs, 'cy')) return []
@@ -325,6 +325,36 @@ export function suggestAttrs(raw: string, node?: FvgNode): string[] {
   return suggestNames(raw, node ? attrCandidates(node) : KNOWN_ATTRS)
 }
 
+/** `material` 是网格的磨砂、塑料、金属或玻璃，不写在平面上。层上的 `glass` 仍是透镜。 */
+export function materialAttrIssues(node: FvgNode, path: string): Issue[] {
+  if (!present(node.attrs, 'material')) return []
+  if (isMeshTag(node.tag)) return []
+  return [
+    flagged(
+      'warn',
+      'invalid-attr',
+      path,
+      'material 只写在网格上',
+      '网格用 matte、plastic、metal 或 glass。不写是磨砂，例如 material="metal 0.35"',
+    ),
+  ]
+}
+
+/** `halo` 是网格可见线在交叉处留出的断开，不写在平面、线条或文字上。 */
+export function haloAttrIssues(node: FvgNode, path: string): Issue[] {
+  if (!present(node.attrs, 'halo')) return []
+  if (isMeshTag(node.tag)) return []
+  return [
+    flagged(
+      'warn',
+      'invalid-attr',
+      path,
+      'halo 只写在网格上',
+      '可见线会在交叉处把更远的线断开，例如 halo="3"',
+    ),
+  ]
+}
+
 /** `hidden` 是网格被挡住的棱，不写在平面、线条或文字上。 */
 export function hiddenAttrIssues(node: FvgNode, path: string): Issue[] {
   if (!present(node.attrs, 'hidden')) return []
@@ -335,7 +365,7 @@ export function hiddenAttrIssues(node: FvgNode, path: string): Issue[] {
       'invalid-attr',
       path,
       'hidden 只写在网格上',
-      'sphere、box、extrude、model 用它表示被挡住的棱，例如 hidden="#8a8175"',
+      'sphere、box、cylinder、torus、tube、extrude、model 用它表示被挡住的棱，例如 hidden="#8a8175"',
     ),
   ]
 }

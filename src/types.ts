@@ -299,6 +299,8 @@ export type TextRunStyle = {
   fontStyle?: 'normal' | 'italic'
   /** u 加下划线。 */
   underline?: boolean
+  /** 行内标签自己的背景。不继承。铺在这一段文字的行盒上。 */
+  background?: string
 }
 
 /** 带 id 的行内标签。最内层有 id 的那段拥有这些字；里面没写 id 的行内标签沿用外层。 */
@@ -322,6 +324,8 @@ export type LaidTextLine = {
   segments: Array<{ text: string; style: TextRunStyle; x: number; width: number; owner?: InlineOwner }>
   width: number
   height: number
+  /** 相对文字内容区顶部。竖排的字距加在行与行之间，不在 height 里。 */
+  y: number
   baselineY: number
   ink: Box
   /** 这一行里的图片，坐标相对文字内容区左上角。 */
@@ -487,20 +491,49 @@ export type CustomLayoutNode = LayoutNodeBase & {
   kind: 'custom'
 }
 
+/** 长方体 12 条棱。名字是两个面，不分先后；`top` 是画面上方。 */
+export type BoxEdge =
+  | 'front-top'
+  | 'front-bottom'
+  | 'front-left'
+  | 'front-right'
+  | 'back-top'
+  | 'back-bottom'
+  | 'back-left'
+  | 'back-right'
+  | 'top-left'
+  | 'top-right'
+  | 'bottom-left'
+  | 'bottom-right'
+
+export type CylinderRim = 'top' | 'bottom'
+
 export type MeshSpec =
   | { type: 'sphere'; r: number }
-  | { type: 'box'; depth: number }
+  | { type: 'box'; depth: number; rx: number; edges: readonly BoxEdge[] }
   | { type: 'extrude'; d: string; depth: number }
+  | { type: 'cylinder'; r: number; height: number; rx: number; rims: readonly CylinderRim[] }
+  | { type: 'torus'; r: number; tube: number }
+  | { type: 'tube'; d: string; r: number }
   | { type: 'model'; src: string; file?: string; span?: { x: number; y: number; z: number } }
+
+/** 网格表面。不写时是 matte：磨砂塑料，主光乘 fill，没有高光。粗糙度 0 到 1，越大高光和反射越散。磨砂不看粗糙度。 */
+export type MeshMaterial = {
+  kind: 'matte' | 'plastic' | 'metal' | 'glass'
+  roughness: number
+}
 
 export type MeshLayoutNode = LayoutNodeBase & {
   kind: 'mesh'
   mesh: MeshSpec
   fill: string
+  material?: MeshMaterial
   /** 可见折棱和轮廓。`none` 不描。 */
   stroke: string
-  /** 屏幕像素。写了 stroke 没写宽度时是 2。 */
-  strokeWidth: number
+  /** 屏幕像素，依次是轮廓、折棱、隐藏线。只写一个数时三档相同。 */
+  strokeWidths: [number, number, number]
+  /** 可见线压过更远的线时，交叉处两侧断开的屏幕像素。0 不断开。 */
+  halo: number
   /** 被这只网格自己挡住的棱。`none` 不画。 */
   hidden: string
 }
