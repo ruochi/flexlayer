@@ -967,6 +967,21 @@ for await (const { frame, png, report } of renderFrames(scene, { from: 0, to: 30
 | `box` | 布局盒，字段是 `left`、`top`、`right`、`bottom`、`width`、`height`。不含这一元素自己的 `rotate` |
 | `ink` | 这一元素自己的 `rotate`、`scale` 之后的外接矩形，字段和 `box` 相同。线条含描边。没有旋转、缩放和描边外扩时与 `box` 重合。`layer` 的 `ink` 是子树着墨。`flex` 的 `ink` 是 padding 里面的内容区 |
 | `mask` | 写了 `<mask>` 的 `layer` 才有。`area`、`pieces`、`softEdge`、`ops` 和报告里的 `mask` 相同（第 10 章）。`ink` 是留下来的部分的外接矩形，字段和 `box` 相同，全部藏起来时是 `null` |
+| `points` | 落在 `perspective` 里的网格才有。投影后的顶点，`x`、`y` 和 `box` 同一套坐标。看得见的点带 `visible: true`，被自己或别的网格挡住的带 `hidden: true`。观众身后的顶点不在这里。球没有折点，不写这个字段 |
+| `edges` | 这些顶点之间的棱。`a`、`b` 是 `points` 的下标。`outline` 是轮廓，`crease` 是看得见的折棱，`hidden` 是被挡住的整条棱 |
+| `d` | 看得见的轮廓，SVG 路径，坐标和 `points` 相同。球是解析出来的圆，不把细分三角的顶点放进 `points` |
+
+网格不在带 `perspective` 的层里时，这三项都没有，和没写 `mask` 一样。`rect` 这些不是网格的元素也没有。坐标已经算上嵌套层的位置和缩放，不算这一层和祖先的平面旋转。标注贴着某个角时，用 `points` 里看得见的点，再加上这一层的 `left`、`top`。`create` 只做投影，填充仍在绘制时发生；被挡住的棱在这里整条标成 `hidden`，画面上的虚线仍按像素一段一段判断。
+
+```tsx
+const scene = canvas.create(
+  <layer width={480} height={360} perspective="700">
+    <box id="cube" x={80} y={60} width={160} height={120} depth={90} rotateY={-28} />
+  </layer>,
+)
+const cube = scene.elements.find((el) => el.id === 'cube')
+const corner = cube?.points?.find((point) => point.visible)
+```
 
 根层自己写了 `<mask>` 时，返回值上也有 `mask`，字段同上，坐标和 `elements` 同一套。和 `glyph()` 一样，这些数来自先画出来的结果：蒙版先画成位图再量，所以图片的 alpha、渐变和形状的 `rotate` 都算在里面。
 

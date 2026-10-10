@@ -57,7 +57,7 @@ export type LayerBox = {
   height: number
 }
 
-export type { PlacedElement, PlacedMask } from './placed-elements.js'
+export type { MeshEdgeKind, MeshPoint, MeshProjectedEdge, PlacedElement, PlacedMask } from './placed-elements.js'
 export type { PlacedChar, PlacedLine, PlacedText } from './placed-text.js'
 
 export type CreatedLayer = FvgNode & LayerBox & {
