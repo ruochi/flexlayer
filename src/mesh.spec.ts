@@ -409,7 +409,7 @@ describe('网格绘制', () => {
     expect(Math.abs(shade(plastic, 110, 120) - shade(plain, 110, 120))).toBeLessThan(20)
   }, 30000)
 
-  it('金属朝上亮、朝下暗，亮处仍带着 fill', async () => {
+  it('金属映横向灯带，左右差得比上下多，亮处仍带着 fill', async () => {
     const paint = (material: string) =>
       renderFvg(
         `<layer width="180" height="180" background="#101010" perspective="700"><sphere cx="90" cy="90" r="50" fill="#cc2222"${material} /></layer>`,
@@ -417,10 +417,12 @@ describe('网格绘制', () => {
     const matte = await imageOf((await paint(' material="matte"')).png)
     const metal = await imageOf((await paint(' material="metal 0.2"')).png)
     const lum = (image: ImageSample, x: number, y: number) => image.at(x, y).reduce((sum, channel, index) => (index < 3 ? sum + channel : sum), 0)
-    const metalSpan = lum(metal, 90, 70) - lum(metal, 90, 110)
-    const matteSpan = lum(matte, 90, 70) - lum(matte, 90, 110)
-    expect(metalSpan).toBeGreaterThan(matteSpan + 40)
-    expect(lum(metal, 90, 110)).toBeLessThan(lum(matte, 90, 110) - 40)
+    const across = lum(metal, 50, 90) - lum(metal, 130, 90)
+    const upright = Math.abs(lum(metal, 90, 50) - lum(metal, 90, 130))
+    expect(across).toBeGreaterThan(80)
+    expect(upright).toBeLessThan(40)
+    expect(across).toBeGreaterThan(upright + 60)
+    expect(lum(metal, 90, 130)).toBeLessThan(lum(matte, 90, 130) - 40)
     const peak = brightest(metal)
     expect(peak.rgba[0]).toBeGreaterThan(peak.rgba[1]! + 40)
   }, 30000)
@@ -440,7 +442,7 @@ describe('网格绘制', () => {
     expect(center[0]).toBeGreaterThan(240)
     expect(center[1]).toBeGreaterThan(50)
     expect(center[1]).toBeLessThan(160)
-    expect(brightest(glass).rgba[1]).toBeGreaterThan(center[1]! + 60)
+    expect(brightest(glass).rgba[1]).toBeGreaterThan(center[1]! + 30)
 
     const covered = await renderFvg(`
       <layer width="180" height="180" background="#000000" perspective="700">

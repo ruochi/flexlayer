@@ -1,5 +1,6 @@
 import { createCanvas, type Canvas, type CanvasRenderingContext2D } from '@napi-rs/canvas'
 import { readFileSync } from 'node:fs'
+import { studioAt } from './env-map.js'
 import { solidPaint } from './gradient.js'
 import { parseGlb } from './glb.js'
 import { originOffset } from './matrix.js'
@@ -18,7 +19,7 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
  * glb 用文件里的底色乘这套明暗。
  * 写了 stroke 时，缩小抗锯齿之后再按屏幕像素描折棱和轮廓。
  * hidden 只画被这只网格自己挡住的棱，虚线是 6 实 4 空。
- * 不写 material 时是磨砂：主光乘 fill。plastic 加高光，metal 反射固定天空，glass 后画叠色。
+ * 不写 material 时是磨砂：主光乘 fill。plastic 加高光，metal 和 glass 映一张横向的工作室环境，glass 后画叠色。
  * 同一条折线上的短段接成一条再取虚线相位，圆弧不会接成实线。
  */
 
@@ -137,10 +138,6 @@ function lit(x: number, y: number, z: number, blocked = false) {
   return 0.5 + key + 0.3 * Math.max(x * FILL_LIGHT.x + y * FILL_LIGHT.y + z * FILL_LIGHT.z, 0)
 }
 
-const SKY_DOWN = { r: 36, g: 40, b: 48 }
-const SKY_HORIZON = { r: 148, g: 174, b: 196 }
-const SKY_UP = { r: 246, g: 247, b: 250 }
-
 function clamp01(n: number) {
   if (n <= 0) return 0
   if (n >= 1) return 1
@@ -149,18 +146,6 @@ function clamp01(n: number) {
 
 function shininess(roughness: number) {
   return 2 ** (8 * (1 - clamp01(roughness)))
-}
-
-function mixByte(a: number, b: number, t: number) {
-  return a + (b - a) * t
-}
-
-/** 反射方向的 y 朝上为亮、朝下为暗。粗糙度把方向往地平线收。 */
-function skyAt(up: number, roughness: number) {
-  const spread = up * (1 - clamp01(roughness) * 0.9)
-  const t = clamp01(spread * 0.5 + 0.5)
-  const [a, b, k] = t < 0.5 ? [SKY_DOWN, SKY_HORIZON, t * 2] : [SKY_HORIZON, SKY_UP, (t - 0.5) * 2]
-  return { r: mixByte(a.r, b.r, k), g: mixByte(a.g, b.g, k), b: mixByte(a.b, b.b, k) }
 }
 
 function shadeNormal(nx: number, ny: number, nz: number, back: boolean) {
@@ -186,7 +171,7 @@ function reflectView(v: { x: number; y: number; z: number }, n: { x: number; y: 
 
 type ShadeCamera = { x: number; y: number; z: number }
 
-/** 塑料加白高光，金属用 fill 给固定天空染色，玻璃按掠射角变白并透出底下。 */
+/** 塑料加白高光。金属用 fill 给工作室环境染色。玻璃边缘映出同一张环境，中心透出底下。 */
 function materialBytes(
   batch: Batch,
   nx: number,
@@ -214,17 +199,21 @@ function materialBytes(
       batch.a,
     ]
   }
+  const reflect = reflectView(v, n)
+  const env = studioAt(reflect.x, reflect.y, reflect.z, batch.roughness)
+  const envR = env.r
+  const envG = env.g
+  const envB = env.b
   if (batch.material === 'metal') {
-    const sky = skyAt(reflectView(v, n).y, batch.roughness)
     const ndotv = clamp01(n.x * v.x + n.y * v.y + n.z * v.z)
     const fres = (1 - ndotv) ** 5
     const exposure = blocked ? 0.32 : 0.5 + 0.5 * Math.min(1, shade)
     const specAdd = spec * 220
-    const tint = (channel: number, skyC: number) => {
+    const tint = (channel: number, envC: number) => {
       const f = channel / 255
-      return Math.min(255, (f + (1 - f) * fres) * skyC * exposure + specAdd * (0.25 + 0.75 * f))
+      return Math.min(255, (f + (1 - f) * fres) * envC * exposure + specAdd * (0.25 + 0.75 * f))
     }
-    return [byte(tint(batch.r, sky.r)), byte(tint(batch.g, sky.g)), byte(tint(batch.b, sky.b)), batch.a]
+    return [byte(tint(batch.r, envR)), byte(tint(batch.g, envG)), byte(tint(batch.b, envB)), batch.a]
   }
   const ndotv = clamp01(n.x * v.x + n.y * v.y + n.z * v.z)
   const edge = (1 - ndotv) ** 2.2
@@ -233,8 +222,8 @@ function materialBytes(
   const whiten = edge * 0.8
   const lit = (0.72 + 0.28 * Math.min(1, shade)) * (blocked ? 0.72 : 1)
   const specAdd = spec * 255
-  const chan = (c: number) => Math.min(255, (c * lit * (1 - whiten) + 255 * whiten) + specAdd)
-  return [byte(chan(batch.r)), byte(chan(batch.g)), byte(chan(batch.b)), byte(alpha * 255)]
+  const chan = (c: number, envC: number) => Math.min(255, c * lit * (1 - whiten) + envC * whiten + specAdd)
+  return [byte(chan(batch.r, envR)), byte(chan(batch.g, envG)), byte(chan(batch.b, envB)), byte(alpha * 255)]
 }
 
 function shadeOf(nx: number, ny: number, nz: number, back: boolean, blocked = false) {
