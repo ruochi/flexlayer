@@ -67,11 +67,17 @@ function mergeStyle(base: TextRunStyle, styleMap: Record<string, string>, inline
   if (fw != null) next.fontWeight = fw
   if (styleMap['font-family']) next.fontFamily = styleMap['font-family'].trim()
   if (styleMap.color) next.color = styleMap.color.trim()
+  if (styleMap.fill) next.fill = styleMap.fill.trim()
   const ls = parseLetterSpacing(styleMap['letter-spacing'], next.fontSize)
   if (ls != null) next.letterSpacing = ls
   if (inline) {
-    const background = styleMap.background ?? styleMap['background-color']
-    if (background) next.background = background.trim()
+    if (styleMap.background) {
+      next.background = styleMap.background.trim()
+      next.backgroundProp = 'background'
+    } else if (styleMap['background-color']) {
+      next.background = styleMap['background-color'].trim()
+      next.backgroundProp = 'background-color'
+    }
   }
   return next
 }

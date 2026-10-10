@@ -194,9 +194,10 @@ type PaintBox = { x: number; y: number; width: number; height: number }
 /** 单行蒙版的设备像素上限。更大时退回直接填充，避免一张离屏盖住整页。 */
 const TEXT_MASK_LIMIT = 8192
 
-function textColorBox(node: TextLayoutNode, color: string, fragment: PaintBox): PaintBox {
-  const declared = node.style.color?.trim()
-  if (declared && declared === color.trim() && node.width > 0 && node.height > 0) {
+/** 写在文字盒子上的 fill 按整段盒子取样；写在行内标签上的按这一段的行盒。 */
+function textPaintBox(node: TextLayoutNode, paint: string, fragment: PaintBox): PaintBox {
+  const declared = node.style.fill?.trim()
+  if (declared && declared === paint.trim() && node.width > 0 && node.height > 0) {
     return { x: node.x, y: node.y, width: node.width, height: node.height }
   }
   return fragment
@@ -316,8 +317,8 @@ function drawTextNode(ctx: CanvasRenderingContext2D, node: TextLayoutNode, inkCo
       if (!seg.text) continue
       applyCanvasFont(ctx, seg.style.fontFamily, seg.style.fontWeight, seg.style.fontSize, seg.style.fontStyle)
       ctx.letterSpacing = `${seg.style.letterSpacing}px`
-      const color = inkColor ?? seg.style.color
-      const box = inkColor ? fragment : textColorBox(node, seg.style.color, fragment)
+      const color = inkColor ?? seg.style.fill ?? seg.style.color
+      const box = inkColor ? fragment : textPaintBox(node, color, fragment)
       fillTextPaint(ctx, seg.text, x, contentY + line.baselineY, color, box, seg.style.fontSize)
       if (seg.style.underline) {
         const y = contentY + line.baselineY + Math.max(1, seg.style.fontSize * 0.12)

@@ -19,6 +19,7 @@ import { classAttr, ICON_FONT_FAMILY, symbolsClassOf } from './icons.js'
 import { materialize } from './components.js'
 import { catmullRomPath } from './curve.js'
 import { isGradient, parseGradient, solidPaint } from './gradient.js'
+import { isGradientPaint } from './gradientField.js'
 import { glbSpan, resolveModelFile } from './glb.js'
 import { readBoxFillet, readCylinderFillet } from './mesh-round.js'
 import { openSvgPath, translateSvgPath } from './path.js'
@@ -418,6 +419,62 @@ function scalePair(raw: string | undefined): { scaleX: number; scaleY: number } 
   return { scaleX: scale.x, scaleY: scale.y }
 }
 
+/** `color` / `background-color` 只收纯色。渐变返回 undefined，并报 invalid-attr。 */
+function solidColor(raw: string | undefined, ctx: LayoutContext, label: string): string | undefined {
+  const value = raw?.trim()
+  if (!value) return undefined
+  if (!isGradient(value)) return value
+  ctx.issues.push({
+    level: 'warn',
+    code: 'invalid-attr',
+    path: ctx.pathPrefix,
+    message: `${label} 只收纯色`,
+    hint:
+      label === 'background-color'
+        ? '渐变写 background: linear-gradient(to right, #ff0000, #0000ff)'
+        : '写成 #112233。字形渐变写 fill: linear-gradient(to right, #ff0000, #0000ff)',
+  })
+  return undefined
+}
+
+/**
+ * HTML `background` 收纯色和 CSS 渐变。`background-color` 只收纯色。
+ * 矩阵 `gradient()` 不进这两个属性。
+ */
+function cssBackground(style: Record<string, string>, ctx: LayoutContext): string | undefined {
+  const shorthand = style.background?.trim()
+  if (shorthand) {
+    if (isGradientPaint(shorthand)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `background 不收矩阵渐变: ${shorthand}`,
+        hint: '盒子用 linear-gradient(...) 或 radial-gradient(...)。矩阵渐变写 fill',
+      })
+      return undefined
+    }
+    if (isGradient(shorthand) && !parseGradient(shorthand)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `无法解析 background: ${shorthand}`,
+        hint: '写成 #ffe08a，或 linear-gradient(to right, #ff0000, #0000ff)',
+      })
+      return undefined
+    }
+    return shorthand
+  }
+  return solidColor(style['background-color'], ctx, 'background-color')
+}
+
+function applyCssBackground(appearance: { background?: string }, style: Record<string, string>, ctx: LayoutContext) {
+  const background = cssBackground(style, ctx)
+  if (background) appearance.background = background
+  else delete appearance.background
+}
+
 function readHtmlAppearance(style: Record<string, string>) {
   return {
     padding: parseEdges(style.padding) ?? ZERO_EDGES,
@@ -482,7 +539,8 @@ function inheritTextContext(ctx: LayoutContext, tag: string, style: Record<strin
   const next: LayoutContext = { ...ctx }
   const family = style['font-family']?.trim()
   if (family) next.fontFamily = family
-  if (style.color?.trim()) next.color = style.color.trim()
+  const color = solidColor(style.color, ctx, 'color')
+  if (color) next.color = color
   const fontSize = parsePx(style['font-size'])
   if (fontSize != null) next.fontSize = fontSize
   else if (isHeadingTag(tag)) next.fontSize = defaultFontSizeForTag(tag)
@@ -502,7 +560,7 @@ function withLayerText(ctx: LayoutContext, node: FvgNode): LayoutContext {
   const next: LayoutContext = { ...ctx }
   const family = node.attrs['font-family']?.trim()
   if (family) next.fontFamily = family
-  const color = node.attrs.color?.trim()
+  const color = solidColor(node.attrs.color, ctx, 'color')
   if (color) next.color = color
   const fontSize = parsePx(node.attrs['font-size'])
   if (fontSize != null) next.fontSize = fontSize
@@ -526,7 +584,8 @@ function computeDrawStyle(node: FvgNode, ctx: LayoutContext, style: Record<strin
       ? 700
       : ctx.fontWeight ?? (isTextBoxTag(node.tag) ? defaultFontWeightForTag(tag) : 400))
   const fontFamily = style['font-family']?.trim() || ctx.fontFamily
-  const color = style.color ?? ctx.color
+  const fromStyle = style.color?.trim()
+  const color = fromStyle && !isGradient(fromStyle) ? fromStyle : isGradient(ctx.color) ? '#111111' : ctx.color
   const opacity = isHtmlTag(node.tag) ? parseNumber(style.opacity) ?? 1 : parseNumber(node.attrs.opacity) ?? 1
   return { color, fontFamily, fontSize, fontWeight, opacity }
 }
@@ -755,29 +814,64 @@ function normalizeLineGeometry(geom: LineGeometry, box: Box): LineGeometry {
 function sanitizeTextPaints(segments: TextSegment[], ctx: LayoutContext): TextSegment[] {
   return segments.map((seg) => {
     let color = seg.style.color
+    let fill = seg.style.fill
     let background = seg.style.background
-    if (isGradient(color) && !parseGradient(color)) {
+    const prop = seg.style.backgroundProp
+    if (isGradient(color)) {
       ctx.issues.push({
         level: 'warn',
         code: 'invalid-attr',
         path: ctx.pathPrefix,
-        message: `无法解析 color: ${color}`,
-        hint: '写成 #112233，或 linear-gradient(to right, #ff0000, #0000ff)',
+        message: `color 只收纯色: ${color}`,
+        hint: '写成 #112233。字形渐变写 fill: linear-gradient(to right, #ff0000, #0000ff)',
       })
-      color = ctx.color
+      color = isGradient(ctx.color) ? '#111111' : ctx.color
     }
-    if (background && background !== 'transparent' && background !== 'none' && isGradient(background) && !parseGradient(background)) {
+    if (fill && isGradient(fill) && !parseGradient(fill)) {
       ctx.issues.push({
         level: 'warn',
         code: 'invalid-attr',
         path: ctx.pathPrefix,
-        message: `无法解析 background: ${background}`,
-        hint: '写成 #ffe08a，或 linear-gradient(to right, #ff0000, #0000ff)',
+        message: `无法解析 fill: ${fill}`,
+        hint: '写成 #112233、linear-gradient(to right, #ff0000, #0000ff)，或 gradient(#112233, #ff8800)',
       })
-      background = undefined
+      fill = undefined
     }
-    if (color === seg.style.color && background === seg.style.background) return seg
+    if (background && background !== 'transparent' && background !== 'none') {
+      if (prop === 'background-color' && isGradient(background)) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: ctx.pathPrefix,
+          message: `background-color 只收纯色: ${background}`,
+          hint: '渐变写 background: linear-gradient(to right, #ff0000, #0000ff)',
+        })
+        background = undefined
+      } else if (isGradientPaint(background)) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: ctx.pathPrefix,
+          message: `background 不收矩阵渐变: ${background}`,
+          hint: '盒子用 linear-gradient(...) 或 radial-gradient(...)。矩阵渐变写 fill',
+        })
+        background = undefined
+      } else if (isGradient(background) && !parseGradient(background)) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: ctx.pathPrefix,
+          message: `无法解析 background: ${background}`,
+          hint: '写成 #ffe08a，或 linear-gradient(to right, #ff0000, #0000ff)',
+        })
+        background = undefined
+      }
+    }
+    if (color === seg.style.color && fill === seg.style.fill && background === seg.style.background && !prop) return seg
     const style = { ...seg.style, color }
+    delete style.backgroundProp
+    if (fill) style.fill = fill
+    else delete style.fill
     if (background) style.background = background
     else delete style.background
     return { ...seg, style }
@@ -795,7 +889,8 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
     parseFontWeight(style['font-weight']) ??
     (isHeadingTag(tag) || tag === 'strong' || tag === 'b' ? 700 : ctx.fontWeight ?? defaultFontWeightForTag(tag))
   const fontFamily = style['font-family']?.trim() || (symbols ? ICON_FONT_FAMILY : ctx.fontFamily)
-  const color = readPaint(style.color ?? ctx.color, ctx.color, ctx, 'color')
+  const declaredColor = style.color?.trim()
+  const color = declaredColor && !isGradient(declaredColor) ? declaredColor : isGradient(ctx.color) ? '#111111' : ctx.color
   const letterSpacing = parseLetterSpacing(style['letter-spacing'], fontSize) ?? ctx.letterSpacing ?? 0
   const images: ImageLayoutNode[] = []
   const segments = extractTextSegments(
@@ -843,6 +938,7 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
   const lineHeightRatio = specifiedLine == null ? fallbackRatio : specifiedLine.unit === 'ratio' ? specifiedLine.value : fontSize > 0 ? specifiedLine.value / fontSize : fallbackRatio
 
   const appearance = readHtmlAppearance(style)
+  applyCssBackground(appearance, style, ctx)
   const innerPadX = appearance.padding.left + appearance.padding.right + (appearance.border?.width ?? 0) * 2
   const innerPadY = appearance.padding.top + appearance.padding.bottom + (appearance.border?.width ?? 0) * 2
 
@@ -943,7 +1039,7 @@ function layoutImage(node: FvgNode, ctx: LayoutContext): ImageLayoutNode {
   warnNestedMasks(node, ctx)
   const style = parseStyle(node.attrs.style)
   const appearance = readHtmlAppearance(style)
-  if (appearance.background) appearance.background = readPaint(appearance.background, 'transparent', ctx, 'background')
+  applyCssBackground(appearance, style, ctx)
   if (isDisplayFlex(node.attrs.style)) {
     ctx.issues.push({
       level: 'warn',
@@ -1990,7 +2086,7 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
   const childCtx = inheritTextContext(ctx, node.tag, style)
   const direction = flexDirectionOf(style)
   const appearance = readHtmlAppearance(style)
-  if (appearance.background) appearance.background = readPaint(appearance.background, 'transparent', ctx, 'background')
+  applyCssBackground(appearance, style, ctx)
   const gap = parsePx(style.gap)
   const columnGap = parsePx(style['column-gap']) ?? gap ?? 0
   const rowGap = parsePx(style['row-gap']) ?? gap ?? 0
@@ -3292,7 +3388,7 @@ export function layoutSync(rootNode: FvgNode, assets: LayoutAssets): FvgDocument
   const attrs = rootNode.attrs
   const width = parseNumber(attrs.width) ?? 1080
   const height = parseNumber(attrs.height) ?? 1920
-  const color = attrs.color ?? '#111111'
+  let color = attrs.color?.trim() || '#111111'
   const fontFamily = attrs['font-family'] ?? 'ChillDuanSans'
   const safe = parseSafe(attrs.safe, width, height)
   const maxContentWidth = width - safe.left - safe.right
@@ -3331,9 +3427,34 @@ export function layoutSync(rootNode: FvgNode, assets: LayoutAssets): FvgDocument
     previews: [],
   }
   track(paintCtx, 'layer', rootNode)
-  // 没写 background 时不铺底色，PNG 里空出来的像素保持透明。
+  if (isGradient(color)) {
+    issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: 'layer',
+      message: 'color 只收纯色',
+      hint: '写成 #112233。字形渐变写 fill: linear-gradient(to right, #ff0000, #0000ff)',
+    })
+    color = '#111111'
+    paintCtx.color = '#111111'
+  }
+  // 没写 background 时不铺底色，PNG 里空出来的像素保持透明。画布底色只收纯色。
   const rawBackground = attrs.background?.trim() ?? ''
-  const background = rawBackground ? readPaint(rawBackground, '#ffffff', paintCtx, 'background') : 'transparent'
+  let background = 'transparent'
+  if (rawBackground) {
+    if (isGradient(rawBackground)) {
+      issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: 'layer',
+        message: '画布 background 只收纯色',
+        hint: '整页渐变用铺满的 <rect fill="linear-gradient(...)">',
+      })
+      background = '#ffffff'
+    } else {
+      background = rawBackground
+    }
+  }
   const root = layoutLayer(rootNode, paintCtx)
 
   root.width = width

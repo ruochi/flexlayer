@@ -1,3 +1,4 @@
+import { isGradient } from '../gradient.js'
 import type { FvgNode } from '../parse.js'
 import { parseBorder, parseEdges, parseNumber, parsePx, parseScale, parseStyle, ZERO_EDGES } from '../style.js'
 import { layoutText } from '../text.js'
@@ -180,11 +181,26 @@ function rejectTextFont(node: FvgNode, path: string, ctx: Ctx): void {
   })
 }
 
+function solidMathColor(raw: string | undefined, issues: Issue[], path: string, fallback: string): string {
+  const value = raw?.trim()
+  if (!value) return fallback
+  if (!isGradient(value)) return value
+  issues.push({
+    level: 'warn',
+    code: 'invalid-attr',
+    path,
+    message: 'color 只收纯色',
+    hint: '写成 #112233。字形渐变写 fill: linear-gradient(to right, #ff0000, #0000ff)',
+  })
+  return fallback
+}
+
 function styled(node: FvgNode, ctx: Ctx, path: string): Ctx {
   rejectTextFont(node, path, ctx)
   const style = parseStyle(node.attrs.style)
   const size = parsePx(style['font-size'])
-  const color = style.color ?? node.attrs.mathcolor
+  const requested = style.color ?? node.attrs.mathcolor
+  const color = requested ? solidMathColor(requested, ctx.issues, path, ctx.color) : undefined
   if (size == null && !color) return ctx
   return { ...ctx, size: size ?? ctx.size, color: color ?? ctx.color }
 }
@@ -954,7 +970,7 @@ function lowerNode(node: FvgNode, path: string, ctx0: Ctx, position: 'first' | '
 export function layoutMath(node: FvgNode, host: MathLayoutHost, rowAlign?: string): FlexLayoutNode {
   const style = parseStyle(node.attrs.style)
   const fontSize = parsePx(style['font-size']) ?? 40
-  const color = style.color ?? node.attrs.mathcolor ?? host.color
+  const color = solidMathColor(style.color ?? node.attrs.mathcolor, host.issues, host.pathPrefix, host.color)
   const family = MATH_FONT_FAMILY
   const display = node.attrs.display === 'block' || node.attrs.displaystyle === 'true'
   const ctx: Ctx = {

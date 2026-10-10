@@ -295,12 +295,16 @@ export type TextRunStyle = {
   fontWeight: number
   color: string
   letterSpacing: number
+  /** 字形颜料。写了就盖过 color。纯色、渐变或矩阵渐变。 */
+  fill?: string
   /** 省略是 normal。em / i 为 italic。 */
   fontStyle?: 'normal' | 'italic'
   /** u 加下划线。 */
   underline?: boolean
   /** 行内标签自己的背景。不继承。铺在这一段文字的行盒上。 */
   background?: string
+  /** 行内背景来自 background 还是 background-color。排版后去掉。 */
+  backgroundProp?: 'background' | 'background-color'
 }
 
 /** 带 id 的行内标签。最内层有 id 的那段拥有这些字；里面没写 id 的行内标签沿用外层。 */

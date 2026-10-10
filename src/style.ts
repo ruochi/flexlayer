@@ -701,6 +701,7 @@ const STYLE_CHECKS: Record<string, (value: string) => StyleDiagnostic | null> = 
   'font-weight': (value) => (parseFontWeight(value) == null ? { hint: '写成 400、700，或 normal、bold' } : null),
   'font-family': () => null,
   color: () => null,
+  fill: () => null,
   'letter-spacing': (value) => (parseLetterSpacing(value, 16) == null ? { hint: '写成 0、2px 或 0.05em' } : null),
   'line-height': (value) => (parseLineHeight(value) == null ? { hint: '写成倍数 1.4，或像素 24px' } : null),
   'text-align': (value) => keywordHint(value, ['left', 'center', 'right', 'start', 'end'], '写成 left、center 或 right'),

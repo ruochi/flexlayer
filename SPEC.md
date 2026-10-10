@@ -33,8 +33,8 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | 属性 | 默认值 | 说明 |
 | --- | --- | --- |
 | `width`、`height` | 必填 | 画布尺寸 |
-| `background` | `transparent` | 画布背景色。没写，或写 `transparent`，不铺底色，PNG 里空出来的像素是透明的。要白底写 `#ffffff` |
-| `color` | `#111111` | 全局文字色、线条默认色 |
+| `background` | `transparent` | 画布底色，只收纯色。没写，或写 `transparent`，不铺底色，PNG 里空出来的像素是透明的。要白底写 `#ffffff`。整页渐变用铺满的 `<rect fill="…">` |
+| `color` | `#111111` | 全局文字色、线条默认色。只收纯色。字形渐变写 `fill` |
 | `font-family` | `ChillDuanSans` | 全局字体。目录里的名字直接写，第一次用到时自动下载。见 [docs/RESOURCES.md](docs/RESOURCES.md) |
 | `safe` | 画布短边的 4% | 安全区边距，`上 右 下 左` 或一个数字，只用于检查 |
 
@@ -267,14 +267,15 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 | 属性 | 说明 |
 | --- | --- |
-| `font-size`、`font-weight`、`font-family`、`color`、`letter-spacing` | 同 CSS，行内标签也可以写。`color` 可以是纯色，也可以是第 8 章的渐变。写在文字盒子上时，整段按这一层的盒子取样；写在行内标签上时，只铺这一段的行盒。`letter-spacing` 可以写 `0`、`2px` 或 `0.05em`。`em` 按写这条声明的元素自己的字号换算，再按像素继承；子元素改了字号不会把父级的 `em` 重算 |
+| `font-size`、`font-weight`、`font-family`、`color`、`letter-spacing` | 同 CSS，行内标签也可以写。`color` 只收纯色，会继承。渐变写在 `color` 上报 `invalid-attr`，退回继承来的纯色。`letter-spacing` 可以写 `0`、`2px` 或 `0.05em`。`em` 按写这条声明的元素自己的字号换算，再按像素继承；子元素改了字号不会把父级的 `em` 重算 |
+| `fill` | 字形的颜料，写在 `style` 里。没写时用 `color`。可以是纯色，或第 8 章的 `linear-gradient()`、`radial-gradient()`、`gradient()`。写在文字盒子上时，整段按这一层的盒子取样；写在行内标签上时，只铺这一段的行盒。不继承：没写的子元素继续用 `color`。形状的 `fill` 仍是属性，见第 7 章 |
 | （字重规则） | `ChillDuanSans` 按可变字重绘制，字重轴约 300 到 800，中间的字重不会收成 400 和 700 两档。登记了多档文件的字体取最近的一档。只登记了一档的字体，例如 `Brush`、`Bebas`，请求别的字重仍用这一档。自带 `<font>` 且文件没有字重轴的，按 400 |
 | `writing-mode` | `horizontal-tb`（默认）或 `vertical-rl`。竖排时字从上到下，列从右到左，`letter-spacing` 是字与字之间的额外间距 |
 | `line-height` | 倍数（`1.4`）或像素（`24px`）。`normal` 按 1.2。单行默认 1.2，多行默认 1.4。`%`、`em` 等报 `invalid-attr`。像素行高按像素继承，不跟子元素的字号再乘一次 |
 | `text-align` | `left`（默认）、`center`、`right` |
 | `width`、`height` | 外框尺寸（含 padding 和 border） |
 | `max-width` | 最大外框宽度，超出就换行，盒子贴合最长的一行 |
-| `padding`、`background`、`border`、`border-radius` | 同 CSS。文字盒子的 `background` 铺满外框。行内 `span`、`strong`、`b`、`em`、`i`、`u` 的 `background` 或 `background-color` 铺在这一段的行盒上，用来高亮一个词。行内背景不从文字盒子继承；嵌在里面的行内标签没写时，沿用包着它的那一层 |
+| `padding`、`background`、`background-color`、`border`、`border-radius` | `background-color` 只收纯色。`background` 收纯色，以及 CSS 的 `linear-gradient()`、`radial-gradient()`，不收 `gradient()`。文字盒子的 `background` 铺满外框。行内 `span`、`strong`、`b`、`em`、`i`、`u` 的 `background` 或 `background-color` 铺在这一段的行盒上，用来高亮一个词。行内背景不从文字盒子继承；嵌在里面的行内标签没写时，沿用包着它的那一层 |
 | `white-space: nowrap` | 禁止换行 |
 | `text-wrap` | `balance`（默认，各行长度尽量均匀）或 `wrap`（尽量填满每一行） |
 
@@ -457,7 +458,19 @@ npx flexlayer-select apply photo.jpg --add 2 --subtract 1
 
 ## 8. 填充 paint
 
-`fill`、`stroke`、画布 `background`、HTML 的 `background`、文字的 `color`，以及第 9 章里的 `overlay`、`grade-mask`，共用这一套写法。色标位置是元素自己的 0 到 1，也可以写百分比，不是布局用的百分比。文字盒子上的 `color` 渐变按这个盒子取样，行内标签自己的 `color` 按这一段的行盒取样。渲染倍率不是 1 时（例如导出 `@2x`），渐变文字仍落在同一套用户坐标上。
+颜料值只定义一次：纯色、`linear-gradient()`、`radial-gradient()`、`gradient()`。色标位置是元素自己的 0 到 1，也可以写百分比，不是布局用的百分比。渲染倍率不是 1 时（例如导出 `@2x`），渐变文字仍落在同一套用户坐标上。
+
+谁能写哪种值：
+
+| 槽 | 收什么 | 画在哪 |
+| --- | --- | --- |
+| `fill` | 全部 | 字形或形状内部。文字写 `style="fill:…"`，形状写属性 |
+| `stroke` | 全部 | 形状或线条的描边 |
+| `overlay`、`grade-mask` | 全部 | 整层，只写在 `layer` 上 |
+| `background` | 纯色、`linear-gradient()`、`radial-gradient()` | 盒子或行盒。不收 `gradient()` |
+| `background-color`、`color`、画布 `background` | 纯色 | 底板、字形的默认色、画布清屏色 |
+
+文字盒子上的 `fill` 按这一层的盒子取样，行内标签自己的 `fill` 按这一段的行盒取样。没写 `fill` 时字形用 `color`。
 
 ```html
 <rect x="0" y="0" width="720" height="960" fill="linear-gradient(to bottom, #0c1424, #1a3352 55%, #6e7c72)" />

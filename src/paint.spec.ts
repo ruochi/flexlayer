@@ -389,7 +389,7 @@ async function inkBounds(png: Buffer, scale: number, isInk: (r: number, g: numbe
 }
 
 describe('文字样式', () => {
-  const gradient = `<layer width="720" height="140" background="#ffffff" safe="0"><p style="font-size:72px; white-space:nowrap; color:linear-gradient(to right, #ff0000, #0000ff)">GRADIENT</p></layer>`
+  const gradient = `<layer width="720" height="140" background="#ffffff" safe="0"><p style="font-size:72px; white-space:nowrap; fill:linear-gradient(to right, #ff0000, #0000ff)">GRADIENT</p></layer>`
 
   it('渐变文字在 1、2、0.5 倍下大小和位置一致，左红右蓝', async () => {
     const at = async (scale: number) => {
