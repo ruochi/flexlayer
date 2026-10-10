@@ -4,7 +4,7 @@ import { studioAt } from './env-map.js'
 import { solidPaint } from './gradient.js'
 import { parseGlb } from './glb.js'
 import { originOffset } from './matrix.js'
-import { applyPoseMatrix, PERSPECTIVE_AA, resolveSamples } from './perspective.js'
+import { applyPoseMatrix, behindCamera, PERSPECTIVE_AA, resolveSamples, type Perspective } from './perspective.js'
 import { meshIntersections } from './mesh-intersect.js'
 import { roundedBoxGeometry, roundedCylinderGeometry } from './mesh-round.js'
 import { tessellateSvgPath } from './path.js'
@@ -15,6 +15,7 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
 /**
  * 网格的三角形光栅。
  * 投影用 `project` 的同一套公式（这里直接算），深度大的像素盖住深度小的。
+ * `perspective="parallel"` 时不除视距，屏幕坐标就是层坐标。
  * 正对镜头的面是 fill，侧面按内置主光和补光变暗。
  * 主光沿固定方向打一张正交深度图：不透明三角形互相挡住这盏光时，主光不计。
  * glb 用文件里的底色乘这套明暗。
@@ -40,7 +41,7 @@ type RasterBitmap = {
 
 export type SoftwareMeshInput = {
   layer: LayerLayoutNode
-  perspective: number
+  perspective: Perspective
   meshes: Array<{ node: MeshLayoutNode; toLayer: Mat4; opacity?: number }>
   planes: Array<{ node: LayoutNode; peeled: LayoutNode; toLayer: Mat4 }>
   scale: number
@@ -171,7 +172,7 @@ function reflectView(v: { x: number; y: number; z: number }, n: { x: number; y: 
   return unit(2 * d * n.x - v.x, 2 * d * n.y - v.y, 2 * d * n.z - v.z)
 }
 
-type ShadeCamera = { x: number; y: number; z: number }
+type ShadeCamera = { x: number; y: number; z: number; parallel?: boolean }
 
 /** 塑料加白高光。金属用 fill 给工作室环境染色。玻璃边缘映出同一张环境，中心透出底下。 */
 function materialBytes(
@@ -188,7 +189,7 @@ function materialBytes(
   camera: ShadeCamera,
 ): [number, number, number, number] {
   const n = shadeNormal(nx, ny, nz, back)
-  const v = unit(camera.x - x, y - camera.y, camera.z - z)
+  const v = camera.parallel ? { x: 0, y: 0, z: 1 } : unit(camera.x - x, y - camera.y, camera.z - z)
   const h = unit(KEY.x + v.x, KEY.y + v.y, KEY.z + v.z)
   const ndoth = Math.max(n.x * h.x + n.y * h.y + n.z * h.z, 0)
   const spec = blocked ? 0 : ndoth ** shininess(batch.roughness)
@@ -1378,7 +1379,7 @@ function drawTriangle(
   }
 }
 
-function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: number, scale: number): MeshFrame {
+function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: Perspective, scale: number): MeshFrame {
   const vx = layer.width / 2
   const vy = layer.height / 2
   let minX = 0
@@ -1395,10 +1396,9 @@ function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: number
       const u = batch.uvs ? batch.uvs[i * 2]! : 0
       const v = batch.uvs ? batch.uvs[i * 2 + 1]! : 0
       verts.push({ x: p.x, y: p.y, z: p.z, nx: n.x, ny: n.y, nz: n.z, u, v })
-      if (p.z < perspective * (1 - 1e-3)) {
-        const w = 1 - p.z / perspective
-        const x = vx + (p.x - vx) / w
-        const y = vy + (p.y - vy) / w
+      if (perspective === 'parallel' || p.z < perspective * (1 - 1e-3)) {
+        const x = perspective === 'parallel' ? p.x : vx + (p.x - vx) / (1 - p.z / perspective)
+        const y = perspective === 'parallel' ? p.y : vy + (p.y - vy) / (1 - p.z / perspective)
         minX = Math.min(minX, x)
         minY = Math.min(minY, y)
         maxX = Math.max(maxX, x)
@@ -1448,9 +1448,13 @@ function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: number
   depth.fill(-1e30)
   owners.fill(-1)
   const shadow = buildShadowMap(batches, authored, Math.max(layer.width, layer.height) * base * 2)
-  const near = perspective * (1 - 1e-3)
-  const camera: ShadeCamera = { x: vx, y: vy, z: perspective }
+  const near = perspective === 'parallel' ? Number.POSITIVE_INFINITY : perspective * (1 - 1e-3)
+  const camera: ShadeCamera =
+    perspective === 'parallel' ? { x: 0, y: 0, z: 0, parallel: true } : { x: vx, y: vy, z: perspective }
   const toScreen = (v: Vert): ScreenVert => {
+    if (perspective === 'parallel') {
+      return { ...v, sx: (v.x + padL) * pixelScale, sy: (v.y + padT) * pixelScale, invW: 1 }
+    }
     const w = 1 - v.z / perspective
     return {
       ...v,
@@ -1600,13 +1604,14 @@ function facesCamera(
   mid: { x: number; y: number; z: number },
   vx: number,
   vy: number,
-  perspective: number,
+  perspective: Perspective,
 ) {
   const n = transformNormal(toLayer, normal[0], normal[1], normal[2])
+  if (perspective === 'parallel') return n.z > 1e-4
   return n.x * (vx - mid.x) + n.y * (vy - mid.y) + n.z * (perspective - mid.z) > 1e-4
 }
 
-function isSilhouette(edge: MeshEdge, verts: Vert[], batch: Batch, vx: number, vy: number, perspective: number) {
+function isSilhouette(edge: MeshEdge, verts: Vert[], batch: Batch, vx: number, vy: number, perspective: Perspective) {
   const a = verts[edge.a]
   const b = verts[edge.b]
   if (!a || !b) return false
@@ -1618,7 +1623,7 @@ function isSilhouette(edge: MeshEdge, verts: Vert[], batch: Batch, vx: number, v
 
 function projectLayer(
   v: Vert,
-  perspective: number,
+  perspective: Perspective,
   vx: number,
   vy: number,
   padL: number,
@@ -1626,6 +1631,9 @@ function projectLayer(
   scaleX: number,
   scaleY: number,
 ) {
+  if (perspective === 'parallel') {
+    return { x: (v.x + padL) * scaleX, y: (v.y + padT) * scaleY, z: v.z }
+  }
   const w = 1 - v.z / perspective
   if (w <= 1e-4) return null
   return {
@@ -1665,7 +1673,7 @@ type ScreenSample = { x: number; y: number; z: number; kind: 'visible' | 'hidden
 function sampleSegment(
   a: Vert,
   b: Vert,
-  perspective: number,
+  perspective: Perspective,
   vx: number,
   vy: number,
   padL: number,
@@ -1682,7 +1690,7 @@ function sampleSegment(
   outline: boolean,
   owner2 = 0,
 ): ScreenSample[] {
-  const near = perspective * (1 - 1e-3)
+  const near = perspective === 'parallel' ? Number.POSITIVE_INFINITY : perspective * (1 - 1e-3)
   let p0 = a
   let p1 = b
   const in0 = p0.z < near
@@ -1827,7 +1835,25 @@ function chainHidden(runs: PointRun[]): ChainPoint[][] {
   return out
 }
 
-function sphereRing(center: { x: number; y: number; z: number }, radius: number, vx: number, vy: number, perspective: number): Vert[] | null {
+function sphereRing(center: { x: number; y: number; z: number }, radius: number, vx: number, vy: number, perspective: Perspective): Vert[] | null {
+  if (perspective === 'parallel') {
+    const count = 72
+    const ring: Vert[] = []
+    for (let i = 0; i < count; i++) {
+      const ang = (i / count) * Math.PI * 2
+      ring.push({
+        x: center.x + radius * Math.cos(ang),
+        y: center.y + radius * Math.sin(ang),
+        z: center.z,
+        nx: 0,
+        ny: 0,
+        nz: 1,
+        u: 0,
+        v: 0,
+      })
+    }
+    return ring
+  }
   const dx = center.x - vx
   const dy = center.y - vy
   const dz = center.z - perspective
@@ -1869,6 +1895,20 @@ function sphereSurface(
   y: number,
   z: number,
 ) {
+  if (camera.parallel) {
+    const dx = x - round.x
+    const dy = y - round.y
+    const rad2 = round.radius * round.radius - dx * dx - dy * dy
+    if (rad2 >= 0) {
+      const span = round.radius
+      return { x, y, z: round.z + Math.sqrt(rad2), nx: dx / span, ny: dy / span, nz: Math.sqrt(rad2) / span }
+    }
+    const fx = x - round.x
+    const fy = y - round.y
+    const fz = z - round.z
+    const flen = Math.hypot(fx, fy, fz) || 1
+    return { x, y, z, nx: fx / flen, ny: fy / flen, nz: fz / flen }
+  }
   const ocx = camera.x - round.x
   const ocy = camera.y - round.y
   const ocz = camera.z - round.z
@@ -2065,7 +2105,7 @@ function paintMeshLines(
   pw: number,
   ph: number,
   layer: LayerLayoutNode,
-  perspective: number,
+  perspective: Perspective,
   padL: number,
   padT: number,
   viewW: number,
@@ -2269,7 +2309,7 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
     const node = instance.node
     if (node.width <= 0 && node.mesh.type !== 'extrude') continue
     const o = originOffset(node.origin, node.width, node.height)
-    if (applyPoseMatrix(instance.toLayer, o.x, o.y, 0).z >= perspective) continue
+    if (behindCamera(applyPoseMatrix(instance.toLayer, o.x, o.y, 0).z, perspective)) continue
     const owner = nextOwner++
     const opacity = (instance.opacity ?? 1) * node.opacity
     if (node.mesh.type === 'model') {

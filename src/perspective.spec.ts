@@ -160,6 +160,38 @@ describe('perspective', () => {
     expect(rect?.quad?.[0]?.y).toBeCloseTo(local.y + 100, 1)
   })
 
+  it('parallel 不按 z 放大，大的 z 仍绘制', async () => {
+    expect(project(100, 100, 'parallel', { x: 20, y: 40, z: 1000 })).toEqual({ x: 20, y: 40 })
+    const parallel = await checkFvg(
+      `<layer width="200" height="120" perspective="parallel"><rect width="40" height="40" x="20" y="40" fill="#fff" z="80" /></layer>`,
+    )
+    const rect = parallel.elements.find((el) => el.tag === 'rect')
+    expect(rect!.ink.x).toBeCloseTo(20, 0)
+    expect(rect!.ink.y).toBeCloseTo(40, 0)
+    expect(rect!.ink.width).toBeCloseTo(40, 0)
+    expect(rect!.ink.height).toBeCloseTo(40, 0)
+    expect(parallel.issues.some((issue) => issue.code === 'behind-camera' || issue.code === 'invalid-attr')).toBe(false)
+    const far = await checkFvg(
+      `<layer width="200" height="120" perspective="parallel"><rect width="40" height="40" x="20" y="40" fill="#fff" z="5000" /></layer>`,
+    )
+    const farRect = far.elements.find((el) => el.tag === 'rect')
+    expect(farRect!.ink.width).toBeCloseTo(40, 0)
+    expect(far.issues.some((issue) => issue.code === 'behind-camera')).toBe(false)
+    const numeric = await checkFvg(
+      `<layer width="200" height="120" perspective="200"><rect width="40" height="40" x="20" y="40" fill="#fff" z="80" /></layer>`,
+    )
+    const grown = numeric.elements.find((el) => el.tag === 'rect')
+    expect(grown!.ink.width).toBeGreaterThan(60)
+  })
+
+  it('perspective 写了别的词时报 invalid-attr', async () => {
+    const report = await checkFvg(
+      `<layer width="100" height="100" perspective="foo"><rect x="30" y="30" width="40" height="40" fill="#fff" rotateY="20" /></layer>`,
+    )
+    expect(report.issues.some((issue) => issue.code === 'invalid-attr')).toBe(true)
+    expect(report.issues.some((issue) => issue.code === 'flatten-3d')).toBe(true)
+  })
+
   it('z 超过视距时报 behind-camera', async () => {
     const report = await checkFvg(
       h(

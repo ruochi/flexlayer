@@ -414,8 +414,8 @@ export type LayerLayoutNode = LayoutNodeBase & {
   children: LayoutNode[]
   /** 缺省为 visible。hidden 时按盒子裁剪子元素。 */
   overflow?: 'visible' | 'hidden'
-  /** 直接子元素共用的视距，像素。灭点是这一层盒子的中心。 */
-  perspective?: number
+  /** 直接子元素共用的视距，像素。灭点是这一层盒子的中心。`parallel` 是平行投影。 */
+  perspective?: number | 'parallel'
   /**
    * 蒙版内容，坐标系是这一层的局部像素。
    * 绘制时只取 alpha，不进入 children，不参与布局。

@@ -100,8 +100,21 @@ export function applyPoseMatrix(m: number[], u: number, v: number, z: number): V
   }
 }
 
-/** 视距像素。灭点 (vx, vy)。z 越大越近。观众身后返回 null。 */
-export function project(vx: number, vy: number, perspective: number, p: Vec3): Vec2 | null {
+/** 像素视距，或 `parallel`：视线平行于 z，没有近大远小。 */
+export type Perspective = number | 'parallel'
+
+export function hasPerspective(value: Perspective | undefined): value is Perspective {
+  return value === 'parallel' || (typeof value === 'number' && value > 0)
+}
+
+/** 平行投影没有镜头平面。数值视距里，z 大于等于视距就是观众身后。 */
+export function behindCamera(z: number, perspective: Perspective): boolean {
+  return perspective !== 'parallel' && z >= perspective
+}
+
+/** 视距像素。灭点 (vx, vy)。z 越大越近。观众身后返回 null。平行投影不缩放。 */
+export function project(vx: number, vy: number, perspective: Perspective, p: Vec3): Vec2 | null {
+  if (perspective === 'parallel') return { x: p.x, y: p.y }
   const w = 1 - p.z / perspective
   if (w <= 1e-4) return null
   return { x: vx + (p.x - vx) / w, y: vy + (p.y - vy) / w }
@@ -477,7 +490,7 @@ export function drawTexturedPlane(
  */
 export function perspectiveIssues(root: LayoutNode): Issue[] {
   const issues: Issue[] = []
-  const visit = (node: LayoutNode, inCamera: boolean, distance: number | undefined) => {
+  const visit = (node: LayoutNode, inCamera: boolean, distance: Perspective | undefined) => {
     if (node.kind === 'mesh') {
       if (distance == null) {
         issues.push({
@@ -487,7 +500,7 @@ export function perspectiveIssues(root: LayoutNode): Issue[] {
           message: `${node.tag} 没有落在带 perspective 的 layer 里`,
           hint: '在父 layer 上写 perspective，例如 <layer perspective="900">',
         })
-      } else if ((node.z ?? 0) >= distance) {
+      } else if (behindCamera(node.z ?? 0, distance)) {
         issues.push({
           level: 'warn',
           code: 'behind-camera',
@@ -507,7 +520,7 @@ export function perspectiveIssues(root: LayoutNode): Issue[] {
         hint: '在父 layer 上写 perspective，例如 <layer perspective="900">',
       })
     }
-    if (inCamera && distance != null && (node.z ?? 0) >= distance) {
+    if (inCamera && distance != null && behindCamera(node.z ?? 0, distance)) {
       issues.push({
         level: 'warn',
         code: 'behind-camera',
@@ -517,7 +530,7 @@ export function perspectiveIssues(root: LayoutNode): Issue[] {
       })
     }
     const children = node.kind === 'layer' || node.kind === 'flex' ? node.children : []
-    const opens = node.kind === 'layer' && node.perspective != null && node.perspective > 0
+    const opens = node.kind === 'layer' && hasPerspective(node.perspective)
     for (const child of children) visit(child, opens, opens ? node.perspective : distance)
   }
   visit(root, false, undefined)
