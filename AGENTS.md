@@ -36,6 +36,7 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 | 笔画贴齐定位点用 `anchor-box="ink"` | 用布局盒子当笔画边界 | `<layer x="76" y="40" anchor-box="ink">`。只写在 `layer` 和 `use` 上 | `ink-inset` |
 | 镜头取舞台的一块，用 `view` | 用 `scale` 把整页放大，越界就报 `overflow-canvas` | `<layer width="1920" height="1080" view="200 80 960 540">` 包住舞台。章节和标注写在这层外面，用成片像素。`scale` 的支点仍是 `origin` | `view-outside` |
 | 图片是 HTML | `<Image width="320">` | `<img src="cover.png" style="width:320px; height:180px">`。`image` 同样可用 | `invalid-attr` |
+| 图标用 `class="material-symbols-outlined"` | `<icon name="home" />` | `<span class="material-symbols-outlined">home</span>`。字重写 `style="font-weight:400"`，字号和颜色跟周围文字 | `missing-icon` |
 | 作用于整棵子树的效果只写在 `layer` 上 | `<rect grade="lomo">`、`<p style="overlay:#000">` | `<layer grade="lomo" overlay="#00000066">` | `invalid-attr` |
 | 调色先选预设再改一两项 | `grade="contrast 5"` | `<layer grade="lomo 0.8, fade 0.1">` | `invalid-attr` |
 | 结构化数据只放 `data` | `values={[1, 2]}` 会变成字符串 | `data={{ values: [1, 2] }}`。`.layer` 写 `data='{"values":[1,2]}'`，`draw` 读 `el.data` | `invalid-attr`、`emit-data` |
@@ -54,7 +55,7 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 
 flex 的 `align-items` 默认 `center`（CSS 里是 `stretch`）。**column 忘写 `align-items` 会全部居中**：较窄的子项在交叉轴居中，和容器同宽的子项看起来仍贴着起点。左对齐写 `align-items:flex-start`。横排按文字基线对齐写 `align-items:baseline`（图片、`layer`、形状对齐到下边缘）；竖排写了 `baseline` 按 `flex-start`。`letter-spacing` 可以写 `em`，按写这条声明的元素自己的字号换算后再继承。`justify-content` 只管本层主轴，写在子项上改不了它在父级交叉轴上的位置。`align-content` 默认 `flex-start`，管的是 `flex-wrap` 之后的多行，不是一行里的子项。`flex-wrap` 可以写 `wrap` 或 `wrap-reverse`。
 
-没写 `display:flex` 的 `div` 里直接放 `p`、`h1`–`h3`、`div`、写了宽高的 `layer` 或其他非行内标签时，按块级从上到下排，文字块拉到这一列的宽度，不报 `invalid-child`。只放文字和行内标签时，`div` 仍是文字盒子。`p`、`h1`–`h3`、`span` 里嵌套块级标签或 `layer` 仍然报 `invalid-child`，但可以直接放 `<img>`。放进 `div` 的 `layer` 写 `width`、`height`，位置由排布决定，这一层上不写 `x`、`y`。容器上的字号、字重、字体、颜色、字距和 `text-align` 会传给没写这些的 `p`、`div`、`span`；`h1`–`h3` 仍用自己的默认字号和字重。`em` / `i` 是斜体，`u` 加下划线。
+没写 `display:flex` 的 `div` 里直接放 `p`、`h1`–`h3`、`div`、写了宽高的 `layer` 或其他非行内标签时，按块级从上到下排，文字块拉到这一列的宽度，不报 `invalid-child`。只放文字和行内标签时，`div` 仍是文字盒子。`p`、`h1`–`h3`、`span` 里嵌套块级标签或 `layer` 仍然报 `invalid-child`，但可以直接放 `<img>`。图标写成 `<span class="material-symbols-outlined">home</span>`。放进 `div` 的 `layer` 写 `width`、`height`，位置由排布决定，这一层上不写 `x`、`y`。容器上的字号、字重、字体、颜色、字距和 `text-align` 会传给没写这些的 `p`、`div`、`span`；`h1`–`h3` 仍用自己的默认字号和字重。`em` / `i` 是斜体，`u` 加下划线。
 
 ## 3. 生成
 

@@ -8,7 +8,7 @@
 
 `<font src>` 要的是字体文件（ttf、otf、woff）。`fonts.googleapis.com` 的 CSS 地址不是字体文件，写进去会下载失败。目录里的 Google 字体已经换成 jsDelivr 上的文件，直接写名字即可。
 
-多档字体在 400 和 700 里取最近的一档。只登记了一档的，标题的 bold 仍用这一档。`ChillDuanSans` 是可变字体，字重轴约 300 到 800；轮廓只有默认字重 300。
+多档字体在 400 和 700 里取最近的一档。只登记了一档的，标题的 bold 仍用这一档。`Symbols` 是图标字体，按 100 到 700 的整百取最近一档。写成 `<span class="material-symbols-outlined">home</span>`，字重用 `font-weight`。`ChillDuanSans` 是可变字体，字重轴约 300 到 800；轮廓只有默认字重 300。
 
 简体子集不含完整拉丁字形时，缺的字回退到 `ChillDuanSans`。拉丁子集不含汉字。
 
@@ -33,6 +33,7 @@
 | `XiaoWei` | 站酷小薇 | 400 | 简体 | 宋意标题 | ZCOOL XiaoWei |
 | `KuaiLe` | 站酷快乐体 | 400 | 简体 | 活泼标题 | ZCOOL KuaiLe |
 | `MaoCao` | 刘建毛草 | 400 | 简体 | 手写 | Liu Jian Mao Cao |
+| `Symbols` | 图标 | 100–700 | 图标 | 图标 | Material Symbols Outlined |
 
 ```html
 <layer width="720" height="360" background="#0c1424" color="#f4ecdf" font-family="Song">
@@ -44,6 +45,15 @@
 ```
 
 自己的字体文件仍写在根下：`<font family="DeYiHei" src="fonts/deyihei.otf" />`。`src` 可以是相对路径或字体文件的网址。
+
+图标写 `class="material-symbols-outlined"`，里面是图标名。字重写 `font-weight`，没写就跟周围的字重。字号没写就跟周围的 `font-size`。颜色写 `style`。这是空心的一套。
+
+```html
+<div style="display:flex; align-items:center; gap:12px; font-size:40px; color:#f4ecdf">
+  <span class="material-symbols-outlined">home</span>
+  <span>首页</span>
+</div>
+```
 
 ## 图片
 

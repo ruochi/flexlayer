@@ -48,6 +48,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | 绘制 | `draw`（子标签，正文 JS；程序侧也可用 `draw={fn}`） |
 | 文字 | `h1`、`h2`、`h3`、`p`、`div`、`span`；行内：`span`、`strong`、`b`、`em`、`br` |
 | 图片 | `img`（`image` 是同一个标签） |
+| 图标 | 不是单独的标签。`<span class="material-symbols-outlined">home</span>`，字重写 `font-weight` |
 | 形状 | `rect`、`circle`、`ellipse` |
 | 分组 | `g`（放在 `layer` 里，用 `transform` 平移、旋转、缩放） |
 | 线条 | `line`、`arrow`、`polyline`、`polygon`、`path`、`curve`。`arrow` 是内置组件，排版时展开成 `g` |
@@ -240,7 +241,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 ## 5. 文字
 
-最外层的文字标签是一个**文字盒子**，里面只能放文字和行内标签（`span`、`strong`、`b`、`em`、`i`、`u`、`br`），也可以直接放 `<img>`。图片和文字排在同一段里，宽度不够时跟着一起换行。
+最外层的文字标签是一个**文字盒子**，里面只能放文字和行内标签（`span`、`strong`、`b`、`em`、`i`、`u`、`br`），也可以直接放 `<img>`。图片和文字排在同一段里，宽度不够时跟着一起换行。图标是带 `class="material-symbols-outlined"` 的文字，见第 6 章。
 `div` 里有块级子元素时不是文字盒子，见 4.2。
 `p`、`h1`–`h3`、`span` 里不要嵌套 `div`、`p`，也不要放 `layer`。多段上下排写成 `<div><p>…</p></div>`。图形和文字并排时，把写了宽高的 `layer` 放进 `<div style="display:flex">`。
 `em` 和 `i` 是斜体，`strong` 和 `b` 是粗体，`u` 加下划线。没写字号时，它们和 `span` 一样继承外层。
@@ -327,6 +328,25 @@ const chars = await glyph('春眠', { font: 'Kai', size: 120, weight: 700 })
 | `border-radius`、`opacity`、`padding`、`background`、`border` | 同其它 HTML。圆角会裁切图片 |
 
 图片可以放进 `display:flex`，默认不缩小。在 layer 里默认落在 `(0, 0)`；要指定位置就外包一层 `layer`，把 `x`、`y`、`anchor` 写在那一层上。`canvas.create` 会按 `src` 准备图片。读不到文件时报 `missing-image`，`hint` 说明路径。写了宽高的盒子仍然占位。缺 `src` 报 `invalid-attr`。
+
+### 图标
+
+图标不是单独的标签，写法和网页一样。`class="material-symbols-outlined"` 把这一段换成 Material Symbols Outlined，里面写图标名。字号和颜色跟周围的文字走，用 `style` 里的 `font-size` 和 `color`，不会单独变成 24px。字重写 `font-weight`，按 100、200、300、400、500、600、700 取最近的一档；两边一样近时用较轻的那一档。没写就跟周围的字重，默认 400。`.tsx` 里也可以写 `className`。这个 class 写在 `i` 上时仍是正体。
+
+```html
+<div style="display:flex; align-items:center; gap:12px; font-size:40px">
+  <span class="material-symbols-outlined" style="font-weight:400">home</span>
+  <span>首页</span>
+</div>
+```
+
+字体第一次用到时下载。不要把 `fonts.googleapis.com` 的地址写进 `<font>`。排版按码位拆开，字体里的连字留不住，所以图标名会换成一个码位再量、再画。`font-family` 写成 `Symbols`、`图标` 或 `material-symbols-outlined` 时同样换。
+
+这个 class 写在文字盒子上、又没写 `line-height` 和 `white-space` 时，行高是 1，并且不换行。写在行内标签上时，只改这一段的字体，字距收成 0，除非 `style` 里写了 `letter-spacing`。
+
+`material-symbols-rounded` 和 `material-symbols-sharp` 仍用这一套空心字体，并报 `invalid-attr`。对不上的名字报 `missing-icon`，这些字留在原处。普通字体里的英文单词不报。这是空心的一套，没有单独的实心轴。
+
+放进 `p` 时跟文字排在同一段。单独放进 `display:flex` 或 `layer` 时，边长跟字号走。
 
 ## 7. 形状与线条
 
@@ -678,6 +698,7 @@ registerFilter({
 | `empty-mask` | warn | `mask` 里没有可用的形状或图片，不生效 |
 | `invalid-draw` | error / warn | `<draw>` 语法错误或运行出错（error），或内容为空（warn）。运行出错带上源码位置，其余内容照常绘制 |
 | `missing-image` | warn | `img` 的 `src` 读不到 |
+| `missing-icon` | warn | `class="material-symbols-outlined"`（或 `font-family` 指到 `Symbols`）里的名字不是 Material Symbols 的图标名 |
 | `missing-model` | warn | `model` 的 `src` 缺失、不是 `.glb`，或文件读不到；没有可放入的宽高时也是这个码 |
 | `missing-symbol` | warn | `use` 的 `href` 没有对应的 `symbol` |
 | `symbol-cycle` | warn | `symbol` 通过 `use` 引用了自己 |

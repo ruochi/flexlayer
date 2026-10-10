@@ -35,6 +35,19 @@ function woff(pkg: string, version: string, file: string, weight: number, regist
   return { file, weight, registeredAs, url: `${FONTSOURCE}/${pkg}@${version}/files/${file}` }
 }
 
+/** Material Symbols 的字体名。网页上的 class 也会选这套。字重按 100–700 的整百取最近一档。 */
+export const ICON_FONT_FAMILY = 'Symbols'
+
+function symbolFace(weight: number, registeredAs: string): CatalogFace {
+  return woff(
+    'material-symbols-outlined',
+    V,
+    `material-symbols-outlined-latin-${weight}-normal.woff`,
+    weight,
+    registeredAs,
+  )
+}
+
 const V = '5.2.8'
 
 export const DEFAULT_FONT: CatalogFont = {
@@ -341,6 +354,27 @@ export const REGISTERED_FONTS: CatalogFont[] = [
     weights: '400',
     aliases: ['刘建毛草', 'liu jian mao cao', 'liujianmaocao'],
     faces: [woff('liu-jian-mao-cao', V, 'liu-jian-mao-cao-chinese-simplified-400-normal.woff', 400, 'MaoCao')],
+  },
+  {
+    family: ICON_FONT_FAMILY,
+    title: 'Material Symbols',
+    role: 'google',
+    source: 'Material Symbols Outlined（Google Fonts）',
+    license: 'Apache-2.0',
+    covers: '图标',
+    use: '图标。写 <span class="material-symbols-outlined">home</span>，字重用 font-weight',
+    sample: 'home',
+    weights: '100、200、300、400、500、600、700',
+    aliases: ['图标', 'material symbols', 'material-symbols', 'material symbols outlined', 'material-symbols-outlined'],
+    faces: [
+      symbolFace(100, 'Symbols100'),
+      symbolFace(200, 'Symbols200'),
+      symbolFace(300, 'Symbols300'),
+      symbolFace(400, 'Symbols'),
+      symbolFace(500, 'Symbols500'),
+      symbolFace(600, 'Symbols600'),
+      symbolFace(700, 'Symbols700'),
+    ],
   },
 ]
 

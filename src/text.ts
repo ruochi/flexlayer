@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module'
 import type { FvgChild, FvgNode } from './parse.js'
 import { applyCanvasFont } from './fonts.js'
+import { applySymbolsClass, classAttr, rewriteIconLigatures, symbolsClassNotes, type SymbolsNote } from './icons.js'
 import { getMeasureCtx } from './measureCtx.js'
 import { parseFontWeight, parseLetterSpacing, parsePx } from './style.js'
 import { emptyBox, translateBox, unionBoxes, type Box, type InlineOwner, type TextLayoutResult, type TextRunStyle, type TextSegment } from './types.js'
@@ -126,12 +127,29 @@ function walkInline(
   parentPath: string,
   inherited: InlineOwner | undefined,
   imageSize?: (node: FvgNode, path: string) => TextSegment['atom'],
+  onSymbols?: (notes: SymbolsNote[], path: string) => void,
 ): void {
   let breakNext = hardBreakNext
   let elementIndex = 0
   for (const child of nodes) {
     if (typeof child === 'string') {
-      if (child) out.push({ text: child, style, hardBreakBefore: breakNext, owner: inherited })
+      if (child) {
+        const icon = rewriteIconLigatures(child, style.fontFamily)
+        if (icon.missing.length > 0) {
+          onSymbols?.(
+            [
+              {
+                level: 'warn',
+                code: 'missing-icon',
+                message: `没有图标 ${icon.missing.join('、')}`,
+                hint: '写成 <span class="material-symbols-outlined">home</span>',
+              },
+            ],
+            parentPath,
+          )
+        }
+        out.push({ text: icon.text, style, hardBreakBefore: breakNext, owner: inherited })
+      }
       breakNext = false
       continue
     }
@@ -155,10 +173,17 @@ function walkInline(
     if (tag === 'strong' || tag === 'b') segStyle = { ...style, fontWeight: 700 }
     if (tag === 'em' || tag === 'i') segStyle = { ...segStyle, fontStyle: 'italic' }
     if (tag === 'u') segStyle = { ...segStyle, underline: true }
-    segStyle = mergeStyle(segStyle, parseStyleAttr(child.attrs.style))
+    const declared = parseStyleAttr(child.attrs.style)
+    segStyle = mergeStyle(segStyle, declared)
+    segStyle = applySymbolsClass(segStyle, classAttr(child.attrs), {
+      family: Boolean(declared['font-family']),
+      spacing: declared['letter-spacing'] != null,
+    })
+    const notes = symbolsClassNotes(classAttr(child.attrs))
+    if (notes.length > 0) onSymbols?.(notes, path)
     const id = child.attrs.id?.trim()
     const owner = id ? { id, path, tag } : inherited
-    walkInline(child.children, segStyle, out, breakNext, path, owner, imageSize)
+    walkInline(child.children, segStyle, out, breakNext, path, owner, imageSize, onSymbols)
     breakNext = false
   }
 }
@@ -168,6 +193,7 @@ export function extractTextSegments(
   defaults: TextBoxDefaults,
   parentPath = '',
   imageSize?: (node: FvgNode, path: string) => TextSegment['atom'],
+  onSymbols?: (notes: SymbolsNote[], path: string) => void,
 ): TextSegment[] {
   const base: TextRunStyle = {
     fontFamily: defaults.fontFamily,
@@ -177,12 +203,19 @@ export function extractTextSegments(
     letterSpacing: defaults.letterSpacing,
   }
   const tag = node.tag.toLowerCase()
-  let style = mergeStyle(base, parseStyleAttr(node.attrs.style))
+  const declared = parseStyleAttr(node.attrs.style)
+  let style = mergeStyle(base, declared)
   if (tag === 'strong' || tag === 'b') style = { ...style, fontWeight: 700 }
   if (tag === 'em' || tag === 'i') style = { ...style, fontStyle: 'italic' }
   if (tag === 'u') style = { ...style, underline: true }
+  style = applySymbolsClass(style, classAttr(node.attrs), {
+    family: Boolean(declared['font-family']),
+    spacing: declared['letter-spacing'] != null,
+  })
+  const notes = symbolsClassNotes(classAttr(node.attrs))
+  if (notes.length > 0) onSymbols?.(notes, parentPath)
   const segs: TextSegment[] = []
-  walkInline(node.children, style, segs, false, parentPath, undefined, imageSize)
+  walkInline(node.children, style, segs, false, parentPath, undefined, imageSize, onSymbols)
   return normalizeInlineSegments(segs)
 }
 

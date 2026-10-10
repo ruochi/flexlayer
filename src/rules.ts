@@ -315,7 +315,7 @@ export function suggestNames(raw: string, candidates: Iterable<string>): string[
 }
 
 function attrCandidates(node: FvgNode): Iterable<string> {
-  if (isHtmlTag(node.tag) || isTextBoxTag(node.tag)) return [...HTML_STYLE_ATTRS, 'style', 'id', 'src', 'alt']
+  if (isHtmlTag(node.tag) || isTextBoxTag(node.tag)) return [...HTML_STYLE_ATTRS, 'style', 'id', 'src', 'alt', 'class']
   return KNOWN_ATTRS
 }
 

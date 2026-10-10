@@ -14,6 +14,7 @@ import { imageInk, peekLayerImage, preloadLayerImagesSync, parseObjectFit, parse
 import type { FvgNode } from './parse.js'
 import { parseFvg } from './parse.js'
 import { ensureBuiltinFontsSync, primaryFontFamily, registerFontsFromDocumentSync } from './fonts.js'
+import { classAttr, ICON_FONT_FAMILY, symbolsClassOf } from './icons.js'
 import { materialize } from './components.js'
 import { catmullRomPath } from './curve.js'
 import { isGradient, parseGradient, solidPaint } from './gradient.js'
@@ -736,12 +737,13 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
   warnNestedMasks(node, ctx)
   const style = parseStyle(node.attrs.style)
   const tag = node.tag.toLowerCase()
+  const symbols = symbolsClassOf(classAttr(node.attrs))
   const fontSize =
     parsePx(style['font-size']) ?? (isHeadingTag(tag) ? defaultFontSizeForTag(tag) : ctx.fontSize ?? defaultFontSizeForTag(tag))
   const fontWeight =
     parseFontWeight(style['font-weight']) ??
     (isHeadingTag(tag) || tag === 'strong' || tag === 'b' ? 700 : ctx.fontWeight ?? defaultFontWeightForTag(tag))
-  const fontFamily = style['font-family']?.trim() || ctx.fontFamily
+  const fontFamily = style['font-family']?.trim() || (symbols ? ICON_FONT_FAMILY : ctx.fontFamily)
   const color = style.color ?? ctx.color
   const letterSpacing = parseLetterSpacing(style['letter-spacing'], fontSize) ?? ctx.letterSpacing ?? 0
   const images: ImageLayoutNode[] = []
@@ -762,8 +764,11 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
       images.push(laid)
       return { width: laid.width, height: laid.height, key }
     },
+    (notes, notePath) => {
+      for (const note of notes) ctx.issues.push({ ...note, path: notePath })
+    },
   )
-  const nowrap = style['white-space'] === 'nowrap'
+  const nowrap = style['white-space'] === 'nowrap' || (symbols != null && !style['white-space'])
   const textWrap = style['text-wrap'] === 'wrap' ? 'wrap' : 'balance'
   const fixedW = parsePx(style.width)
   const fixedH = parsePx(style.height)
@@ -780,7 +785,7 @@ function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: nu
       hint: '竖排用 writing-mode:vertical-rl',
     })
   }
-  const specifiedLine = parseLineHeight(style['line-height']) ?? ctx.lineHeight
+  const specifiedLine = parseLineHeight(style['line-height']) ?? (symbols && !style['line-height'] ? { unit: 'ratio' as const, value: 1 } : ctx.lineHeight)
   const fallbackRatio = segments.length > 1 && !vertical ? 1.4 : 1.2
   const lineHeightPx = specifiedLine?.unit === 'px' ? specifiedLine.value : undefined
   const lineHeightRatio = specifiedLine == null ? fallbackRatio : specifiedLine.unit === 'ratio' ? specifiedLine.value : fontSize > 0 ? specifiedLine.value / fontSize : fallbackRatio
@@ -2485,6 +2490,7 @@ export function fontFamiliesOf(node: FvgNode): string[] {
     }
     add(concrete.attrs['font-family'])
     add(parseStyle(concrete.attrs.style)['font-family'])
+    if (symbolsClassOf(classAttr(concrete.attrs))) out.add(ICON_FONT_FAMILY)
     for (const child of concrete.children) {
       if (typeof child !== 'string') visit(child)
     }
@@ -2498,6 +2504,7 @@ function collectFontFamilies(node: FvgNode, out: Set<string>) {
   const style = parseStyle(concrete.attrs.style)
   if (style['font-family']) out.add(style['font-family'])
   if (concrete.attrs['font-family']) out.add(concrete.attrs['font-family'])
+  if (symbolsClassOf(classAttr(concrete.attrs))) out.add(ICON_FONT_FAMILY)
   for (const child of concrete.children) {
     if (typeof child !== 'string') collectFontFamilies(child, out)
   }
