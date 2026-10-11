@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.54
+
+实现提交：`d3cf69c60c70da2dea7e0dc9ed30eff3a75010e1`
+
+取景层的 `camera` 写 `aperture` 时按每个像素的深度做景深。半径是 `aperture × |深度 − focus| / 深度`，近处的糊边盖到远处。`sharp="true"` 的表面保持清楚。
+
 ## 0.2.53
 
 实现提交：`f9c392d55d7509a73dfffb1e351fe0d19a9dcb81`

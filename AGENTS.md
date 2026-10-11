@@ -57,7 +57,7 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 | 蒙版缓存用 `derive` | 把抠图结果写回原图 | `<img src="photo.jpg" derive="subject" />`。没有缓存报 `missing-mask`，哈希对不上报 `stale-mask` | `missing-mask`、`stale-mask` |
 | 透视写在父 `layer`，转动和 `z` 写在子元素 | `<rect perspective="900" rotateY="20">` | `<layer perspective="900"><rect rotateY="20" z="40" /></layer>`。平行投影写 `perspective="parallel"` | `invalid-attr`、`flatten-3d` |
 | 球体、圆柱、圆环、线管、长方体、拉伸和 glb 放在带 `perspective` 的 layer 里 | `<sphere r="40">` 没有视距 | `<layer perspective="700"><sphere cx="80" cy="80" r="40" /></layer>`。圆柱 `<cylinder cx cy r height>`，圆环 `<torus cx cy r tube>`，线管 `<tube d r>`。`box` 的 `rx` 圆棱，`round` 选边；圆柱的 `rx` 圆口，`round` 写 `top` 或 `bottom`。`model` 只写 `src`，尺寸写在外包 layer | `flatten-3d`、`missing-model` |
-| 镜头写 `camera`，`perspective` 是焦距简写 | 另起 `<camera>`，或和 `view` 写在同一层 | `<layer camera="fov 40, at 980 640 0, orbit 35 18, distance 1200">`。`perspective="1484"` 等于 `focal 1484`。`preserve-3d` 写在 layer 或 flex 上，压平效果仍收成一张图并报 info | `invalid-attr`、`flattened-3d`、`behind-camera` |
+| 镜头写 `camera`，`perspective` 是焦距简写 | 另起 `<camera>`，或和 `view` 写在同一层 | `<layer camera="fov 40, at 980 640 0, orbit 35 18, distance 1200">`。`perspective="1484"` 等于 `focal 1484`。景深写 `aperture`、`focus`、`max`；要保持清楚的表面写 `sharp="true"`。`preserve-3d` 写在 layer 或 flex 上，压平效果仍收成一张图并报 info | `invalid-attr`、`flattened-3d`、`behind-camera` |
 
 根节点 `<layer width height background>` 上的 `background` 是画布底色，只有这一处可以写。没写时不铺底色，PNG 里空出来的像素是透明的。要白底写 `background="#ffffff"`。
 

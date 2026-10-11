@@ -118,6 +118,9 @@ export type TextLineReport = {
   box: Rect
 }
 
+/** 景深。aperture 是无限远处的模糊半径，成片像素。focus 是从机位沿视线量的对焦距离。 */
+export type DofSpec = { aperture: number; focus: number; maxBlur: number }
+
 export type ShadowSpec = { x: number; y: number; blur: number; spread: number; color: string }
 export type GlowSpec = { blur: number; spread: number; color: string }
 export type InkStrokePosition = 'outside' | 'inside' | 'center'
@@ -267,6 +270,8 @@ export type ElementReport = {
   /** 按墨迹距离描边，从内到外。 */
   inkStroke?: InkStrokeSpec[]
   blur?: number
+  /** 这一层镜头在采样点上的景深模糊半径，成片像素。没开景深或不糊时不写。 */
+  defocus?: number
   backdropBlur?: number
   noise?: NoiseSpec
   overlay?: OverlaySpec
@@ -413,6 +418,8 @@ export type LayoutNodeBase = {
   source?: string
   /** 子元素沿父链进入外层镜头。压平效果仍会把子树收成一张图。 */
   preserve3d?: boolean
+  /** 不吃景深。这一层表面保持清楚，仍挡住后面的东西。 */
+  sharp?: boolean
 }
 
 export type LayerLayoutNode = LayoutNodeBase & {
@@ -429,6 +436,8 @@ export type LayerLayoutNode = LayoutNodeBase & {
   vanishY?: number
   /** 机位不是「只有焦距、对准盒子中心」时为真。没有三维姿态的子元素也要投影。 */
   cameraMoved?: boolean
+  /** 写了 aperture 才有。平行投影没有。 */
+  dof?: DofSpec
   /**
    * 蒙版内容，坐标系是这一层的局部像素。
    * 绘制时只取 alpha，不进入 children，不参与布局。

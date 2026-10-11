@@ -23,7 +23,7 @@ import { isGradientPaint } from './gradientField.js'
 import { glbSpan, resolveModelFile } from './glb.js'
 import { readBoxFillet, readCylinderFillet } from './mesh-round.js'
 import { openSvgPath, translateSvgPath } from './path.js'
-import { cameraAuditIssues, readPreserve, resolveCamera } from './camera.js'
+import { cameraAuditIssues, readPreserve, readSharp, resolveCamera } from './camera.js'
 import { perspectiveIssues } from './perspective.js'
 import {
   parseBlend,
@@ -556,6 +556,20 @@ function readAttrAppearance(attrs: Record<string, string>) {
     ...scalePair(attrs.scale),
     origin: parseOrigin(attrs.origin),
   }
+}
+
+function sharpOf(attrs: Record<string, string>, ctx: LayoutContext): { sharp?: true } {
+  const sharp = readSharp(attrs.sharp)
+  if (sharp.invalid) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 sharp: ${attrs.sharp}`,
+      hint: '写成 sharp="true"。不写或 false 表示照常吃景深',
+    })
+  }
+  return sharp.value ? { sharp: true } : {}
 }
 
 function flexDirectionOf(style: Record<string, string>): 'row' | 'column' {
@@ -1263,6 +1277,7 @@ function layoutShape(node: FvgNode, ctx: LayoutContext, _defaultStroke: string):
     height: h,
     ink,
     ...appearance,
+    ...sharpOf(node.attrs, ctx),
     shape: node.tag === 'rect' ? 'rect' : node.tag === 'circle' ? 'circle' : 'ellipse',
     fill,
     stroke,
@@ -1730,6 +1745,7 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
     height,
     ink: { x: 0, y: 0, width, height },
     ...appearance,
+    ...sharpOf(node.attrs, ctx),
     mesh,
     fill,
     ...(material ? { material } : {}),
@@ -2340,6 +2356,7 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
     height: fixedH ?? outer.height,
     ink: { x: appearance.padding.left, y: appearance.padding.top, width: contentW, height: contentH },
     ...appearance,
+    ...sharpOf(node.attrs, ctx),
     direction,
     ...(preserve.value ? { preserve3d: true } : {}),
     children: laidChildren,
@@ -3160,6 +3177,7 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
   let vanishX: number | undefined
   let vanishY: number | undefined
   let cameraMoved = false
+  let dof: LayerLayoutNode['dof']
   const perspectiveRaw = node.attrs.perspective
   const cameraSource = node.camera !== undefined ? node.camera : node.attrs.camera
   if (cameraSource != null && !(typeof cameraSource === 'string' && cameraSource.trim() === '')) {
@@ -3188,6 +3206,7 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
       if (resolved.camera.vanishX !== 0) vanishX = resolved.camera.vanishX
       if (resolved.camera.vanishY !== 0) vanishY = resolved.camera.vanishY
       cameraMoved = resolved.camera.moved
+      dof = resolved.camera.dof
     }
   } else if (perspectiveRaw != null && perspectiveRaw.trim() !== '') {
     if (perspectiveRaw.trim() === 'parallel') {
@@ -3281,6 +3300,8 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
     ...(vanishX != null ? { vanishX } : {}),
     ...(vanishY != null ? { vanishY } : {}),
     ...(cameraMoved ? { cameraMoved: true } : {}),
+    ...(dof ? { dof } : {}),
+    ...sharpOf(node.attrs, ctx),
     ...(preserve.value ? { preserve3d: true } : {}),
     ...(mask ? { mask } : {}),
     ...(laidMask?.feather != null ? { maskFeather: laidMask.feather } : {}),

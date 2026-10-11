@@ -39,6 +39,8 @@ type FvgPositioned = FvgGraphic & {
   anchor?: string
   /** ink 时按子树着墨对齐，box 时按布局盒子。 */
   'anchor-box'?: string
+  /** 不吃景深 */
+  sharp?: boolean | string
 }
 
 /** circle、ellipse、sphere、cylinder、torus 的圆心。 */
@@ -176,6 +178,12 @@ export namespace JSX {
               distance?: number
               from?: [number, number, number]
               vanish?: [number, number]
+              /** 无限远处的模糊半径，成片像素 */
+              aperture?: number
+              /** 对焦距离，或镜头局部坐标 */
+              focus?: number | [number, number, number]
+              /** 模糊半径上限，成片像素。不写是 aperture 的 3 倍 */
+              max?: number
             }
         /** 子元素沿父链进入外层镜头 */
         'preserve-3d'?: boolean | string
@@ -388,7 +396,7 @@ export namespace JSX {
     h3: FvgHtml
     p: FvgHtml
     /** 排布容器。可以直接放文字、图片，以及写了宽高的 layer。 */
-    div: FvgHtml & { 'preserve-3d'?: boolean | string }
+    div: FvgHtml & { 'preserve-3d'?: boolean | string; sharp?: boolean | string }
     span: FvgHtml
     strong: FvgHtml
     b: FvgHtml
