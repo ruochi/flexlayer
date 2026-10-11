@@ -157,6 +157,30 @@ export function cameraSceneCustom(layer: LayerLayoutNode): boolean {
   return layer.children.some((child) => visit(child, child.kind === 'layer' && hasPerspective(child.perspective)))
 }
 
+/** 子树里有要单独进当前镜头的网格、姿态或还能展开的 preserve-3d。压平的层和另一台镜头拦住。 */
+function subtreeEntersCamera(node: LayoutNode): boolean {
+  if (node.kind === 'mesh' || has3dPose(node)) return true
+  if (node.preserve3d && !flattenReason(node) && (node.kind === 'layer' || node.kind === 'flex')) return true
+  if (node.kind !== 'layer' && node.kind !== 'flex') return false
+  if (flattenReason(node)) return false
+  if (node.kind === 'layer' && hasPerspective(node.perspective)) return false
+  return node.children.some(subtreeEntersCamera)
+}
+
+/**
+ * 这一层拆开，子元素各自进当前镜头。
+ * 自己写了 preserve-3d 就拆。祖先已经拆过、自己又没有姿态时，只在子孙需要单独一层时穿过：
+ * 旋转卡片没有 preserve-3d 时仍是一张图，文字留在卡片里。
+ */
+export function splitsForCamera(node: LayoutNode, descended: boolean): boolean {
+  if (node.kind !== 'layer' && node.kind !== 'flex') return false
+  if (node.kind === 'layer' && hasPerspective(node.perspective)) return false
+  if (flattenReason(node)) return false
+  if (node.preserve3d) return true
+  if (!descended || has3dPose(node)) return false
+  return node.children.some(subtreeEntersCamera)
+}
+
 function solveAffine(
   s0: Vec2,
   s1: Vec2,

@@ -83,7 +83,7 @@ export default canvas.create(
 | 图片 | `<img src="cover.png" style="width:320px; height:180px">`。`image` 同样可用 | `invalid-attr` |
 | 图标 | `<span class="material-symbols-outlined">home</span>`。字重写 `font-weight`，字号和颜色跟周围文字 | `missing-icon` |
 | 字形渐变 | `<p style="fill:linear-gradient(to right, #2f7bff, #b423c4)">`。`color` 和 `background-color` 只写纯色，底板渐变写 `background` | `invalid-attr` |
-| 描边 | 形状 `stroke="#fff" stroke-width="4"` 居中。沿墨迹写 `stroke="6 #000 outside"`。文字 `style="stroke:#000; stroke-width:6"`，默认外侧 | `invalid-attr` |
+| 描边 | 形状 `stroke="#fff" stroke-width="4"` 居中。沿墨迹写 `stroke="6 #000 outside"`。文字 `style="stroke:#000; stroke-width:6"`，默认外侧。有 `background` 时绕着底板 | `invalid-attr` |
 | 整棵子树的效果 | `<layer grade="lomo" overlay="#00000066">` | `invalid-attr` |
 | 调色 | `<layer grade="lomo 0.8, fade 0.1">` | `invalid-attr` |
 | 结构化数据 | `data={{ values: [1, 2] }}`。`.layer` 写 `data='{"values":[1,2]}'`，`draw` 读 `el.data` | `invalid-attr`、`emit-data` |
@@ -96,7 +96,7 @@ export default canvas.create(
 | 蒙版运算 | `<mask><rect … /><circle op="subtract" /></mask>`。默认 `add`，分组用 `<g>`。不要写 `mask-image` | `invalid-attr` |
 | 黑白图和编号 | `<img channel="luma">`、`<img pick="3 5">`。缓存写 `derive="subject"` | `invalid-attr`、`missing-mask` |
 | 羽化、反选、预览 | `<mask feather="8" invert="true">`、`<preview of="#cut" />` | `invalid-attr` |
-| 透视 | `<layer perspective="900"><rect rotateY="20" z="40" /></layer>`。平行投影写 `perspective="parallel"`，没有近大远小 | `invalid-attr`、`flatten-3d` |
+| 透视 | `<layer perspective="900"><rect rotateY="20" z="40" /></layer>`。`preserve-3d` 穿过没有姿态的 flex 时，卡片仍是一张图。平行投影写 `perspective="parallel"`，没有近大远小 | `invalid-attr`、`flatten-3d` |
 | 球体、圆柱、圆环、线管、长方体、拉伸、glb | `<layer perspective="700"><sphere cx="80" cy="80" r="40" /></layer>`。圆柱 `cx cy r height`，圆环 `cx cy r tube`，线管 `d` 和 `r`。`box` 的 `rx` 圆棱，`round` 选边；圆柱的 `rx` 圆口。`model` 只写 `src`，尺寸写在外包 layer | `flatten-3d`、`missing-model` |
 
 `align-items` 默认 `center`。竖排要左对齐时写 `align-items:flex-start`。横排按文字基线对齐写 `align-items:baseline`，同一行被撑高后 `center` 和 `end` 按新的行盒再排，竖排写了仍按 `flex-start`。`letter-spacing` 可以写 `em`。`justify-content` 只管这一层的主轴。`align-content` 默认 `flex-start`，管的是 `flex-wrap` 之后的多行。

@@ -1,7 +1,7 @@
 import { filtersInPaintOrder, getFilter } from './filter.js'
 import { MESH_TAGS } from './tags.js'
 import { apply, applyToBox, aroundPivot, IDENTITY, intersectBox, matrixScale, multiply, originOffset, translated, type Matrix } from './matrix.js'
-import { applyPoseMatrix, behindCamera, cameraSceneCustom, flattenReason, has3dPose, hasPerspective, planeDepth, poseMatrix, posePoint, project as projectPoint, type Perspective } from './perspective.js'
+import { applyPoseMatrix, behindCamera, cameraSceneCustom, has3dPose, hasPerspective, planeDepth, poseMatrix, posePoint, project as projectPoint, splitsForCamera, type Perspective } from './perspective.js'
 import { maskStats } from './mask-stats.js'
 import { innerInkStrokeReach, outerInkStrokeReach } from './style.js'
 import type { Box, ElementReport, FvgDocument, FvgReport, InlineOwner, Issue, LayerLayoutNode, LayoutNode, MeshLayoutNode, TextLayoutNode } from './types.js'
@@ -22,7 +22,7 @@ type PlaneSpace = {
   canvasClip?: Box
 }
 
-type EffectRecord = { plane: true; box: Box | null } | { plane: false; clip?: Box }
+type EffectRecord = { plane: true; box: Box | null } | { plane: false; clip?: Box; base?: Box }
 
 type Mat4 = number[]
 const IDENTITY4: Mat4 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
@@ -199,6 +199,22 @@ function boxFromPoints(pts: Pt[]): Box | null {
 
 function expandBox(box: Box, pad: number): Box {
   return { x: box.x - pad, y: box.y - pad, width: box.width + pad * 2, height: box.height + pad * 2 }
+}
+
+/** 文字、图片、自定义节点的背景或边框铺满外框。没有时返回 null。 */
+function boxChrome(node: LayoutNode): Box | null {
+  const fills =
+    (node.kind === 'text' || node.kind === 'image' || node.kind === 'custom') &&
+    ((node.background != null && node.background !== 'transparent') || (node.border != null && node.border.width > 0))
+  if (!fills) return null
+  return { x: 0, y: 0, width: node.width, height: node.height }
+}
+
+/** 描边和阴影的范围要算上底板，不能只从字形外扩。 */
+function effectInkLocal(node: LayoutNode): Box {
+  const chrome = boxChrome(node)
+  if (!chrome) return node.ink
+  return unionBoxes(node.ink, chrome)
 }
 
 /**
@@ -438,7 +454,7 @@ function walk(
     quad = layoutQuad(node, plane, planeRoot)
     const pad = effectPadOf(node)
     if (pad > 0) {
-      const grown = toPlaneBox(plane, node, expandBox(node.ink, pad), planeRoot)
+      const grown = toPlaneBox(plane, node, expandBox(effectInkLocal(node), pad), planeRoot)
       let effectLocal = plane.localClip ? intersectBox(grown, plane.localClip) : grown
       if (ownMask) {
         const maskPlane = planeRoot ? ownMask : applyToBox(contentToPlane(plane, node, false, 0, 0), ownMask)
@@ -540,7 +556,18 @@ function walk(
   }
   let effectClip = clip
   if (!plane && ownMask) effectClip = tighten(effectClip, applyToBox(childMatrix, ownMask))
-  effects.push(plane ? { plane: true, box: planeEffect } : { plane: false, clip: effectClip })
+  const chrome = boxChrome(node)
+  effects.push(
+    plane
+      ? { plane: true, box: planeEffect }
+      : {
+          plane: false,
+          clip: effectClip,
+          ...(chrome
+            ? { base: clipInk(applyToBox(matrix, translateBox(unionBoxes(node.ink, chrome), node.x, node.y)), clip) }
+            : {}),
+        },
+  )
 
   if (node.kind === 'text') {
     for (const extra of inlineElementReports(node, matrix, opacity, clip, plane, planeRoot)) {
@@ -614,9 +641,7 @@ function walk(
 
     const start = elements.length
     const opensOwn = node.kind === 'layer' && hasPerspective(node.perspective)
-    const projectChildren = opensOwn
-      ? cameraSceneCustom(node)
-      : !!(cameraCtx && node.preserve3d && !flattenReason(node))
+    const projectChildren = opensOwn ? cameraSceneCustom(node) : !!(cameraCtx && splitsForCamera(node, true))
     if (projectChildren) {
       const camera = opensOwn ? node : cameraCtx!.layer
       const toContent = opensOwn ? (node.cameraView ?? IDENTITY4) : mul4(cameraCtx!.toLocal, translation4(inset, insetY))
@@ -627,8 +652,7 @@ function walk(
       const perspective = camera.perspective!
       for (const ch of node.children) {
         const toLayer = mul4(toContent, poseMatrix(ch))
-        const nested = ch.kind === 'layer' && hasPerspective(ch.perspective)
-        const descend = !nested && !!ch.preserve3d && !flattenReason(ch) && (ch.kind === 'layer' || ch.kind === 'flex')
+        const descend = splitsForCamera(ch, !opensOwn && cameraCtx != null)
         const posed = !opensOwn || !!node.cameraMoved || has3dPose(ch) || descend
         const center = applyPoseMatrix(toLayer, ch.width / 2, ch.height / 2, 0)
         const behind = behindCamera(center.z, perspective)
@@ -784,7 +808,10 @@ export function buildReport(doc: FvgDocument): FvgReport {
     const screen = el.screenScale ?? 1
     let effectBox: Box | null = null
     if (recorded?.plane) effectBox = recorded.box
-    else if (effectPad > 0) effectBox = clipInk(expandBox(el.ink, effectPad * screen), recorded?.clip)
+    else if (effectPad > 0) {
+      const base = recorded && !recorded.plane && recorded.base ? recorded.base : el.ink
+      effectBox = clipInk(expandBox(base, effectPad * screen), recorded?.clip)
+    }
     if (!MESH_TAGS.has(el.tag) && effectBox && hasArea(effectBox)) el.effect = boxToRect(effectBox)
     if (!MESH_TAGS.has(el.tag) && !inkOutside && effectBox && hasArea(effectBox) && effectOutside(effectBox, doc)) {
       issues.push({

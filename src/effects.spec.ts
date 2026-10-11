@@ -803,6 +803,35 @@ describe('墨迹 spread 与 stroke', () => {
     expect(at(32, 60)).toEqual([255, 255, 255, 255])
   })
 
+  it('普通文字盒的描边绕着背景，贴边时提示超出', async () => {
+    const centered = await renderFvg(`
+      <layer width="360" height="220" background="#ffffff" color="#111111">
+        <div style="display:flex; width:360px; height:220px; align-items:center; justify-content:center">
+          <p style="font-size:32px; background:#f4efe6; stroke:8 #e00000; padding:20px">卡片</p>
+        </div>
+      </layer>`)
+    expect(centered.report.issues.filter((issue) => issue.level === 'error')).toEqual([])
+    expect(centered.report.issues.some((issue) => issue.code === 'effect-clipped')).toBe(false)
+    const box = centered.report.elements.find((el) => el.tag === 'p')!.box
+    const { at } = await pixels(centered.png)
+    const ring = at(Math.round(box.left - 4), Math.round(box.centerY))
+    expect(ring[0]).toBeGreaterThan(180)
+    expect(ring[1]).toBeLessThan(80)
+    const pad = at(Math.round(box.left + 8), Math.round(box.top + 8))
+    expect(pad[0]).toBeGreaterThan(220)
+    expect(pad[1]).toBeGreaterThan(200)
+    const flush = await renderFvg(`
+      <layer width="360" height="200" background="#ffffff" color="#111111">
+        <p style="font-size:32px; background:#f4efe6; stroke:8 #e00000; padding:20px">卡片</p>
+      </layer>`)
+    expect(flush.report.issues.some((issue) => issue.code === 'effect-clipped')).toBe(true)
+    const edge = flush.report.elements.find((el) => el.tag === 'p')!.box
+    const { at: atFlush } = await pixels(flush.png)
+    const right = atFlush(Math.round(edge.right + 4), Math.round(edge.centerY))
+    expect(right[0]).toBeGreaterThan(180)
+    expect(right[1]).toBeLessThan(80)
+  })
+
   it('有背景的盒子，描边绕着背景', async () => {
     const { png, report } = await renderFvg(`
       <layer width="360" height="240" background="#ffffff" color="#111111">
