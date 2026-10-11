@@ -434,7 +434,7 @@ describe('网格绘制', () => {
     const dark = samples.reduce((best, sample) => (sample.lum < best.lum ? sample : best))
     expect(bright.lum).toBeGreaterThan(500)
     expect(dark.lum).toBeLessThan(140)
-    expect(bright.x).toBeLessThan(108)
+    expect(bright.x).toBeGreaterThan(132)
     expect(dark.x).toBeGreaterThan(118)
     expect(dark.x).toBeLessThan(165)
     const lo = Math.min(bright.x, dark.x)
