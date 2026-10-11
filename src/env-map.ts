@@ -36,11 +36,11 @@ type Panel = {
  * 右后一条窄的边缘光板，贴着轮廓，顶边也接不到主灯。角度都不落在 90° 的整数倍上。
  */
 const PANELS: Panel[] = [
-  { az: -38, el: 2, across: 8, along: 18, radius: 6, feather: 6, lean: 7, r: 176, g: 178, b: 184 },
-  { az: -8, el: -8, across: 3.5, along: 12, radius: 3, feather: 5, lean: -6, r: 104, g: 106, b: 112 },
-  { az: 162, el: -2, across: 2.4, along: 20, radius: 2.2, feather: 3.2, lean: -4, r: 188, g: 190, b: 196 },
-  { az: 88, el: 2, across: 6, along: 14, radius: 4, feather: 6, lean: 7, r: 78, g: 80, b: 86 },
-  { az: -74, el: -10, across: 4.5, along: 12, radius: 3.5, feather: 5, lean: 6, r: 52, g: 54, b: 60 },
+  { az: -30, el: 4, across: 20, along: 36, radius: 12, feather: 9, lean: 6, r: 176, g: 178, b: 184 },
+  { az: 14, el: -6, across: 8, along: 24, radius: 6, feather: 7, lean: -5, r: 100, g: 102, b: 108 },
+  { az: 158, el: 2, across: 5, along: 40, radius: 4.5, feather: 4, lean: -4, r: 190, g: 192, b: 198 },
+  { az: 72, el: -4, across: 10, along: 28, radius: 7, feather: 7, lean: 6, r: 70, g: 72, b: 78 },
+  { az: -78, el: -8, across: 8, along: 24, radius: 6, feather: 6, lean: 5, r: 54, g: 56, b: 62 },
 ]
 
 const SAMPLE = { r: 0, g: 0, b: 0 }
