@@ -103,7 +103,7 @@ export default canvas.create(
 
 没写 `display:flex` 的 `div` 里直接放 `p`、`h1`–`h3`、`div`、写了宽高的 `layer` 时，从上到下排。只放文字和行内标签时，`div` 仍是文字盒子。`p`、`h1`–`h3`、`span` 里可以放 `<img>`，不要放块级标签或 `layer`。图标写成 `<span class="material-symbols-outlined">home</span>`。容器上的字号、字重、字体、颜色、字距和 `text-align` 会传给没写这些的 `p`、`div`、`span`；`h1`–`h3` 仍用自己的默认字号和字重。`color` 和 `background-color` 只写纯色。字形渐变写 `style="fill:linear-gradient(...)"`。盒子渐变写 `background:linear-gradient(...)`。行内 `background` 高亮这一段的行盒。
 
-带 `perspective` 的 layer 里，没有网格时直接子元素按中心深度从远到近画。出现 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 时近的盖住远的。`perspective="parallel"` 是平行投影，视线平行于 z，没有近大远小，也没有镜头平面。不在透视里时 `z` 不改变顺序，并报 `flatten-3d`。网格可以写 `material="matte"`（默认的磨砂塑料）、`material="plastic"`、`material="metal 0.35"` 或 `material="glass"`。`plastic` 和 `metal` 都用磨砂明暗做底，再叠同一张工作室环境，金属更实、塑料更透，没有缩成一点的高光。粗糙度先模糊环境再取样，越高越糊，并叠上噪点。主灯是左上方一块大圆角正方形，不和其他板在顶部相接，也不收到天顶。暗面有一条贴着轮廓的边缘光。有黑、白和灰过渡。`stroke-width="3 2 1"` 依次是轮廓、折棱和隐藏线。两只都写了 `stroke` 的网格相互穿过时描出交界线，算折棱，颜色和宽度跟后写的那只；面贴面不描。`halo="3"` 让可见线在交叉处把更远的线断开。共用一个角的棱不断开，线管端面和自己的轮廓也不切开。
+带 `perspective` 的 layer 里，没有网格时直接子元素按中心深度从远到近画。出现 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 时近的盖住远的。`perspective="parallel"` 是平行投影，视线平行于 z，没有近大远小，也没有镜头平面。不在透视里时 `z` 不改变顺序，并报 `flatten-3d`。网格可以写 `material="matte"`（默认的磨砂塑料）、`material="plastic"`、`material="metal 0.35"` 或 `material="glass"`。`plastic` 和 `metal` 都用磨砂明暗做底，再叠同一张工作室环境，金属更实、塑料更透，没有缩成一点的高光。粗糙度先模糊环境，噪点写进这张图再取样，越高越糊，噪点越密。主灯是左上方一块大圆角正方形，不和其他板在顶部相接，也不收到天顶。暗面有一条贴着轮廓的边缘光。有黑、白和灰过渡。`stroke-width="3 2 1"` 依次是轮廓、折棱和隐藏线。两只都写了 `stroke` 的网格相互穿过时描出交界线，算折棱，颜色和宽度跟后写的那只；面贴面不描。`halo="3"` 让可见线在交叉处把更远的线断开。共用一个角的棱不断开，线管端面和自己的轮廓也不切开。
 
 ## 字体、配色、图片
 

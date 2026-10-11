@@ -3,7 +3,7 @@
  * 主灯是左上方一块大圆角正方形，方向和头顶偏左的柔光箱一致。暗面另有一条窄长的边缘光条。
  * 几块板的顶部停在不同高度，互不相接，也不收到天顶。
  * 方位和仰角躲开 0°、90°、180°、270°，板子也从竖直偏开一点。
- * 白、黑和灰过渡都有。粗糙度先把这张环境模糊好再取样，越高越糊，并叠上越密的噪点。
+ * 白、黑和灰过渡都有。粗糙度先把这张环境模糊，噪点也写进这张图，再拿它贴到反射上。越高越糊，噪点越密。
  */
 
 const WIDTH = 128
@@ -236,12 +236,35 @@ function settlePole(src: Uint8Array): Uint8Array {
   return out
 }
 
+/** 把噪点写进已经模糊好的环境。粗糙越高，振幅越大。 */
+function addGrain(src: Uint8Array, roughness: number): Uint8Array {
+  if (roughness <= 0.02) return src
+  const amp = roughness * roughness * 0.55
+  const out = new Uint8Array(src.length)
+  for (let y = 0; y < HEIGHT; y++) {
+    const el = (0.5 - (y + 0.5) / HEIGHT) * Math.PI
+    const cy = Math.cos(el)
+    const sy = Math.sin(el)
+    for (let x = 0; x < WIDTH; x++) {
+      const az = ((x + 0.5) / WIDTH) * Math.PI * 2
+      const speck = grain(Math.sin(az) * cy, sy, Math.cos(az) * cy) * amp
+      const scale = 1 + speck
+      const i = (y * WIDTH + x) * 3
+      out[i] = Math.max(0, Math.min(255, Math.round(src[i]! * scale)))
+      out[i + 1] = Math.max(0, Math.min(255, Math.round(src[i + 1]! * scale)))
+      out[i + 2] = Math.max(0, Math.min(255, Math.round(src[i + 2]! * scale)))
+    }
+  }
+  return out
+}
+
 const maps: Uint8Array[] = []
 {
   const sharp = paintStudio()
   for (let i = 0; i < LEVELS; i++) {
     const sigma = SIGMAS[i]!
-    maps.push(sigma <= 0 ? sharp : settlePole(blur(sharp, sigma)))
+    const blurred = sigma <= 0 ? sharp : settlePole(blur(sharp, sigma))
+    maps.push(addGrain(blurred, i / (LEVELS - 1)))
   }
 }
 
@@ -296,14 +319,6 @@ export function studioAt(x: number, y: number, z: number, roughness: number) {
     SAMPLE.r = r0 + (SAMPLE.r - r0) * f
     SAMPLE.g = g0 + (SAMPLE.g - g0) * f
     SAMPLE.b = b0 + (SAMPLE.b - b0) * f
-  }
-  const rough = clamp01(roughness)
-  if (rough > 0.02) {
-    const speck = grain(dx, dy, dz) * rough * rough * 0.55
-    const scale = 1 + speck
-    SAMPLE.r = Math.max(0, Math.min(255, SAMPLE.r * scale))
-    SAMPLE.g = Math.max(0, Math.min(255, SAMPLE.g * scale))
-    SAMPLE.b = Math.max(0, Math.min(255, SAMPLE.b * scale))
   }
   return SAMPLE
 }
