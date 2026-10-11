@@ -3152,6 +3152,81 @@ function shadeMaterial(kind: NonNullable<MeshLayoutNode['material']>['kind'] | u
   return kind
 }
 
+function groupDepth(group: Batch[]): number {
+  let sum = 0
+  let n = 0
+  for (const batch of group) {
+    const count = batch.positions.length / 3
+    for (let i = 0; i < count; i++) {
+      const p = transformPoint(
+        batch.toLayer,
+        batch.originX,
+        batch.originY,
+        batch.positions[i * 3]!,
+        batch.positions[i * 3 + 1]!,
+        batch.positions[i * 3 + 2]!,
+      )
+      sum += p.z
+      n++
+    }
+  }
+  return n === 0 ? 0 : sum / n
+}
+
+/** 景深按物体分开糊。合成进同一张图之后，被挡住的颜色已经没了，糊边会漏出底。 */
+function rasterizeDofObjects(
+  batches: Batch[],
+  layer: LayerLayoutNode,
+  perspective: Perspective,
+  scale: number,
+  samples: number,
+  clip: RasterRect,
+): MeshFrame {
+  const groups: Array<{ batches: Batch[]; index: number; z: number }> = []
+  const byOwner = new Map<number, Batch[]>()
+  batches.forEach((batch, index) => {
+    let list = byOwner.get(batch.owner)
+    if (!list) {
+      list = []
+      byOwner.set(batch.owner, list)
+      groups.push({ batches: list, index, z: 0 })
+    }
+    list.push(batch)
+  })
+  for (const group of groups) group.z = groupDepth(group.batches)
+  groups.sort((a, b) => a.z - b.z || a.index - b.index)
+  const sprites: MeshFrame[] = []
+  for (const group of groups) {
+    const frame = rasterize(group.batches, layer, perspective, scale, samples, clip)
+    if (frame.width > 0 && frame.height > 0) sprites.push(frame)
+  }
+  return compositeSprites(sprites)
+}
+
+function compositeSprites(sprites: MeshFrame[]): MeshFrame {
+  if (sprites.length === 0) return emptyMeshFrame()
+  if (sprites.length === 1) return sprites[0]!
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const sprite of sprites) {
+    minX = Math.min(minX, sprite.x)
+    minY = Math.min(minY, sprite.y)
+    maxX = Math.max(maxX, sprite.x + sprite.width)
+    maxY = Math.max(maxY, sprite.y + sprite.height)
+  }
+  const base = sprites[0]!.canvas.width / sprites[0]!.width
+  const pw = Math.max(1, Math.round((maxX - minX) * base))
+  const ph = Math.max(1, Math.round((maxY - minY) * base))
+  const canvas = createCanvas(pw, ph)
+  const ctx = canvas.getContext('2d')
+  for (const sprite of sprites) {
+    ctx.drawImage(sprite.canvas, (sprite.x - minX) * base, (sprite.y - minY) * base)
+  }
+  return { canvas, x: minX, y: minY, width: pw / base, height: ph / base }
+}
+
 export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
   const { layer, perspective, meshes, planes, scale, raster } = input
   const samples = input.samples === 1 || input.samples === 2 || input.samples === 4 ? input.samples : 4
@@ -3229,5 +3304,6 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
     batch.owner = plane.node.sharp ? -(ownerId + 1) : ownerId
     batches.push(batch)
   }
+  if (layer.dof && perspective !== 'parallel') return rasterizeDofObjects(batches, layer, perspective, scale, samples, clip)
   return rasterize(batches, layer, perspective, scale, samples, clip)
 }

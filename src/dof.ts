@@ -1,8 +1,6 @@
 import { createCanvas } from '@napi-rs/canvas'
 import type { DofSpec } from './types.js'
 
-const SLICES = 8
-
 /**
  * 薄透镜弥散圆。depth = focal - z，z 是镜头空间里朝观众为正的坐标。
  * aperture 是无限远处的半径。depth 趋近 0 时用 maxBlur 封顶。
@@ -23,8 +21,9 @@ export type DofImage = {
 }
 
 /**
- * 按深度分片，每片用自己的半径做预乘高斯模糊，再从远到近叠回去。
- * 近处的糊边因此盖到已经画好的远处，而不是把合成完的整张图糊一遍。
+ * 糊单独一个物体。整张表面一起进各级高斯，再按每个像素自己的半径取样。
+ * 切成深度条再叠会在斜面上留缝，被挡住的颜色也已经不在这张图里。
+ * 多个物体从远到近各糊一次再叠，近处的糊边才盖住远处。
  */
 export function applyDepthOfField(input: {
   pixels: Uint8ClampedArray
@@ -37,65 +36,57 @@ export function applyDepthOfField(input: {
   pixelScale: number
 }): DofImage {
   const { pixels, width, height, depth, sharp, focal, dof, pixelScale } = input
-  let zMin = Infinity
-  let zMax = -Infinity
+  const count = width * height
+  const coc = new Float32Array(count).fill(-1)
   let maxCoc = 0
-  const covered: number[] = []
-  for (let i = 0; i < width * height; i++) {
+  let minCoc = Infinity
+  let sumCoc = 0
+  let coveredCount = 0
+  for (let i = 0; i < count; i++) {
     if ((pixels[i * 4 + 3] ?? 0) < 8) continue
     const z = depth[i] ?? -1e30
     if (z < -1e20) continue
-    covered.push(i)
-    if (z < zMin) zMin = z
-    if (z > zMax) zMax = z
-    const coc = sharp[i] ? 0 : circleOfConfusion(focal, z, dof)
-    if (coc > maxCoc) maxCoc = coc
+    const radius = sharp[i] ? 0 : circleOfConfusion(focal, z, dof)
+    coc[i] = radius
+    if (radius > maxCoc) maxCoc = radius
+    if (radius < minCoc) minCoc = radius
+    sumCoc += radius
+    coveredCount++
   }
-  if (!(maxCoc * pixelScale >= 0.45) || covered.length === 0) {
+  if (!(maxCoc * pixelScale >= 0.45) || coveredCount === 0) {
     return { pixels, width, height, pad: 0 }
   }
-  const pad = Math.max(1, Math.ceil(dof.maxBlur * pixelScale))
+  const pad = Math.max(1, Math.ceil(maxCoc * pixelScale))
   const dw = width + pad * 2
   const dh = height + pad * 2
-  const span = zMax - zMin
-  const sliceOf = (z: number) => (span < 1e-2 ? 0 : Math.min(SLICES - 1, Math.floor(((z - zMin) / span) * SLICES)))
-  const soft = Array.from({ length: SLICES }, () => new Uint8ClampedArray(dw * dh * 4))
-  const hard = Array.from({ length: SLICES }, () => new Uint8ClampedArray(dw * dh * 4))
-  const sumZ = new Float64Array(SLICES)
-  const count = new Int32Array(SLICES)
-  const hardCount = new Int32Array(SLICES)
-  for (const i of covered) {
-    const z = depth[i]!
-    const slice = sliceOf(z)
-    const x = (i % width) + pad
-    const y = Math.floor(i / width) + pad
-    const di = (y * dw + x) * 4
-    const si = i * 4
-    const a = pixels[si + 3]!
-    const into = sharp[i] ? hard[slice]! : soft[slice]!
-    into[di] = Math.round((pixels[si]! * a) / 255)
-    into[di + 1] = Math.round((pixels[si + 1]! * a) / 255)
-    into[di + 2] = Math.round((pixels[si + 2]! * a) / 255)
-    into[di + 3] = a
-    if (sharp[i]) hardCount[slice] = (hardCount[slice] ?? 0) + 1
-    else {
-      sumZ[slice] = (sumZ[slice] ?? 0) + z
-      count[slice] = (count[slice] ?? 0) + 1
+  const base = padImage(pixels, width, height, pad)
+  if (maxCoc - minCoc < 1) {
+    const sigma = (sumCoc / coveredCount) * pixelScale
+    return { pixels: blurStraight(base, dw, dh, sigma), width: dw, height: dh, pad }
+  }
+  const sigmas = blurLevels(maxCoc * pixelScale)
+  const levels = sigmas.map((sigma) => (sigma < 0.45 ? base : blurStraight(base, dw, dh, sigma)))
+  const nearest = nearestCovered(coc, width, height, pad, dw, dh)
+  const out = new Uint8ClampedArray(dw * dh * 4)
+  for (let y = 0; y < dh; y++) {
+    for (let x = 0; x < dw; x++) {
+      const src = nearest[y * dw + x] ?? -1
+      if (src < 0) continue
+      const sx = (src % dw) - pad
+      const sy = Math.floor(src / dw) - pad
+      if (sx < 0 || sy < 0 || sx >= width || sy >= height) continue
+      const radiusPx = (coc[sy * width + sx] ?? 0) * pixelScale
+      const dx = x - (sx + pad)
+      const dy = y - (sy + pad)
+      if (dx * dx + dy * dy > radiusPx * radiusPx + 1e-6) continue
+      writeSample(out, levels, sigmas, dw, x, y, radiusPx)
     }
   }
-  const acc = new Float32Array(dw * dh * 4)
-  for (let slice = 0; slice < SLICES; slice++) {
-    const n = count[slice] ?? 0
-    if (n > 0) {
-      const sigma = circleOfConfusion(focal, (sumZ[slice] ?? 0) / n, dof) * pixelScale
-      compositePremultiplied(acc, blurPremultiplied(soft[slice]!, dw, dh, sigma), dw, dh)
-    }
-    if ((hardCount[slice] ?? 0) > 0) compositePremultiplied(acc, hard[slice]!, dw, dh)
-  }
-  return { pixels: unpremultiply(acc), width: dw, height: dh, pad }
+  return { pixels: out, width: dw, height: dh, pad }
 }
 
-function blurPremultiplied(pixels: Uint8ClampedArray, width: number, height: number, sigma: number): Uint8ClampedArray {
+/** 画布模糊读回来的是直通颜色，调用方按直通叠回去。 */
+function blurStraight(pixels: Uint8ClampedArray, width: number, height: number, sigma: number): Uint8ClampedArray {
   if (!(sigma >= 0.45)) return pixels
   const src = createCanvas(width, height)
   const sctx = src.getContext('2d')
@@ -109,32 +100,92 @@ function blurPremultiplied(pixels: Uint8ClampedArray, width: number, height: num
   return octx.getImageData(0, 0, width, height).data
 }
 
-function compositePremultiplied(acc: Float32Array, src: Uint8ClampedArray, width: number, height: number) {
-  const n = width * height
-  for (let i = 0; i < n; i++) {
-    const o = i * 4
-    const a = (src[o + 3] ?? 0) / 255
-    if (a <= 0) continue
-    const inv = 1 - a
-    acc[o] = (src[o] ?? 0) / 255 + (acc[o] ?? 0) * inv
-    acc[o + 1] = (src[o + 1] ?? 0) / 255 + (acc[o + 1] ?? 0) * inv
-    acc[o + 2] = (src[o + 2] ?? 0) / 255 + (acc[o + 2] ?? 0) * inv
-    acc[o + 3] = a + (acc[o + 3] ?? 0) * inv
-  }
-}
-
-function unpremultiply(acc: Float32Array): Uint8ClampedArray {
-  const out = new Uint8ClampedArray(acc.length)
-  for (let i = 0; i < acc.length; i += 4) {
-    const a = acc[i + 3] ?? 0
-    if (a <= 1e-4) continue
-    const inv = 255 / a
-    out[i] = clampByte((acc[i] ?? 0) * inv)
-    out[i + 1] = clampByte((acc[i + 1] ?? 0) * inv)
-    out[i + 2] = clampByte((acc[i + 2] ?? 0) * inv)
-    out[i + 3] = clampByte(a * 255)
+function padImage(pixels: Uint8ClampedArray, width: number, height: number, pad: number): Uint8ClampedArray {
+  const dw = width + pad * 2
+  const out = new Uint8ClampedArray(dw * (height + pad * 2) * 4)
+  for (let y = 0; y < height; y++) {
+    const row = pixels.subarray(y * width * 4, (y + 1) * width * 4)
+    out.set(row, ((y + pad) * dw + pad) * 4)
   }
   return out
+}
+
+function blurLevels(maxSigma: number): number[] {
+  const sigmas = [0]
+  let sigma = 1
+  while (sigma < maxSigma) {
+    sigmas.push(sigma)
+    sigma *= 2
+  }
+  if ((sigmas[sigmas.length - 1] ?? 0) < maxSigma - 0.1) sigmas.push(maxSigma)
+  return sigmas
+}
+
+/** 每个像素指向最近的有颜色的像素，坐标系是补过边的图。没有来源时为 -1。 */
+function nearestCovered(coc: Float32Array, width: number, height: number, pad: number, dw: number, dh: number): Int32Array {
+  const nearest = new Int32Array(dw * dh).fill(-1)
+  const dist = new Float32Array(dw * dh).fill(1e9)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if ((coc[y * width + x] ?? -1) < 0) continue
+      const di = (y + pad) * dw + (x + pad)
+      dist[di] = 0
+      nearest[di] = di
+    }
+  }
+  const relax = (x: number, y: number, nx: number, ny: number, step: number) => {
+    if (nx < 0 || ny < 0 || nx >= dw || ny >= dh) return
+    const from = dist[ny * dw + nx] ?? 1e9
+    if (from >= 1e8) return
+    const next = from + step
+    const di = y * dw + x
+    if (next < (dist[di] ?? 1e9)) {
+      dist[di] = next
+      nearest[di] = nearest[ny * dw + nx] ?? -1
+    }
+  }
+  for (let y = 0; y < dh; y++) {
+    for (let x = 0; x < dw; x++) {
+      relax(x, y, x - 1, y, 1)
+      relax(x, y, x, y - 1, 1)
+      relax(x, y, x - 1, y - 1, 1.4142)
+      relax(x, y, x + 1, y - 1, 1.4142)
+    }
+  }
+  for (let y = dh - 1; y >= 0; y--) {
+    for (let x = dw - 1; x >= 0; x--) {
+      relax(x, y, x + 1, y, 1)
+      relax(x, y, x, y + 1, 1)
+      relax(x, y, x + 1, y + 1, 1.4142)
+      relax(x, y, x - 1, y + 1, 1.4142)
+    }
+  }
+  return nearest
+}
+
+function writeSample(
+  out: Uint8ClampedArray,
+  levels: Uint8ClampedArray[],
+  sigmas: number[],
+  dw: number,
+  x: number,
+  y: number,
+  sigma: number,
+) {
+  let level = 0
+  while (level < sigmas.length - 2 && (sigmas[level + 1] ?? 0) < sigma) level++
+  const s0 = sigmas[level] ?? 0
+  const next = Math.min(sigmas.length - 1, level + 1)
+  const s1 = sigmas[next] ?? s0
+  const t = s1 <= s0 + 1e-6 ? 0 : Math.min(1, (sigma - s0) / (s1 - s0))
+  const o = (y * dw + x) * 4
+  const a = levels[level] ?? levels[0]!
+  const b = levels[next] ?? a
+  const inv = 1 - t
+  out[o] = clampByte((a[o] ?? 0) * inv + (b[o] ?? 0) * t)
+  out[o + 1] = clampByte((a[o + 1] ?? 0) * inv + (b[o + 1] ?? 0) * t)
+  out[o + 2] = clampByte((a[o + 2] ?? 0) * inv + (b[o + 2] ?? 0) * t)
+  out[o + 3] = clampByte((a[o + 3] ?? 0) * inv + (b[o + 3] ?? 0) * t)
 }
 
 function clampByte(value: number): number {

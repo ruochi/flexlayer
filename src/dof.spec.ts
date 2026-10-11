@@ -59,6 +59,9 @@ describe('景深', () => {
     const covered = await pixels((await renderLayer(scene)).png)
     const spill = at(covered.data, covered.width, 136, 90)
     expect(spill[0]).toBeGreaterThan(40)
+    const inside = at(covered.data, covered.width, 100, 90)
+    expect(inside[0]).toBeGreaterThan(200)
+    expect(inside[1]).toBeLessThan(40)
     const sharp = await pixels(
       (await renderLayer(scene.replace('z="120"', 'z="120" sharp="true"'))).png,
     )
@@ -68,6 +71,19 @@ describe('景深', () => {
     const report = await checkFvg(scene)
     const near = report.elements.find((el) => el.tag === 'rect' && el.defocus != null && el.defocus > 8)
     expect(near?.defocus).toBeCloseTo(12, 0)
+  })
+
+  it('灰色卡片的糊边不会被抬成白色', async () => {
+    const image = await pixels(
+      (
+        await renderLayer(
+          `<layer width="160" height="120" background="#000" camera="focal 240, aperture 20"><rect x="40" y="30" width="70" height="50" fill="#404040" z="90" /></layer>`,
+        )
+      ).png,
+    )
+    let max = 0
+    for (let i = 0; i < image.data.length; i += 4) max = Math.max(max, image.data[i] ?? 0, image.data[i + 1] ?? 0, image.data[i + 2] ?? 0)
+    expect(max).toBeLessThan(80)
   })
 
   it('有网格时平面仍按自己的深度糊，parallel 忽略景深', async () => {
