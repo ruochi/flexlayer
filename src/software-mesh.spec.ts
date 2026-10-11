@@ -250,6 +250,31 @@ describe('软件光栅', () => {
     expect(hard).toBeLessThan(8)
   })
 
+  it('旋转后的网格描边沿斜边有过渡', async () => {
+    const { png } = await render(
+      `<layer width="240" height="200" background="#000000" perspective="800"><box x="30" y="90" width="180" height="16" depth="2" rotate="24" fill="#ffffff" stroke="#ff0000" stroke-width="3" /></layer>`,
+    )
+    const img = await loadImage(png)
+    const canvas = createCanvas(img.width, img.height)
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    const data = ctx.getImageData(0, 0, img.width, img.height).data
+    const at = (x: number, y: number) => data[(y * img.width + x) * 4] ?? 0
+    let hard = 0
+    let soft = 0
+    for (let y = 20; y < 180; y++) {
+      let prev = at(8, y)
+      for (let x = 9; x < 230; x++) {
+        const v = at(x, y)
+        if (prev < 12 && v > 243) hard++
+        else if (prev < 12 && v >= 12 && v <= 243) soft++
+        prev = v
+      }
+    }
+    expect(soft).toBeGreaterThan(30)
+    expect(hard).toBeLessThan(soft)
+  })
+
   it('盒子描可见棱，对角线不画，被自己挡住的棱是虚线', async () => {
     const { png } = await render(`
       <layer width="200" height="200" background="#ffffff" perspective="500">

@@ -30,7 +30,7 @@ import { applyToBox, aroundPivot, invert, multiply, originOffset } from './matri
 import { invalidDrawIssue } from './draw-tag.js'
 import { openSvgPath } from './path.js'
 import { ownsMeshScene, renderMeshLayer, type MeshFrame } from './mesh.js'
-import { behindCamera, drawTexturedPlane, has3dPose, hasPerspective, PERSPECTIVE_AA, planeDepth, posePoint, project, type Perspective } from './perspective.js'
+import { behindCamera, drawTexturedPlane, has3dPose, hasPerspective, PERSPECTIVE_AA, planeDepth, posePoint, project, resolveSamples, type Perspective } from './perspective.js'
 import { compositeMask } from './mask-compose.js'
 import { outerInkStrokeReach } from './style.js'
 import { layoutScale, viewMatrix } from './view.js'
@@ -1234,7 +1234,72 @@ function rasterizeUser(bounds: Box, draw: (ctx: PaintCtx) => void): { canvas: Ca
   return { canvas, x, y }
 }
 
-/** 把覆盖蒙版染成颜色或渐变，再画回当前用户空间。渐变坐标用元素盒子。 */
+type Mat2 = { a: number; b: number; c: number; d: number; e: number; f: number }
+
+/** 旋转或错切会把正的覆盖蒙版转成台阶。这种变换改在屏幕像素里栅格化，并超采样后再平均。 */
+function transformTurns(matrix: { b: number; c: number }): boolean {
+  return Math.abs(matrix.b) > 1e-4 || Math.abs(matrix.c) > 1e-4
+}
+
+/** 描边这棵子树里有旋转时，正着算距离再贴回去会在斜边上出台阶。 */
+function inkNeedsScreen(node: LayoutNode): boolean {
+  if (Math.abs(node.rotate) > 1e-4) return true
+  if (node.kind === 'group' && (Math.abs(node.svg.b) > 1e-4 || Math.abs(node.svg.c) > 1e-4)) return true
+  if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
+    return node.children.some(inkNeedsScreen)
+  }
+  return false
+}
+
+function rasterizeOnScreen(
+  matrix: Mat2,
+  bounds: Box,
+  draw: (ctx: PaintCtx) => void,
+): { canvas: Canvas; x: number; y: number; scale: number; sample: number; dw: number; dh: number } | null {
+  if (![matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f, bounds.x, bounds.y, bounds.width, bounds.height].every((n) => Number.isFinite(n))) {
+    return null
+  }
+  const corners = [
+    [bounds.x, bounds.y],
+    [bounds.x + bounds.width, bounds.y],
+    [bounds.x, bounds.y + bounds.height],
+    [bounds.x + bounds.width, bounds.y + bounds.height],
+  ].map(([px, py]) => ({
+    x: matrix.a * px + matrix.c * py + matrix.e,
+    y: matrix.b * px + matrix.d * py + matrix.f,
+  }))
+  const x = Math.floor(Math.min(...corners.map((p) => p.x))) - 1
+  const y = Math.floor(Math.min(...corners.map((p) => p.y))) - 1
+  const dw = Math.ceil(Math.max(...corners.map((p) => p.x))) + 1 - x
+  const dh = Math.ceil(Math.max(...corners.map((p) => p.y))) + 1 - y
+  if (dw < 1 || dh < 1 || dw > RASTER_MAX_SIDE || dh > RASTER_MAX_SIDE) return null
+  let sample = PERSPECTIVE_AA
+  while (sample > 1 && (dw * sample > RASTER_MAX_SIDE || dh * sample > RASTER_MAX_SIDE)) sample /= 2
+  const canvas = createCanvas(Math.max(1, Math.round(dw * sample)), Math.max(1, Math.round(dh * sample)))
+  const octx = canvas.getContext('2d') as PaintCtx
+  octx.setTransform(
+    matrix.a * sample,
+    matrix.b * sample,
+    matrix.c * sample,
+    matrix.d * sample,
+    (matrix.e - x) * sample,
+    (matrix.f - y) * sample,
+  )
+  draw(octx)
+  const scale = (Math.sqrt(Math.abs(matrix.a * matrix.d - matrix.b * matrix.c)) || 1) * sample
+  return { canvas, x, y, scale, sample, dw, dh }
+}
+
+type ScreenBlit = {
+  /** 覆盖蒙版在屏幕像素的超采样网格上。渐变仍按用户坐标，经这个矩阵变过去。 */
+  matrix: Mat2
+  cover: Box
+  sample: number
+  dw: number
+  dh: number
+}
+
+/** 把覆盖蒙版染成颜色或渐变，再画回。渐变坐标用元素盒子。`screen` 时按屏幕像素 1:1 贴，不再转一次。 */
 function blitCoverage(
   ctx: PaintCtx,
   originX: number,
@@ -1244,6 +1309,7 @@ function blitCoverage(
   h: number,
   color: string,
   gradientBox: Box | null,
+  screen?: ScreenBlit,
 ) {
   let any = false
   for (let i = 0; i < alpha.length; i++) {
@@ -1270,7 +1336,11 @@ function blitCoverage(
   const colored = createCanvas(w, h)
   const cctx = colored.getContext('2d') as PaintCtx
   if (gradientBox && isGradient(color)) {
-    cctx.translate(-originX, -originY)
+    if (screen) {
+      const m = screen.matrix
+      const s = screen.sample
+      cctx.setTransform(m.a * s, m.b * s, m.c * s, m.d * s, (m.e - originX) * s, (m.f - originY) * s)
+    } else cctx.translate(-originX, -originY)
     cctx.fillStyle = paintOf(
       cctx,
       color,
@@ -1279,7 +1349,10 @@ function blitCoverage(
       Math.max(1, gradientBox.width),
       Math.max(1, gradientBox.height),
     )
-    cctx.fillRect(originX, originY, w, h)
+    if (screen) {
+      const cover = screen.cover
+      cctx.fillRect(cover.x - 4, cover.y - 4, cover.width + 8, cover.height + 8)
+    } else cctx.fillRect(originX, originY, w, h)
     cctx.setTransform(1, 0, 0, 1, 0, 0)
   } else {
     cctx.fillStyle = color
@@ -1289,7 +1362,16 @@ function blitCoverage(
   cctx.drawImage(mask, 0, 0)
   const smoothing = ctx.imageSmoothingEnabled
   ctx.imageSmoothingEnabled = false
-  ctx.drawImage(colored, originX, originY)
+  if (screen) {
+    const image =
+      colored.width === screen.dw && colored.height === screen.dh
+        ? colored
+        : resolveSamples(colored, screen.dw, screen.dh)
+    ctx.save()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.drawImage(image, originX, originY)
+    ctx.restore()
+  } else ctx.drawImage(colored, originX, originY)
   ctx.imageSmoothingEnabled = smoothing
 }
 
@@ -1478,6 +1560,38 @@ function collectStrokeBands(layers: InkStrokeSpec[], phase: 'outer' | 'inner'): 
   return bands.filter((band) => band.outer > band.inner + 1e-3)
 }
 
+/** 把外侧描边的不透明度扩进墨迹，只盖住填充的抗锯齿边，不改外缘。 */
+function tuckStrokeUnderInk(alpha: Uint8ClampedArray, src: Uint8ClampedArray, w: number, h: number, radius: number) {
+  const tmp = new Uint8ClampedArray(w * h)
+  for (let y = 0; y < h; y++) {
+    const row = y * w
+    for (let x = 0; x < w; x++) {
+      let m = 0
+      const x0 = Math.max(0, x - radius)
+      const x1 = Math.min(w - 1, x + radius)
+      for (let xx = x0; xx <= x1; xx++) {
+        const v = alpha[row + xx]!
+        if (v > m) m = v
+      }
+      tmp[row + x] = m
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    for (let y = 0; y < h; y++) {
+      const i = y * w + x
+      if (src[i * 4 + 3]! === 0) continue
+      let m = 0
+      const y0 = Math.max(0, y - radius)
+      const y1 = Math.min(h - 1, y + radius)
+      for (let yy = y0; yy <= y1; yy++) {
+        const v = tmp[yy * w + x]!
+        if (v > m) m = v
+      }
+      if (m > alpha[i]!) alpha[i] = m
+    }
+  }
+}
+
 function paintInkStrokes(
   ctx: PaintCtx,
   node: LayoutNode,
@@ -1493,16 +1607,18 @@ function paintInkStrokes(
   if (!base || base.width <= 0 || base.height <= 0) return
   const reach = phase === 'outer' ? outerInkStrokeReach(layers) : 2
   const pad = Math.ceil(Math.max(reach, 2)) + 2
-  const raster = rasterizeUser(
-    { x: base.x - pad, y: base.y - pad, width: base.width + pad * 2, height: base.height + pad * 2 },
-    (octx) => {
-      if (source) source.draw(octx)
-      else if (subtree) drawInkMask(octx, node, true)
-      else drawNodeInk(octx, node, 0, '#ffffff')
-    },
-  )
+  const user: Box = { x: base.x - pad, y: base.y - pad, width: base.width + pad * 2, height: base.height + pad * 2 }
+  const draw = (octx: PaintCtx) => {
+    if (source) source.draw(octx)
+    else if (subtree) drawInkMask(octx, node, true)
+    else drawNodeInk(octx, node, 0, '#ffffff')
+  }
+  const matrix = ctx.getTransform()
+  const turned = transformTurns(matrix) || inkNeedsScreen(node) ? rasterizeOnScreen(matrix, user, draw) : null
+  const axis = turned ? null : rasterizeUser(user, draw)
+  const raster = turned ?? (axis ? { canvas: axis.canvas, x: axis.x, y: axis.y, scale: 1 } : null)
   if (!raster) return
-  const { canvas, x, y } = raster
+  const { canvas, x, y, scale } = raster
   const w = canvas.width
   const h = canvas.height
   const src = (canvas.getContext('2d') as PaintCtx).getImageData(0, 0, w, h).data
@@ -1510,18 +1626,25 @@ function paintInkStrokes(
   const outside = bands.some((band) => band.side === 'out') ? distanceToSites(inkAt, w, h, 0) : null
   const inside = bands.some((band) => band.side === 'in') ? distanceToSites((i) => !inkAt(i), w, h, 0) : null
   const box: Box = { x: node.x, y: node.y, width: node.width, height: node.height }
+  const screen = turned
+    ? { matrix, cover: user, sample: turned.sample, dw: turned.dw, dh: turned.dh }
+    : undefined
   for (const band of bands) {
     const field = band.side === 'out' ? outside : inside
     if (!field) continue
+    const inner = band.inner * scale
+    const outer = band.outer * scale
     const alpha = new Uint8ClampedArray(w * h)
     for (let i = 0; i < w * h; i++) {
-      let cover = bandCoverage(field[i]!, band.inner, band.outer)
+      let cover = bandCoverage(field[i]!, inner, outer)
       if (cover <= 0) continue
       if (band.side === 'in') cover *= src[i * 4 + 3]! / 255
       const a = Math.round(255 * cover)
       if (a > 0) alpha[i] = a
     }
-    blitCoverage(ctx, x, y, alpha, w, h, band.color, box)
+    // 填充的抗锯齿边要压在描边上。旋转后这条边不落在像素网格上，垫进大约 1 个屏幕像素，黑底才不会从缝里露出来。
+    if (turned && band.side === 'out') tuckStrokeUnderInk(alpha, src, w, h, Math.max(1, Math.round(turned.sample)))
+    blitCoverage(ctx, x, y, alpha, w, h, band.color, box, screen)
   }
 }
 

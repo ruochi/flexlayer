@@ -43,7 +43,7 @@
 
 文字默认外侧，是因为居中的 `-webkit-text-stroke` 会吃细中文笔画、转角出尖刺。`outline` 按盒子描，留着不用。
 
-距离场只在元素墨迹外框加上最大外描边宽度的范围内计算（Felzenszwalb 二维 EDT，与 `glass`、文字 `spread` 共用）。`outside` 取墨迹外侧 `0 < d ≤ w`，`inside` 取内侧，`center` 两侧各 `w / 2`。外缘在 `d = w` 处约 1px smoothstep。转角是圆角，没有 miter。
+距离场只在元素墨迹外框加上最大外描边宽度的范围内计算（Felzenszwalb 二维 EDT，与 `glass`、文字 `spread` 共用）。`outside` 取墨迹外侧 `0 < d ≤ w`，`inside` 取内侧，`center` 两侧各 `w / 2`。外缘在 `d = w` 处约 1px smoothstep。转角是圆角，没有 miter。当前变换带了旋转或错切时，距离场改在屏幕像素里按 4 倍采样，平均缩回后再 1:1 贴上，避免把正的覆盖蒙版最近邻转上去。网格折线画在超采样缓冲上，和填充一起平均缩回，斜边用同一套抗锯齿。
 
 写在 layer、flex 或 `<g>` 上时，先把子树墨迹合成一张再求距离，重叠的字只有一圈外轮廓。`shadow` / `glow` 的轮廓是本体并上外侧描边，再应用 `spread`。`overlay` 只染本体：蒙版是子树墨迹，内侧描边会从蒙版里挖掉，所以 Layer 渐变字加纯色描边时，描边不会被渐变盖住。
 

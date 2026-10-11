@@ -19,7 +19,7 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
  * 正对镜头的面是 fill，侧面按内置主光和补光变暗。
  * 主光沿固定方向打一张正交深度图：不透明三角形互相挡住这盏光时，主光不计。
  * glb 用文件里的底色乘这套明暗。
- * 写了 stroke 时，缩小抗锯齿之后再按屏幕像素描折棱和轮廓。
+ * 写了 stroke 时，在超采样缓冲上按屏幕像素描折棱和轮廓，再和填充一起平均缩回。
  * 两只都写了 stroke 的网格相互穿过时，交界线算折棱，颜色和宽度跟后写的那只。
  * hidden 只画被这只网格自己挡住的棱，虚线是 6 实 4 空。交界线被这两只中任意一只挡住时同样算隐藏线。
  * 不写 material 时是磨砂：主光乘 fill。plastic 加高光，metal 和 glass 映一张横向的工作室环境，glass 后画叠色。
@@ -1497,7 +1497,14 @@ function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: Perspe
   hi.getContext('2d').putImageData(image, 0, 0)
   const outW = Math.max(1, Math.round(viewW * base))
   const outH = Math.max(1, Math.round(viewH * base))
-  const out = hi.width >= outW && hi.height >= outH ? resolveSamples(hi, outW, outH) : hi
+  const canResolve = hi.width >= outW && hi.height >= outH
+  // 折线画在缩小之后只有屏幕分辨率的抗锯齿，斜边会呈台阶。超采样时先描再平均。
+  if (samples > 1 && canResolve) {
+    paintMeshLines(hi, batches, authored, depth, owners, pw, ph, layer, perspective, padL, padT, viewW, viewH)
+    const out = resolveSamples(hi, outW, outH)
+    return { canvas: out, x: -padL, y: -padT, width: viewW, height: viewH }
+  }
+  const out = canResolve ? resolveSamples(hi, outW, outH) : hi
   paintMeshLines(out, batches, authored, depth, owners, pw, ph, layer, perspective, padL, padT, viewW, viewH)
   return { canvas: out, x: -padL, y: -padT, width: viewW, height: viewH }
 }

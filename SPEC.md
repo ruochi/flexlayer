@@ -472,7 +472,7 @@ npx flexlayer-select apply photo.jpg --add 2 --subtract 1
 
 文字盒子上的 `fill` 按这一层的盒子取样，行内标签自己的 `fill` 按这一段的行盒取样，这一段里的汉字和英文单词共用这一段。没写 `fill` 时字形用 `color`。
 
-`stroke` 用同一套颜料。形状和线条写颜色时居中描边，宽度是 `stroke-width`（形状默认 1，线条默认 4）。写成 `6 #000`、`6 #000 outside`、`6 #fff inside`、`8 #fff center`，或 `6 #ffffff, 14 #c8321e` 时，按到墨迹的距离描边，默认 `outside`，后一层的宽度是总距离。文字、图片、`layer` 和 flex 写颜色时沿墨迹外侧描：`style="stroke:#000"` 或 `stroke="#000"`，没写宽度时用 4，写了 `stroke-width` 用那个宽度。`layer` 和 flex 按整棵子树合并后的墨迹描一圈。网格的 `stroke` 仍是折线颜色。`inside` / `center` 的内侧宽度达到字号的约 8% 时报 `stroke-fill`。
+`stroke` 用同一套颜料。形状和线条写颜色时居中描边，宽度是 `stroke-width`（形状默认 1，线条默认 4）。写成 `6 #000`、`6 #000 outside`、`6 #fff inside`、`8 #fff center`，或 `6 #ffffff, 14 #c8321e` 时，按到墨迹的距离描边，默认 `outside`，后一层的宽度是总距离。文字、图片、`layer` 和 flex 写颜色时沿墨迹外侧描：`style="stroke:#000"` 或 `stroke="#000"`，没写宽度时用 4，写了 `stroke-width` 用那个宽度。`layer` 和 flex 按整棵子树合并后的墨迹描一圈。当前变换带了旋转或错切时，这段距离改在屏幕像素里按 4 倍采样再平均，外缘仍是大约 1px 的过渡，斜边不会跟着位图一起变成台阶。网格的 `stroke` 仍是折线颜色，和填充画在同一张超采样缓冲上，再一起平均缩回。`inside` / `center` 的内侧宽度达到字号的约 8% 时报 `stroke-fill`。
 
 ```html
 <rect x="0" y="0" width="720" height="960" fill="linear-gradient(to bottom, #0c1424, #1a3352 55%, #6e7c72)" />
