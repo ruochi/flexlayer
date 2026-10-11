@@ -79,6 +79,8 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 `camera` 写在这层取景 `layer` 上，不是新标签。`perspective="1484"` 等于 `camera="focal 1484"`，`perspective="parallel"` 等于 `camera="parallel"`。同一层两个都写时报 `invalid-attr`，用 `camera`。不要和 `view` 写在同一层。镜头必须有一种：`focal`、`fov`（`focal = height/2/tan(fov/2)`）、`lens`（竖直全画幅，`fov = 2·atan(12/mm)`）或 `parallel`。`at` 是对准点，默认盒子中心、`z=0`，投影到取景窗中心。`orbit` 是 yaw、pitch，度；yaw 正数机位往右绕，pitch 正数从上往下看。`roll` 正数让画面内容绕对准点顺时针转。`distance` 是机位到对准点的像素，焦距不变；不写时等于焦距。`from` 是机位坐标，不能再写 `orbit` 或 `distance`；和 `at` 重合报 `invalid-attr`。`vanish` 只改投影主点，`z=0` 的布局不平移，深处的线朝新灭点汇聚。`parallel` 下 `distance` 和 `vanish` 报 `info` 并忽略。对象和字符串等价，`--emit` 按作者写的字段写回，不把 `from` 折成 `orbit`。默认机位的像素与只写 `perspective` 相同。机位一旦偏离默认，没有 `z` / `rotateX` / `rotateY` 的子元素也要投影。
 
+`aperture` 是景深：无限远处的模糊半径，成片像素。不写就没有景深。对焦距离 `focus` 从机位沿视线量，不写时等于 `distance`；也可以写 `focus x y z`，对到镜头局部坐标里的那一点。半径 = `aperture × |深度 − focus| / 深度`，`深度 = 焦距 − z`。`max` 是半径上限，不写时是 `aperture` 的 3 倍。深度按每个像素算，近处的糊边盖到已经画好的远处，不是把合成完的整张图再糊一遍，也不代替元素自己的 `blur`。`sharp="true"` 写在要保持清楚的那一层表面上。`parallel` 下这三个字段报 `info` 并忽略。报告里采样点的半径写在 `defocus`，不糊就不写。
+
 `preserve-3d` 写在 `layer` 或 flex 上时，子元素沿着父链（含 flex 的 padding 和边框）进入外层这台镜头，和直接子元素一起按深度排序。`opacity` 小于 1、`blur`、`filter`、`grade`、`<mask>`、`overflow="hidden"`，以及 `glass`、`backdrop-blur`、非 `source-over` 的 `blend`、`noise`、`overlay`，仍然把子树收成一张图，并报 `flattened-3d`（info），hint 里写是哪一个属性。自己写了 `perspective` 或 `camera` 的嵌套层是另一台镜头，不并进来。不写 `preserve-3d` 时，子孙仍先画进父平面。两段文字都有投影四边形时，`text-overlap` 看凸四边形是否相交；缺了 `quad` 时仍看 `ink` 的外接矩形。
 
 `z` 的前后只在带 `perspective` 的那一层生效。这一层没有 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 时，直接子元素按中心深度从远到近绘制，深度相同保持文档顺序。出现这些网格时，这一层改成一台三维场景，网格和带姿态的平面放进同一个深度缓冲：更靠近观众（`z` 更大）的面盖住更远的面，不透明的面写入深度。嵌套 `layer` 自己没有 `perspective` 时，里面的网格和平面仍算进外层这台场景。

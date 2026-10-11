@@ -5,6 +5,7 @@ import { solidPaint } from './gradient.js'
 import { parseGlb } from './glb.js'
 import { originOffset } from './matrix.js'
 import type { MeshClip } from './mesh-cache.js'
+import { applyDepthOfField } from './dof.js'
 import { applyPoseMatrix, behindCamera, type Perspective } from './perspective.js'
 import { meshIntersections } from './mesh-intersect.js'
 import { roundedBoxGeometry, roundedCylinderGeometry } from './mesh-round.js'
@@ -1525,7 +1526,7 @@ function paintFlatShadowRow(
           if (stored >= -1e20) blocked = stored > nT * inv + bias
         }
         depth[di] = z
-        if (writeOwner) owners[di] = owner
+        owners[di] = owner
         words[di] = blocked ? shutPix : openPix
       }
     }
@@ -2124,7 +2125,7 @@ function rasterize(
       proj[i + 1] = (proj[i + 1]! - originY) * pixelScale
     }
   }
-  const writeOwner = batches.some((batch) => batch.lines !== null)
+  const writeOwner = batches.some((batch) => batch.lines !== null) || layer.dof != null
   const buffers = takeRasterBuffers(pw * ph, writeOwner)
   const color = buffers.color
   const depth = buffers.depth
@@ -2222,6 +2223,35 @@ function rasterize(
     width: canvas.width / base,
     height: canvas.height / base,
   })
+  const finish = (canvas: Canvas, hiColor: Uint8ClampedArray, sw: number, sh: number): MeshFrame => {
+    const plain = frameOf(canvas)
+    const dof = layer.dof
+    if (!dof || typeof perspective !== 'number') return plain
+    const dw = canvas.width
+    const dh = canvas.height
+    const sampled = downsampleSurface(hiColor, depth, owners, sw, sh, dw, dh)
+    const ctx = canvas.getContext('2d')
+    const painted = ctx.getImageData(0, 0, dw, dh)
+    coverStrokes(painted.data, sampled.depth, sampled.sharp, dw, dh)
+    const blurred = applyDepthOfField({
+      pixels: painted.data,
+      width: dw,
+      height: dh,
+      depth: sampled.depth,
+      sharp: sampled.sharp,
+      focal: perspective,
+      dof,
+      pixelScale: base,
+    })
+    if (blurred.pad === 0) return plain
+    const out = createCanvas(blurred.width, blurred.height)
+    const octx = out.getContext('2d')
+    const image = octx.createImageData(blurred.width, blurred.height)
+    image.data.set(blurred.pixels)
+    octx.putImageData(image, 0, 0)
+    const pad = blurred.pad / base
+    return { canvas: out, x: originX - pad, y: originY - pad, width: out.width / base, height: out.height / base }
+  }
   // 折线画在缩小之后只有屏幕分辨率的抗锯齿，斜边会呈台阶。超采样时先描再平均。
   if (samples > 1 && pw > outW && ph > outH && batches.some((batch) => batch.lines)) {
     const hi = createCanvas(pw, ph)
@@ -2231,11 +2261,94 @@ function rasterize(
     hctx.putImageData(image, 0, 0)
     paintMeshLines(hi, batches, authored, depth, owners, pw, ph, layer, perspective, originX, originY, viewW, viewH)
     const stroked = hctx.getImageData(0, 0, pw, ph).data
-    return frameOf(resolveColor(stroked, pw, ph, outW, outH))
+    return finish(resolveColor(stroked, pw, ph, outW, outH), stroked, pw, ph)
   }
   const out = pw >= outW && ph >= outH ? resolveColor(color, pw, ph, outW, outH) : resolveColor(color, pw, ph, pw, ph)
   paintMeshLines(out, batches, authored, depth, owners, pw, ph, layer, perspective, originX, originY, out.width / base, out.height / base)
-  return frameOf(out)
+  return finish(out, color, pw, ph)
+}
+
+function downsampleSurface(
+  color: Uint8ClampedArray,
+  depth: Float32Array,
+  owners: Int16Array,
+  sw: number,
+  sh: number,
+  dw: number,
+  dh: number,
+): { depth: Float32Array; sharp: Uint8Array } {
+  const outD = new Float32Array(dw * dh)
+  const outS = new Uint8Array(dw * dh)
+  outD.fill(-1e30)
+  for (let y = 0; y < dh; y++) {
+    const y0 = Math.floor((y * sh) / dh)
+    const y1 = Math.min(sh, Math.max(y0 + 1, Math.floor(((y + 1) * sh) / dh)))
+    for (let x = 0; x < dw; x++) {
+      const x0 = Math.floor((x * sw) / dw)
+      const x1 = Math.min(sw, Math.max(x0 + 1, Math.floor(((x + 1) * sw) / dw)))
+      let bestA = -1
+      let bestZ = -1e30
+      let bestS = 0
+      for (let iy = y0; iy < y1; iy++) {
+        for (let ix = x0; ix < x1; ix++) {
+          const si = iy * sw + ix
+          const z = depth[si] ?? -1e30
+          if (z < -1e20) continue
+          const a = color[si * 4 + 3] ?? 0
+          if (a > bestA) {
+            bestA = a
+            bestZ = z
+            bestS = (owners[si] ?? 0) < -1 ? 1 : 0
+          }
+        }
+      }
+      if (bestA >= 0) {
+        const di = y * dw + x
+        outD[di] = bestZ
+        outS[di] = bestS
+      }
+    }
+  }
+  return { depth: outD, sharp: outS }
+}
+
+/** 描边画在填充外面时，把旁边表面的深度借过来，否则这些像素没有景深。 */
+function coverStrokes(color: Uint8ClampedArray, depth: Float32Array, sharp: Uint8Array, w: number, h: number) {
+  const nextD = depth.slice()
+  const nextS = sharp.slice()
+  const radius = 4
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x
+      if ((color[i * 4 + 3] ?? 0) < 8 || (depth[i] ?? -1e30) > -1e20) continue
+      let best = 1e9
+      let z = -1e30
+      let s = 0
+      for (let dy = -radius; dy <= radius; dy++) {
+        const ny = y + dy
+        if (ny < 0 || ny >= h) continue
+        for (let dx = -radius; dx <= radius; dx++) {
+          const nx = x + dx
+          if (nx < 0 || nx >= w) continue
+          const j = ny * w + nx
+          const jz = depth[j] ?? -1e30
+          if (jz < -1e20) continue
+          const d2 = dx * dx + dy * dy
+          if (d2 < best) {
+            best = d2
+            z = jz
+            s = sharp[j] ?? 0
+          }
+        }
+      }
+      if (best < 1e9) {
+        nextD[i] = z
+        nextS[i] = s
+      }
+    }
+  }
+  depth.set(nextD)
+  sharp.set(nextS)
 }
 
 function rgbaCss(r: number, g: number, b: number, a: number) {
@@ -3050,7 +3163,8 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
     if (node.width <= 0 && node.mesh.type !== 'extrude') continue
     const o = originOffset(node.origin, node.width, node.height)
     if (behindCamera(applyPoseMatrix(instance.toLayer, o.x, o.y, 0).z, perspective)) continue
-    const owner = nextOwner++
+    const ownerId = nextOwner++
+    const owner = node.sharp ? -(ownerId + 1) : ownerId
     const opacity = (instance.opacity ?? 1) * node.opacity
     if (node.mesh.type === 'model') {
       for (const prim of buildModel(node)) {
@@ -3111,7 +3225,8 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
   for (const plane of planes) {
     const batch = planeBatch(plane, raster)
     if (!batch) continue
-    batch.owner = nextOwner++
+    const ownerId = nextOwner++
+    batch.owner = plane.node.sharp ? -(ownerId + 1) : ownerId
     batches.push(batch)
   }
   return rasterize(batches, layer, perspective, scale, samples, clip)

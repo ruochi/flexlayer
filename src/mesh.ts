@@ -131,7 +131,8 @@ function gatherCustom(layer: LayerLayoutNode): {
     const peeled = stripMeshes(item.node)
     if (peeled && paintable(peeled)) planes.push({ node: item.node, peeled, toLayer: item.toLayer })
   }
-  if (meshes.length === 0) return null
+  if (meshes.length === 0 && layer.dof == null) return null
+  if (meshes.length === 0 && planes.length === 0) return null
   return { perspective, meshes, planes }
 }
 

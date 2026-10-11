@@ -1,3 +1,5 @@
+import { cameraItems } from './camera.js'
+import { circleOfConfusion } from './dof.js'
 import { filtersInPaintOrder, getFilter } from './filter.js'
 import { MESH_TAGS } from './tags.js'
 import { apply, applyToBox, aroundPivot, IDENTITY, intersectBox, matrixScale, multiply, originOffset, translated, type Matrix } from './matrix.js'
@@ -754,12 +756,29 @@ function effectOutside(box: Box, doc: FvgDocument): boolean {
   return box.x < -1e-3 || box.y < -1e-3 || box.x + box.width > doc.width + 1e-3 || box.y + box.height > doc.height + 1e-3
 }
 
+function attachDefocus(node: LayoutNode, elements: ElementReport[]) {
+  if (node.kind === 'layer' && node.dof && typeof node.perspective === 'number') {
+    const byPath = new Map(elements.map((el) => [el.path, el]))
+    for (const item of cameraItems(node)) {
+      if (item.behind) continue
+      const el = byPath.get(item.node.path)
+      if (!el) continue
+      const coc = circleOfConfusion(node.perspective, item.depth, node.dof, !!item.node.sharp)
+      if (coc > 0.05) el.defocus = Math.round(coc * 1000) / 1000
+    }
+  }
+  if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
+    for (const child of node.children) attachDefocus(child, elements)
+  }
+}
+
 export function buildReport(doc: FvgDocument): FvgReport {
   const elements: ElementReport[] = []
   const effects: EffectRecord[] = []
   const inkSlack: number[] = []
   const maskIssues: Issue[] = []
   walk(doc.root, IDENTITY, 1, 0, 0, undefined, elements, effects, undefined, false, undefined, inkSlack, maskIssues)
+  attachDefocus(doc.root, elements)
 
   const issues: Issue[] = [...doc.issues, ...maskIssues]
   const visible = elements.filter((el) => el.opacity >= VISIBLE_OPACITY && hasArea(el.ink))

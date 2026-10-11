@@ -2367,7 +2367,8 @@ async function prepareMeshFrames(
     if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
       for (const child of node.children) await visit(child, k)
     }
-    if (node.kind !== 'layer' || !ownsMeshScene(node)) return
+    if (node.kind !== 'layer' || !hasPerspective(node.perspective)) return
+    if (!ownsMeshScene(node) && node.dof == null) return
     const frame = renderMeshLayer(
       node,
       k,

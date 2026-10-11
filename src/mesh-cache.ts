@@ -244,7 +244,8 @@ function hashKind(node: LayoutNode): string | null {
  */
 export function meshSceneCacheKey(scene: MeshCacheScene): string | null {
   const parts: string[] = [
-    'mesh-scene-v1',
+    'mesh-scene-v2',
+    scene.layer.dof ? `dof ${qnum(scene.layer.dof.aperture)} ${qnum(scene.layer.dof.focus)} ${qnum(scene.layer.dof.maxBlur)}` : 'dof',
     String(qnum(scene.layer.width)),
     String(qnum(scene.layer.height)),
     String(scene.perspective),
@@ -270,6 +271,7 @@ export function meshSceneCacheKey(scene: MeshCacheScene): string | null {
       strokeWidths: node.strokeWidths,
       halo: node.halo,
       hidden: node.hidden,
+      sharp: node.sharp === true,
       toLayer: instance.toLayer,
     })
     if (body == null) return null
@@ -282,6 +284,7 @@ export function meshSceneCacheKey(scene: MeshCacheScene): string | null {
       w: plane.node.width,
       h: plane.node.height,
       origin: plane.node.origin ?? null,
+      sharp: plane.node.sharp === true,
       toLayer: plane.toLayer,
     })
     if (pose == null) return null

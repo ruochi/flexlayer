@@ -12,7 +12,7 @@ import {
   type Vec2,
   type Vec3,
 } from './perspective.js'
-import type { Issue, LayerLayoutNode, LayoutNode } from './types.js'
+import type { DofSpec, Issue, LayerLayoutNode, LayoutNode } from './types.js'
 
 /** 行主序 3×3。和 shot3d 的镜头旋转同一套：先 yaw，再 pitch，再 roll。 */
 type Mat3 = [number, number, number, number, number, number, number, number, number]
@@ -75,6 +75,7 @@ export type CameraResolved = {
   vanishX: number
   vanishY: number
   moved: boolean
+  dof?: DofSpec
 }
 
 type CameraIssue = { level: 'warn' | 'info'; message: string; hint: string }
@@ -93,9 +94,15 @@ type ParsedCamera = {
   distance?: number
   from?: Vec3
   vanish?: { x: number; y: number }
+  /** 无限远处的模糊半径，成片像素。 */
+  aperture?: number
+  /** 对焦距离，或镜头局部坐标里的一个点。 */
+  focus?: number | Vec3
+  /** 模糊半径上限，成片像素。 */
+  max?: number
 }
 
-const SEGMENT_NAMES = ['focal', 'fov', 'lens', 'parallel', 'at', 'orbit', 'roll', 'distance', 'from', 'vanish'] as const
+const SEGMENT_NAMES = ['focal', 'fov', 'lens', 'parallel', 'at', 'orbit', 'roll', 'distance', 'from', 'vanish', 'aperture', 'focus', 'max'] as const
 
 function num(token: string): number | null {
   if (token.trim() === '') return null
@@ -163,7 +170,18 @@ function parseSegments(text: string, issues: CameraIssue[]): ParsedCamera | null
       lens = { kind: 'parallel' }
       continue
     }
-    if (head === 'focal' || head === 'fov' || head === 'lens' || head === 'roll' || head === 'distance') {
+    if (head === 'focus') {
+      const one = nums(rest, 1)
+      const three = one ? null : nums(rest, 3)
+      if (one) parsed.focus = one[0]!
+      else if (three) parsed.focus = { x: three[0]!, y: three[1]!, z: three[2]! }
+      else {
+        pushIssue(issues, `无法解析 camera 片段「${part.trim()}」`, 'focus 后面跟一个距离，或 x y z 三个数')
+        return null
+      }
+      continue
+    }
+    if (head === 'focal' || head === 'fov' || head === 'lens' || head === 'roll' || head === 'distance' || head === 'aperture' || head === 'max') {
       const value = nums(rest, 1)
       if (!value) {
         pushIssue(issues, `无法解析 camera 片段「${part.trim()}」`, `${head} 后面跟一个数`)
@@ -171,6 +189,8 @@ function parseSegments(text: string, issues: CameraIssue[]): ParsedCamera | null
       }
       if (head === 'roll') parsed.roll = value[0]!
       else if (head === 'distance') parsed.distance = value[0]!
+      else if (head === 'aperture') parsed.aperture = value[0]!
+      else if (head === 'max') parsed.max = value[0]!
       else {
         if (lens) {
           pushIssue(issues, 'camera 写了不止一种镜头', 'focal、fov、lens、parallel 只留一个')
@@ -327,6 +347,34 @@ function parseObject(source: Record<string, unknown>, issues: CameraIssue[]): Pa
     }
     parsed.vanish = { x: vanish[0]!, y: vanish[1]! }
   }
+  if ('aperture' in source) {
+    const aperture = asNum(source.aperture)
+    if (aperture == null) {
+      pushIssue(issues, '无法解析 camera 的 aperture', 'aperture 是无限远处的模糊半径，成片像素')
+      return null
+    }
+    parsed.aperture = aperture
+  }
+  if ('focus' in source) {
+    const focus = asNum(source.focus)
+    if (focus != null) parsed.focus = focus
+    else {
+      const point = asPoint(source.focus, 3)
+      if (!point) {
+        pushIssue(issues, '无法解析 camera 的 focus', 'focus 是一个距离，或 [x, y, z]')
+        return null
+      }
+      parsed.focus = { x: point[0]!, y: point[1]!, z: point[2]! }
+    }
+  }
+  if ('max' in source) {
+    const max = asNum(source.max)
+    if (max == null) {
+      pushIssue(issues, '无法解析 camera 的 max', 'max 是景深模糊半径的上限，成片像素')
+      return null
+    }
+    parsed.max = max
+  }
   parsed.lens = lens
   return parsed
 }
@@ -434,8 +482,34 @@ export function resolveCamera(source: unknown, width: number, height: number): {
   const vanishX = !parallel && parsed.vanish ? parsed.vanish.x : 0
   const vanishY = !parallel && parsed.vanish ? parsed.vanish.y : 0
   const moved = view != null || Math.abs(vanishX) > 1e-9 || Math.abs(vanishY) > 1e-9
+  let dof: DofSpec | undefined
+  if (parallel && (parsed.aperture != null || parsed.focus != null || parsed.max != null)) {
+    pushIssue(issues, 'parallel 下 aperture、focus、max 不起作用', '平行投影没有镜头平面，景深只写在有焦距的 camera 上', 'info')
+  } else if (!parallel) {
+    if (parsed.aperture != null && !(parsed.aperture > 0)) {
+      pushIssue(issues, `无法解析 camera 的 aperture: ${parsed.aperture}`, 'aperture 是无限远处的模糊半径，成片像素，要大于 0')
+    } else if (parsed.aperture != null) {
+      let focus = distance
+      if (typeof parsed.focus === 'number') {
+        if (!(parsed.focus > 0)) pushIssue(issues, 'focus 要大于 0', '对焦距离是从机位沿视线量的像素。不写时等于 distance')
+        else focus = parsed.focus
+      } else if (parsed.focus) {
+        const point = applyPoseMatrix(view ?? IDENTITY4, parsed.focus.x, parsed.focus.y, parsed.focus.z)
+        const depth = focalLength - point.z
+        if (!(depth > 1e-3)) pushIssue(issues, 'focus 落在镜头上或镜头后', '对焦点要在镜头前面。这一层仍对到对准点')
+        else focus = depth
+      }
+      let maxBlur = parsed.aperture * 3
+      if (parsed.max != null && !(parsed.max > 0)) {
+        pushIssue(issues, 'max 要大于 0', 'max 是景深模糊半径的上限，像素。不写时是 aperture 的 3 倍')
+      } else if (parsed.max != null) maxBlur = parsed.max
+      dof = { aperture: parsed.aperture, focus, maxBlur }
+    } else if (parsed.focus != null || parsed.max != null) {
+      pushIssue(issues, 'focus、max 要和 aperture 一起写', '不写 aperture 就没有景深', 'info')
+    }
+  }
   return {
-    camera: { perspective, ...(view ? { view } : {}), vanishX, vanishY, moved },
+    camera: { perspective, ...(view ? { view } : {}), vanishX, vanishY, moved, ...(dof ? { dof } : {}) },
     issues,
   }
 }
@@ -503,8 +577,35 @@ export function formatCamera(source: unknown): string | null {
     if (!vanish) return null
     parts.push(`vanish ${formatPoint(vanish)}`)
   }
+  if ('aperture' in record) {
+    const aperture = asNum(record.aperture)
+    if (aperture == null) return null
+    parts.push(`aperture ${formatNum(aperture)}`)
+  }
+  if ('focus' in record) {
+    const focus = asNum(record.focus)
+    if (focus != null) parts.push(`focus ${formatNum(focus)}`)
+    else {
+      const point = asPoint(record.focus, 3)
+      if (!point) return null
+      parts.push(`focus ${formatPoint(point)}`)
+    }
+  }
+  if ('max' in record) {
+    const max = asNum(record.max)
+    if (max == null) return null
+    parts.push(`max ${formatNum(max)}`)
+  }
   if (parts.length === 0) return null
   return parts.join(', ')
+}
+
+export function readSharp(raw: string | undefined): { value: boolean; invalid: boolean } {
+  if (raw == null || raw.trim() === '') return { value: false, invalid: false }
+  const text = raw.trim()
+  if (text === 'true' || text === 'sharp') return { value: true, invalid: false }
+  if (text === 'false') return { value: false, invalid: false }
+  return { value: false, invalid: true }
 }
 
 export function readPreserve(raw: string | undefined): { value: boolean; invalid: boolean } {
