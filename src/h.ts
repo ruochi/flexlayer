@@ -38,6 +38,8 @@ export function h(tag: string, props: FvgProps | null, ...children: unknown[]): 
   let draw: DrawFn | undefined
   let data: unknown
   let hasData = false
+  let camera: unknown
+  let hasCamera = false
   const badAttrs: string[] = []
   const p = props ?? {}
 
@@ -51,6 +53,11 @@ export function h(tag: string, props: FvgProps | null, ...children: unknown[]): 
         data = value
         hasData = true
       }
+      continue
+    }
+    if (key === 'camera' && isPlainData(value)) {
+      camera = value
+      hasCamera = true
       continue
     }
     if (key === 'children' || key === 'key' || key === 'ref') continue
@@ -76,6 +83,7 @@ export function h(tag: string, props: FvgProps | null, ...children: unknown[]): 
   const name = canonicalTag(tag)
   const node: FvgNode = { tag: name, attrs, children: merged, draw }
   if (hasData) node.data = data
+  if (hasCamera) node.camera = camera
   if (badAttrs.length > 0) node.badAttrs = badAttrs
   if (tag !== name) node.writtenTag = tag
   return node

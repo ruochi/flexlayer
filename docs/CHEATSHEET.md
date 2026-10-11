@@ -6,7 +6,7 @@
 
 | 标签 | 做什么 |
 | --- | --- |
-| `layer` | 根画布兼定位容器。根上写 `width` `height` `background`（画布底色，省略则 PNG 透明）`color` `safe`。定位用 `x` `y` `anchor`（默认左上角，没写是 0），还有 `opacity` `rotate` `rotateX` `rotateY` `z` `scale` `origin`。`view="x y w h"` 是镜头：这一层的宽高是屏幕上的取景窗，四个数是舞台上被取的矩形，窗口外裁掉。`perspective` 只写在这一层，是直接子元素共用的视距；写成 `parallel` 时视线平行，没有近大远小。可嵌套 |
+| `layer` | 根画布兼定位容器。根上写 `width` `height` `background`（画布底色，省略则 PNG 透明）`color` `safe`。定位用 `x` `y` `anchor`（默认左上角，没写是 0），还有 `opacity` `rotate` `rotateX` `rotateY` `z` `scale` `origin`。`view="x y w h"` 是镜头：这一层的宽高是屏幕上的取景窗，四个数是舞台上被取的矩形，窗口外裁掉。`perspective` 只写在这一层，是直接子元素共用的视距；写成 `parallel` 时视线平行，没有近大远小。`camera` 是同一处的镜头（`focal` / `fov` / `lens` / `parallel`，以及 `at` `orbit` `roll` `distance` `from` `vanish`）。`preserve-3d` 让子元素进入外层镜头。可嵌套 |
 | `draw` | 子标签。正文是 JS（`ctx`、`el`），画在父元素内容之后 |
 | `div` 写 `display:flex` | 排布。默认横向；竖排加 `flex-direction:column`。`gap` `row-gap` `column-gap` `align-items` `align-content` `justify-content` `flex-wrap` `padding` 都在 `style` 里。**`align-items` 默认 `center`（CSS 里是 `stretch`）：column 忘写 `align-items` 会全部居中**。左对齐写 `align-items:flex-start`。横排按文字基线对齐写 `align-items:baseline`，同一行被撑高后 `center` 和 `end` 按新的行盒再排，竖排写了仍按 `flex-start`。`letter-spacing` 可以写 `0.05em`。`align-content` 默认 `flex-start`，管换行后的多行。`justify-content` 只管主轴，改不了这一层在父级交叉轴上的位置 |
 
@@ -40,7 +40,7 @@
 
 色块、圆点、分隔线用 div：`<div style="width:28px; height:28px; border-radius:14px; background:#3ecfc4">`，分隔线用 `flex:1; height:4px`。
 
-形状的 `fill` 和文字的 `style="fill:…"` 共用一套颜料：`linear-gradient(to bottom, #0c1424, #6e7c72)`、`radial-gradient(at 40% 35%, #fff, #fff0)`，或 `gradient(#000, #fff)`。文字写在盒子上按整段取样，写在 `span` 上按这一段的行盒取样。`stroke` 写颜色时，形状和线条居中（`stroke-width`）；写成 `6 #000 outside` 时沿墨迹描。文字、图片和 `layer` 的 `stroke="#000"` 沿外侧描，没写宽度时用 4。写在 `layer` 上时按整组子树墨迹描一圈。
+形状的 `fill` 和文字的 `style="fill:…"` 共用一套颜料：`linear-gradient(to bottom, #0c1424, #6e7c72)`、`radial-gradient(at 40% 35%, #fff, #fff0)`，或 `gradient(#000, #fff)`。文字写在盒子上按整段取样，写在 `span` 上按这一段的行盒取样。`stroke` 写颜色时，形状和线条居中（`stroke-width`）；写成 `6 #000 outside` 时沿墨迹描。文字、图片和 `layer` 的 `stroke="#000"` 沿外侧描，没写宽度时用 4。写在 `layer` 上时按整组子树墨迹描一圈，flex 的背景和边框算进去；这一层是三维场景时，描边和阴影跟着已经画好的画面。
 
 <!-- attrs:effects:begin -->
 效果：`shadow` `0 8 16 #00000055`（默认 颜色 `#00000066`）、`glow` `56 #f3ead4`（默认 颜色取本体）、`inner-shadow` `0 8 16 #00000055`（默认 同 shadow）、`inner-glow` `28 #7ec8ff`（默认 同 glow）、`blur` `6`、`backdrop-blur` `16`、`glass` `clear`、`noise` `0.08`、`filter` `saturate(1.1)`、`blend` `multiply`（默认 `source-over`）、`overlay` `#00000066`（默认 透明度 1，`source-over`）、`grade` `lomo 0.8, fade 0.1`（默认 强度 1）、`grade-mask` `radial-gradient(#fff0 30%, #fff)`。作用于整棵子树的 `overlay`、`grade`、`grade-mask` 只写在 `layer` 上。
@@ -48,7 +48,7 @@
 
 整层裁切用 `<mask>`，和内容并列写在 `layer` 里：`<mask><circle cx="160" cy="90" r="90" /></mask>`。实心是硬边，`fill="linear-gradient(to bottom, #fff, #fff0)"` 是软边。挖掉一块写 `op="subtract"`。羽化写 `<mask feather="8">`，反选写 `invert="true"`。黑白蒙版用 `<img channel="luma">`，编号区域用 `pick="3 5"`。缓存写 `<img src="photo.jpg" derive="subject">`。不要写 `mask-image`。`overflow="hidden"` 只裁子元素。蒙版裁掉子元素的阴影和模糊；这一层自己的 `shadow`、`glow`、外侧 `stroke` 按留下的轮廓伸出蒙版，父层的描边和阴影也跟着这块轮廓。预览写在标记里：`<preview of="#cut" show="overlay checker" />`，`show` 是合法属性，正常成片不包含它。
 
-透视：`<layer perspective="700"><rect rotateY="28" z="40" /></layer>`。`z` 越大越靠近观众。平行投影写 `<layer perspective="parallel">`，位置不随 `z` 缩放，大的 `z` 仍画在前面。没有网格时，直接子元素按中心深度从远到近画，深度相同按文档顺序。有 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 时改用深度缓冲，近的盖住远的。没有 `perspective` 的祖先时，`rotateX`、`rotateY`、`z` 仍按二维画，`z` 不改变顺序，并报 `flatten-3d`。例子见 [examples/perspective.layer](../examples/perspective.layer)。
+透视：`<layer perspective="700"><rect rotateY="28" z="40" /></layer>`。`z` 越大越靠近观众。平行投影写 `<layer perspective="parallel">`，位置不随 `z` 缩放，大的 `z` 仍画在前面。`camera="fov 40, orbit 35 18, distance 1200"` 把机位写在同一层；`perspective="700"` 等于 `focal 700`。`preserve-3d` 写在 layer 或 flex 上，子元素沿父链进入这台镜头。没有网格时，直接子元素按中心深度从远到近画，深度相同按文档顺序。有 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 时改用深度缓冲，近的盖住远的。没有 `perspective` 的祖先时，`rotateX`、`rotateY`、`z` 仍按二维画，`z` 不改变顺序，并报 `flatten-3d`。采样点的投影 `w` 小于等于 0 报 `behind-camera`。例子见 [examples/perspective.layer](../examples/perspective.layer)。
 
 网格和透视共用这一层：`<layer perspective="700"><sphere cx="220" cy="340" r="90" z="50" fill="#4CC3D9" /><box x="355" y="350" width="150" height="100" depth="60" fill="#EF2D5E" /></layer>`。`cylinder` 是竖直圆柱，`torus` 是躺着的圆环，`tube` 沿 `d` 扫出圆管。`box` 的 `rx` 圆棱，`round` 不写就是 12 条都圆；圆柱的 `rx` 圆上下口。`extrude` 用 `d` 和 `depth`，`d` 里并排的形状各自挤出，套在里面的才是洞。`model` 放在有宽高的 layer 里，`src` 指向 `.glb`。网格的 `fill` 是纯色，渐变、`shadow`、`glow` 会警告。`material="matte"` 是默认的磨砂塑料，只有明暗。`material="plastic"` 和 `material="metal 0.35"` 都用这套明暗做底，再叠同一张工作室环境：主灯是左上方的大圆角正方形，从正左向中间偏 30°，顶部互不相接，暗面有贴轮廓的边缘光。金属更实，塑料更透，没有缩成一点的高光。粗糙度先模糊环境，噪点写进这张图再取样，越高越糊，噪点越密。`material="glass"` 透出后面的画面，边缘映出同一张环境。棱线写在网格上：`stroke="#1c1915" stroke-width="3 2 1"` 依次描轮廓、折棱和隐藏线，只写一个数时三档一样粗。`hidden="#8a8175"` 把被自己挡住的棱画成虚线。`halo="3"` 让这只网格的可见线在交叉处把更远的线断开。共用一个角的棱不断开，线管端面和自己的轮廓也不切开。`fill="none"` 只留线。球没有折棱，`stroke` 只画轮廓圆。没有 `perspective` 时不绘制。例子见 [examples/meshes.layer](../examples/meshes.layer)、[examples/solids.layer](../examples/solids.layer)、[examples/rounded.layer](../examples/rounded.layer)、[examples/wire.layer](../examples/wire.layer)、[examples/materials.layer](../examples/materials.layer)。
 

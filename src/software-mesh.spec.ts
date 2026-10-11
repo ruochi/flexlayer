@@ -250,6 +250,31 @@ describe('软件光栅', () => {
     expect(hard).toBeLessThan(8)
   })
 
+  it('旋转后的网格描边沿斜边有过渡', async () => {
+    const { png } = await render(
+      `<layer width="240" height="200" background="#000000" perspective="800"><box x="30" y="90" width="180" height="16" depth="2" rotate="24" fill="#ffffff" stroke="#ff0000" stroke-width="3" /></layer>`,
+    )
+    const img = await loadImage(png)
+    const canvas = createCanvas(img.width, img.height)
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    const data = ctx.getImageData(0, 0, img.width, img.height).data
+    const at = (x: number, y: number) => data[(y * img.width + x) * 4] ?? 0
+    let hard = 0
+    let soft = 0
+    for (let y = 20; y < 180; y++) {
+      let prev = at(8, y)
+      for (let x = 9; x < 230; x++) {
+        const v = at(x, y)
+        if (prev < 12 && v > 243) hard++
+        else if (prev < 12 && v >= 12 && v <= 243) soft++
+        prev = v
+      }
+    }
+    expect(soft).toBeGreaterThan(30)
+    expect(hard).toBeLessThan(soft)
+  })
+
   it('盒子描可见棱，对角线不画，被自己挡住的棱是虚线', async () => {
     const { png } = await render(`
       <layer width="200" height="200" background="#ffffff" perspective="500">
@@ -841,5 +866,66 @@ describe('软件光栅', () => {
     expect(onRing[0]).toBeGreaterThan(140)
     expect(insideRing[0]).toBeLessThan(20)
     expect(outsideRing[0]).toBeLessThan(20)
+  })
+
+  it('父层 rotateX 里有平面时，盒子远侧的棱还在', async () => {
+    const scene = (plane: boolean) => `
+      <layer width="360" height="280" background="#f7f4ee" perspective="700">
+        <layer x="30" y="20" width="300" height="240" rotateX="58">
+          ${plane ? '<rect x="16" y="16" width="36" height="24" fill="#88aaff" />' : ''}
+          <box x="80" y="70" width="150" height="110" depth="80" fill="none" stroke="#111111" stroke-width="3" hidden="#111111" />
+        </layer>
+      </layer>`
+    const bare = await colorMask(scene(false), (r, g, b) => r < 40 && g < 40 && b < 40)
+    const withPlane = await colorMask(scene(true), (r, g, b) => r < 40 && g < 40 && b < 40)
+    let own = 0
+    let kept = 0
+    for (let i = 0; i < bare.mask.length; i++) {
+      if (!bare.mask[i]) continue
+      own++
+      if (withPlane.mask[i]) kept++
+    }
+    expect(own).toBeGreaterThan(1000)
+    expect(kept / own).toBeGreaterThan(0.9)
+  })
+
+  async function edgeStroke(source: string) {
+    const { png } = await render(source)
+    const img = await loadImage(png)
+    const canvas = createCanvas(img.width, img.height)
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    const data = ctx.getImageData(0, 0, img.width, img.height).data
+    const redAt = (x: number, y: number) => {
+      const i = (y * img.width + x) * 4
+      return (data[i] ?? 0) > 180 && (data[i + 1] ?? 255) < 80 && (data[i + 2] ?? 255) < 80
+    }
+    let edge = 0
+    let mid = 0
+    const mx = Math.floor(img.width / 2)
+    for (let y = 0; y < img.height; y++) {
+      if (redAt(0, y) || redAt(1, y)) edge++
+      if (redAt(mx, y)) mid++
+    }
+    return { edge, mid }
+  }
+
+  it('scale 或 view 放大后，贴边的网格描边画到画布边', async () => {
+    const scaled = await edgeStroke(`
+      <layer width="240" height="160" background="#ffffff">
+        <layer width="240" height="160" perspective="420" scale="3" origin="center">
+          <box x="-80" y="70" width="400" height="12" depth="6" fill="none" stroke="#e00000" stroke-width="6" />
+        </layer>
+      </layer>`)
+    const viewed = await edgeStroke(`
+      <layer width="240" height="160" background="#ffffff" view="40 50 80 40">
+        <layer width="240" height="160" perspective="420">
+          <box x="-40" y="58" width="360" height="12" depth="6" fill="none" stroke="#e00000" stroke-width="6" />
+        </layer>
+      </layer>`)
+    expect(scaled.mid).toBeGreaterThan(8)
+    expect(scaled.edge).toBeGreaterThan(scaled.mid * 0.6)
+    expect(viewed.mid).toBeGreaterThan(8)
+    expect(viewed.edge).toBeGreaterThan(viewed.mid * 0.6)
   })
 })

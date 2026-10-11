@@ -7,7 +7,8 @@ import {
   writeMeshCache,
   type MeshClip,
 } from './mesh-cache.js'
-import { behindCamera, hasPerspective, planeDepth, poseMatrix, type Perspective } from './perspective.js'
+import { cameraItems } from './camera.js'
+import { behindCamera, cameraSceneCustom, hasPerspective, planeDepth, poseMatrix, type Perspective } from './perspective.js'
 import { renderMeshSoftware } from './software-mesh.js'
 import type { LayerLayoutNode, LayoutNode, MeshLayoutNode } from './types.js'
 
@@ -106,11 +107,40 @@ export type MeshLayerOptions = {
   cacheBytes?: number | false
 }
 
+function gatherCustom(layer: LayerLayoutNode): {
+  perspective: Perspective
+  meshes: MeshInstance[]
+  planes: PlaneInstance[]
+} | null {
+  const perspective = layer.perspective
+  if (!hasPerspective(perspective) || layer.width <= 0 || layer.height <= 0) return null
+  const meshes: MeshInstance[] = []
+  const planes: PlaneInstance[] = []
+  for (const item of cameraItems(layer)) {
+    if (item.behind) continue
+    if (item.kind === 'mesh') {
+      meshes.push({ node: item.node as MeshLayoutNode, toLayer: item.toLayer, opacity: item.opacity })
+      continue
+    }
+    if (item.kind === 'chrome') {
+      const shell = { ...item.node, children: [] } as LayoutNode
+      if (paintable(shell)) planes.push({ node: item.node, peeled: shell, toLayer: item.toLayer })
+      continue
+    }
+    if (item.node.kind === 'mesh') continue
+    const peeled = stripMeshes(item.node)
+    if (peeled && paintable(peeled)) planes.push({ node: item.node, peeled, toLayer: item.toLayer })
+  }
+  if (meshes.length === 0) return null
+  return { perspective, meshes, planes }
+}
+
 function gather(layer: LayerLayoutNode): {
   perspective: Perspective
   meshes: MeshInstance[]
   planes: PlaneInstance[]
 } | null {
+  if (cameraSceneCustom(layer)) return gatherCustom(layer)
   const perspective = layer.perspective
   if (!hasPerspective(perspective) || layer.width <= 0 || layer.height <= 0) return null
   const meshes: MeshInstance[] = []

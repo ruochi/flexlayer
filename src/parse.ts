@@ -15,6 +15,8 @@ export type FvgNode = {
   draw?: DrawFn
   /** 结构化数据。不进 `attrs`，`draw` 里从 `el.data` 读。 */
   data?: unknown
+  /** `camera` 写成对象时挂在这里，不进 `attrs`。字符串仍在 `attrs.camera`。 */
+  camera?: unknown
   /** h() 收到对象或数组、却没有放进 data 的属性名。 */
   badAttrs?: string[]
   /** `.layer` 里 `data` 不是合法 JSON 时的原文。 */

@@ -20,7 +20,7 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
  * 正对镜头的面是 fill，侧面按内置主光和补光变暗。
  * 主光沿固定方向打一张正交深度图：不透明三角形互相挡住这盏光时，主光不计。
  * glb 用文件里的底色乘这套明暗。
- * 写了 stroke 时，缩小抗锯齿之后再按屏幕像素描折棱和轮廓。
+ * 写了 stroke 时，在超采样缓冲上按屏幕像素描折棱和轮廓，再和填充一起平均缩回。
  * 两只都写了 stroke 的网格相互穿过时，交界线算折棱，颜色和宽度跟后写的那只。
  * hidden 只画被这只网格自己挡住的棱，虚线是 6 实 4 空。交界线被这两只中任意一只挡住时同样算隐藏线。
  * 不写 material 时是磨砂：主光乘 fill。plastic 和 metal 用同一套磨砂明暗，再叠竖向工作室环境，没有缩成一点的高光。glass 后画，边缘映环境。
@@ -1840,7 +1840,8 @@ function drawTriangle(
         sg = byte(batch.g * dim)
         sb = byte(batch.b * dim)
       }
-      if (batch.depthWrite) {
+      // 贴图上全透明的像素不挡后面的棱。线框没有贴图，空的面仍要写深度，隐藏线才分得出来。
+      if (batch.depthWrite && (batch.texture ? sa > 0 : batch.a > 0 || batch.lines != null)) {
         depth[di] = z
         owners[di] = batch.owner
       }
@@ -1883,6 +1884,21 @@ function intersectRect(a: RasterRect, b: RasterRect): RasterRect | null {
   const bottom = Math.min(a.y + a.height, b.y + b.height)
   if (right - x <= 1e-4 || bottom - y <= 1e-4) return null
   return { x, y, width: right - x, height: bottom - y }
+}
+
+/** 被可见范围裁掉的那一边多留出线宽，圆头落在窗口外面，贴边的线裁齐。 */
+function padClipEdges(tight: RasterRect, full: RasterRect, margin: number): RasterRect {
+  if (!(margin > 0)) return tight
+  const left = tight.x > full.x + 1e-3 ? margin : 0
+  const top = tight.y > full.y + 1e-3 ? margin : 0
+  const right = tight.x + tight.width < full.x + full.width - 1e-3 ? margin : 0
+  const bottom = tight.y + tight.height < full.y + full.height - 1e-3 ? margin : 0
+  return {
+    x: tight.x - left,
+    y: tight.y - top,
+    width: tight.width + left + right,
+    height: tight.height + top + bottom,
+  }
 }
 
 function snapDown(value: number, step: number) {
@@ -2058,6 +2074,8 @@ function rasterize(
 ): MeshFrame {
   const vx = layer.width / 2
   const vy = layer.height / 2
+  const px = vx + (layer.vanishX ?? 0)
+  const py = vy + (layer.vanishY ?? 0)
   const authored: Vert[][] = []
   const projected: Float32Array[] = []
   let minX = Infinity
@@ -2078,7 +2096,7 @@ function rasterize(
       const u = batch.uvs ? batch.uvs[i * 2]! : 0
       const v = batch.uvs ? batch.uvs[i * 2 + 1]! : 0
       verts[i] = { x: p.x, y: p.y, z: p.z, nx: n.x, ny: n.y, nz: n.z, u, v }
-      const front = layerProject(p, perspective, vx, vy)
+      const front = layerProject(p, perspective, px, py)
       const o = i * 3
       if (front) {
         proj[o] = front.lx
@@ -2094,11 +2112,15 @@ function rasterize(
     projected.push(proj)
   }
   if (!Number.isFinite(minX) || !Number.isFinite(minY)) return emptyMeshFrame()
-  const bounds = intersectRect(
-    { x: minX - margin, y: minY - margin, width: maxX - minX + margin * 2, height: maxY - minY + margin * 2 },
-    clip,
-  )
-  if (!bounds) return emptyMeshFrame()
+  const covered = {
+    x: minX - margin,
+    y: minY - margin,
+    width: maxX - minX + margin * 2,
+    height: maxY - minY + margin * 2,
+  }
+  const tight = intersectRect(covered, clip)
+  if (!tight) return emptyMeshFrame()
+  const bounds = padClipEdges(tight, covered, margin)
   const base = Math.max(scale, 1e-3)
   const step = 1 / base
   const originX = snapDown(bounds.x, step)
@@ -2184,9 +2206,9 @@ function rasterize(
           owners,
           pw,
           ph,
-          projectClipped(clipped[0]!, perspective, vx, vy, originX, originY, pixelScale),
-          projectClipped(clipped[k]!, perspective, vx, vy, originX, originY, pixelScale),
-          projectClipped(clipped[k + 1]!, perspective, vx, vy, originX, originY, pixelScale),
+          projectClipped(clipped[0]!, perspective, px, py, originX, originY, pixelScale),
+          projectClipped(clipped[k]!, perspective, px, py, originX, originY, pixelScale),
+          projectClipped(clipped[k + 1]!, perspective, px, py, originX, originY, pixelScale),
           batch,
           shadow,
           camera,
@@ -2209,9 +2231,27 @@ function rasterize(
   for (const index of glass) paintBatch(index)
   const outW = Math.max(1, Math.round(viewW * base))
   const outH = Math.max(1, Math.round(viewH * base))
+  const frameOf = (canvas: Canvas): MeshFrame => ({
+    canvas,
+    x: originX,
+    y: originY,
+    width: canvas.width / base,
+    height: canvas.height / base,
+  })
+  // 折线画在缩小之后只有屏幕分辨率的抗锯齿，斜边会呈台阶。超采样时先描再平均。
+  if (samples > 1 && pw > outW && ph > outH && batches.some((batch) => batch.lines)) {
+    const hi = createCanvas(pw, ph)
+    const hctx = hi.getContext('2d')
+    const image = hctx.createImageData(pw, ph)
+    image.data.set(color.subarray(0, pw * ph * 4))
+    hctx.putImageData(image, 0, 0)
+    paintMeshLines(hi, batches, authored, depth, owners, pw, ph, layer, perspective, originX, originY, viewW, viewH)
+    const stroked = hctx.getImageData(0, 0, pw, ph).data
+    return frameOf(resolveColor(stroked, pw, ph, outW, outH))
+  }
   const out = pw >= outW && ph >= outH ? resolveColor(color, pw, ph, outW, outH) : resolveColor(color, pw, ph, pw, ph)
   paintMeshLines(out, batches, authored, depth, owners, pw, ph, layer, perspective, originX, originY, out.width / base, out.height / base)
-  return { canvas: out, x: originX, y: originY, width: out.width / base, height: out.height / base }
+  return frameOf(out)
 }
 
 function rgbaCss(r: number, g: number, b: number, a: number) {
@@ -2830,6 +2870,8 @@ function paintMeshLines(
   const scale = (scaleX + scaleY) / 2
   const vx = layer.width / 2
   const vy = layer.height / 2
+  const px = vx + (layer.vanishX ?? 0)
+  const py = vy + (layer.vanishY ?? 0)
   const mapX = pw / canvas.width
   const mapY = ph / canvas.height
   const edges: EdgeEnds[] = []
@@ -2855,8 +2897,8 @@ function paintMeshLines(
         a,
         b,
         perspective,
-        vx,
-        vy,
+        px,
+        py,
         originX,
         originY,
         scaleX,
