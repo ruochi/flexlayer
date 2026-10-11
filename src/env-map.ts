@@ -1,8 +1,9 @@
 /**
  * 金属、塑料和玻璃共用的一张固定工作室环境。
- * 主光是一块竖向的柔光，中心稍亮，四周散开，没有一块等亮的白斑。
- * 轮廓上另有一条又窄又长的边光。方位和仰角躲开 0°、90°、180°、270°，也从正竖直偏开一点。
- * 白、黑和中间的灰过渡都有。亮度在到天顶之前就淡掉。粗糙度只决定取哪一层模糊，一次双线性采样。
+ * 灯是竖向柔光板：窄边是直的，边上有一圈羽化，长边中间更亮、两头自己淡掉。
+ * 轮廓上另有一条窄长的边光板。方位和仰角躲开 0°、90°、180°、270°，板子也从竖直偏开一点。
+ * 不按仰角把天顶切掉，否则球的上下会各剩一块黑圆。白、黑和灰过渡都有。
+ * 粗糙度只决定取哪一层模糊，一次双线性采样。
  */
 
 const WIDTH = 128
@@ -17,8 +18,11 @@ type Panel = {
   az: number
   /** 仰角，度。正数朝上。 */
   el: number
-  /** 窄边、长边的衰减半径，度。没有等亮的核心。 */
+  /** 窄边半宽，度。这块里是满的。 */
   across: number
+  /** 窄边外侧的羽化，度。 */
+  feather: number
+  /** 长边的衰减半径，度。中间亮，两头淡。 */
   along: number
   /** 相对竖直偏转的角度。0 是正竖直。 */
   lean: number
@@ -28,15 +32,15 @@ type Panel = {
 }
 
 /**
- * 左前方一大块柔光，旁边用灰接上黑。轮廓只留一条细边光。
- * 没有第二块白斑。角度都不落在 90° 的整数倍上。
+ * 左前方一块竖向柔光板，旁边一块灰板把白和黑接上。
+ * 右后一条窄的边缘光板，贴着轮廓。角度都不落在 90° 的整数倍上。
  */
 const PANELS: Panel[] = [
-  { az: -40, el: 14, across: 36, along: 48, lean: 6, r: 164, g: 166, b: 172 },
-  { az: -16, el: 6, across: 9, along: 32, lean: -6, r: 96, g: 98, b: 104 },
-  { az: 170, el: 2, across: 3.6, along: 36, lean: -3, r: 208, g: 210, b: 214 },
-  { az: 86, el: -6, across: 12, along: 22, lean: 8, r: 52, g: 54, b: 58 },
-  { az: -82, el: 0, across: 11, along: 28, lean: 6, r: 48, g: 50, b: 54 },
+  { az: -36, el: 8, across: 11, feather: 16, along: 52, lean: 8, r: 176, g: 178, b: 184 },
+  { az: -12, el: 4, across: 4, feather: 12, along: 44, lean: -7, r: 108, g: 110, b: 116 },
+  { az: 166, el: 2, across: 2.4, feather: 4.5, along: 46, lean: -4, r: 196, g: 198, b: 204 },
+  { az: 82, el: -4, across: 5, feather: 10, along: 30, lean: 9, r: 62, g: 64, b: 70 },
+  { az: -78, el: 0, across: 5, feather: 10, along: 34, lean: 7, r: 56, g: 58, b: 64 },
 ]
 
 const SAMPLE = { r: 0, g: 0, b: 0 }
@@ -63,21 +67,20 @@ function wrapSigned(d: number) {
 }
 
 /**
- * 灯的权重。窄边沿方位，偏 lean 度之后不再是正竖直。
- * 中心最亮，向四周按高斯散开，没有平顶，也没有端头的尖角。天顶附近再淡掉。
+ * 柔光板的权重。窄边是直的，外侧羽化。长边中间亮、两头按距离淡掉，不收成圆头，也不在天顶切一刀。
  */
 function panelWeight(u: number, v: number, panel: Panel) {
   const elev = (0.5 - v) * 180
-  const sky = window1d(Math.abs(elev), 46, 14)
-  if (sky <= 0) return 0
   const az = wrapSigned(u - panel.az / 360) * 360
   const el = elev - panel.el
   const lean = (panel.lean * Math.PI) / 180
   const c = Math.cos(lean)
   const s = Math.sin(lean)
-  const across = (az * c + el * s) / panel.across
+  const across = Math.abs(az * c + el * s)
   const along = (-az * s + el * c) / panel.along
-  return Math.exp(-0.5 * (across * across + along * along)) * sky
+  const side = window1d(across, panel.across, panel.feather)
+  const axial = Math.exp(-0.5 * along * along)
+  return side * axial
 }
 
 function paintStudio(): Uint8Array {
