@@ -180,6 +180,48 @@ describe('camera', () => {
     expect(Math.abs(rect!.quad![0]!.x - 70)).toBeGreaterThan(2)
   })
 
+  it('preserve-3d 穿过 flex 时，旋转卡片里的文字跟着色块', async () => {
+    const card = `<layer width="260" height="200" rotateY="-48">
+      <rect width="260" height="200" fill="#2244aa" />
+      <p style="font-size:36px; color:#ffffff">标题</p>
+    </layer>`
+    const through = `<layer width="640" height="420" background="#101114" camera="focal 800">
+      <layer x="80" y="60" width="480" height="280" preserve-3d="true">
+        <div style="display:flex; padding:20px; width:480px; height:280px">
+          ${card}
+        </div>
+      </layer>
+    </layer>`
+    const direct = `<layer width="640" height="420" background="#101114" camera="focal 800">
+      <layer x="80" y="80" width="260" height="200" rotateY="-48">
+        <rect width="260" height="200" fill="#2244aa" />
+        <p style="font-size:36px; color:#ffffff">标题</p>
+      </layer>
+    </layer>`
+    const whiteOf = async (source: string) => {
+      const { png, report } = await renderLayer(source)
+      const img = await loadImage(png)
+      const canvas = createCanvas(img.width, img.height)
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, 0, 0)
+      const data = ctx.getImageData(0, 0, img.width, img.height).data
+      let white = 0
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i]! > 230 && data[i + 1]! > 230 && data[i + 2]! > 230) white++
+      }
+      return { white, report }
+    }
+    const passed = await whiteOf(through)
+    const alone = await whiteOf(direct)
+    expect(passed.report.issues.filter((issue) => issue.level === 'error')).toEqual([])
+    expect(passed.white).toBeGreaterThan(80)
+    expect(alone.white).toBeGreaterThan(80)
+    const quad = passed.report.elements.find((el) => el.tag === 'p')!.quad!
+    expect(Math.abs(quad[0]!.y - quad[1]!.y)).toBeGreaterThan(2)
+    const directQuad = alone.report.elements.find((el) => el.tag === 'p')!.quad!
+    expect(Math.abs(directQuad[0]!.y - directQuad[1]!.y)).toBeGreaterThan(2)
+  })
+
   it('preserve-3d 穿过带 padding 的 flex，opacity 压平并报 info', async () => {
     const source = `<layer width="400" height="320" perspective="700">
       <layer x="40" y="30" width="320" height="220" rotateY="28" preserve-3d="true">

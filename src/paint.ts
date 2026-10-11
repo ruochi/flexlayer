@@ -1452,10 +1452,17 @@ function paintDilatedInk(
 
 function leafInkBounds(node: LayoutNode): Box {
   const slop = 4
-  const b =
+  const glyph =
     node.ink.width > 0.5 && node.ink.height > 0.5
       ? { x: node.x + node.ink.x, y: node.y + node.ink.y, width: node.ink.width, height: node.ink.height }
       : { x: node.x, y: node.y, width: Math.max(1, node.width), height: Math.max(1, node.height) }
+  // 文字、图片的底板铺满外框。描边和阴影要绕着这块，不能只裁在字形上，否则会被后面的填充盖住。
+  const fillsBox =
+    (node.kind === 'text' || node.kind === 'image' || node.kind === 'custom') &&
+    ((node.background != null && node.background !== 'transparent') || (node.border != null && node.border.width > 0))
+  const b = fillsBox
+    ? unionBoxes(glyph, { x: node.x, y: node.y, width: Math.max(1, node.width), height: Math.max(1, node.height) })
+    : glyph
   return { x: b.x - slop, y: b.y - slop, width: b.width + slop * 2, height: b.height + slop * 2 }
 }
 

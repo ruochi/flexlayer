@@ -79,7 +79,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 `camera` 写在这层取景 `layer` 上，不是新标签。`perspective="1484"` 等于 `camera="focal 1484"`，`perspective="parallel"` 等于 `camera="parallel"`。同一层两个都写时报 `invalid-attr`，用 `camera`。不要和 `view` 写在同一层。镜头必须有一种：`focal`、`fov`（`focal = height/2/tan(fov/2)`）、`lens`（竖直全画幅，`fov = 2·atan(12/mm)`）或 `parallel`。`at` 是对准点，默认盒子中心、`z=0`，投影到取景窗中心。`orbit` 是 yaw、pitch，度；yaw 正数机位往右绕，pitch 正数从上往下看。`roll` 正数让画面内容绕对准点顺时针转。`distance` 是机位到对准点的像素，焦距不变；不写时等于焦距。`from` 是机位坐标，不能再写 `orbit` 或 `distance`；和 `at` 重合报 `invalid-attr`。`vanish` 只改投影主点，`z=0` 的布局不平移，深处的线朝新灭点汇聚。`parallel` 下 `distance` 和 `vanish` 报 `info` 并忽略。对象和字符串等价，`--emit` 按作者写的字段写回，不把 `from` 折成 `orbit`。默认机位的像素与只写 `perspective` 相同。机位一旦偏离默认，没有 `z` / `rotateX` / `rotateY` 的子元素也要投影。
 
-`preserve-3d` 写在 `layer` 或 flex 上时，子元素沿着父链（含 flex 的 padding 和边框）进入外层这台镜头，和直接子元素一起按深度排序。`opacity` 小于 1、`blur`、`filter`、`grade`、`<mask>`、`overflow="hidden"`，以及 `glass`、`backdrop-blur`、非 `source-over` 的 `blend`、`noise`、`overlay`，仍然把子树收成一张图，并报 `flattened-3d`（info），hint 里写是哪一个属性。自己写了 `perspective` 或 `camera` 的嵌套层是另一台镜头，不并进来。不写 `preserve-3d` 时，子孙仍先画进父平面。两段文字都有投影四边形时，`text-overlap` 看凸四边形是否相交；缺了 `quad` 时仍看 `ink` 的外接矩形。
+`preserve-3d` 写在 `layer` 或 flex 上时，子元素沿着父链（含 flex 的 padding 和边框）进入外层这台镜头，和直接子元素一起按深度排序。`opacity` 小于 1、`blur`、`filter`、`grade`、`<mask>`、`overflow="hidden"`，以及 `glass`、`backdrop-blur`、非 `source-over` 的 `blend`、`noise`、`overlay`，仍然把子树收成一张图，并报 `flattened-3d`（info），hint 里写是哪一个属性。自己写了 `perspective` 或 `camera` 的嵌套层是另一台镜头，不并进来。不写 `preserve-3d` 时，子孙仍先画进父平面。父链上没有 `rotateX`、`rotateY`、`z` 的 layer 和 flex 只把子元素送进同一台镜头：没写 `preserve-3d` 的卡片仍是一张图，色块和里面的文字一起投影。两段文字都有投影四边形时，`text-overlap` 看凸四边形是否相交；缺了 `quad` 时仍看 `ink` 的外接矩形。
 
 `z` 的前后只在带 `perspective` 的那一层生效。这一层没有 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 时，直接子元素按中心深度从远到近绘制，深度相同保持文档顺序。出现这些网格时，这一层改成一台三维场景，网格和带姿态的平面放进同一个深度缓冲：更靠近观众（`z` 更大）的面盖住更远的面，不透明的面写入深度。嵌套 `layer` 自己没有 `perspective` 时，里面的网格和平面仍算进外层这台场景。
 
@@ -476,7 +476,7 @@ npx flexlayer-select apply photo.jpg --add 2 --subtract 1
 
 文字盒子上的 `fill` 按这一层的盒子取样，行内标签自己的 `fill` 按这一段的行盒取样，这一段里的汉字和英文单词共用这一段。没写 `fill` 时字形用 `color`。
 
-`stroke` 用同一套颜料。形状和线条写颜色时居中描边，宽度是 `stroke-width`（形状默认 1，线条默认 4）。写成 `6 #000`、`6 #000 outside`、`6 #fff inside`、`8 #fff center`，或 `6 #ffffff, 14 #c8321e` 时，按到墨迹的距离描边，默认 `outside`，后一层的宽度是总距离。文字、图片、`layer` 和 flex 写颜色时沿墨迹外侧描：`style="stroke:#000"` 或 `stroke="#000"`，没写宽度时用 4，写了 `stroke-width` 用那个宽度。`layer` 和 flex 按整棵子树合并后的墨迹描一圈，flex 的背景和边框算进这圈。这一层是三维场景时，描边跟着已经画好的画面。当前变换带了旋转或错切时，这段距离改在屏幕像素里按 4 倍采样再平均，外缘仍是大约 1px 的过渡，斜边不会跟着位图一起变成台阶。网格的 `stroke` 仍是折线颜色，和填充画在同一张超采样缓冲上，再一起平均缩回。平面里全透明的像素不写深度，不会把后面的棱裁掉。描边伸到可见范围外时，多留出线宽再裁，贴边的线一直画到边上，不在窗口里面收成圆头。`inside` / `center` 的内侧宽度达到字号的约 8% 时报 `stroke-fill`。
+`stroke` 用同一套颜料。形状和线条写颜色时居中描边，宽度是 `stroke-width`（形状默认 1，线条默认 4）。写成 `6 #000`、`6 #000 outside`、`6 #fff inside`、`8 #fff center`，或 `6 #ffffff, 14 #c8321e` 时，按到墨迹的距离描边，默认 `outside`，后一层的宽度是总距离。文字、图片、`layer` 和 flex 写颜色时沿墨迹外侧描：`style="stroke:#000"` 或 `stroke="#000"`，没写宽度时用 4，写了 `stroke-width` 用那个宽度。`layer` 和 flex 按整棵子树合并后的墨迹描一圈，背景和边框算进这圈。文字盒子和图片写了 `background` 或 `border` 时，描边绕着这块底板，不绕着字形。这一层是三维场景时，描边跟着已经画好的画面。当前变换带了旋转或错切时，这段距离改在屏幕像素里按 4 倍采样再平均，外缘仍是大约 1px 的过渡，斜边不会跟着位图一起变成台阶。网格的 `stroke` 仍是折线颜色，和填充画在同一张超采样缓冲上，再一起平均缩回。平面里全透明的像素不写深度，不会把后面的棱裁掉。描边伸到可见范围外时，多留出线宽再裁，贴边的线一直画到边上，不在窗口里面收成圆头。`inside` / `center` 的内侧宽度达到字号的约 8% 时报 `stroke-fill`。
 
 ```html
 <rect x="0" y="0" width="720" height="960" fill="linear-gradient(to bottom, #0c1424, #1a3352 55%, #6e7c72)" />

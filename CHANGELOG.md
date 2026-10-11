@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.53
+
+实现提交：`f9c392d55d7509a73dfffb1e351fe0d19a9dcb81`
+
+普通文字盒同时写 `background` 和 `stroke` 时，描边绕着底板，贴出画布报 `effect-clipped`。`preserve-3d` 穿过没有姿态的 flex 时，没写 `preserve-3d` 的旋转卡片仍是一张图，里面的文字跟着色块一起投影。
+
 ## 0.2.52
 
 实现提交：`780c328b65e051a52707d806f65888ccb3678a42`
