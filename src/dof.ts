@@ -56,7 +56,8 @@ export function applyDepthOfField(input: {
   if (!(maxCoc * pixelScale >= 0.45) || coveredCount === 0) {
     return { pixels, width, height, pad: 0 }
   }
-  const pad = Math.max(1, Math.ceil(maxCoc * pixelScale))
+  // 画布高斯在大约 3σ 才接近 0。只留 1σ 时，尾巴还亮着就被切掉，边缘有一圈边界。
+  const pad = Math.max(1, Math.ceil(maxCoc * pixelScale * 3))
   const dw = width + pad * 2
   const dh = height + pad * 2
   const base = padImage(pixels, width, height, pad)
@@ -78,7 +79,8 @@ export function applyDepthOfField(input: {
       const radiusPx = (coc[sy * width + sx] ?? 0) * pixelScale
       const dx = x - (sx + pad)
       const dy = y - (sy + pad)
-      if (dx * dx + dy * dy > radiusPx * radiusPx + 1e-6) continue
+      const reach = radiusPx * 3
+      if (dx * dx + dy * dy > reach * reach + 1e-6) continue
       writeSample(out, levels, sigmas, dw, x, y, radiusPx)
     }
   }
@@ -111,13 +113,11 @@ function padImage(pixels: Uint8ClampedArray, width: number, height: number, pad:
 }
 
 function blurLevels(maxSigma: number): number[] {
+  // 16 和 32 两档混在一起会留下内圈轮廓。相邻档差两像素，混出来的边是连续的。
+  const step = maxSigma <= 16 ? 1 : 2
   const sigmas = [0]
-  let sigma = 1
-  while (sigma < maxSigma) {
-    sigmas.push(sigma)
-    sigma *= 2
-  }
-  if ((sigmas[sigmas.length - 1] ?? 0) < maxSigma - 0.1) sigmas.push(maxSigma)
+  for (let sigma = step; sigma < maxSigma - 0.25; sigma += step) sigmas.push(sigma)
+  sigmas.push(maxSigma)
   return sigmas
 }
 

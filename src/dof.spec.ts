@@ -73,6 +73,36 @@ describe('景深', () => {
     expect(near?.defocus).toBeCloseTo(12, 0)
   })
 
+  it('糊边收到背景里，不在半径处截出一圈', async () => {
+    const image = await pixels(
+      (
+        await renderLayer(
+          `<layer width="220" height="140" background="#000" camera="focal 260, aperture 20"><rect x="70" y="40" width="70" height="50" fill="#fff" z="90" /></layer>`,
+        )
+      ).png,
+    )
+    const y = Math.round(image.height / 2)
+    let peak = 0
+    let peakX = 0
+    for (let x = 0; x < image.width; x++) {
+      const red = at(image.data, image.width, x, y)[0] ?? 0
+      if (red > peak) {
+        peak = red
+        peakX = x
+      }
+    }
+    expect(peak).toBeGreaterThan(180)
+    let previous = peak
+    let sawTail = false
+    for (let x = peakX; x < image.width; x++) {
+      const red = at(image.data, image.width, x, y)[0] ?? 0
+      if (red > 12 && red < 70) sawTail = true
+      expect(previous - red).toBeLessThan(18)
+      previous = red
+    }
+    expect(sawTail).toBe(true)
+  })
+
   it('灰色卡片的糊边不会被抬成白色', async () => {
     const image = await pixels(
       (
