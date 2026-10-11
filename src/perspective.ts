@@ -1,5 +1,5 @@
 import { createCanvas, type Canvas, type CanvasRenderingContext2D } from '@napi-rs/canvas'
-import { originOffset } from './matrix.js'
+import { applyToBox, invert, originOffset } from './matrix.js'
 import type { Issue, LayerLayoutNode, LayoutNode } from './types.js'
 
 export type Vec3 = { x: number; y: number; z: number }
@@ -216,7 +216,11 @@ function expandTriangle(points: [Vec2, Vec2, Vec2], amount: number): [Vec2, Vec2
   }) as [Vec2, Vec2, Vec2]
 }
 
-type DrawCtx = CanvasRenderingContext2D & { drawImage(...args: unknown[]): void }
+type DrawCtx = CanvasRenderingContext2D & {
+  canvas: Canvas
+  drawImage(...args: unknown[]): void
+  getTransform(): { a: number; b: number; c: number; d: number; e: number; f: number }
+}
 
 const MAX_RASTER_SIDE = 8192
 
@@ -489,6 +493,59 @@ function closeInteriorCracks(canvas: Canvas) {
   ctx.putImageData(image, 0, 0)
 }
 
+/** 当前变换下，画布在用户坐标里的外接矩形。 */
+function userBounds(ctx: DrawCtx): { x: number; y: number; width: number; height: number } | null {
+  const canvas = ctx.canvas
+  if (!canvas || canvas.width <= 0 || canvas.height <= 0) return null
+  const tr = ctx.getTransform()
+  const inv = invert({ a: tr.a, b: tr.b, c: tr.c, d: tr.d, e: tr.e, f: tr.f })
+  if (!inv) return null
+  return applyToBox(inv, { x: 0, y: 0, width: canvas.width, height: canvas.height })
+}
+
+/** 投影外框和画布相交。画布外面的像素不会被看到，不必分配。 */
+function clipRasterBounds(
+  ctx: DrawCtx,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): { x0: number; y0: number; x1: number; y1: number } | null {
+  const pad = 2
+  let x0 = Math.floor(minX - pad)
+  let y0 = Math.floor(minY - pad)
+  let x1 = Math.ceil(maxX + pad)
+  let y1 = Math.ceil(maxY + pad)
+  const view = userBounds(ctx)
+  if (view) {
+    const slack = 4
+    x0 = Math.max(x0, Math.floor(view.x) - slack)
+    y0 = Math.max(y0, Math.floor(view.y) - slack)
+    x1 = Math.min(x1, Math.ceil(view.x + view.width) + slack)
+    y1 = Math.min(y1, Math.ceil(view.y + view.height) + slack)
+  }
+  if (x1 - x0 < 1 || y1 - y0 < 1) return null
+  return { x0, y0, x1, y1 }
+}
+
+function rasterScale(base: number, lw: number, lh: number): { samples: number; raster: number; pw: number; ph: number } {
+  let samples = PERSPECTIVE_AA
+  while (samples > 1 && (lw * base * samples > MAX_RASTER_SIDE || lh * base * samples > MAX_RASTER_SIDE)) samples /= 2
+  const raster = base * samples
+  return {
+    samples,
+    raster,
+    pw: Math.max(1, Math.round(lw * raster)),
+    ph: Math.max(1, Math.round(lh * raster)),
+  }
+}
+
+function blitRaster(ctx: DrawCtx, off: Canvas, samples: number, base: number, x0: number, y0: number, lw: number, lh: number) {
+  const resolved = samples > 1 ? resolveSamples(off, Math.max(1, Math.round(lw * base)), Math.max(1, Math.round(lh * base))) : off
+  ctx.imageSmoothingEnabled = true
+  ctx.drawImage(resolved, x0, y0, lw, lh)
+}
+
 /** 把位图贴到投影后的平面上。平面是一次投影，每个像素只采样一次，柔和的阴影和发光不会出现网格。 */
 export function drawTexturedPlane(
   ctx: DrawCtx,
@@ -516,19 +573,13 @@ export function drawTexturedPlane(
     }
   }
   if (!Number.isFinite(minX)) return
-  const base = deviceScale(ctx)
-  const pad = 2
-  const x0 = Math.floor(minX - pad)
-  const y0 = Math.floor(minY - pad)
-  const x1 = Math.ceil(maxX + pad)
-  const y1 = Math.ceil(maxY + pad)
+  const bounds = clipRasterBounds(ctx, minX, minY, maxX, maxY)
+  if (!bounds) return
+  const { x0, y0, x1, y1 } = bounds
   const lw = Math.max(1, x1 - x0)
   const lh = Math.max(1, y1 - y0)
-  let samples = PERSPECTIVE_AA
-  while (samples > 1 && (lw * base * samples > MAX_RASTER_SIDE || lh * base * samples > MAX_RASTER_SIDE)) samples /= 2
-  const raster = base * samples
-  const pw = Math.max(1, Math.round(lw * raster))
-  const ph = Math.max(1, Math.round(lh * raster))
+  const base = deviceScale(ctx)
+  const { samples, raster, pw, ph } = rasterScale(base, lw, lh)
   const off = createCanvas(pw, ph)
   const octx = off.getContext('2d') as DrawCtx
   if (!paintHomography(off, bitmap, logicalWidth, logicalHeight, at, x0, y0, raster)) {
@@ -536,9 +587,91 @@ export function drawTexturedPlane(
     paintGrid(octx, bitmap, logicalWidth, logicalHeight, n, pts, 0)
     closeInteriorCracks(off)
   }
-  const resolved = samples > 1 ? resolveSamples(off, Math.max(1, Math.round(lw * base)), Math.max(1, Math.round(lh * base))) : off
-  ctx.imageSmoothingEnabled = true
-  ctx.drawImage(resolved, x0, y0, lw, lh)
+  blitRaster(ctx, off, samples, base, x0, y0, lw, lh)
+}
+
+export type ScreenPoint = { u: number; v: number; x: number; y: number }
+
+/** 已经裁进画布的多边形。u、v 是位图局部坐标，和 logicalWidth 同一套。 */
+export function drawTexturedPolygon(
+  ctx: DrawCtx,
+  bitmap: Canvas,
+  logicalWidth: number,
+  logicalHeight: number,
+  polygon: ScreenPoint[],
+) {
+  if (polygon.length < 3 || logicalWidth <= 0 || logicalHeight <= 0) return
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const point of polygon) {
+    minX = Math.min(minX, point.x)
+    minY = Math.min(minY, point.y)
+    maxX = Math.max(maxX, point.x)
+    maxY = Math.max(maxY, point.y)
+  }
+  const bounds = clipRasterBounds(ctx, minX, minY, maxX, maxY)
+  if (!bounds) return
+  const { x0, y0, x1, y1 } = bounds
+  const lw = Math.max(1, x1 - x0)
+  const lh = Math.max(1, y1 - y0)
+  const base = deviceScale(ctx)
+  const { samples, raster, pw, ph } = rasterScale(base, lw, lh)
+  const off = createCanvas(pw, ph)
+  const octx = off.getContext('2d') as DrawCtx
+  octx.setTransform(raster, 0, 0, raster, -x0 * raster, -y0 * raster)
+  for (let i = 1; i < polygon.length - 1; i++) {
+    const a = polygon[0]!
+    const b = polygon[i]!
+    const c = polygon[i + 1]!
+    drawTriangle(
+      octx,
+      bitmap,
+      logicalWidth,
+      logicalHeight,
+      { x: a.u, y: a.v },
+      { x: b.u, y: b.v },
+      { x: c.u, y: c.v },
+      { x: a.x, y: a.y },
+      { x: b.x, y: b.y },
+      { x: c.x, y: c.y },
+    )
+  }
+  closeInteriorCracks(off)
+  blitRaster(ctx, off, samples, base, x0, y0, lw, lh)
+}
+
+/** 纯色多边形。不需要按平面尺寸准备位图。 */
+export function drawSolidPolygon(ctx: DrawCtx, color: string, polygon: Array<{ x: number; y: number }>) {
+  if (polygon.length < 3) return
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const point of polygon) {
+    minX = Math.min(minX, point.x)
+    minY = Math.min(minY, point.y)
+    maxX = Math.max(maxX, point.x)
+    maxY = Math.max(maxY, point.y)
+  }
+  const bounds = clipRasterBounds(ctx, minX, minY, maxX, maxY)
+  if (!bounds) return
+  const { x0, y0, x1, y1 } = bounds
+  const lw = Math.max(1, x1 - x0)
+  const lh = Math.max(1, y1 - y0)
+  const base = deviceScale(ctx)
+  const { samples, raster, pw, ph } = rasterScale(base, lw, lh)
+  const off = createCanvas(pw, ph)
+  const octx = off.getContext('2d') as DrawCtx
+  octx.setTransform(raster, 0, 0, raster, -x0 * raster, -y0 * raster)
+  octx.fillStyle = color
+  octx.beginPath()
+  octx.moveTo(polygon[0]!.x, polygon[0]!.y)
+  for (const point of polygon.slice(1)) octx.lineTo(point.x, point.y)
+  octx.closePath()
+  octx.fill()
+  blitRaster(ctx, off, samples, base, x0, y0, lw, lh)
 }
 
 /**

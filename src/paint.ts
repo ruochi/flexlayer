@@ -31,7 +31,8 @@ import { invalidDrawIssue } from './draw-tag.js'
 import { openSvgPath } from './path.js'
 import { cameraItems, projectOnLayer } from './camera.js'
 import { ownsMeshScene, renderMeshLayer, type MeshFrame } from './mesh.js'
-import { behindCamera, cameraSceneCustom, drawTexturedPlane, has3dPose, hasPerspective, PERSPECTIVE_AA, planeDepth, posePoint, project, resolveSamples, type Perspective } from './perspective.js'
+import { applyPoseMatrix, behindCamera, cameraSceneCustom, drawSolidPolygon, drawTexturedPlane, drawTexturedPolygon, has3dPose, hasPerspective, PERSPECTIVE_AA, planeDepth, posePoint, project, resolveSamples, type Perspective, type ScreenPoint } from './perspective.js'
+import { flatFill, planeBitmapPad, visiblePlaneWindow, type PlaneCorner } from './plane-crop.js'
 import { compositeMask } from './mask-compose.js'
 import { outerInkStrokeReach } from './style.js'
 import { layoutScale, viewMatrix } from './view.js'
@@ -1888,28 +1889,21 @@ function paintGlass(ctx: PaintCtx, node: LayoutNode, glass: GlassSpec, drawShado
   ctx.restore()
 }
 
-function outwardPad(node: LayoutNode): number {
-  const shadow = node.shadow
-    ? node.shadow.blur * 2 + node.shadow.spread + Math.max(Math.abs(node.shadow.x), Math.abs(node.shadow.y))
-    : 0
-  let glass = 0
-  if (!node.shadow && node.glass) {
-    const depth = node.glass.variant === 'thick' ? 18 : node.glass.variant === 'clear' ? 12 : 14
-    glass = depth * 2 + Math.abs(depth * 0.35)
-  }
-  const glow = node.glow ? node.glow.blur * 2 + node.glow.spread : 0
-  const blur = node.blur != null ? node.blur * 2 : 0
-  return Math.max(shadow, glass, glow, blur)
+type BitmapCrop = { u: number; v: number; width: number; height: number; scaleX: number; scaleY: number }
+
+type PlaneBitmap = {
+  canvas: Canvas
+  pad: number
+  logicalWidth: number
+  logicalHeight: number
+  localX: number
+  localY: number
+  /** 内容坐标。有的话，网格只画这块可见多边形，不再用整张位图的四个角。 */
+  polygon?: Array<{ u: number; v: number }>
 }
 
-/** 平面位图要比盒子大一圈，否则发光和阴影会被裁在平面自己的框里。 */
-function planeBitmapPad(node: LayoutNode): number {
-  let pad = outwardPad(node)
-  if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
-    for (const child of node.children) pad = Math.max(pad, planeBitmapPad(child))
-  }
-  return pad > 0 ? Math.ceil(pad + 2) : 0
-}
+const PLANE_BITMAP_SIDE = 2048
+const PLANE_BITMAP_CAP = 4096
 
 function paintChildBitmap(
   child: LayoutNode,
@@ -1917,28 +1911,165 @@ function paintChildBitmap(
   t: number,
   state: PaintState,
   samples = 1,
-): { canvas: Canvas; pad: number; logicalWidth: number; logicalHeight: number; localX: number; localY: number } {
+  crop?: BitmapCrop,
+): PlaneBitmap {
   const pad = planeBitmapPad(child)
   const frame = child.kind === 'layer' ? state.meshFrames?.get(child) : undefined
   const extraL = frame ? Math.max(0, Math.ceil(-frame.x)) : 0
   const extraT = frame ? Math.max(0, Math.ceil(-frame.y)) : 0
   const extraR = frame ? Math.max(0, Math.ceil(frame.x + frame.width - child.width)) : 0
   const extraB = frame ? Math.max(0, Math.ceil(frame.y + frame.height - child.height)) : 0
-  const localX = -(pad + extraL)
-  const localY = -(pad + extraT)
-  const logicalWidth = child.width + pad * 2 + extraL + extraR
-  const logicalHeight = child.height + pad * 2 + extraT + extraB
-  const w = Math.max(1, Math.ceil(logicalWidth * k))
-  const h = Math.max(1, Math.ceil(logicalHeight * k))
-  const canvas = createCanvas(w, h)
+  const originX = -(pad + extraL)
+  const originY = -(pad + extraT)
+  const fullW = child.width + pad * 2 + extraL + extraR
+  const fullH = child.height + pad * 2 + extraT + extraB
+  let u0 = 0
+  let v0 = 0
+  let logicalWidth = fullW
+  let logicalHeight = fullH
+  let sx = k
+  let sy = k
+  let sample = samples
+  if (crop) {
+    u0 = Math.max(0, Math.min(fullW, crop.u))
+    v0 = Math.max(0, Math.min(fullH, crop.v))
+    logicalWidth = Math.max(1, Math.min(fullW - u0, crop.width))
+    logicalHeight = Math.max(1, Math.min(fullH - v0, crop.height))
+    sx = Math.max(crop.scaleX, 1e-3)
+    sy = Math.max(crop.scaleY, 1e-3)
+    sample = samples * (Math.max(sx, sy) / Math.max(k, 1e-3))
+  }
+  let bw = Math.max(1, Math.ceil(logicalWidth * sx))
+  let bh = Math.max(1, Math.ceil(logicalHeight * sy))
+  if (bw > PLANE_BITMAP_CAP || bh > PLANE_BITMAP_CAP) {
+    const fit = PLANE_BITMAP_CAP / Math.max(bw, bh)
+    sx *= fit
+    sy *= fit
+    bw = Math.max(1, Math.ceil(logicalWidth * sx))
+    bh = Math.max(1, Math.ceil(logicalHeight * sy))
+  }
+  const canvas = createCanvas(bw, bh)
   const octx = canvas.getContext('2d') as PaintCtx
   // 位图是平面局部像素。rotate / scale 交给 posePoint，避免和投影各转一次。
-  octx.setTransform(k, 0, 0, k, (-child.x - localX) * k, (-child.y - localY) * k)
+  octx.setTransform(sx, 0, 0, sy, (-child.x - originX - u0) * sx, (-child.y - originY - v0) * sy)
   const previous = state.supersample
-  state.supersample = samples
+  state.supersample = sample
   paintNode(octx, child, false, t, state, true)
   state.supersample = previous
-  return { canvas, pad, logicalWidth, logicalHeight, localX, localY }
+  return { canvas, pad, logicalWidth, logicalHeight, localX: originX + u0, localY: originY + v0 }
+}
+
+function emptyPlaneBitmap(): PlaneBitmap {
+  return { canvas: createCanvas(1, 1), pad: 0, logicalWidth: 0, logicalHeight: 0, localX: 0, localY: 0 }
+}
+
+type PlanePaint =
+  | { kind: 'skip' }
+  | { kind: 'full'; bitmap: PlaneBitmap }
+  | { kind: 'solid'; color: string; screen: Array<{ x: number; y: number }>; bitmap: PlaneBitmap }
+  | { kind: 'crop'; bitmap: PlaneBitmap; screen: ScreenPoint[] }
+
+/** 整张位图会比画布大很多时，只画落进取景窗的那一块。完全落在画面里的小平面仍走原来的位图。 */
+function choosePlane(
+  child: LayoutNode,
+  worldAt: (contentU: number, contentV: number) => { x: number; y: number; z: number },
+  perspective: Perspective,
+  vx: number,
+  vy: number,
+  view: { x: number; y: number; width: number; height: number } | null,
+  deviceScale: number,
+  textureScale: number,
+  t: number,
+  state: PaintState,
+): PlanePaint {
+  const probe = paintMetrics(child, state)
+  const corners: PlaneCorner[] = [
+    [0, 0],
+    [probe.fullW, 0],
+    [probe.fullW, probe.fullH],
+    [0, probe.fullH],
+  ].map(([u, v]) => {
+    const point = worldAt(probe.originX + u!, probe.originY + v!)
+    return { u: u!, v: v!, x: point.x, y: point.y, z: point.z }
+  })
+  const maxScale = Math.max(deviceScale, 1e-3) * textureScale
+  const fullSide = Math.max(probe.fullW, probe.fullH) * maxScale
+  const seen = view ? visiblePlaneWindow(corners, perspective, vx, vy, view, 4) : null
+  const scaleOf = (density: number) => Math.min(maxScale, Math.max(density, 0) * maxScale)
+  const cropSide = seen ? Math.max(seen.width * scaleOf(seen.densityU), seen.height * scaleOf(seen.densityV)) : fullSide
+  const useCrop = seen != null && fullSide > PLANE_BITMAP_SIDE && cropSide < fullSide * 0.85
+  if (view && !seen) return { kind: 'skip' }
+  if (!useCrop || !seen) {
+    return { kind: 'full', bitmap: paintChildBitmap(child, maxScale, t, state, textureScale) }
+  }
+  const contentPolygon = seen.polygon.map((point) => ({
+    u: probe.originX + point.u,
+    v: probe.originY + point.v,
+  }))
+  const fill = flatFill(child)
+  if (fill) {
+    const canvas = createCanvas(1, 1)
+    const solid = canvas.getContext('2d')
+    solid.fillStyle = fill
+    solid.fillRect(0, 0, 1, 1)
+    return {
+      kind: 'solid',
+      color: fill,
+      screen: seen.polygon,
+      bitmap: {
+        canvas,
+        pad: 0,
+        logicalWidth: seen.width,
+        logicalHeight: seen.height,
+        localX: probe.originX + seen.u,
+        localY: probe.originY + seen.v,
+        polygon: contentPolygon,
+      },
+    }
+  }
+  const bitmap = paintChildBitmap(child, maxScale, t, state, textureScale, {
+    u: seen.u,
+    v: seen.v,
+    width: seen.width,
+    height: seen.height,
+    scaleX: scaleOf(seen.densityU),
+    scaleY: scaleOf(seen.densityV),
+  })
+  bitmap.polygon = contentPolygon
+  return {
+    kind: 'crop',
+    bitmap,
+    screen: seen.polygon.map((point) => ({
+      u: point.u - seen.u,
+      v: point.v - seen.v,
+      x: point.x,
+      y: point.y,
+    })),
+  }
+}
+
+function userView(ctx: PaintCtx): { x: number; y: number; width: number; height: number } | null {
+  const canvas = ctx.canvas
+  if (!canvas || canvas.width <= 0 || canvas.height <= 0) return null
+  const tr = ctx.getTransform()
+  const inv = invert(tr)
+  if (!inv) return null
+  return applyToBox(inv, { x: 0, y: 0, width: canvas.width, height: canvas.height })
+}
+
+function paintMetrics(child: LayoutNode, state: PaintState) {
+  const pad = planeBitmapPad(child)
+  const frame = child.kind === 'layer' ? state.meshFrames?.get(child) : undefined
+  const extraL = frame ? Math.max(0, Math.ceil(-frame.x)) : 0
+  const extraT = frame ? Math.max(0, Math.ceil(-frame.y)) : 0
+  const extraR = frame ? Math.max(0, Math.ceil(frame.x + frame.width - child.width)) : 0
+  const extraB = frame ? Math.max(0, Math.ceil(frame.y + frame.height - child.height)) : 0
+  return {
+    originX: -(pad + extraL),
+    originY: -(pad + extraT),
+    fullW: child.width + pad * 2 + extraL + extraR,
+    fullH: child.height + pad * 2 + extraT + extraB,
+  }
 }
 
 function paintPerspectiveChildren(ctx: PaintCtx, node: LayerLayoutNode, debug: boolean, t: number, state: PaintState) {
@@ -1956,12 +2087,27 @@ function paintPerspectiveChildren(ctx: PaintCtx, node: LayerLayoutNode, debug: b
       paintNode(ctx, child, debug, t, state)
       continue
     }
-    const { canvas: bitmap, localX, localY, logicalWidth, logicalHeight } = paintChildBitmap(child, k * PERSPECTIVE_AA, t, state, PERSPECTIVE_AA)
-    const at = (u: number, v: number) => {
-      const p = posePoint(child, u + localX, v + localY)
-      return project(vx, vy, perspective, p)
+    const chosen = choosePlane(
+      child,
+      (u, v) => posePoint(child, u, v),
+      perspective,
+      vx,
+      vy,
+      userView(ctx),
+      k,
+      PERSPECTIVE_AA,
+      t,
+      state,
+    )
+    if (chosen.kind === 'full') {
+      const { canvas: bitmap, localX, localY, logicalWidth, logicalHeight } = chosen.bitmap
+      const at = (u: number, v: number) => project(vx, vy, perspective, posePoint(child, u + localX, v + localY))
+      drawTexturedPlane(ctx, bitmap, logicalWidth, logicalHeight, at)
+    } else if (chosen.kind === 'solid') {
+      drawSolidPolygon(ctx, chosen.color, chosen.screen)
+    } else if (chosen.kind === 'crop') {
+      drawTexturedPolygon(ctx, chosen.bitmap.canvas, chosen.bitmap.logicalWidth, chosen.bitmap.logicalHeight, chosen.screen)
     }
-    drawTexturedPlane(ctx, bitmap, logicalWidth, logicalHeight, at)
     if (debug) strokeProjectedQuad(ctx, child, vx, vy, perspective)
   }
 }
@@ -1980,9 +2126,29 @@ function paintProjectedChildren(ctx: PaintCtx, node: LayerLayoutNode, debug: boo
       paintNode(ctx, child, debug, t, state)
       continue
     }
-    const { canvas: bitmap, localX, localY, logicalWidth, logicalHeight } = paintChildBitmap(child, k * PERSPECTIVE_AA, t, state, PERSPECTIVE_AA)
-    const at = (u: number, v: number) => projectOnLayer(node, item.toLayer, u + localX, v + localY)
-    drawTexturedPlane(ctx, bitmap, logicalWidth, logicalHeight, at)
+    const vx = node.width / 2 + (node.vanishX ?? 0)
+    const vy = node.height / 2 + (node.vanishY ?? 0)
+    const chosen = choosePlane(
+      child,
+      (u, v) => applyPoseMatrix(item.toLayer, u, v, 0),
+      perspective,
+      vx,
+      vy,
+      userView(ctx),
+      k,
+      PERSPECTIVE_AA,
+      t,
+      state,
+    )
+    if (chosen.kind === 'full') {
+      const { canvas: bitmap, localX, localY, logicalWidth, logicalHeight } = chosen.bitmap
+      const at = (u: number, v: number) => projectOnLayer(node, item.toLayer, u + localX, v + localY)
+      drawTexturedPlane(ctx, bitmap, logicalWidth, logicalHeight, at)
+    } else if (chosen.kind === 'solid') {
+      drawSolidPolygon(ctx, chosen.color, chosen.screen)
+    } else if (chosen.kind === 'crop') {
+      drawTexturedPolygon(ctx, chosen.bitmap.canvas, chosen.bitmap.logicalWidth, chosen.bitmap.logicalHeight, chosen.screen)
+    }
     if (debug) {
       const pts = [
         [0, 0],
@@ -2403,12 +2569,29 @@ async function prepareMeshFrames(
     }
     if (node.kind !== 'layer' || !hasPerspective(node.perspective)) return
     if (!ownsMeshScene(node) && node.dof == null) return
+    const clip = meshVisibleRect(docWidth, docHeight, root, node)
     const frame = renderMeshLayer(
       node,
       k,
-      (peeled) => paintChildBitmap(peeled, Math.max(k, 1e-3) * 2, t, state, 2),
+      (peeled, toLayer) => {
+        if (!toLayer || !hasPerspective(node.perspective)) return paintChildBitmap(peeled, Math.max(k, 1e-3) * 2, t, state, 2)
+        const chosen = choosePlane(
+          peeled,
+          (u, v) => applyPoseMatrix(toLayer, u, v, 0),
+          node.perspective,
+          node.width / 2 + (node.vanishX ?? 0),
+          node.height / 2 + (node.vanishY ?? 0),
+          clip,
+          Math.max(k, 1e-3),
+          2,
+          t,
+          state,
+        )
+        if (chosen.kind === 'skip') return emptyPlaneBitmap()
+        return chosen.bitmap
+      },
       {
-        clip: meshVisibleRect(docWidth, docHeight, root, node),
+        clip,
         samples: mesh.samples,
         cacheBytes: mesh.cacheBytes,
       },

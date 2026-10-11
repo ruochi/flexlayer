@@ -93,6 +93,8 @@ export type MeshRaster = {
   /** 位图 (0, 0) 在平面局部的位置。效果留白是负的。 */
   localX: number
   localY: number
+  /** 内容坐标里的可见多边形。缺省时用位图四角。 */
+  polygon?: Array<{ u: number; v: number }>
 }
 
 /** 画进父层的网格画面。x、y 可以是负的，这样物体能溢出所在 layer。 */
@@ -172,7 +174,7 @@ export function meshLayerCacheKey(layer: LayerLayoutNode, scale: number, samples
 export function renderMeshLayer(
   layer: LayerLayoutNode,
   scale: number,
-  raster: (node: LayoutNode) => MeshRaster,
+  raster: (node: LayoutNode, toLayer?: number[]) => MeshRaster,
   options?: MeshLayerOptions,
 ): MeshFrame | null {
   const scene = gather(layer)
