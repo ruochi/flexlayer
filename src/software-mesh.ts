@@ -20,7 +20,7 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
  * 正对镜头的面是 fill，侧面按内置主光和补光变暗。
  * 主光沿固定方向打一张正交深度图：不透明三角形互相挡住这盏光时，主光不计。
  * glb 用文件里的底色乘这套明暗。
- * 写了 stroke 时，缩小抗锯齿之后再按屏幕像素描折棱和轮廓。
+ * 写了 stroke 时，在超采样缓冲上按屏幕像素描折棱和轮廓，再和填充一起平均缩回。
  * 两只都写了 stroke 的网格相互穿过时，交界线算折棱，颜色和宽度跟后写的那只。
  * hidden 只画被这只网格自己挡住的棱，虚线是 6 实 4 空。交界线被这两只中任意一只挡住时同样算隐藏线。
  * 不写 material 时是磨砂：主光乘 fill。plastic 加高光，metal 和 glass 映一张竖向的工作室环境，glass 后画叠色。
@@ -2213,9 +2213,27 @@ function rasterize(
   for (const index of glass) paintBatch(index)
   const outW = Math.max(1, Math.round(viewW * base))
   const outH = Math.max(1, Math.round(viewH * base))
+  const frameOf = (canvas: Canvas): MeshFrame => ({
+    canvas,
+    x: originX,
+    y: originY,
+    width: canvas.width / base,
+    height: canvas.height / base,
+  })
+  // 折线画在缩小之后只有屏幕分辨率的抗锯齿，斜边会呈台阶。超采样时先描再平均。
+  if (samples > 1 && pw > outW && ph > outH && batches.some((batch) => batch.lines)) {
+    const hi = createCanvas(pw, ph)
+    const hctx = hi.getContext('2d')
+    const image = hctx.createImageData(pw, ph)
+    image.data.set(color.subarray(0, pw * ph * 4))
+    hctx.putImageData(image, 0, 0)
+    paintMeshLines(hi, batches, authored, depth, owners, pw, ph, layer, perspective, originX, originY, viewW, viewH)
+    const stroked = hctx.getImageData(0, 0, pw, ph).data
+    return frameOf(resolveColor(stroked, pw, ph, outW, outH))
+  }
   const out = pw >= outW && ph >= outH ? resolveColor(color, pw, ph, outW, outH) : resolveColor(color, pw, ph, pw, ph)
   paintMeshLines(out, batches, authored, depth, owners, pw, ph, layer, perspective, originX, originY, out.width / base, out.height / base)
-  return { canvas: out, x: originX, y: originY, width: out.width / base, height: out.height / base }
+  return frameOf(out)
 }
 
 function rgbaCss(r: number, g: number, b: number, a: number) {
