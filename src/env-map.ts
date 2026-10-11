@@ -1,7 +1,9 @@
 /**
  * 金属、塑料和玻璃共用的一张固定工作室环境。
  * 灯是竖向柔光板，方位和仰角都躲开 0°、90°、180°、270°，板子自己也从竖直偏开一点。
- * 白、黑和中间的灰过渡都有，接近商业静物的布灯。粗糙度只决定取哪一层模糊，一次双线性采样。
+ * 板子是直边的长条，两头用平口切断，不收成圆头，也不伸到天顶。
+ * 圆头或伸到极点的端头会在球面上收成一个亮点。暗面另有一条窄的边缘光，反射贴着轮廓。
+ * 白、黑和中间的灰过渡都有。粗糙度只决定取哪一层模糊，一次双线性采样。
  */
 
 const WIDTH = 128
@@ -16,9 +18,12 @@ type Panel = {
   az: number
   /** 仰角，度。正数朝上。 */
   el: number
-  /** 窄边、长边的半宽，度。长边沿灯板方向。 */
+  /** 窄边半宽，度。 */
   across: number
+  /** 等亮段的半长，度。再往外是平口。 */
   along: number
+  /** 平口切掉的长度，度。这段里亮度落到 0。 */
+  end: number
   /** 相对竖直偏转的角度。0 是正竖直。 */
   lean: number
   feather: number
@@ -28,16 +33,18 @@ type Panel = {
 }
 
 /**
- * 主灯在左前方，右侧一块辅灯，中间留黑，边上用灰把黑和白接上。
- * 角度都不落在 90° 的整数倍上。
+ * 主灯在左前方，右侧一块更窄的辅灯，中间留黑，边上用灰把黑和白接上。
+ * 左右轮廓各一条窄的边缘光，方位靠后，反射落在剪影上。
+ * 角度都不落在 90° 的整数倍上。平口落在中等仰角，不到天顶。
  */
 const PANELS: Panel[] = [
-  { az: -38, el: 16, across: 16, along: 72, lean: 13, feather: 11, r: 252, g: 252, b: 255 },
-  { az: -16, el: 10, across: 7, along: 60, lean: -9, feather: 14, r: 156, g: 158, b: 164 },
-  { az: 64, el: 12, across: 10, along: 66, lean: -15, feather: 13, r: 240, g: 242, b: 246 },
-  { az: 158, el: 6, across: 12, along: 56, lean: -11, feather: 18, r: 228, g: 230, b: 234 },
-  { az: 86, el: -6, across: 8, along: 48, lean: 11, feather: 16, r: 108, g: 110, b: 116 },
-  { az: -72, el: 8, across: 12, along: 54, lean: 10, feather: 18, r: 78, g: 80, b: 86 },
+  { az: -36, el: 2, across: 12, along: 14, end: 4, lean: 10, feather: 6, r: 252, g: 252, b: 255 },
+  { az: -14, el: 0, across: 5, along: 12, end: 4, lean: -8, feather: 7, r: 150, g: 152, b: 158 },
+  { az: 58, el: 2, across: 8, along: 12, end: 4, lean: -12, feather: 6, r: 232, g: 234, b: 238 },
+  { az: 168, el: 0, across: 4.5, along: 22, end: 4, lean: -5, feather: 3.5, r: 250, g: 251, b: 253 },
+  { az: -164, el: 0, across: 4, along: 20, end: 4, lean: 6, feather: 3.5, r: 214, g: 216, b: 220 },
+  { az: 84, el: -12, across: 5, along: 12, end: 4, lean: 10, feather: 6, r: 100, g: 102, b: 108 },
+  { az: -78, el: -2, across: 6, along: 12, end: 4, lean: 8, feather: 7, r: 70, g: 72, b: 78 },
 ]
 
 const SAMPLE = { r: 0, g: 0, b: 0 }
@@ -63,16 +70,24 @@ function wrapSigned(d: number) {
   return x
 }
 
-/** 灯板在经纬上的权重。窄边沿方位，偏 lean 度之后不再是正竖直。 */
+/**
+ * 灯板在经纬上的权重。窄边沿方位，偏 lean 度之后不再是正竖直。
+ * 长边可以偏一点。平口按仰角切，左右两角在同一高度断开，不留斜出去的尖角。
+ * 羽化若乘在一起，端头会收成圆头，映在球面上就是一个亮点。天顶再乘一刀。
+ */
 function panelWeight(u: number, v: number, panel: Panel) {
+  const elev = (0.5 - v) * 180
+  const sky = window1d(Math.abs(elev), 50, 8)
+  if (sky <= 0) return 0
   const az = wrapSigned(u - panel.az / 360) * 360
-  const el = (0.5 - v) * 180 - panel.el
+  const el = elev - panel.el
   const lean = (panel.lean * Math.PI) / 180
   const c = Math.cos(lean)
   const s = Math.sin(lean)
   const across = Math.abs(az * c + el * s)
-  const along = Math.abs(-az * s + el * c)
-  return window1d(across, panel.across, panel.feather) * window1d(along, panel.along, panel.feather)
+  const side = window1d(across, panel.across, panel.feather)
+  const axial = window1d(Math.abs(el), panel.along, panel.end)
+  return Math.min(side, axial) * sky
 }
 
 function paintStudio(): Uint8Array {
