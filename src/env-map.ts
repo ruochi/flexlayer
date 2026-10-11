@@ -1,9 +1,8 @@
 /**
  * 金属、塑料和玻璃共用的一张固定工作室环境。
- * 灯是竖向柔光板：窄边是直的，边上有一圈羽化，长边中间更亮、两头自己淡掉。
- * 轮廓上另有一条窄长的边光板。方位和仰角躲开 0°、90°、180°、270°，板子也从竖直偏开一点。
- * 不按仰角把天顶切掉，否则球的上下会各剩一块黑圆。白、黑和灰过渡都有。
- * 粗糙度只决定取哪一层模糊，一次双线性采样。
+ * 灯是竖向的圆角矩形。几块板的顶部停在不同高度，互不相接，也不收到天顶。
+ * 轮廓上另有一条窄的圆角边缘光板。方位和仰角躲开 0°、90°、180°、270°，板子也从竖直偏开一点。
+ * 白、黑和灰过渡都有。粗糙度只决定取哪一层模糊，一次双线性采样。
  */
 
 const WIDTH = 128
@@ -18,12 +17,13 @@ type Panel = {
   az: number
   /** 仰角，度。正数朝上。 */
   el: number
-  /** 窄边半宽，度。这块里是满的。 */
+  /** 半宽、半高，度。不含圆角外的羽化。 */
   across: number
-  /** 窄边外侧的羽化，度。 */
-  feather: number
-  /** 长边的衰减半径，度。中间亮，两头淡。 */
   along: number
+  /** 圆角半径，度。不超过短边的一半。 */
+  radius: number
+  /** 形状外侧的羽化，度。 */
+  feather: number
   /** 相对竖直偏转的角度。0 是正竖直。 */
   lean: number
   r: number
@@ -32,15 +32,15 @@ type Panel = {
 }
 
 /**
- * 左前方一块竖向柔光板，旁边一块灰板把白和黑接上。
- * 右后一条窄的边缘光板，贴着轮廓。角度都不落在 90° 的整数倍上。
+ * 左前方一块圆角矩形，旁边一块更矮的灰板，顶边错开。
+ * 右后一条窄的边缘光板，贴着轮廓，顶边也接不到主灯。角度都不落在 90° 的整数倍上。
  */
 const PANELS: Panel[] = [
-  { az: -36, el: 8, across: 11, feather: 16, along: 52, lean: 8, r: 176, g: 178, b: 184 },
-  { az: -12, el: 4, across: 4, feather: 12, along: 44, lean: -7, r: 108, g: 110, b: 116 },
-  { az: 166, el: 2, across: 2.4, feather: 4.5, along: 46, lean: -4, r: 196, g: 198, b: 204 },
-  { az: 82, el: -4, across: 5, feather: 10, along: 30, lean: 9, r: 62, g: 64, b: 70 },
-  { az: -78, el: 0, across: 5, feather: 10, along: 34, lean: 7, r: 56, g: 58, b: 64 },
+  { az: -38, el: 2, across: 8, along: 18, radius: 6, feather: 6, lean: 7, r: 176, g: 178, b: 184 },
+  { az: -8, el: -8, across: 3.5, along: 12, radius: 3, feather: 5, lean: -6, r: 104, g: 106, b: 112 },
+  { az: 162, el: -2, across: 2.4, along: 20, radius: 2.2, feather: 3.2, lean: -4, r: 188, g: 190, b: 196 },
+  { az: 88, el: 2, across: 6, along: 14, radius: 4, feather: 6, lean: 7, r: 78, g: 80, b: 86 },
+  { az: -74, el: -10, across: 4.5, along: 12, radius: 3.5, feather: 5, lean: 6, r: 52, g: 54, b: 60 },
 ]
 
 const SAMPLE = { r: 0, g: 0, b: 0 }
@@ -51,14 +51,6 @@ function clamp01(n: number) {
   return n
 }
 
-function window1d(distance: number, half: number, feather: number) {
-  if (distance <= half) return 1
-  if (distance >= half + feather) return 0
-  const t = (distance - half) / feather
-  const s = t * t * (3 - 2 * t)
-  return 1 - s
-}
-
 function wrapSigned(d: number) {
   let x = d
   while (x > 0.5) x -= 1
@@ -66,8 +58,24 @@ function wrapSigned(d: number) {
   return x
 }
 
+/** 圆角矩形的有符号距离。负值在内部。 */
+function roundedRect(x: number, y: number, halfW: number, halfH: number, radius: number) {
+  const rad = Math.min(Math.max(radius, 0), halfW, halfH)
+  const qx = Math.abs(x) - (halfW - rad)
+  const qy = Math.abs(y) - (halfH - rad)
+  return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - rad
+}
+
+function feathered(distance: number, feather: number) {
+  if (distance <= 0) return 1
+  if (feather <= 0 || distance >= feather) return 0
+  const t = distance / feather
+  const s = t * t * (3 - 2 * t)
+  return 1 - s
+}
+
 /**
- * 柔光板的权重。窄边是直的，外侧羽化。长边中间亮、两头按距离淡掉，不收成圆头，也不在天顶切一刀。
+ * 圆角矩形柔光板。顶边由 along 决定，不到天顶，几块板的顶也不会接到一起。
  */
 function panelWeight(u: number, v: number, panel: Panel) {
   const elev = (0.5 - v) * 180
@@ -76,11 +84,10 @@ function panelWeight(u: number, v: number, panel: Panel) {
   const lean = (panel.lean * Math.PI) / 180
   const c = Math.cos(lean)
   const s = Math.sin(lean)
-  const across = Math.abs(az * c + el * s)
-  const along = (-az * s + el * c) / panel.along
-  const side = window1d(across, panel.across, panel.feather)
-  const axial = Math.exp(-0.5 * along * along)
-  return side * axial
+  const across = az * c + el * s
+  const along = -az * s + el * c
+  const dist = roundedRect(across, along, panel.across, panel.along, panel.radius)
+  return feathered(dist, panel.feather)
 }
 
 function paintStudio(): Uint8Array {
