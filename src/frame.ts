@@ -20,7 +20,7 @@ export type Composition = {
   component: (input: FrameInput) => FvgNode
 }
 
-export type RenderCompositionOptions = Pick<RenderOptions, 'scale' | 'baseDir' | 'fontsCacheDir' | 'debug'>
+export type RenderCompositionOptions = Pick<RenderOptions, 'scale' | 'baseDir' | 'fontsCacheDir' | 'debug' | 'meshSamples' | 'meshCache'>
 
 export type RenderFramesOptions = RenderCompositionOptions & {
   /** 含这一帧。缺省为 0。 */
@@ -371,6 +371,8 @@ export async function* renderFrames(
       debug: options.debug,
       baseDir,
       fontsCacheDir: options.fontsCacheDir,
+      meshSamples: options.meshSamples,
+      meshCache: options.meshCache,
     })
     const rendered: RenderedFrame = { frame, t, width: canvas.width, height: canvas.height, report }
     if (format === 'rgba') rendered.rgba = canvasRgba(canvas)

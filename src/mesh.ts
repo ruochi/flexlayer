@@ -1,5 +1,13 @@
 import type { Canvas } from '@napi-rs/canvas'
-import { behindCamera, hasPerspective, planeDepth, poseMatrix } from './perspective.js'
+import {
+  meshCacheLimit,
+  meshSampleCount,
+  meshSceneCacheKey,
+  readMeshCache,
+  writeMeshCache,
+  type MeshClip,
+} from './mesh-cache.js'
+import { behindCamera, hasPerspective, planeDepth, poseMatrix, type Perspective } from './perspective.js'
 import { renderMeshSoftware } from './software-mesh.js'
 import type { LayerLayoutNode, LayoutNode, MeshLayoutNode } from './types.js'
 
@@ -89,15 +97,20 @@ export type MeshRaster = {
 /** 画进父层的网格画面。x、y 可以是负的，这样物体能溢出所在 layer。 */
 export type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: number }
 
-/**
- * 把这一层的网格和兄弟平面画进同一台相机。返回的画布盖住整个 layer，背景透明。
- * 没有可画的东西时返回 null，调用方继续走原来的二维透视。
- */
-export function renderMeshLayer(
-  layer: LayerLayoutNode,
-  scale: number,
-  raster: (node: LayoutNode) => MeshRaster,
-): MeshFrame | null {
+export type MeshLayerOptions = {
+  /** 这一层坐标里真正可见的范围。光栅和它求交。 */
+  clip?: MeshClip
+  /** 超采样，1、2 或 4。缺省 4。 */
+  samples?: number
+  /** 场景缓存上限，字节。false 关闭。缺省看环境变量，再缺省 256MB。 */
+  cacheBytes?: number | false
+}
+
+function gather(layer: LayerLayoutNode): {
+  perspective: Perspective
+  meshes: MeshInstance[]
+  planes: PlaneInstance[]
+} | null {
   const perspective = layer.perspective
   if (!hasPerspective(perspective) || layer.width <= 0 || layer.height <= 0) return null
   const meshes: MeshInstance[] = []
@@ -110,5 +123,47 @@ export function renderMeshLayer(
     if (peeled && paintable(peeled)) planes.push({ node: child, peeled, toLayer: poseMatrix(child) })
   }
   if (meshes.length === 0 && planes.length === 0) return null
-  return renderMeshSoftware({ layer, perspective, meshes, planes, scale, raster })
+  return { perspective, meshes, planes }
+}
+
+/** 和 renderMeshLayer 用同一套输入。无法哈希时返回 null。 */
+export function meshLayerCacheKey(layer: LayerLayoutNode, scale: number, samples: number, clip: MeshClip): string | null {
+  const scene = gather(layer)
+  if (!scene) return null
+  return meshSceneCacheKey({ layer, scale, samples: meshSampleCount(samples), clip, ...scene })
+}
+
+/**
+ * 把这一层的网格和兄弟平面画进同一台相机。返回的画布只盖住可见范围内的物体，背景透明。
+ * 没有可画的东西时返回 null，调用方继续走原来的二维透视。
+ * 内容没变时直接复用进程里上一次的画面。
+ */
+export function renderMeshLayer(
+  layer: LayerLayoutNode,
+  scale: number,
+  raster: (node: LayoutNode) => MeshRaster,
+  options?: MeshLayerOptions,
+): MeshFrame | null {
+  const scene = gather(layer)
+  if (!scene) return null
+  const samples = meshSampleCount(options?.samples)
+  const clip = options?.clip ?? { x: 0, y: 0, width: layer.width, height: layer.height }
+  const limit = meshCacheLimit(options?.cacheBytes)
+  const key = limit > 0 ? meshSceneCacheKey({ layer, scale, samples, clip, ...scene }) : null
+  if (key) {
+    const hit = readMeshCache(key)
+    if (hit) return hit
+  }
+  const frame = renderMeshSoftware({
+    layer,
+    perspective: scene.perspective,
+    meshes: scene.meshes,
+    planes: scene.planes,
+    scale,
+    raster,
+    samples,
+    clip,
+  })
+  if (key) writeMeshCache(key, frame, limit)
+  return frame
 }

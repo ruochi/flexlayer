@@ -582,4 +582,11 @@ export type RenderOptions = {
   frame?: number
   /** 每秒帧数。缺省为 0。 */
   fps?: number
+  /** 网格超采样。1、2 或 4，缺省 4。草稿可以传 1 或 2。 */
+  meshSamples?: 1 | 2 | 4
+  /**
+   * 网格场景缓存上限，字节。false 关闭。
+   * 缺省 256MB，也可用环境变量 FLEXLAYER_MESH_CACHE（字节数，或 0 / off）。
+   */
+  meshCache?: number | false
 }

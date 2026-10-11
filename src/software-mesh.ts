@@ -1,10 +1,11 @@
 import { createCanvas, type Canvas, type CanvasRenderingContext2D } from '@napi-rs/canvas'
-import { readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { studioAt } from './env-map.js'
 import { solidPaint } from './gradient.js'
 import { parseGlb } from './glb.js'
 import { originOffset } from './matrix.js'
-import { applyPoseMatrix, behindCamera, PERSPECTIVE_AA, resolveSamples, type Perspective } from './perspective.js'
+import type { MeshClip } from './mesh-cache.js'
+import { applyPoseMatrix, behindCamera, type Perspective } from './perspective.js'
 import { meshIntersections } from './mesh-intersect.js'
 import { roundedBoxGeometry, roundedCylinderGeometry } from './mesh-round.js'
 import { tessellateSvgPath } from './path.js'
@@ -22,7 +23,7 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
  * 写了 stroke 时，在超采样缓冲上按屏幕像素描折棱和轮廓，再和填充一起平均缩回。
  * 两只都写了 stroke 的网格相互穿过时，交界线算折棱，颜色和宽度跟后写的那只。
  * hidden 只画被这只网格自己挡住的棱，虚线是 6 实 4 空。交界线被这两只中任意一只挡住时同样算隐藏线。
- * 不写 material 时是磨砂：主光乘 fill。plastic 加高光，metal 和 glass 映一张横向的工作室环境，glass 后画叠色。
+ * 不写 material 时是磨砂：主光乘 fill。plastic 加高光，metal 和 glass 映一张竖向的工作室环境，glass 后画叠色。
  * 同一条折线上的短段接成一条再取虚线相位，圆弧不会接成实线。
  */
 
@@ -46,6 +47,10 @@ export type SoftwareMeshInput = {
   planes: Array<{ node: LayoutNode; peeled: LayoutNode; toLayer: Mat4 }>
   scale: number
   raster: (node: LayoutNode) => RasterBitmap
+  /** 1、2 或 4。缺省 4，不再因为视口伸出画面而降档。 */
+  samples?: number
+  /** 这一层坐标里要画的范围。和投影外框求交后再分配缓冲区。 */
+  clip?: MeshClip
 }
 
 type MeshEdge = {
@@ -111,6 +116,109 @@ type Vert = {
 }
 
 type ScreenVert = Vert & { sx: number; sy: number; invW: number }
+
+const SCREEN_SCRATCH: [ScreenVert, ScreenVert, ScreenVert] = [
+  { x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, u: 0, v: 0, sx: 0, sy: 0, invW: 1 },
+  { x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, u: 0, v: 0, sx: 0, sy: 0, invW: 1 },
+  { x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, u: 0, v: 0, sx: 0, sy: 0, invW: 1 },
+]
+
+let colorPool = new Uint8ClampedArray(0)
+let depthPool = new Float32Array(0)
+let ownerPool = new Int16Array(0)
+let shadowPool = new Float32Array(0)
+let colorWords: Uint32Array | null = null
+
+const LITTLE_ENDIAN = new Uint8Array(Uint32Array.of(1).buffer)[0] === 1
+
+function takeRasterBuffers(pixels: number, fillOwners: boolean) {
+  const colors = pixels * 4
+  if (colorPool.length < colors) {
+    colorPool = new Uint8ClampedArray(colors)
+    colorWords = null
+  } else colorPool.fill(0, 0, colors)
+  if (depthPool.length < pixels) depthPool = new Float32Array(pixels)
+  depthPool.fill(-1e30, 0, pixels)
+  if (fillOwners) {
+    if (ownerPool.length < pixels) ownerPool = new Int16Array(pixels)
+    ownerPool.fill(-1, 0, pixels)
+  }
+  return { color: colorPool, depth: depthPool, owners: ownerPool }
+}
+
+function takeShadowDepth(texels: number) {
+  if (shadowPool.length < texels) shadowPool = new Float32Array(texels)
+  shadowPool.fill(-1e30, 0, texels)
+  return shadowPool
+}
+
+function colorWordView(color: Uint8ClampedArray): Uint32Array | null {
+  if (!LITTLE_ENDIAN || color.byteOffset % 4 !== 0) return null
+  const words = color.byteLength >>> 2
+  if (colorWords && colorWords.buffer === color.buffer && colorWords.byteOffset === color.byteOffset && colorWords.length === words) {
+    return colorWords
+  }
+  colorWords = new Uint32Array(color.buffer, color.byteOffset, words)
+  return colorWords
+}
+
+function quantGeometry(n: number) {
+  return Math.round(n * 1e4) / 1e4
+}
+
+type MeshGeometry = { positions: Float32Array; normals: Float32Array; indices: Uint32Array }
+type ModelPrim = {
+  positions: Float32Array
+  normals: Float32Array
+  indices: Uint32Array
+  color: [number, number, number, number]
+  doubleSided: boolean
+}
+
+const geometryCache = new Map<string, MeshGeometry | null>()
+const modelCache = new Map<string, ModelPrim[]>()
+const GEOMETRY_CAP = 64
+
+function originKey(node: MeshLayoutNode) {
+  const origin = node.origin
+  if (!origin) return ''
+  return `${origin.x.unit}:${quantGeometry(origin.x.value)}:${origin.y.unit}:${quantGeometry(origin.y.value)}`
+}
+
+function geometryCacheKey(node: MeshLayoutNode): string | null {
+  const mesh = node.mesh
+  if (mesh.type === 'model') return null
+  const head = `${mesh.type}|${quantGeometry(node.width)}|${quantGeometry(node.height)}|${originKey(node)}`
+  if (mesh.type === 'sphere') return `${head}|${quantGeometry(mesh.r)}`
+  if (mesh.type === 'box') return `${head}|${quantGeometry(mesh.depth)}|${quantGeometry(mesh.rx)}|${mesh.edges.join(',')}`
+  if (mesh.type === 'extrude') return `${head}|${quantGeometry(mesh.depth)}|${mesh.d}`
+  if (mesh.type === 'cylinder') return `${head}|${quantGeometry(mesh.r)}|${quantGeometry(mesh.height)}|${quantGeometry(mesh.rx)}|${mesh.rims.join(',')}`
+  if (mesh.type === 'torus') return `${head}|${quantGeometry(mesh.r)}|${quantGeometry(mesh.tube)}`
+  if (mesh.type === 'tube') return `${head}|${quantGeometry(mesh.r)}|${mesh.d}`
+  return null
+}
+
+function modelCacheKey(node: MeshLayoutNode): string | null {
+  if (node.mesh.type !== 'model' || !node.mesh.file) return null
+  let stamp = 'missing'
+  try {
+    const st = statSync(node.mesh.file)
+    stamp = `${st.mtimeMs}:${st.size}`
+  } catch {
+    stamp = 'missing'
+  }
+  return `${node.mesh.file}|${stamp}|${quantGeometry(node.width)}|${quantGeometry(node.height)}|${quantGeometry(node.opacity)}|${originKey(node)}`
+}
+
+function touchCache<T>(map: Map<string, T>, key: string, value: T, cap: number) {
+  map.delete(key)
+  map.set(key, value)
+  while (map.size > cap) {
+    const oldest = map.keys().next().value
+    if (oldest === undefined) break
+    map.delete(oldest)
+  }
+}
 
 const KEY = unit(-0.6, 0.85, 1)
 const FILL_LIGHT = unit(0.75, -0.2, 0.45)
@@ -213,11 +321,8 @@ function materialBytes(
       const exposure = blocked ? 0.32 : 0.5 + 0.5 * Math.min(1, shade)
       const specAdd = spec * 220
       const envLum = (envR + envG + envB) / 3
-      // 暗部留两成 fill，避免房间暗处变成纯黑。
-      // 灯带之间的暗墙映到水平轮廓上时，再补一截 fill，否则背光一侧会压出一条近黑的边。朝上朝下仍是暗的。
-      const horiz = clamp01(1 - Math.abs(reflect.y) / 0.55)
-      const room = clamp01((130 - envLum) / 70)
-      const fillKeep = 0.2 + 0.35 * horiz * room
+      // 暗部只留一点 fill，避免掠射处掉成纯黑的一像素。竖向黑旗要保持黑，不再把整条水平暗反射补亮。
+      const fillKeep = 0.08 + (envLum < 28 && ndotv < 0.18 ? 0.12 : 0)
       const tint = (channel: number, envC: number) => {
         const f = channel / 255
         return Math.min(255, (f + (1 - f) * fres) * envC * exposure + channel * fillKeep + specAdd * (0.25 + 0.75 * f))
@@ -940,7 +1045,7 @@ function smoothNormals(positions: Float32Array, indices: Uint32Array) {
   return out
 }
 
-function buildModel(node: MeshLayoutNode) {
+function buildModelFresh(node: MeshLayoutNode): ModelPrim[] {
   if (node.mesh.type !== 'model' || !node.mesh.file) return []
   let prims
   try {
@@ -1007,7 +1112,7 @@ function buildModel(node: MeshLayoutNode) {
   return out
 }
 
-function geometryOf(node: MeshLayoutNode) {
+function geometryOfFresh(node: MeshLayoutNode): MeshGeometry | null {
   if (node.mesh.type === 'sphere') return buildSphere(node)
   if (node.mesh.type === 'box') return buildBox(node)
   if (node.mesh.type === 'cylinder') return buildCylinder(node)
@@ -1015,6 +1120,30 @@ function geometryOf(node: MeshLayoutNode) {
   if (node.mesh.type === 'tube') return buildTube(node)
   if (node.mesh.type === 'extrude') return buildExtrude(node)
   return null
+}
+
+function geometryOf(node: MeshLayoutNode): MeshGeometry | null {
+  const key = geometryCacheKey(node)
+  if (key && geometryCache.has(key)) {
+    const hit = geometryCache.get(key) ?? null
+    touchCache(geometryCache, key, hit, GEOMETRY_CAP)
+    return hit
+  }
+  const geo = geometryOfFresh(node)
+  if (key) touchCache(geometryCache, key, geo, GEOMETRY_CAP)
+  return geo
+}
+
+function buildModel(node: MeshLayoutNode): ModelPrim[] {
+  const key = modelCacheKey(node)
+  if (key && modelCache.has(key)) {
+    const hit = modelCache.get(key) ?? []
+    touchCache(modelCache, key, hit, GEOMETRY_CAP)
+    return hit
+  }
+  const built = buildModelFresh(node)
+  if (key) touchCache(modelCache, key, built, GEOMETRY_CAP)
+  return built
 }
 
 type Texel = { r: number; g: number; b: number; a: number }
@@ -1136,33 +1265,53 @@ function buildShadowMap(batches: Batch[], authored: Vert[][], pixels: number): S
   const longest = Math.max(spanU, spanV)
   const width = Math.max(1, Math.round((side * spanU) / longest))
   const height = Math.max(1, Math.round((side * spanV) / longest))
-  const depth = new Float32Array(width * height)
-  depth.fill(-1e30)
+  const depth = takeShadowDepth(width * height)
   const scaleU = width / spanU
   const scaleV = height / spanV
-  const toLight = (v: Vert): ScreenVert => {
-    const p = { x: v.x, y: v.y, z: v.z }
-    return {
-      ...v,
-      z: dot(p, toward),
-      sx: (dot(p, right) - minU) * scaleU,
-      sy: (dot(p, up) - minV) * scaleV,
-      invW: 1,
+  const light = authored.map((verts) => {
+    const buf = new Float32Array(verts.length * 3)
+    for (let i = 0; i < verts.length; i++) {
+      const v = verts[i]!
+      const o = i * 3
+      buf[o] = (v.x * right.x + v.y * right.y + v.z * right.z - minU) * scaleU
+      buf[o + 1] = (v.x * up.x + v.y * up.y + v.z * up.z - minV) * scaleV
+      buf[o + 2] = v.x * toward.x + v.y * toward.y + v.z * toward.z
     }
+    return buf
+  })
+  const loadLight = (into: ScreenVert, source: Vert, buf: Float32Array, index: number) => {
+    const o = index * 3
+    into.x = source.x
+    into.y = source.y
+    into.z = buf[o + 2]!
+    into.nx = source.nx
+    into.ny = source.ny
+    into.nz = source.nz
+    into.u = source.u
+    into.v = source.v
+    into.sx = buf[o]!
+    into.sy = buf[o + 1]!
+    into.invW = 1
+    return into
   }
+  const [la, lb, lc] = SCREEN_SCRATCH
   batches.forEach((batch, batchIndex) => {
     if (batch.material === 'glass') return
     if (!batch.texture && batch.a < 128) return
     const verts = authored[batchIndex]!
+    const buf = light[batchIndex]!
     const indices = batch.indices
     for (let i = 0; i < indices.length; i += 3) {
+      const i0 = indices[i]!
+      const i1 = indices[i + 1]!
+      const i2 = indices[i + 2]!
       drawShadowTriangle(
         depth,
         width,
         height,
-        toLight(verts[indices[i]!]!),
-        toLight(verts[indices[i + 1]!]!),
-        toLight(verts[indices[i + 2]!]!),
+        loadLight(la, verts[i0]!, buf, i0),
+        loadLight(lb, verts[i1]!, buf, i1),
+        loadLight(lc, verts[i2]!, buf, i2),
         batch,
       )
     }
@@ -1183,6 +1332,36 @@ function buildShadowMap(batches: Batch[], authored: Vert[][], pixels: number): S
   }
 }
 
+const spanBox = { min: 0, max: 0 }
+
+function accumEdge(x0: number, y0: number, x1: number, y1: number, y: number) {
+  const dy = y1 - y0
+  if (Math.abs(dy) < 1e-8) {
+    if (Math.abs(y - y0) > 1.5) return
+    const lo = x0 < x1 ? x0 : x1
+    const hi = x0 < x1 ? x1 : x0
+    if (lo < spanBox.min) spanBox.min = lo
+    if (hi > spanBox.max) spanBox.max = hi
+    return
+  }
+  const t = (y - y0) / dy
+  if (t < -0.05 || t > 1.05) return
+  const tc = t < 0 ? 0 : t > 1 ? 1 : t
+  const x = x0 + (x1 - x0) * tc
+  if (x < spanBox.min) spanBox.min = x
+  if (x > spanBox.max) spanBox.max = x
+}
+
+/** 扫描线可能盖住的 x。左右各多留一像素，内外仍由重心坐标判断。 */
+function scanBounds(ax: number, ay: number, bx: number, by: number, cx: number, cy: number, y: number) {
+  spanBox.min = Infinity
+  spanBox.max = -Infinity
+  accumEdge(ax, ay, bx, by, y)
+  accumEdge(bx, by, cx, cy, y)
+  accumEdge(cx, cy, ax, ay, y)
+  return spanBox.min <= spanBox.max
+}
+
 function drawShadowTriangle(
   map: Float32Array,
   width: number,
@@ -1198,22 +1377,45 @@ function drawShadowTriangle(
   const maxX = Math.min(width - 1, Math.ceil(Math.max(a.sx, b.sx, c.sx)))
   const minY = Math.max(0, Math.floor(Math.min(a.sy, b.sy, c.sy)))
   const maxY = Math.min(height - 1, Math.ceil(Math.max(a.sy, b.sy, c.sy)))
+  const e0x = (b.sy - c.sy) / area
+  const e0y = (c.sx - b.sx) / area
+  const e1x = (c.sy - a.sy) / area
+  const e1y = (a.sx - c.sx) / area
+  const texture = batch.texture
   for (let iy = minY; iy <= maxY; iy++) {
     const py = iy + 0.5
-    for (let ix = minX; ix <= maxX; ix++) {
-      const px = ix + 0.5
-      const w0 = ((b.sy - c.sy) * (px - c.sx) + (c.sx - b.sx) * (py - c.sy)) / area
-      const w1 = ((c.sy - a.sy) * (px - c.sx) + (a.sx - c.sx) * (py - c.sy)) / area
-      const w2 = 1 - w0 - w1
-      if (w0 < -1e-4 || w1 < -1e-4 || w2 < -1e-4) continue
-      if (batch.texture) {
-        const u = w0 * a.u + w1 * b.u + w2 * c.u
-        const v = w0 * a.v + w1 * b.v + w2 * c.v
-        if (sampleTexture(batch.texture, batch.tw, batch.th, u, v).a < 128) continue
+    if (!scanBounds(a.sx, a.sy, b.sx, b.sy, c.sx, c.sy, py)) continue
+    const left = Math.max(minX, Math.floor(spanBox.min) - 1)
+    const right = Math.min(maxX, Math.ceil(spanBox.max) + 1)
+    let w0 = e0x * (left + 0.5 - c.sx) + e0y * (py - c.sy)
+    let w1 = e1x * (left + 0.5 - c.sx) + e1y * (py - c.sy)
+    const row = iy * width
+    if (texture) {
+      for (let ix = left; ix <= right; ix++) {
+        const w2 = 1 - w0 - w1
+        if (w0 >= -1e-4 && w1 >= -1e-4 && w2 >= -1e-4) {
+          const u = w0 * a.u + w1 * b.u + w2 * c.u
+          const v = w0 * a.v + w1 * b.v + w2 * c.v
+          if (sampleTexture(texture, batch.tw, batch.th, u, v).a >= 128) {
+            const d = w0 * a.z + w1 * b.z + w2 * c.z
+            const di = row + ix
+            if (d > map[di]!) map[di] = d
+          }
+        }
+        w0 += e0x
+        w1 += e1x
       }
-      const d = w0 * a.z + w1 * b.z + w2 * c.z
-      const di = iy * width + ix
-      if (d > map[di]!) map[di] = d
+    } else {
+      for (let ix = left; ix <= right; ix++) {
+        const w2 = 1 - w0 - w1
+        if (w0 >= -1e-4 && w1 >= -1e-4 && w2 >= -1e-4) {
+          const d = w0 * a.z + w1 * b.z + w2 * c.z
+          const di = row + ix
+          if (d > map[di]!) map[di] = d
+        }
+        w0 += e0x
+        w1 += e1x
+      }
     }
   }
 }
@@ -1234,6 +1436,293 @@ function occluded(map: ShadowMap, x: number, y: number, z: number, nx: number, n
   if (stored < -1e20) return false
   const toward = x * map.toward.x + y * map.toward.y + z * map.toward.z
   return stored > toward + bias
+}
+
+function packOpaque(r: number, g: number, b: number) {
+  return (r + g * 256 + b * 65536 + 255 * 16777216) >>> 0
+}
+
+let fitL = 0
+let fitR = 0
+
+/** 把扫描线收成重心坐标里真正盖住的区间。三角形是凸的，两端在内则中间都在内。 */
+function fitCover(
+  left: number,
+  right: number,
+  e0x: number,
+  e1x: number,
+  e0y: number,
+  e1y: number,
+  csx: number,
+  csy: number,
+  py: number,
+) {
+  const y0 = e0y * (py - csy)
+  const y1 = e1y * (py - csy)
+  const x0 = 0.5 - csx
+  let L = left
+  while (L <= right) {
+    const w0 = e0x * (L + x0) + y0
+    const w1 = e1x * (L + x0) + y1
+    if (w0 >= -1e-4 && w1 >= -1e-4 && 1 - w0 - w1 >= -1e-4) break
+    L++
+  }
+  if (L > right) return false
+  let R = right
+  while (R >= L) {
+    const w0 = e0x * (R + x0) + y0
+    const w1 = e1x * (R + x0) + y1
+    if (w0 >= -1e-4 && w1 >= -1e-4 && 1 - w0 - w1 >= -1e-4) break
+    R--
+  }
+  if (R < L) return false
+  fitL = L
+  fitR = R
+  return true
+}
+
+function paintFlatShadowRow(
+  depth: Float32Array,
+  owners: Int16Array,
+  words: Uint32Array,
+  smap: Float32Array,
+  row: number,
+  from: number,
+  to: number,
+  nz: number,
+  nw: number,
+  nR: number,
+  nU: number,
+  nT: number,
+  dnz: number,
+  dnw: number,
+  dnR: number,
+  dnU: number,
+  dnT: number,
+  mapW: number,
+  mapH: number,
+  minU: number,
+  minV: number,
+  scaleU: number,
+  scaleV: number,
+  bias: number,
+  openPix: number,
+  shutPix: number,
+  owner: number,
+  writeOwner: boolean,
+) {
+  for (let ix = from; ix <= to; ix++) {
+    if (nw > 1e-8) {
+      const inv = 1 / nw
+      const z = nz * inv
+      const di = row + ix
+      if (z >= depth[di]! - 1e-4) {
+        const sx = (nR * inv - minU) * scaleU
+        const sy = (nU * inv - minV) * scaleV
+        let blocked = false
+        if (sx >= 0 && sy >= 0 && sx < mapW && sy < mapH) {
+          const stored = smap[(sy | 0) * mapW + (sx | 0)]!
+          if (stored >= -1e20) blocked = stored > nT * inv + bias
+        }
+        depth[di] = z
+        if (writeOwner) owners[di] = owner
+        words[di] = blocked ? shutPix : openPix
+      }
+    }
+    nz += dnz
+    nw += dnw
+    nR += dnR
+    nU += dnU
+    nT += dnT
+  }
+}
+
+function paintFlatPlainRow(
+  depth: Float32Array,
+  owners: Int16Array,
+  words: Uint32Array,
+  row: number,
+  from: number,
+  to: number,
+  nz: number,
+  nw: number,
+  dnz: number,
+  dnw: number,
+  openPix: number,
+  owner: number,
+) {
+  for (let ix = from; ix <= to; ix++) {
+    if (nw > 1e-8) {
+      const z = nz / nw
+      const di = row + ix
+      if (z >= depth[di]! - 1e-4) {
+        depth[di] = z
+        owners[di] = owner
+        words[di] = openPix
+      }
+    }
+    nz += dnz
+    nw += dnw
+  }
+}
+
+/**
+ * 不透明、平面、Lambert、写深度的三角。颜色只取决于朝向和阴影，内循环不走贴图和材质分支。
+ * 重心和透视插值与 drawTriangle 相同。返回 false 时调用方改走通用路径。
+ */
+function drawFlatLambert(
+  color: Uint8ClampedArray,
+  depth: Float32Array,
+  owners: Int16Array,
+  width: number,
+  height: number,
+  a: ScreenVert,
+  b: ScreenVert,
+  c: ScreenVert,
+  batch: Batch,
+  shadow: ShadowMap | null,
+  writeOwner: boolean,
+): boolean {
+  if (batch.material !== 'lambert' || !batch.shaded || batch.a < 255 || !batch.depthWrite || batch.texture || batch.outline) return false
+  const area = (b.sx - a.sx) * (c.sy - a.sy) - (b.sy - a.sy) * (c.sx - a.sx)
+  if (Math.abs(area) < 1e-8) return true
+  const back = area > 0
+  if (back && !batch.doubleSided) return true
+  if (a.nx !== b.nx || a.ny !== b.ny || a.nz !== b.nz || a.nx !== c.nx || a.ny !== c.ny || a.nz !== c.nz) return false
+  let minX = Math.floor(Math.min(a.sx, b.sx, c.sx))
+  let maxX = Math.ceil(Math.max(a.sx, b.sx, c.sx))
+  let minY = Math.floor(Math.min(a.sy, b.sy, c.sy))
+  let maxY = Math.ceil(Math.max(a.sy, b.sy, c.sy))
+  if (maxX < 0 || maxY < 0 || minX >= width || minY >= height) return true
+  if (minX < 0) minX = 0
+  if (minY < 0) minY = 0
+  if (maxX >= width) maxX = width - 1
+  if (maxY >= height) maxY = height - 1
+  const e0x = (b.sy - c.sy) / area
+  const e0y = (c.sx - b.sx) / area
+  const e1x = (c.sy - a.sy) / area
+  const e1y = (a.sx - c.sx) / area
+  const openShade = shadeOf(a.nx, a.ny, a.nz, back, false)
+  const shutShade = shadeOf(a.nx, a.ny, a.nz, back, true)
+  const openR = byte(batch.r * openShade)
+  const openG = byte(batch.g * openShade)
+  const openB = byte(batch.b * openShade)
+  const shutR = byte(batch.r * shutShade)
+  const shutG = byte(batch.g * shutShade)
+  const shutB = byte(batch.b * shutShade)
+  const words = colorWordView(color)
+  if (!words || a.invW <= 1e-4 || b.invW <= 1e-4 || c.invW <= 1e-4) return false
+  const openPix = packOpaque(openR, openG, openB)
+  const shutPix = packOpaque(shutR, shutG, shutB)
+  const ai = a.invW
+  const bi = b.invW
+  const ci = c.invW
+  const azw = a.z * ai
+  const bzw = b.z * bi
+  const czw = c.z * ci
+  const e2x = -e0x - e1x
+  const dnz = e0x * azw + e1x * bzw + e2x * czw
+  const dnw = e0x * ai + e1x * bi + e2x * ci
+  const owner = batch.owner
+  const csx = c.sx
+  const csy = c.sy
+  if (!shadow) {
+    for (let iy = minY; iy <= maxY; iy++) {
+      const py = iy + 0.5
+      if (!scanBounds(a.sx, a.sy, b.sx, b.sy, c.sx, c.sy, py)) continue
+      const left = Math.max(minX, Math.floor(spanBox.min) - 1)
+      const right = Math.min(maxX, Math.ceil(spanBox.max) + 1)
+      if (!fitCover(left, right, e0x, e1x, e0y, e1y, csx, csy, py)) continue
+      const w0 = e0x * (fitL + 0.5 - csx) + e0y * (py - csy)
+      const w1 = e1x * (fitL + 0.5 - csx) + e1y * (py - csy)
+      const w2 = 1 - w0 - w1
+      paintFlatPlainRow(
+        depth,
+        owners,
+        words,
+        iy * width,
+        fitL,
+        fitR,
+        w0 * azw + w1 * bzw + w2 * czw,
+        w0 * ai + w1 * bi + w2 * ci,
+        dnz,
+        dnw,
+        openPix,
+        owner,
+      )
+    }
+    return true
+  }
+  const srx = shadow.right.x
+  const sry = shadow.right.y
+  const srz = shadow.right.z
+  const sux = shadow.up.x
+  const suy = shadow.up.y
+  const suz = shadow.up.z
+  const stx = shadow.toward.x
+  const sty = shadow.toward.y
+  const stz = shadow.toward.z
+  const aR = ai * (a.x * srx + a.y * sry + a.z * srz)
+  const bR = bi * (b.x * srx + b.y * sry + b.z * srz)
+  const cR = ci * (c.x * srx + c.y * sry + c.z * srz)
+  const aU = ai * (a.x * sux + a.y * suy + a.z * suz)
+  const bU = bi * (b.x * sux + b.y * suy + b.z * suz)
+  const cU = ci * (c.x * sux + c.y * suy + c.z * suz)
+  const aT = ai * (a.x * stx + a.y * sty + a.z * stz)
+  const bT = bi * (b.x * stx + b.y * sty + b.z * stz)
+  const cT = ci * (c.x * stx + c.y * sty + c.z * stz)
+  const dnR = e0x * aR + e1x * bR + e2x * cR
+  const dnU = e0x * aU + e1x * bU + e2x * cU
+  const dnT = e0x * aT + e1x * bT + e2x * cT
+  const smap = shadow.depth
+  const mapW = shadow.width
+  const mapH = shadow.height
+  const minU = shadow.minU
+  const minV = shadow.minV
+  const scaleU = shadow.scaleU
+  const scaleV = shadow.scaleV
+  const bias = shadowBias(shadow, a.nx, a.ny, a.nz)
+  for (let iy = minY; iy <= maxY; iy++) {
+    const py = iy + 0.5
+    if (!scanBounds(a.sx, a.sy, b.sx, b.sy, c.sx, c.sy, py)) continue
+    const left = Math.max(minX, Math.floor(spanBox.min) - 1)
+    const right = Math.min(maxX, Math.ceil(spanBox.max) + 1)
+    if (!fitCover(left, right, e0x, e1x, e0y, e1y, csx, csy, py)) continue
+    const w0 = e0x * (fitL + 0.5 - csx) + e0y * (py - csy)
+    const w1 = e1x * (fitL + 0.5 - csx) + e1y * (py - csy)
+    const w2 = 1 - w0 - w1
+    paintFlatShadowRow(
+      depth,
+      owners,
+      words,
+      smap,
+      iy * width,
+      fitL,
+      fitR,
+      w0 * azw + w1 * bzw + w2 * czw,
+      w0 * ai + w1 * bi + w2 * ci,
+      w0 * aR + w1 * bR + w2 * cR,
+      w0 * aU + w1 * bU + w2 * cU,
+      w0 * aT + w1 * bT + w2 * cT,
+      dnz,
+      dnw,
+      dnR,
+      dnU,
+      dnT,
+      mapW,
+      mapH,
+      minU,
+      minV,
+      scaleU,
+      scaleV,
+      bias,
+      openPix,
+      shutPix,
+      owner,
+      writeOwner,
+    )
+  }
+  return true
 }
 
 function drawTriangle(
@@ -1281,9 +1770,12 @@ function drawTriangle(
   const texture = batch.texture
   for (let iy = minY; iy <= maxY; iy++) {
     const py = iy + 0.5
-    let w0 = e0x * (minX + 0.5 - c.sx) + e0y * (py - c.sy)
-    let w1 = e1x * (minX + 0.5 - c.sx) + e1y * (py - c.sy)
-    for (let ix = minX; ix <= maxX; ix++) {
+    if (!scanBounds(a.sx, a.sy, b.sx, b.sy, c.sx, c.sy, py)) continue
+    const left = Math.max(minX, Math.floor(spanBox.min) - 1)
+    const right = Math.min(maxX, Math.ceil(spanBox.max) + 1)
+    let w0 = e0x * (left + 0.5 - c.sx) + e0y * (py - c.sy)
+    let w1 = e1x * (left + 0.5 - c.sx) + e1y * (py - c.sy)
+    for (let ix = left; ix <= right; ix++) {
       const w2 = 1 - w0 - w1
       if (w0 < -1e-4 || w1 < -1e-4 || w2 < -1e-4) {
         w0 += e0x
@@ -1379,102 +1871,330 @@ function drawTriangle(
   }
 }
 
-function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: Perspective, scale: number): MeshFrame {
+type RasterRect = { x: number; y: number; width: number; height: number }
+
+let emptyCanvas: Canvas | null = null
+
+function emptyMeshFrame(): MeshFrame {
+  if (!emptyCanvas) emptyCanvas = createCanvas(1, 1)
+  return { canvas: emptyCanvas, x: 0, y: 0, width: 0, height: 0 }
+}
+
+function intersectRect(a: RasterRect, b: RasterRect): RasterRect | null {
+  const x = Math.max(a.x, b.x)
+  const y = Math.max(a.y, b.y)
+  const right = Math.min(a.x + a.width, b.x + b.width)
+  const bottom = Math.min(a.y + a.height, b.y + b.height)
+  if (right - x <= 1e-4 || bottom - y <= 1e-4) return null
+  return { x, y, width: right - x, height: bottom - y }
+}
+
+function snapDown(value: number, step: number) {
+  return Math.floor(value / step + 1e-6) * step
+}
+
+function snapUp(value: number, step: number) {
+  return Math.ceil(value / step - 1e-6) * step
+}
+
+function layerProject(p: { x: number; y: number; z: number }, perspective: Perspective, vx: number, vy: number) {
+  if (perspective === 'parallel') return { lx: p.x, ly: p.y, invW: 1 }
+  if (!(p.z < perspective * (1 - 1e-3))) return null
+  const w = 1 - p.z / perspective
+  if (w <= 1e-8) return null
+  return { lx: vx + (p.x - vx) / w, ly: vy + (p.y - vy) / w, invW: 1 / w }
+}
+
+function loadScreen(into: ScreenVert, v: Vert, screen: Float32Array, index: number) {
+  const o = index * 3
+  into.x = v.x
+  into.y = v.y
+  into.z = v.z
+  into.nx = v.nx
+  into.ny = v.ny
+  into.nz = v.nz
+  into.u = v.u
+  into.v = v.v
+  into.sx = screen[o]!
+  into.sy = screen[o + 1]!
+  into.invW = screen[o + 2]!
+  return into
+}
+
+function projectClipped(v: Vert, perspective: Perspective, vx: number, vy: number, originX: number, originY: number, pixelScale: number): ScreenVert {
+  const into: ScreenVert = { x: v.x, y: v.y, z: v.z, nx: v.nx, ny: v.ny, nz: v.nz, u: v.u, v: v.v, sx: 0, sy: 0, invW: 1 }
+  if (perspective === 'parallel') {
+    into.sx = (v.x - originX) * pixelScale
+    into.sy = (v.y - originY) * pixelScale
+    return into
+  }
+  const w = 1 - v.z / perspective
+  into.sx = (vx + (v.x - vx) / w - originX) * pixelScale
+  into.sy = (vy + (v.y - vy) / w - originY) * pixelScale
+  into.invW = 1 / w
+  return into
+}
+
+/** 采样格刚好铺满时，整块颜色相同就直接拷贝，边缘才做预乘平均。 */
+function resolveExact(color: Uint8ClampedArray, sw: number, dw: number, dh: number, samples: number): Canvas | null {
+  if (color.byteOffset % 4 !== 0) return null
+  const out = createCanvas(dw, dh)
+  const octx = out.getContext('2d')
+  const image = octx.createImageData(dw, dh)
+  const dst = image.data
+  if (dst.byteOffset % 4 !== 0) return null
+  if (samples === 1) {
+    dst.set(color.subarray(0, dw * dh * 4))
+    octx.putImageData(image, 0, 0)
+    return out
+  }
+  const srcWords = new Uint32Array(color.buffer, color.byteOffset, color.byteLength >>> 2)
+  const dstWords = new Uint32Array(dst.buffer, dst.byteOffset, dw * dh)
+  const step = samples
+  for (let y = 0; y < dh; y++) {
+    const rows: number[] = []
+    for (let k = 0; k < step; k++) rows.push((y * step + k) * sw)
+    const drow = y * dw
+    for (let x = 0; x < dw; x++) {
+      const x0 = x * step
+      const p0 = srcWords[rows[0]! + x0]!
+      let uniform = true
+      for (let k = 0; k < step && uniform; k++) {
+        const row = rows[k]!
+        for (let i = 0; i < step; i++) {
+          if (srcWords[row + x0 + i] !== p0) {
+            uniform = false
+            break
+          }
+        }
+      }
+      if (uniform) {
+        dstWords[drow + x] = p0 === 0 ? 0 : p0
+        if (p0 !== 0 && (p0 >>> 24) === 0) dstWords[drow + x] = 0
+        continue
+      }
+      let r = 0
+      let g = 0
+      let b = 0
+      let a = 0
+      const n = step * step
+      for (let k = 0; k < step; k++) {
+        let si = (rows[k]! + x0) * 4
+        for (let i = 0; i < step; i++) {
+          const ai = color[si + 3]!
+          r += color[si]! * ai
+          g += color[si + 1]! * ai
+          b += color[si + 2]! * ai
+          a += ai
+          si += 4
+        }
+      }
+      const di = (drow + x) * 4
+      dst[di + 3] = Math.round(a / n)
+      if (a > 0) {
+        dst[di] = Math.round(r / a)
+        dst[di + 1] = Math.round(g / a)
+        dst[di + 2] = Math.round(b / a)
+      }
+    }
+  }
+  octx.putImageData(image, 0, 0)
+  return out
+}
+
+/** 把超采样缓冲区平均缩回目标像素。算法和 resolveSamples 相同，只读这块矩形。 */
+function resolveColor(color: Uint8ClampedArray, sw: number, sh: number, dw: number, dh: number): Canvas {
+  if (dw > 0 && dh > 0 && sw % dw === 0 && sh % dh === 0) {
+    const sx = sw / dw
+    const sy = sh / dh
+    if (sx === sy && (sx === 1 || sx === 2 || sx === 4)) {
+      const exact = resolveExact(color, sw, dw, dh, sx)
+      if (exact) return exact
+    }
+  }
+  const out = createCanvas(dw, dh)
+  const octx = out.getContext('2d')
+  const image = octx.createImageData(dw, dh)
+  const dst = image.data
+  for (let y = 0; y < dh; y++) {
+    const y0 = Math.floor((y * sh) / dh)
+    const y1 = Math.floor(((y + 1) * sh) / dh)
+    for (let x = 0; x < dw; x++) {
+      const x0 = Math.floor((x * sw) / dw)
+      const x1 = Math.floor(((x + 1) * sw) / dw)
+      let r = 0
+      let g = 0
+      let b = 0
+      let a = 0
+      let n = 0
+      for (let iy = y0; iy < y1; iy++) {
+        let si = (iy * sw + x0) * 4
+        for (let ix = x0; ix < x1; ix++) {
+          const ai = color[si + 3]!
+          r += color[si]! * ai
+          g += color[si + 1]! * ai
+          b += color[si + 2]! * ai
+          a += ai
+          n++
+          si += 4
+        }
+      }
+      const di = (y * dw + x) * 4
+      dst[di + 3] = n > 0 ? Math.round(a / n) : 0
+      if (a > 0) {
+        dst[di] = Math.round(r / a)
+        dst[di + 1] = Math.round(g / a)
+        dst[di + 2] = Math.round(b / a)
+      }
+    }
+  }
+  octx.putImageData(image, 0, 0)
+  return out
+}
+
+function rasterize(
+  batches: Batch[],
+  layer: LayerLayoutNode,
+  perspective: Perspective,
+  scale: number,
+  samplesRequested: number,
+  clip: RasterRect,
+): MeshFrame {
   const vx = layer.width / 2
   const vy = layer.height / 2
-  let minX = 0
-  let minY = 0
-  let maxX = layer.width
-  let maxY = layer.height
   const authored: Vert[][] = []
+  const projected: Float32Array[] = []
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  let margin = 1
   for (const batch of batches) {
-    const verts: Vert[] = []
+    if (batch.lines) {
+      margin = Math.max(margin, batch.lines.widths[0], batch.lines.widths[1], batch.lines.widths[2], batch.lines.halo)
+    }
     const count = batch.positions.length / 3
+    const verts: Vert[] = new Array(count)
+    const proj = new Float32Array(count * 3)
     for (let i = 0; i < count; i++) {
       const p = transformPoint(batch.toLayer, batch.originX, batch.originY, batch.positions[i * 3]!, batch.positions[i * 3 + 1]!, batch.positions[i * 3 + 2]!)
       const n = transformNormal(batch.toLayer, batch.normals[i * 3]!, batch.normals[i * 3 + 1]!, batch.normals[i * 3 + 2]!)
       const u = batch.uvs ? batch.uvs[i * 2]! : 0
       const v = batch.uvs ? batch.uvs[i * 2 + 1]! : 0
-      verts.push({ x: p.x, y: p.y, z: p.z, nx: n.x, ny: n.y, nz: n.z, u, v })
-      if (perspective === 'parallel' || p.z < perspective * (1 - 1e-3)) {
-        const x = perspective === 'parallel' ? p.x : vx + (p.x - vx) / (1 - p.z / perspective)
-        const y = perspective === 'parallel' ? p.y : vy + (p.y - vy) / (1 - p.z / perspective)
-        minX = Math.min(minX, x)
-        minY = Math.min(minY, y)
-        maxX = Math.max(maxX, x)
-        maxY = Math.max(maxY, y)
+      verts[i] = { x: p.x, y: p.y, z: p.z, nx: n.x, ny: n.y, nz: n.z, u, v }
+      const front = layerProject(p, perspective, vx, vy)
+      const o = i * 3
+      if (front) {
+        proj[o] = front.lx
+        proj[o + 1] = front.ly
+        proj[o + 2] = front.invW
+        if (front.lx < minX) minX = front.lx
+        if (front.ly < minY) minY = front.ly
+        if (front.lx > maxX) maxX = front.lx
+        if (front.ly > maxY) maxY = front.ly
       }
     }
     authored.push(verts)
+    projected.push(proj)
   }
-  let padL = Math.max(0, -minX)
-  let padT = Math.max(0, -minY)
-  let padR = Math.max(0, maxX - layer.width)
-  let padB = Math.max(0, maxY - layer.height)
-  if (padL + padT + padR + padB > 0.5) {
-    padL = Math.ceil(padL + 1)
-    padT = Math.ceil(padT + 1)
-    padR = Math.ceil(padR + 1)
-    padB = Math.ceil(padB + 1)
-  } else {
-    padL = 0
-    padT = 0
-    padR = 0
-    padB = 0
-  }
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) return emptyMeshFrame()
+  const bounds = intersectRect(
+    { x: minX - margin, y: minY - margin, width: maxX - minX + margin * 2, height: maxY - minY + margin * 2 },
+    clip,
+  )
+  if (!bounds) return emptyMeshFrame()
   const base = Math.max(scale, 1e-3)
-  const maxSide = MAX_RASTER_SIDE / base
-  let viewW = layer.width + padL + padR
-  let viewH = layer.height + padT + padB
-  if (viewW > maxSide || viewH > maxSide) {
-    const sx = padL + padR > 0 ? Math.max(0, (maxSide - layer.width) / (padL + padR)) : 1
-    const sy = padT + padB > 0 ? Math.max(0, (maxSide - layer.height) / (padT + padB)) : 1
-    const fit = Math.min(1, sx, sy)
-    padL *= fit
-    padR *= fit
-    padT *= fit
-    padB *= fit
-    viewW = layer.width + padL + padR
-    viewH = layer.height + padT + padB
-  }
-  let samples = PERSPECTIVE_AA
+  const step = 1 / base
+  const originX = snapDown(bounds.x, step)
+  const originY = snapDown(bounds.y, step)
+  const viewW = snapUp(bounds.x + bounds.width, step) - originX
+  const viewH = snapUp(bounds.y + bounds.height, step) - originY
+  if (!(viewW > 1e-4) || !(viewH > 1e-4)) return emptyMeshFrame()
+  let samples = samplesRequested === 1 || samplesRequested === 2 || samplesRequested === 4 ? samplesRequested : 4
   while (samples > 1 && (viewW * base * samples > MAX_RASTER_SIDE || viewH * base * samples > MAX_RASTER_SIDE)) samples /= 2
   const pixelScale = base * samples
   const pw = Math.max(1, Math.round(viewW * pixelScale))
   const ph = Math.max(1, Math.round(viewH * pixelScale))
-  const color = new Uint8ClampedArray(pw * ph * 4)
-  const depth = new Float32Array(pw * ph)
-  const owners = new Int16Array(pw * ph)
-  depth.fill(-1e30)
-  owners.fill(-1)
+  for (const proj of projected) {
+    for (let i = 0; i < proj.length; i += 3) {
+      if (proj[i + 2] === 0) continue
+      proj[i] = (proj[i]! - originX) * pixelScale
+      proj[i + 1] = (proj[i + 1]! - originY) * pixelScale
+    }
+  }
+  const writeOwner = batches.some((batch) => batch.lines !== null)
+  const buffers = takeRasterBuffers(pw * ph, writeOwner)
+  const color = buffers.color
+  const depth = buffers.depth
+  const owners = buffers.owners
   const shadow = buildShadowMap(batches, authored, Math.max(layer.width, layer.height) * base * 2)
   const near = perspective === 'parallel' ? Number.POSITIVE_INFINITY : perspective * (1 - 1e-3)
   const camera: ShadeCamera =
     perspective === 'parallel' ? { x: 0, y: 0, z: 0, parallel: true } : { x: vx, y: vy, z: perspective }
-  const toScreen = (v: Vert): ScreenVert => {
-    if (perspective === 'parallel') {
-      return { ...v, sx: (v.x + padL) * pixelScale, sy: (v.y + padT) * pixelScale, invW: 1 }
-    }
-    const w = 1 - v.z / perspective
-    return {
-      ...v,
-      sx: (vx + (v.x - vx) / w + padL) * pixelScale,
-      sy: (vy + (v.y - vy) / w + padT) * pixelScale,
-      invW: 1 / w,
-    }
-  }
+  const [sa, sb, sc] = SCREEN_SCRATCH
   const paintBatch = (batchIndex: number) => {
     const batch = batches[batchIndex]!
     const verts = authored[batchIndex]!
+    const screen = projected[batchIndex]!
     const indices = batch.indices
     for (let i = 0; i < indices.length; i += 3) {
-      const tri = [verts[indices[i]!]!, verts[indices[i + 1]!]!, verts[indices[i + 2]!]!]
-      const clipped = clipNear(tri, near)
+      const i0 = indices[i]!
+      const i1 = indices[i + 1]!
+      const i2 = indices[i + 2]!
+      const a = verts[i0]!
+      const b = verts[i1]!
+      const c = verts[i2]!
+      const in0 = a.z < near
+      const in1 = b.z < near
+      const in2 = c.z < near
+      if (in0 && in1 && in2) {
+        if (
+          !drawFlatLambert(
+            color,
+            depth,
+            owners,
+            pw,
+            ph,
+            loadScreen(sa, a, screen, i0),
+            loadScreen(sb, b, screen, i1),
+            loadScreen(sc, c, screen, i2),
+            batch,
+            shadow,
+            writeOwner,
+          )
+        ) {
+          drawTriangle(
+            color,
+            depth,
+            owners,
+            pw,
+            ph,
+            sa,
+            sb,
+            sc,
+            batch,
+            shadow,
+            camera,
+          )
+        }
+        continue
+      }
+      if (!in0 && !in1 && !in2) continue
+      const clipped = clipNear([a, b, c], near)
       for (let k = 1; k < clipped.length - 1; k++) {
-        const a = clipped[0]!
-        const b = clipped[k]!
-        const c = clipped[k + 1]!
-        drawTriangle(color, depth, owners, pw, ph, toScreen(a), toScreen(b), toScreen(c), batch, shadow, camera)
+        drawTriangle(
+          color,
+          depth,
+          owners,
+          pw,
+          ph,
+          projectClipped(clipped[0]!, perspective, vx, vy, originX, originY, pixelScale),
+          projectClipped(clipped[k]!, perspective, vx, vy, originX, originY, pixelScale),
+          projectClipped(clipped[k + 1]!, perspective, vx, vy, originX, originY, pixelScale),
+          batch,
+          shadow,
+          camera,
+        )
       }
     }
   }
@@ -1491,22 +2211,29 @@ function rasterize(batches: Batch[], layer: LayerLayoutNode, perspective: Perspe
   })
   for (const index of solid) paintBatch(index)
   for (const index of glass) paintBatch(index)
-  const hi = createCanvas(pw, ph)
-  const image = hi.getContext('2d').createImageData(pw, ph)
-  image.data.set(color)
-  hi.getContext('2d').putImageData(image, 0, 0)
   const outW = Math.max(1, Math.round(viewW * base))
   const outH = Math.max(1, Math.round(viewH * base))
-  const canResolve = hi.width >= outW && hi.height >= outH
+  const frameOf = (canvas: Canvas): MeshFrame => ({
+    canvas,
+    x: originX,
+    y: originY,
+    width: canvas.width / base,
+    height: canvas.height / base,
+  })
   // 折线画在缩小之后只有屏幕分辨率的抗锯齿，斜边会呈台阶。超采样时先描再平均。
-  if (samples > 1 && canResolve) {
-    paintMeshLines(hi, batches, authored, depth, owners, pw, ph, layer, perspective, padL, padT, viewW, viewH)
-    const out = resolveSamples(hi, outW, outH)
-    return { canvas: out, x: -padL, y: -padT, width: viewW, height: viewH }
+  if (samples > 1 && pw > outW && ph > outH && batches.some((batch) => batch.lines)) {
+    const hi = createCanvas(pw, ph)
+    const hctx = hi.getContext('2d')
+    const image = hctx.createImageData(pw, ph)
+    image.data.set(color.subarray(0, pw * ph * 4))
+    hctx.putImageData(image, 0, 0)
+    paintMeshLines(hi, batches, authored, depth, owners, pw, ph, layer, perspective, originX, originY, viewW, viewH)
+    const stroked = hctx.getImageData(0, 0, pw, ph).data
+    return frameOf(resolveColor(stroked, pw, ph, outW, outH))
   }
-  const out = canResolve ? resolveSamples(hi, outW, outH) : hi
-  paintMeshLines(out, batches, authored, depth, owners, pw, ph, layer, perspective, padL, padT, viewW, viewH)
-  return { canvas: out, x: -padL, y: -padT, width: viewW, height: viewH }
+  const out = pw >= outW && ph >= outH ? resolveColor(color, pw, ph, outW, outH) : resolveColor(color, pw, ph, pw, ph)
+  paintMeshLines(out, batches, authored, depth, owners, pw, ph, layer, perspective, originX, originY, out.width / base, out.height / base)
+  return frameOf(out)
 }
 
 function rgbaCss(r: number, g: number, b: number, a: number) {
@@ -1633,19 +2360,19 @@ function projectLayer(
   perspective: Perspective,
   vx: number,
   vy: number,
-  padL: number,
-  padT: number,
+  originX: number,
+  originY: number,
   scaleX: number,
   scaleY: number,
 ) {
   if (perspective === 'parallel') {
-    return { x: (v.x + padL) * scaleX, y: (v.y + padT) * scaleY, z: v.z }
+    return { x: (v.x - originX) * scaleX, y: (v.y - originY) * scaleY, z: v.z }
   }
   const w = 1 - v.z / perspective
   if (w <= 1e-4) return null
   return {
-    x: (vx + (v.x - vx) / w + padL) * scaleX,
-    y: (vy + (v.y - vy) / w + padT) * scaleY,
+    x: (vx + (v.x - vx) / w - originX) * scaleX,
+    y: (vy + (v.y - vy) / w - originY) * scaleY,
     z: v.z,
   }
 }
@@ -1683,8 +2410,8 @@ function sampleSegment(
   perspective: Perspective,
   vx: number,
   vy: number,
-  padL: number,
-  padT: number,
+  originX: number,
+  originY: number,
   scaleX: number,
   scaleY: number,
   depth: Float32Array,
@@ -1705,8 +2432,8 @@ function sampleSegment(
   if (!in0 && !in1) return []
   if (in0 && !in1) p1 = lerpVert(p0, p1, near)
   else if (!in0 && in1) p0 = lerpVert(p0, p1, near)
-  const s0 = projectLayer(p0, perspective, vx, vy, padL, padT, scaleX, scaleY)
-  const s1 = projectLayer(p1, perspective, vx, vy, padL, padT, scaleX, scaleY)
+  const s0 = projectLayer(p0, perspective, vx, vy, originX, originY, scaleX, scaleY)
+  const s1 = projectLayer(p1, perspective, vx, vy, originX, originY, scaleX, scaleY)
   if (!s0 || !s1) return []
   const steps = Math.max(1, Math.ceil(Math.hypot(s1.x - s0.x, s1.y - s0.y)))
   const out: ScreenSample[] = []
@@ -1722,7 +2449,7 @@ function sampleSegment(
       u: 0,
       v: 0,
     }
-    const s = projectLayer(v, perspective, vx, vy, padL, padT, scaleX, scaleY)
+    const s = projectLayer(v, perspective, vx, vy, originX, originY, scaleX, scaleY)
     if (!s) continue
     out.push({
       x: s.x,
@@ -2113,8 +2840,8 @@ function paintMeshLines(
   ph: number,
   layer: LayerLayoutNode,
   perspective: Perspective,
-  padL: number,
-  padT: number,
+  originX: number,
+  originY: number,
   viewW: number,
   viewH: number,
 ) {
@@ -2152,8 +2879,8 @@ function paintMeshLines(
         perspective,
         vx,
         vy,
-        padL,
-        padT,
+        originX,
+        originY,
         scaleX,
         scaleY,
         depth,
@@ -2310,6 +3037,8 @@ function shadeMaterial(kind: NonNullable<MeshLayoutNode['material']>['kind'] | u
 
 export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
   const { layer, perspective, meshes, planes, scale, raster } = input
+  const samples = input.samples === 1 || input.samples === 2 || input.samples === 4 ? input.samples : 4
+  const clip = input.clip ?? { x: 0, y: 0, width: layer.width, height: layer.height }
   const batches: Batch[] = []
   let nextOwner = 1
   for (const instance of meshes) {
@@ -2381,5 +3110,5 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
     batch.owner = nextOwner++
     batches.push(batch)
   }
-  return rasterize(batches, layer, perspective, scale)
+  return rasterize(batches, layer, perspective, scale, samples, clip)
 }

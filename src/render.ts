@@ -35,6 +35,8 @@ export async function renderToCanvas(source: string | FvgNode, options: RenderOp
     frame: options.frame ?? 0,
     fps: options.fps ?? 0,
     issues: doc.issues,
+    meshSamples: options.meshSamples,
+    meshCache: options.meshCache,
   })
   return { canvas, report: buildReport(doc) }
 }
