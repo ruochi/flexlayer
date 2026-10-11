@@ -23,6 +23,7 @@ import { isGradientPaint } from './gradientField.js'
 import { glbSpan, resolveModelFile } from './glb.js'
 import { readBoxFillet, readCylinderFillet } from './mesh-round.js'
 import { openSvgPath, translateSvgPath } from './path.js'
+import { cameraAuditIssues, readPreserve, resolveCamera } from './camera.js'
 import { perspectiveIssues } from './perspective.js'
 import {
   parseBlend,
@@ -2317,6 +2318,17 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
     ctx.issues.push({ level: 'warn', code: 'flex-overflow', path: ctx.pathPrefix, message: 'flex 内容超出写死的 height' })
   }
 
+  const preserve = readPreserve(node.attrs['preserve-3d'])
+  if (preserve.invalid) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 preserve-3d: ${node.attrs['preserve-3d']}`,
+      hint: '写成 preserve-3d="true"。false 或不写表示压平',
+    })
+  }
+
   return {
     kind: 'flex',
     path: ctx.pathPrefix,
@@ -2329,6 +2341,7 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
     ink: { x: appearance.padding.left, y: appearance.padding.top, width: contentW, height: contentH },
     ...appearance,
     direction,
+    ...(preserve.value ? { preserve3d: true } : {}),
     children: laidChildren,
     ...readEffects(style, ctx, solidPaint(appearance.background, ctx.color), 'ink'),
     ...layoutDrawMeta(node, ctx),
@@ -3143,8 +3156,40 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
   const overlay = readLayerOverlay(node.attrs, ctx)
   const layerFilters = readLayerFilters(node.attrs, ctx)
   let perspective: number | 'parallel' | undefined
+  let cameraView: number[] | undefined
+  let vanishX: number | undefined
+  let vanishY: number | undefined
+  let cameraMoved = false
   const perspectiveRaw = node.attrs.perspective
-  if (perspectiveRaw != null && perspectiveRaw.trim() !== '') {
+  const cameraSource = node.camera !== undefined ? node.camera : node.attrs.camera
+  if (cameraSource != null && !(typeof cameraSource === 'string' && cameraSource.trim() === '')) {
+    if (perspectiveRaw != null && perspectiveRaw.trim() !== '') {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'camera 和 perspective 不要写在同一层',
+        hint: 'perspective="900" 就是 camera="focal 900"。这一层用 camera',
+      })
+    }
+    const resolved = resolveCamera(cameraSource, layerW, layerH)
+    for (const item of resolved.issues) {
+      ctx.issues.push({
+        level: item.level,
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: item.message,
+        hint: item.hint,
+      })
+    }
+    if (resolved.camera) {
+      perspective = resolved.camera.perspective
+      cameraView = resolved.camera.view
+      if (resolved.camera.vanishX !== 0) vanishX = resolved.camera.vanishX
+      if (resolved.camera.vanishY !== 0) vanishY = resolved.camera.vanishY
+      cameraMoved = resolved.camera.moved
+    }
+  } else if (perspectiveRaw != null && perspectiveRaw.trim() !== '') {
     if (perspectiveRaw.trim() === 'parallel') {
       perspective = 'parallel'
     } else {
@@ -3161,6 +3206,16 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
         perspective = parsed
       }
     }
+  }
+  const preserve = readPreserve(node.attrs['preserve-3d'])
+  if (preserve.invalid) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 preserve-3d: ${node.attrs['preserve-3d']}`,
+      hint: '写成 preserve-3d="true"。false 或不写表示压平',
+    })
   }
   const laidMask = chosenMask
     ? layoutMask(chosenMask, { ...ctx, pathPrefix: chosenMaskPath })
@@ -3193,8 +3248,8 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
       level: 'warn',
       code: 'invalid-attr',
       path: ctx.pathPrefix,
-      message: 'view 和 perspective 不要写在同一层',
-      hint: '镜头写在外层 <layer view="x y w h">，perspective 写在里面的舞台上',
+      message: 'view 不要和 perspective、camera 写在同一层',
+      hint: '镜头写在外层 <layer view="x y w h">，perspective 或 camera 写在里面的舞台上',
     })
     view = undefined
   }
@@ -3222,6 +3277,11 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
     overflow: node.attrs.overflow === 'hidden' ? 'hidden' : 'visible',
     ...(view ? { view } : {}),
     ...(perspective != null ? { perspective } : {}),
+    ...(cameraView ? { cameraView } : {}),
+    ...(vanishX != null ? { vanishX } : {}),
+    ...(vanishY != null ? { vanishY } : {}),
+    ...(cameraMoved ? { cameraMoved: true } : {}),
+    ...(preserve.value ? { preserve3d: true } : {}),
     ...(mask ? { mask } : {}),
     ...(laidMask?.feather != null ? { maskFeather: laidMask.feather } : {}),
     ...(laidMask?.invert ? { maskInvert: true } : {}),
@@ -3468,6 +3528,7 @@ export function layoutSync(rootNode: FvgNode, assets: LayoutAssets): FvgDocument
   }
   noteTagSpellings(rootNode, 'layer', issues)
   noteStructuredData(rootNode, 'layer', issues)
+  noteCameraPlacement(rootNode, 'layer', issues)
   issues.push(...legacyCenterIssues(rootNode, 'layer'))
   attachDrawTags(rootNode, issues, 'layer')
   const paintCtx: LayoutContext = {
@@ -3516,6 +3577,7 @@ export function layoutSync(rootNode: FvgNode, assets: LayoutAssets): FvgDocument
   root.width = width
   root.height = height
   issues.push(...perspectiveIssues(root))
+  issues.push(...cameraAuditIssues(root))
 
   if (attrs.bleed != null) {
     issues.push({
@@ -3571,6 +3633,35 @@ function canonicalizeTree(node: FvgNode): void {
   }
   for (const child of node.children) {
     if (typeof child !== 'string') canonicalizeTree(child)
+  }
+}
+
+/** camera 对象和 preserve-3d 的位置。字符串 camera 由 layer-only 检查。 */
+function noteCameraPlacement(node: FvgNode, path: string, issues: Issue[]): void {
+  const flex = isTextBoxTag(node.tag) && isDisplayFlex(node.attrs.style)
+  if (node.camera !== undefined && node.tag !== 'layer') {
+    issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path,
+      message: 'camera 只写在 layer 上',
+      hint: '写在取景的 layer 上，例如 <layer camera="focal 900">',
+    })
+  }
+  if (node.attrs['preserve-3d'] != null && node.tag !== 'layer' && !flex) {
+    issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path,
+      message: 'preserve-3d 只写在 layer 和 flex 上',
+      hint: '写成 <div style="display:flex" preserve-3d="true">，或写在 layer 上',
+    })
+  }
+  let index = 0
+  for (const child of node.children) {
+    if (typeof child === 'string') continue
+    noteCameraPlacement(child, `${path}/${child.tag}[${index}]`, issues)
+    index++
   }
 }
 

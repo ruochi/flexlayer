@@ -1,6 +1,6 @@
 import { createCanvas, type Canvas, type CanvasRenderingContext2D } from '@napi-rs/canvas'
 import { originOffset } from './matrix.js'
-import type { Issue, LayoutNode } from './types.js'
+import type { Issue, LayerLayoutNode, LayoutNode } from './types.js'
 
 export type Vec3 = { x: number; y: number; z: number }
 export type Vec2 = { x: number; y: number }
@@ -107,9 +107,13 @@ export function hasPerspective(value: Perspective | undefined): value is Perspec
   return value === 'parallel' || (typeof value === 'number' && value > 0)
 }
 
-/** 平行投影没有镜头平面。数值视距里，z 大于等于视距就是观众身后。 */
+/**
+ * 平行投影没有镜头平面。数值视距里，采样点的 w = 1 - z/perspective，
+ * w 小于等于 0 就是观众身后，和 project 返回 null 是同一条线。
+ */
 export function behindCamera(z: number, perspective: Perspective): boolean {
-  return perspective !== 'parallel' && z >= perspective
+  if (perspective === 'parallel') return false
+  return 1 - z / perspective <= 1e-4
 }
 
 /** 视距像素。灭点 (vx, vy)。z 越大越近。观众身后返回 null。平行投影不缩放。 */
@@ -122,6 +126,35 @@ export function project(vx: number, vy: number, perspective: Perspective, p: Vec
 
 export function planeDepth(node: LayoutNode): number {
   return posePoint(node, node.width / 2, node.height / 2).z
+}
+
+/** 这些效果会把子树收成一张图，写了 preserve-3d 也不展开。 */
+export function flattenReason(node: LayoutNode): string | null {
+  if ((node.opacity ?? 1) < 1 - 1e-9) return 'opacity'
+  if ((node.blur ?? 0) > 0) return 'blur'
+  if (node.filters != null && node.filters.length > 0) return 'filter'
+  if (node.grade) return 'grade'
+  if (node.kind === 'layer' && node.mask != null && node.mask.length > 0) return 'mask'
+  if (node.kind === 'layer' && node.overflow === 'hidden') return 'overflow'
+  if (node.glass) return 'glass'
+  if ((node.backdropBlur ?? 0) > 0) return 'backdrop-blur'
+  if (node.blend && node.blend !== 'source-over') return 'blend'
+  if (node.noise) return 'noise'
+  if (node.overlay) return 'overlay'
+  return null
+}
+
+/** 机位不是默认的，或者某级子元素写了还能展开的 preserve-3d。 */
+export function cameraSceneCustom(layer: LayerLayoutNode): boolean {
+  if (!hasPerspective(layer.perspective)) return false
+  if (layer.cameraMoved) return true
+  const visit = (node: LayoutNode, blocked: boolean): boolean => {
+    if (blocked) return false
+    if (node.preserve3d && !flattenReason(node)) return true
+    if (node.kind !== 'layer' && node.kind !== 'flex') return false
+    return node.children.some((child) => visit(child, child.kind === 'layer' && hasPerspective(child.perspective)))
+  }
+  return layer.children.some((child) => visit(child, child.kind === 'layer' && hasPerspective(child.perspective)))
 }
 
 function solveAffine(
@@ -486,11 +519,13 @@ export function drawTexturedPlane(
 
 /**
  * 直接子级的平面才进入这一层的镜头。再往里的子孙先画进父平面。
+ * 写了还能展开的 preserve-3d 时，子孙沿父链进入外层镜头，不报 flatten-3d。
  * 网格沿着祖先里最近的 perspective 走，不要求自己是直接子级。
+ * 非默认机位的 behind-camera 由 cameraAuditIssues 按乘过视图矩阵之后的采样点报。
  */
 export function perspectiveIssues(root: LayoutNode): Issue[] {
   const issues: Issue[] = []
-  const visit = (node: LayoutNode, inCamera: boolean, distance: Perspective | undefined) => {
+  const visit = (node: LayoutNode, inCamera: boolean, distance: Perspective | undefined, projected: boolean, custom: boolean) => {
     if (node.kind === 'mesh') {
       if (distance == null) {
         issues.push({
@@ -500,7 +535,7 @@ export function perspectiveIssues(root: LayoutNode): Issue[] {
           message: `${node.tag} 没有落在带 perspective 的 layer 里`,
           hint: '在父 layer 上写 perspective，例如 <layer perspective="900">',
         })
-      } else if (behindCamera(node.z ?? 0, distance)) {
+      } else if (!custom && behindCamera(node.z ?? 0, distance)) {
         issues.push({
           level: 'warn',
           code: 'behind-camera',
@@ -511,7 +546,7 @@ export function perspectiveIssues(root: LayoutNode): Issue[] {
       }
       return
     }
-    if (has3dPose(node) && !inCamera) {
+    if (has3dPose(node) && !inCamera && !projected) {
       issues.push({
         level: 'warn',
         code: 'flatten-3d',
@@ -520,7 +555,7 @@ export function perspectiveIssues(root: LayoutNode): Issue[] {
         hint: '在父 layer 上写 perspective，例如 <layer perspective="900">',
       })
     }
-    if (inCamera && distance != null && behindCamera(node.z ?? 0, distance)) {
+    if (inCamera && !custom && distance != null && behindCamera(planeDepth(node), distance)) {
       issues.push({
         level: 'warn',
         code: 'behind-camera',
@@ -531,8 +566,14 @@ export function perspectiveIssues(root: LayoutNode): Issue[] {
     }
     const children = node.kind === 'layer' || node.kind === 'flex' ? node.children : []
     const opens = node.kind === 'layer' && hasPerspective(node.perspective)
-    for (const child of children) visit(child, opens, opens ? node.perspective : distance)
+    const nextCustom = opens ? cameraSceneCustom(node) : custom
+    const nextProjected = !opens && projected
+    const childProjected = (parent: LayoutNode) =>
+      nextProjected || (!!parent.preserve3d && !flattenReason(parent) && (opens || projected || inCamera))
+    for (const child of children) {
+      visit(child, opens, opens ? node.perspective : distance, opens ? false : childProjected(node), nextCustom && (opens || custom))
+    }
   }
-  visit(root, false, undefined)
+  visit(root, false, undefined, false, false)
   return issues
 }

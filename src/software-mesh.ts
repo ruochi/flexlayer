@@ -2062,6 +2062,8 @@ function rasterize(
 ): MeshFrame {
   const vx = layer.width / 2
   const vy = layer.height / 2
+  const px = vx + (layer.vanishX ?? 0)
+  const py = vy + (layer.vanishY ?? 0)
   const authored: Vert[][] = []
   const projected: Float32Array[] = []
   let minX = Infinity
@@ -2082,7 +2084,7 @@ function rasterize(
       const u = batch.uvs ? batch.uvs[i * 2]! : 0
       const v = batch.uvs ? batch.uvs[i * 2 + 1]! : 0
       verts[i] = { x: p.x, y: p.y, z: p.z, nx: n.x, ny: n.y, nz: n.z, u, v }
-      const front = layerProject(p, perspective, vx, vy)
+      const front = layerProject(p, perspective, px, py)
       const o = i * 3
       if (front) {
         proj[o] = front.lx
@@ -2188,9 +2190,9 @@ function rasterize(
           owners,
           pw,
           ph,
-          projectClipped(clipped[0]!, perspective, vx, vy, originX, originY, pixelScale),
-          projectClipped(clipped[k]!, perspective, vx, vy, originX, originY, pixelScale),
-          projectClipped(clipped[k + 1]!, perspective, vx, vy, originX, originY, pixelScale),
+          projectClipped(clipped[0]!, perspective, px, py, originX, originY, pixelScale),
+          projectClipped(clipped[k]!, perspective, px, py, originX, originY, pixelScale),
+          projectClipped(clipped[k + 1]!, perspective, px, py, originX, originY, pixelScale),
           batch,
           shadow,
           camera,
@@ -2852,6 +2854,8 @@ function paintMeshLines(
   const scale = (scaleX + scaleY) / 2
   const vx = layer.width / 2
   const vy = layer.height / 2
+  const px = vx + (layer.vanishX ?? 0)
+  const py = vy + (layer.vanishY ?? 0)
   const mapX = pw / canvas.width
   const mapY = ph / canvas.height
   const edges: EdgeEnds[] = []
@@ -2877,8 +2881,8 @@ function paintMeshLines(
         a,
         b,
         perspective,
-        vx,
-        vy,
+        px,
+        py,
         originX,
         originY,
         scaleX,

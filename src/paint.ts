@@ -29,8 +29,9 @@ import { gradientStyle, isGradientPaint, type GradientBox } from './gradientFiel
 import { applyToBox, aroundPivot, IDENTITY, intersectBox, invert, multiply, originOffset, translated, type Matrix } from './matrix.js'
 import { invalidDrawIssue } from './draw-tag.js'
 import { openSvgPath } from './path.js'
+import { cameraItems, projectOnLayer } from './camera.js'
 import { ownsMeshScene, renderMeshLayer, type MeshFrame } from './mesh.js'
-import { behindCamera, drawTexturedPlane, has3dPose, hasPerspective, PERSPECTIVE_AA, planeDepth, posePoint, project, resolveSamples, type Perspective } from './perspective.js'
+import { behindCamera, cameraSceneCustom, drawTexturedPlane, has3dPose, hasPerspective, PERSPECTIVE_AA, planeDepth, posePoint, project, resolveSamples, type Perspective } from './perspective.js'
 import { compositeMask } from './mask-compose.js'
 import { outerInkStrokeReach } from './style.js'
 import { layoutScale, viewMatrix } from './view.js'
@@ -76,6 +77,8 @@ type PaintState = {
   frame: number
   fps: number
   issues: Issue[]
+  /** 平面位图的超采样倍数。blur 按这个倍数画进位图，缩回后仍是作者写的半径。 */
+  supersample?: number
 }
 
 const SILHOUETTE = '#000000'
@@ -1879,6 +1882,7 @@ function paintChildBitmap(
   k: number,
   t: number,
   state: PaintState,
+  samples = 1,
 ): { canvas: Canvas; pad: number; logicalWidth: number; logicalHeight: number; localX: number; localY: number } {
   const pad = planeBitmapPad(child)
   const frame = child.kind === 'layer' ? state.meshFrames?.get(child) : undefined
@@ -1896,7 +1900,10 @@ function paintChildBitmap(
   const octx = canvas.getContext('2d') as PaintCtx
   // 位图是平面局部像素。rotate / scale 交给 posePoint，避免和投影各转一次。
   octx.setTransform(k, 0, 0, k, (-child.x - localX) * k, (-child.y - localY) * k)
+  const previous = state.supersample
+  state.supersample = samples
   paintNode(octx, child, false, t, state, true)
+  state.supersample = previous
   return { canvas, pad, logicalWidth, logicalHeight, localX, localY }
 }
 
@@ -1915,13 +1922,53 @@ function paintPerspectiveChildren(ctx: PaintCtx, node: LayerLayoutNode, debug: b
       paintNode(ctx, child, debug, t, state)
       continue
     }
-    const { canvas: bitmap, localX, localY, logicalWidth, logicalHeight } = paintChildBitmap(child, k * PERSPECTIVE_AA, t, state)
+    const { canvas: bitmap, localX, localY, logicalWidth, logicalHeight } = paintChildBitmap(child, k * PERSPECTIVE_AA, t, state, PERSPECTIVE_AA)
     const at = (u: number, v: number) => {
       const p = posePoint(child, u + localX, v + localY)
       return project(vx, vy, perspective, p)
     }
     drawTexturedPlane(ctx, bitmap, logicalWidth, logicalHeight, at)
     if (debug) strokeProjectedQuad(ctx, child, vx, vy, perspective)
+  }
+}
+
+function paintProjectedChildren(ctx: PaintCtx, node: LayerLayoutNode, debug: boolean, t: number, state: PaintState) {
+  const perspective = node.perspective!
+  const k = transformScale(ctx)
+  const planes = cameraItems(node)
+    .filter((item) => item.kind !== 'mesh')
+    .sort((a, b) => a.depth - b.depth || a.index - b.index)
+  for (const item of planes) {
+    const child = item.kind === 'chrome' ? ({ ...item.node, children: [] } as LayoutNode) : item.node
+    if (child.width <= 0 || child.height <= 0) continue
+    if (item.behind) continue
+    if (!item.posed) {
+      paintNode(ctx, child, debug, t, state)
+      continue
+    }
+    const { canvas: bitmap, localX, localY, logicalWidth, logicalHeight } = paintChildBitmap(child, k * PERSPECTIVE_AA, t, state, PERSPECTIVE_AA)
+    const at = (u: number, v: number) => projectOnLayer(node, item.toLayer, u + localX, v + localY)
+    drawTexturedPlane(ctx, bitmap, logicalWidth, logicalHeight, at)
+    if (debug) {
+      const pts = [
+        [0, 0],
+        [child.width, 0],
+        [child.width, child.height],
+        [0, child.height],
+      ]
+        .map(([u, v]) => projectOnLayer(node, item.toLayer, u!, v!))
+      if (pts.every((point) => point != null)) {
+        ctx.save()
+        ctx.strokeStyle = 'rgba(0, 210, 90, 0.95)'
+        ctx.lineWidth = 1.5 / transformScale(ctx)
+        ctx.beginPath()
+        ctx.moveTo(pts[0]!.x, pts[0]!.y)
+        for (const point of pts.slice(1)) ctx.lineTo(point!.x, point!.y)
+        ctx.closePath()
+        ctx.stroke()
+        ctx.restore()
+      }
+    }
   }
 }
 
@@ -1994,8 +2041,9 @@ function paintBody(ctx: PaintCtx, node: LayoutNode, debug: boolean, t: number, s
       ctx.drawImage(meshFrame.canvas, meshFrame.x, meshFrame.y, meshFrame.width, meshFrame.height)
     } else if (meshFrame) {
       // 投影落在可见范围外，这一层不再走二维透视。
-    } else if (node.kind === 'layer' && hasPerspective(node.perspective) && node.children.some(has3dPose)) {
-      paintPerspectiveChildren(ctx, node, debug, t, state)
+    } else if (node.kind === 'layer' && hasPerspective(node.perspective) && (cameraSceneCustom(node) || node.children.some(has3dPose))) {
+      if (cameraSceneCustom(node)) paintProjectedChildren(ctx, node, debug, t, state)
+      else paintPerspectiveChildren(ctx, node, debug, t, state)
     } else {
       for (const ch of node.children) paintNode(ctx, ch, debug, t, state)
     }
@@ -2114,9 +2162,9 @@ function applyPixelFilters(
   cctx.putImageData(image, 0, 0)
 }
 
-function canvasFilterCss(node: LayoutNode): string {
+function canvasFilterCss(node: LayoutNode, samples = 1): string {
   const parts: string[] = []
-  if ((node.blur ?? 0) > 0) parts.push(`blur(${node.blur}px)`)
+  if ((node.blur ?? 0) > 0) parts.push(`blur(${node.blur! * samples}px)`)
   for (const item of orderedFilters(node.filters, 'canvas')) {
     const css = getFilter(item.name)?.canvasFilter?.(item.spec)
     if (css) parts.push(css)
@@ -2173,7 +2221,7 @@ function compositeMaskedOuter(
 function paintWithLayerFilter(ctx: PaintCtx, node: LayoutNode, debug: boolean, t: number, state: PaintState) {
   const blur = node.blur ?? 0
   const pixel = orderedFilters(node.filters, 'pixel')
-  const filter = canvasFilterCss(node)
+  const filter = canvasFilterCss(node, state.supersample ?? 1)
   const masks = layerMaskOf(node)
   const strokeReach = outerInkStrokeReach(node.inkStroke)
   const pad = Math.ceil(blur * 2 + 4 + filtersPad(node.filters))
@@ -2323,7 +2371,7 @@ async function prepareMeshFrames(
     const frame = renderMeshLayer(
       node,
       k,
-      (peeled) => paintChildBitmap(peeled, Math.max(k, 1e-3) * 2, t, state),
+      (peeled) => paintChildBitmap(peeled, Math.max(k, 1e-3) * 2, t, state, 2),
       {
         clip: meshVisibleRect(docWidth, docHeight, root, node),
         samples: mesh.samples,
