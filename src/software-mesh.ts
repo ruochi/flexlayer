@@ -23,7 +23,7 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
  * 写了 stroke 时，在超采样缓冲上按屏幕像素描折棱和轮廓，再和填充一起平均缩回。
  * 两只都写了 stroke 的网格相互穿过时，交界线算折棱，颜色和宽度跟后写的那只。
  * hidden 只画被这只网格自己挡住的棱，虚线是 6 实 4 空。交界线被这两只中任意一只挡住时同样算隐藏线。
- * 不写 material 时是磨砂：主光乘 fill。plastic 加高光，metal 和 glass 映一张竖向的工作室环境，glass 后画叠色。
+ * 不写 material 时是磨砂：主光乘 fill。plastic 和 metal 用同一套磨砂明暗，再叠竖向工作室环境，没有缩成一点的高光。glass 后画，边缘映环境。
  * 同一条折线上的短段接成一条再取虚线相位，圆弧不会接成实线。
  */
 
@@ -282,7 +282,20 @@ function reflectView(v: { x: number; y: number; z: number }, n: { x: number; y: 
 
 type ShadeCamera = { x: number; y: number; z: number; parallel?: boolean }
 
-/** 塑料加白高光。金属用 fill 给工作室环境染色。玻璃边缘映出同一张环境，中心透出底下。 */
+/**
+ * 磨砂底色上叠环境贴图。比中间灰亮的加亮，比中间灰暗的压暗。
+ * 金属压得更黑、亮得更多；塑料更透，底色的明暗留得更多。
+ */
+function envOverMatte(channel: number, shade: number, envC: number, darken: number, lighten: number) {
+  const base = (channel / 255) * shade
+  const env = envC / 255
+  const dark = clamp01((0.45 - env) / 0.45)
+  const light = clamp01((env - 0.45) / 0.55)
+  const darkened = base * (1 - dark * darken)
+  return Math.min(255, (darkened + (1 - darkened) * light * lighten) * 255)
+}
+
+/** 金属和塑料都是磨砂明暗再叠环境。玻璃边缘映出同一张环境，中心透出底下。 */
 function materialBytes(
   batch: Batch,
   nx: number,
@@ -298,37 +311,20 @@ function materialBytes(
 ): [number, number, number, number] {
   const n = shadeNormal(nx, ny, nz, back)
   const v = camera.parallel ? { x: 0, y: 0, z: 1 } : unit(camera.x - x, y - camera.y, camera.z - z)
+  const reflect = reflectView(v, n)
+  const env = studioAt(reflect.x, reflect.y, reflect.z, batch.roughness)
+  const envR = env.r
+  const envG = env.g
+  const envB = env.b
+  if (batch.material === 'metal' || batch.material === 'plastic') {
+    const darken = batch.material === 'metal' ? 0.92 : 0.4
+    const lighten = batch.material === 'metal' ? 0.45 : 0.22
+    const chan = (channel: number, envC: number) => byte(envOverMatte(channel, shade, envC, darken, lighten))
+    return [chan(batch.r, envR), chan(batch.g, envG), chan(batch.b, envB), batch.a]
+  }
   const h = unit(KEY.x + v.x, KEY.y + v.y, KEY.z + v.z)
   const ndoth = Math.max(n.x * h.x + n.y * h.y + n.z * h.z, 0)
   const spec = blocked ? 0 : ndoth ** shininess(batch.roughness)
-  if (batch.material === 'plastic') {
-    const add = spec * 255 * 0.95
-    return [
-      byte(Math.min(255, batch.r * shade + add)),
-      byte(Math.min(255, batch.g * shade + add)),
-      byte(Math.min(255, batch.b * shade + add)),
-      batch.a,
-    ]
-  }
-    const reflect = reflectView(v, n)
-    const env = studioAt(reflect.x, reflect.y, reflect.z, batch.roughness)
-    const envR = env.r
-    const envG = env.g
-    const envB = env.b
-    if (batch.material === 'metal') {
-      const ndotv = clamp01(n.x * v.x + n.y * v.y + n.z * v.z)
-      const fres = (1 - ndotv) ** 5
-      const exposure = blocked ? 0.32 : 0.5 + 0.5 * Math.min(1, shade)
-      const specAdd = spec * 220
-      const envLum = (envR + envG + envB) / 3
-      // 暗部只留一点 fill，避免掠射处掉成纯黑的一像素。竖向黑旗要保持黑，不再把整条水平暗反射补亮。
-      const fillKeep = 0.08 + (envLum < 28 && ndotv < 0.18 ? 0.12 : 0)
-      const tint = (channel: number, envC: number) => {
-        const f = channel / 255
-        return Math.min(255, (f + (1 - f) * fres) * envC * exposure + channel * fillKeep + specAdd * (0.25 + 0.75 * f))
-      }
-      return [byte(tint(batch.r, envR)), byte(tint(batch.g, envG)), byte(tint(batch.b, envB)), batch.a]
-    }
   const ndotv = clamp01(n.x * v.x + n.y * v.y + n.z * v.z)
   const edge = (1 - ndotv) ** 2.2
   const body = batch.a / 255
