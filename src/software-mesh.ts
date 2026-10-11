@@ -39,6 +39,8 @@ type RasterBitmap = {
   logicalHeight: number
   localX: number
   localY: number
+  /** 内容坐标。给出时按这个多边形画，不再用位图四角。 */
+  polygon?: Array<{ u: number; v: number }>
 }
 
 export type SoftwareMeshInput = {
@@ -47,7 +49,7 @@ export type SoftwareMeshInput = {
   meshes: Array<{ node: MeshLayoutNode; toLayer: Mat4; opacity?: number }>
   planes: Array<{ node: LayoutNode; peeled: LayoutNode; toLayer: Mat4 }>
   scale: number
-  raster: (node: LayoutNode) => RasterBitmap
+  raster: (node: LayoutNode, toLayer?: number[]) => RasterBitmap
   /** 1、2 或 4。缺省 4，不再因为视口伸出画面而降档。 */
   samples?: number
   /** 这一层坐标里要画的范围。和投影外框求交后再分配缓冲区。 */
@@ -3109,20 +3111,30 @@ function uniformBytes(data: Uint8ClampedArray): { r: number; g: number; b: numbe
 }
 
 function planeBatch(plane: SoftwareMeshInput['planes'][number], raster: SoftwareMeshInput['raster']): Batch | null {
-  const painted = raster(plane.peeled)
+  const painted = raster(plane.peeled, plane.toLayer)
   if (painted.logicalWidth <= 0 || painted.logicalHeight <= 0) return null
   const pixels = painted.canvas.getContext('2d').getImageData(0, 0, painted.canvas.width, painted.canvas.height)
   const solid = uniformBytes(pixels.data)
   const o = originOffset(plane.node.origin, plane.node.width, plane.node.height)
   const { localX, localY } = painted
-  const corners: Array<[number, number]> = [
-    [localX, localY],
-    [localX + painted.logicalWidth, localY],
-    [localX + painted.logicalWidth, localY + painted.logicalHeight],
-    [localX, localY + painted.logicalHeight],
-  ]
-  // 作者空间 y 向下，正面（法线朝镜头）的屏幕面积为负，和网格的 back 判定一致。
-  const order = [0, 2, 1, 0, 3, 2]
+  const corners: Array<[number, number]> = painted.polygon
+    ? painted.polygon.map((point) => [point.u, point.v])
+    : [
+        [localX, localY],
+        [localX + painted.logicalWidth, localY],
+        [localX + painted.logicalWidth, localY + painted.logicalHeight],
+        [localX, localY + painted.logicalHeight],
+      ]
+  if (corners.length < 3) return null
+  // 四角沿用原来的绕序，正面朝镜头。裁过的多边形按同一绕序扇形切开，法线才不会翻到背面。
+  const order = painted.polygon
+    ? Array.from({ length: (corners.length - 2) * 3 }, (_, slot) => {
+        const tri = Math.floor(slot / 3)
+        const vert = slot % 3
+        if (vert === 0) return 0
+        return tri + (vert === 1 ? 2 : 1)
+      })
+    : [0, 2, 1, 0, 3, 2]
   const positions = new Float32Array(order.length * 3)
   const uvs = new Float32Array(order.length * 2)
   const normals = new Float32Array(order.length * 3)
