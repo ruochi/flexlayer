@@ -702,7 +702,7 @@ function drawOuterInk(ctx: CanvasRenderingContext2D, state: PaintState, node: La
     return
   }
   if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
-    drawSubtreeInk(ctx, node, spread)
+    drawSubtreeInk(ctx, node, spread, SILHOUETTE, state)
     return
   }
   drawNodeInk(ctx, node, spread)
@@ -751,21 +751,28 @@ function drawNodeInk(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: nu
 }
 
 /** layer overlay：自身 chrome + 子树着墨（子元素局部坐标）。不看这一层自己的 mask。 */
-function drawUnmaskedSubtree(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: number, ink = SILHOUETTE) {
+function drawUnmaskedSubtree(
+  ctx: CanvasRenderingContext2D,
+  node: LayoutNode,
+  spread: number,
+  ink = SILHOUETTE,
+  state?: PaintState,
+) {
   if (node.kind === 'group') {
     ctx.save()
     ctx.transform(node.svg.a, node.svg.b, node.svg.c, node.svg.d, node.svg.e, node.svg.f)
-    for (const ch of node.children) drawSubtreeInk(ctx, ch, spread, ink)
+    for (const ch of node.children) drawSubtreeInk(ctx, ch, spread, ink, state)
     ctx.restore()
     return
   }
   drawNodeInk(ctx, node, spread, ink)
+  if (node.kind === 'layer' && state?.meshFrames?.has(node)) drawMeshFrameInk(ctx, node, state)
   if (node.kind !== 'layer' && node.kind !== 'flex') return
   const insetX = node.kind === 'flex' ? node.padding.left + (node.border?.width ?? 0) : 0
   const insetY = node.kind === 'flex' ? node.padding.top + (node.border?.width ?? 0) : 0
   ctx.save()
   ctx.translate(node.x + insetX, node.y + insetY)
-  for (const ch of node.children) drawSubtreeInk(ctx, ch, spread, ink)
+  for (const ch of node.children) drawSubtreeInk(ctx, ch, spread, ink, state)
   ctx.restore()
 }
 
@@ -773,10 +780,16 @@ function drawUnmaskedSubtree(ctx: CanvasRenderingContext2D, node: LayoutNode, sp
  * 蒙版留下的轮廓。先画没裁过的子树，再套 mask，最后按 spread 胀缩。
  * 父层的描边和阴影跟着这块轮廓，不跟着没抠过的矩形。
  */
-function drawMaskedLayerInk(ctx: CanvasRenderingContext2D, node: LayerLayoutNode, spread: number, ink = SILHOUETTE) {
+function drawMaskedLayerInk(
+  ctx: CanvasRenderingContext2D,
+  node: LayerLayoutNode,
+  spread: number,
+  ink = SILHOUETTE,
+  state?: PaintState,
+) {
   const masks = node.mask
   if (!masks || masks.length === 0) {
-    drawUnmaskedSubtree(ctx, node, spread, ink)
+    drawUnmaskedSubtree(ctx, node, spread, ink, state)
     return
   }
   const k = Math.max(transformScale(ctx), 1e-3)
@@ -785,7 +798,7 @@ function drawMaskedLayerInk(ctx: CanvasRenderingContext2D, node: LayerLayoutNode
   const canvas = createCanvas(w, h)
   const octx = canvas.getContext('2d') as PaintCtx
   octx.setTransform(k, 0, 0, k, -node.x * k, -node.y * k)
-  drawUnmaskedSubtree(octx, node, 0, '#ffffff')
+  drawUnmaskedSubtree(octx, node, 0, '#ffffff', state)
   applyLayerMask(
     canvas,
     masks,
@@ -808,12 +821,18 @@ function drawMaskedLayerInk(ctx: CanvasRenderingContext2D, node: LayerLayoutNode
 }
 
 /** layer overlay：自身 chrome + 子树着墨。写了 mask 的层用蒙版之后的轮廓。 */
-function drawSubtreeInk(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: number, ink = SILHOUETTE) {
+function drawSubtreeInk(
+  ctx: CanvasRenderingContext2D,
+  node: LayoutNode,
+  spread: number,
+  ink = SILHOUETTE,
+  state?: PaintState,
+) {
   if (node.kind === 'layer' && node.mask && node.mask.length > 0) {
-    drawMaskedLayerInk(ctx, node, spread, ink)
+    drawMaskedLayerInk(ctx, node, spread, ink, state)
     return
   }
-  drawUnmaskedSubtree(ctx, node, spread, ink)
+  drawUnmaskedSubtree(ctx, node, spread, ink, state)
 }
 
 function transformScale(ctx: CanvasRenderingContext2D): number {
@@ -876,7 +895,7 @@ function paintInnerEffect(
 }
 
 /** layer 专用：按子树墨迹裁切后叠加纯色/渐变。 */
-function paintOverlay(ctx: PaintCtx, node: LayoutNode, overlay: OverlaySpec) {
+function paintOverlay(ctx: PaintCtx, node: LayoutNode, overlay: OverlaySpec, state?: PaintState) {
   if (node.width <= 0 || node.height <= 0 || overlay.opacity <= 0) return
   const w = Math.max(1, Math.ceil(node.width))
   const h = Math.max(1, Math.ceil(node.height))
@@ -893,9 +912,9 @@ function paintOverlay(ctx: PaintCtx, node: LayoutNode, overlay: OverlaySpec) {
   const clipCtx = clip.getContext('2d') as PaintCtx
   clipCtx.setTransform(k, 0, 0, k, 0, 0)
   clipCtx.translate(-node.x, -node.y)
-  drawSubtreeInk(clipCtx, node, 0, '#ffffff')
+  drawSubtreeInk(clipCtx, node, 0, '#ffffff', state)
   // 内描边落在本体内，从蒙版里挖掉，避免渐变 overlay 染到描边。
-  eraseInnerStrokes(clipCtx, node)
+  eraseInnerStrokes(clipCtx, node, state)
   octx.globalCompositeOperation = 'destination-in'
   octx.drawImage(clip, 0, 0)
 
@@ -1441,8 +1460,8 @@ function leafInkBounds(node: LayoutNode): Box {
 }
 
 /** 子元素在父级内容坐标里的墨迹。旋转和缩放绕它自己的 origin，不含父级的平移。 */
-function placedChildInk(node: LayoutNode): Box | null {
-  const local = groupInkBounds(node)
+function placedChildInk(node: LayoutNode, state?: PaintState): Box | null {
+  const local = groupInkBounds(node, state)
   if (!local) return null
   if (node.rotate === 0 && node.scaleX === 1 && node.scaleY === 1) return local
   const origin = originOffset(node.origin, node.width, node.height)
@@ -1453,10 +1472,10 @@ function placedChildInk(node: LayoutNode): Box | null {
  * `<g>` 不另画一圈效果。这里把子路径变到父级内容坐标，供外层 layer 的描边和阴影用。
  * SVG `transform` 已经含在结果里，不再加 `g` 自己的布局原点。
  */
-function groupContentInk(node: LayoutNode & { kind: 'group' }): Box | null {
+function groupContentInk(node: LayoutNode & { kind: 'group' }, state?: PaintState): Box | null {
   const parts: Box[] = []
   for (const ch of node.children) {
-    const local = placedChildInk(ch)
+    const local = placedChildInk(ch, state)
     if (!local) continue
     parts.push(applyToBox(node.svg, local))
   }
@@ -1467,8 +1486,8 @@ function groupContentInk(node: LayoutNode & { kind: 'group' }): Box | null {
 }
 
 /** 子树墨迹外框，坐标系与 drawInkMask 一致（含本节点的 x/y，不含本节点自己的旋转）。 */
-function groupInkBounds(node: LayoutNode): Box | null {
-  if (node.kind === 'group') return groupContentInk(node)
+function groupInkBounds(node: LayoutNode, state?: PaintState): Box | null {
+  if (node.kind === 'group') return groupContentInk(node, state)
   if (node.kind !== 'layer' && node.kind !== 'flex') return leafInkBounds(node)
   const parts: Box[] = []
   const add = (b: Box | null) => {
@@ -1476,12 +1495,18 @@ function groupInkBounds(node: LayoutNode): Box | null {
     parts.push(b)
   }
   if ((node.background && node.background !== 'transparent') || (node.border && node.border.width > 0)) {
-    add(leafInkBounds(node))
+    add({ x: node.x, y: node.y, width: node.width, height: node.height })
+  }
+  if (node.kind === 'layer') {
+    const frame = state?.meshFrames?.get(node)
+    if (frame && frame.width > 0 && frame.height > 0) {
+      add({ x: node.x + frame.x, y: node.y + frame.y, width: frame.width, height: frame.height })
+    }
   }
   const insetX = node.kind === 'flex' ? node.padding.left + (node.border?.width ?? 0) : 0
   const insetY = node.kind === 'flex' ? node.padding.top + (node.border?.width ?? 0) : 0
   for (const ch of node.children) {
-    const transformed = placedChildInk(ch)
+    const transformed = placedChildInk(ch, state)
     if (!transformed) continue
     add({
       x: transformed.x + node.x + insetX,
@@ -1497,7 +1522,7 @@ function groupInkBounds(node: LayoutNode): Box | null {
 }
 
 /** 画本节点墨迹。Layer / flex 合并子树；`<g>` 只把子路径变进这棵子树，不单独描边。 */
-function drawInkMask(ctx: PaintCtx, node: LayoutNode, isTop: boolean) {
+function drawInkMask(ctx: PaintCtx, node: LayoutNode, isTop: boolean, state?: PaintState) {
   if (node.kind === 'layer' && node.mask && node.mask.length > 0) {
     ctx.save()
     if (!isTop) {
@@ -1515,13 +1540,14 @@ function drawInkMask(ctx: PaintCtx, node: LayoutNode, isTop: boolean) {
   }
   if (node.kind === 'group') {
     ctx.transform(node.svg.a, node.svg.b, node.svg.c, node.svg.d, node.svg.e, node.svg.f)
-    for (const ch of node.children) drawInkMask(ctx, ch, false)
+    for (const ch of node.children) drawInkMask(ctx, ch, false, state)
   } else if (node.kind === 'layer' || node.kind === 'flex') {
     drawNodeInk(ctx, node, 0, '#ffffff')
+    if (node.kind === 'layer' && state?.meshFrames?.has(node)) drawMeshFrameInk(ctx, node, state)
     const insetX = node.kind === 'flex' ? node.padding.left + (node.border?.width ?? 0) : 0
     const insetY = node.kind === 'flex' ? node.padding.top + (node.border?.width ?? 0) : 0
     ctx.translate(node.x + insetX, node.y + insetY)
-    for (const ch of node.children) drawInkMask(ctx, ch, false)
+    for (const ch of node.children) drawInkMask(ctx, ch, false, state)
   } else {
     drawNodeInk(ctx, node, 0, '#ffffff')
   }
@@ -1535,9 +1561,9 @@ function drawInkMask(ctx: PaintCtx, node: LayoutNode, isTop: boolean) {
 function drawEffectInk(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: number, state?: PaintState) {
   const extra = outerInkStrokeReach(node.inkStroke)
   if ((node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') && extra > 0) {
-    const bounds = groupInkBounds(node)
+    const bounds = groupInkBounds(node, state)
     if (!bounds) return
-    paintDilatedInk(ctx as PaintCtx, spread + extra, SILHOUETTE, bounds, (octx) => drawInkMask(octx, node, true))
+    paintDilatedInk(ctx as PaintCtx, spread + extra, SILHOUETTE, bounds, (octx) => drawInkMask(octx, node, true, state))
     return
   }
   if (state) drawOuterInk(ctx, state, node, spread + extra)
@@ -1604,20 +1630,21 @@ function paintInkStrokes(
   node: LayoutNode,
   phase: 'outer' | 'inner',
   source?: { bounds: Box; draw: (ctx: PaintCtx) => void },
+  state?: PaintState,
 ) {
   const layers = node.inkStroke
   if (!layers?.length) return
   const bands = collectStrokeBands(layers, phase)
   if (bands.length === 0) return
   const subtree = node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group'
-  const base = source?.bounds ?? (subtree ? groupInkBounds(node) : leafInkBounds(node))
+  const base = source?.bounds ?? (subtree ? groupInkBounds(node, state) : leafInkBounds(node))
   if (!base || base.width <= 0 || base.height <= 0) return
   const reach = phase === 'outer' ? outerInkStrokeReach(layers) : 2
   const pad = Math.ceil(Math.max(reach, 2)) + 2
   const user: Box = { x: base.x - pad, y: base.y - pad, width: base.width + pad * 2, height: base.height + pad * 2 }
   const draw = (octx: PaintCtx) => {
     if (source) source.draw(octx)
-    else if (subtree) drawInkMask(octx, node, true)
+    else if (subtree) drawInkMask(octx, node, true, state)
     else drawNodeInk(octx, node, 0, '#ffffff')
   }
   const matrix = ctx.getTransform()
@@ -1656,17 +1683,17 @@ function paintInkStrokes(
 }
 
 /** 与 drawSubtreeInk 同一套坐标，把内侧描边从 overlay 蒙版里挖掉。 */
-function eraseInnerStrokes(ctx: PaintCtx, node: LayoutNode) {
+function eraseInnerStrokes(ctx: PaintCtx, node: LayoutNode, state?: PaintState) {
   if (node.inkStroke?.some((layer) => layer.position !== 'outside')) {
     ctx.save()
     ctx.globalCompositeOperation = 'destination-out'
-    paintInkStrokes(ctx, node, 'inner')
+    paintInkStrokes(ctx, node, 'inner', undefined, state)
     ctx.restore()
   }
   if (node.kind === 'group') {
     ctx.save()
     ctx.transform(node.svg.a, node.svg.b, node.svg.c, node.svg.d, node.svg.e, node.svg.f)
-    for (const ch of node.children) eraseInnerStrokes(ctx, ch)
+    for (const ch of node.children) eraseInnerStrokes(ctx, ch, state)
     ctx.restore()
     return
   }
@@ -1675,7 +1702,7 @@ function eraseInnerStrokes(ctx: PaintCtx, node: LayoutNode) {
   const insetY = node.kind === 'flex' ? node.padding.top + (node.border?.width ?? 0) : 0
   ctx.save()
   ctx.translate(node.x + insetX, node.y + insetY)
-  for (const ch of node.children) eraseInnerStrokes(ctx, ch)
+  for (const ch of node.children) eraseInnerStrokes(ctx, ch, state)
   ctx.restore()
 }
 
@@ -2082,9 +2109,9 @@ function paintNodeEffectsAndBody(
     if (!opts.skipOwnOuter) drawShadow()
   }
   if (!opts.skipOwnOuter && node.glow) paintGlow(ctx, state, node, node.glow, (spread) => drawEffectInk(ctx, node, spread, state))
-  if (!opts.skipOwnOuter) paintInkStrokes(ctx, node, 'outer')
+  if (!opts.skipOwnOuter) paintInkStrokes(ctx, node, 'outer', undefined, state)
   paintBody(ctx, node, debug, t, state)
-  paintInkStrokes(ctx, node, 'inner')
+  paintInkStrokes(ctx, node, 'inner', undefined, state)
   if (node.innerShadow) {
     paintInnerEffect(ctx, node, node.innerShadow, 'source-over')
   }
@@ -2108,7 +2135,7 @@ function paintNodeEffectsAndBody(
       'screen',
     )
   }
-  if (node.overlay) paintOverlay(ctx, node, node.overlay)
+  if (node.overlay) paintOverlay(ctx, node, node.overlay, state)
   if (node.noise && !opts.skipNoise) paintNoise(ctx, node, node.noise)
   runElementDraw(ctx, node, t, state)
 }

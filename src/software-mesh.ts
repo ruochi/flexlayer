@@ -1844,7 +1844,8 @@ function drawTriangle(
         sg = byte(batch.g * dim)
         sb = byte(batch.b * dim)
       }
-      if (batch.depthWrite) {
+      // 贴图上全透明的像素不挡后面的棱。线框没有贴图，空的面仍要写深度，隐藏线才分得出来。
+      if (batch.depthWrite && (batch.texture ? sa > 0 : batch.a > 0 || batch.lines != null)) {
         depth[di] = z
         owners[di] = batch.owner
       }
@@ -1887,6 +1888,21 @@ function intersectRect(a: RasterRect, b: RasterRect): RasterRect | null {
   const bottom = Math.min(a.y + a.height, b.y + b.height)
   if (right - x <= 1e-4 || bottom - y <= 1e-4) return null
   return { x, y, width: right - x, height: bottom - y }
+}
+
+/** 被可见范围裁掉的那一边多留出线宽，圆头落在窗口外面，贴边的线裁齐。 */
+function padClipEdges(tight: RasterRect, full: RasterRect, margin: number): RasterRect {
+  if (!(margin > 0)) return tight
+  const left = tight.x > full.x + 1e-3 ? margin : 0
+  const top = tight.y > full.y + 1e-3 ? margin : 0
+  const right = tight.x + tight.width < full.x + full.width - 1e-3 ? margin : 0
+  const bottom = tight.y + tight.height < full.y + full.height - 1e-3 ? margin : 0
+  return {
+    x: tight.x - left,
+    y: tight.y - top,
+    width: tight.width + left + right,
+    height: tight.height + top + bottom,
+  }
 }
 
 function snapDown(value: number, step: number) {
@@ -2100,11 +2116,15 @@ function rasterize(
     projected.push(proj)
   }
   if (!Number.isFinite(minX) || !Number.isFinite(minY)) return emptyMeshFrame()
-  const bounds = intersectRect(
-    { x: minX - margin, y: minY - margin, width: maxX - minX + margin * 2, height: maxY - minY + margin * 2 },
-    clip,
-  )
-  if (!bounds) return emptyMeshFrame()
+  const covered = {
+    x: minX - margin,
+    y: minY - margin,
+    width: maxX - minX + margin * 2,
+    height: maxY - minY + margin * 2,
+  }
+  const tight = intersectRect(covered, clip)
+  if (!tight) return emptyMeshFrame()
+  const bounds = padClipEdges(tight, covered, margin)
   const base = Math.max(scale, 1e-3)
   const step = 1 / base
   const originX = snapDown(bounds.x, step)

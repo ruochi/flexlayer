@@ -802,4 +802,58 @@ describe('墨迹 spread 与 stroke', () => {
     expect(at(60, 60)[0]!).toBeGreaterThan(200)
     expect(at(32, 60)).toEqual([255, 255, 255, 255])
   })
+
+  it('有背景的盒子，描边绕着背景', async () => {
+    const { png, report } = await renderFvg(`
+      <layer width="360" height="240" background="#ffffff" color="#111111">
+        <div style="display:flex; width:360px; height:240px; align-items:center; justify-content:center">
+          <div style="display:flex; width:200px; height:100px; background:#f4efe6; stroke:8 #e00000; align-items:center; justify-content:center">
+            <p style="font-size:28px">卡片</p>
+          </div>
+        </div>
+      </layer>`)
+    expect(report.issues.filter((issue) => issue.level === 'error')).toEqual([])
+    const { at } = await pixels(png)
+    expect(at(74, 120)[0]).toBeGreaterThan(180)
+    expect(at(74, 120)[1]).toBeLessThan(80)
+    expect(at(120, 120)[0]).toBeGreaterThan(220)
+    expect(at(120, 120)[1]).toBeGreaterThan(200)
+  })
+
+  it('包着三维场景的层，描边和阴影跟着画面', async () => {
+    const scene = `
+      <layer width="320" height="220" background="#ffffff">
+        <layer x="30" y="24" width="260" height="170" perspective="640" stroke="8 #e00000" shadow="18 20 0 #2244aa">
+          <box x="60" y="40" width="140" height="80" depth="50" fill="#f2efe6" rotateY="-28" rotateX="22" />
+        </layer>
+      </layer>`
+    const wrapped = `
+      <layer width="320" height="220" background="#ffffff">
+        <layer x="24" y="18" width="272" height="184" stroke="8 #e00000" shadow="18 20 0 #2244aa">
+          <layer width="272" height="184" perspective="640">
+            <box x="60" y="36" width="140" height="80" depth="50" fill="#f2efe6" rotateY="-28" rotateX="22" />
+          </layer>
+        </layer>
+      </layer>`
+    for (const source of [scene, wrapped]) {
+      const { png, report } = await renderFvg(source)
+      expect(report.issues.filter((issue) => issue.level === 'error')).toEqual([])
+      const img = await loadImage(png)
+      const canvas = createCanvas(img.width, img.height)
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, 0, 0)
+      const data = ctx.getImageData(0, 0, img.width, img.height).data
+      let red = 0
+      let blue = 0
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i] ?? 0
+        const g = data[i + 1] ?? 0
+        const b = data[i + 2] ?? 0
+        if (r > 180 && g < 80 && b < 80) red++
+        if (b > 140 && r < 80 && g < 120) blue++
+      }
+      expect(red).toBeGreaterThan(200)
+      expect(blue).toBeGreaterThan(40)
+    }
+  })
 })

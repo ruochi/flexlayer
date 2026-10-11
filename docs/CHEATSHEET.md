@@ -40,7 +40,7 @@
 
 色块、圆点、分隔线用 div：`<div style="width:28px; height:28px; border-radius:14px; background:#3ecfc4">`，分隔线用 `flex:1; height:4px`。
 
-形状的 `fill` 和文字的 `style="fill:…"` 共用一套颜料：`linear-gradient(to bottom, #0c1424, #6e7c72)`、`radial-gradient(at 40% 35%, #fff, #fff0)`，或 `gradient(#000, #fff)`。文字写在盒子上按整段取样，写在 `span` 上按这一段的行盒取样。`stroke` 写颜色时，形状和线条居中（`stroke-width`）；写成 `6 #000 outside` 时沿墨迹描。文字、图片和 `layer` 的 `stroke="#000"` 沿外侧描，没写宽度时用 4。写在 `layer` 上时按整组子树墨迹描一圈。
+形状的 `fill` 和文字的 `style="fill:…"` 共用一套颜料：`linear-gradient(to bottom, #0c1424, #6e7c72)`、`radial-gradient(at 40% 35%, #fff, #fff0)`，或 `gradient(#000, #fff)`。文字写在盒子上按整段取样，写在 `span` 上按这一段的行盒取样。`stroke` 写颜色时，形状和线条居中（`stroke-width`）；写成 `6 #000 outside` 时沿墨迹描。文字、图片和 `layer` 的 `stroke="#000"` 沿外侧描，没写宽度时用 4。写在 `layer` 上时按整组子树墨迹描一圈，flex 的背景和边框算进去；这一层是三维场景时，描边和阴影跟着已经画好的画面。
 
 <!-- attrs:effects:begin -->
 效果：`shadow` `0 8 16 #00000055`（默认 颜色 `#00000066`）、`glow` `56 #f3ead4`（默认 颜色取本体）、`inner-shadow` `0 8 16 #00000055`（默认 同 shadow）、`inner-glow` `28 #7ec8ff`（默认 同 glow）、`blur` `6`、`backdrop-blur` `16`、`glass` `clear`、`noise` `0.08`、`filter` `saturate(1.1)`、`blend` `multiply`（默认 `source-over`）、`overlay` `#00000066`（默认 透明度 1，`source-over`）、`grade` `lomo 0.8, fade 0.1`（默认 强度 1）、`grade-mask` `radial-gradient(#fff0 30%, #fff)`。作用于整棵子树的 `overlay`、`grade`、`grade-mask` 只写在 `layer` 上。
