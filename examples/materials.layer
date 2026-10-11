@@ -1,0 +1,120 @@
+<layer width="1520" height="1080" background="#101114" color="#f4efe6" font-family="ChillDuanSans">
+  <layer x="64" y="24">
+    <p style="font-size:40px">金银铜铁 · 塑料</p>
+  </layer>
+
+  <layer perspective="1600" width="1520" height="1080">
+    <sphere cx="230" cy="220" r="84" fill="#e4b33a" material="metal 0.08" />
+    <sphere cx="570" cy="220" r="84" fill="#d5d8e0" material="metal 0.08" />
+    <sphere cx="910" cy="220" r="84" fill="#c86a3e" material="metal 0.08" />
+    <sphere cx="1250" cy="220" r="84" fill="#8b939c" material="metal 0.08" />
+
+    <sphere cx="230" cy="548" r="84" fill="#e4b33a" material="metal 0.82" />
+    <sphere cx="570" cy="548" r="84" fill="#d5d8e0" material="metal 0.82" />
+    <sphere cx="910" cy="548" r="84" fill="#c86a3e" material="metal 0.82" />
+    <sphere cx="1250" cy="548" r="84" fill="#8b939c" material="metal 0.82" />
+
+    <sphere cx="160" cy="880" r="62" fill="#f3f1ec" material="plastic 0.12" />
+    <sphere cx="390" cy="880" r="62" fill="#d23b3b" material="plastic 0.28" />
+    <sphere cx="620" cy="880" r="62" fill="#2a6fbe" material="plastic 0.44" />
+    <sphere cx="850" cy="880" r="62" fill="#248f62" material="plastic 0.6" />
+    <sphere cx="1080" cy="880" r="62" fill="#e0b03a" material="plastic 0.76" />
+    <sphere cx="1310" cy="880" r="62" fill="#6d4a9a" material="plastic 0.92" />
+  </layer>
+
+  <layer x="64" y="84">
+    <p style="font-size:28px; color:#c8c2b6">金属 · 粗糙 0.08</p>
+  </layer>
+  <layer x="120" y="316" width="220">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:4px">
+      <p style="font-size:32px">金</p>
+      <p style="font-size:28px; color:#9a9488">#e4b33a</p>
+    </div>
+  </layer>
+  <layer x="460" y="316" width="220">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:4px">
+      <p style="font-size:32px">银</p>
+      <p style="font-size:28px; color:#9a9488">#d5d8e0</p>
+    </div>
+  </layer>
+  <layer x="800" y="316" width="220">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:4px">
+      <p style="font-size:32px">铜</p>
+      <p style="font-size:28px; color:#9a9488">#c86a3e</p>
+    </div>
+  </layer>
+  <layer x="1140" y="316" width="220">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:4px">
+      <p style="font-size:32px">铁</p>
+      <p style="font-size:28px; color:#9a9488">#8b939c</p>
+    </div>
+  </layer>
+
+  <layer x="64" y="420">
+    <p style="font-size:28px; color:#c8c2b6">金属 · 粗糙 0.82</p>
+  </layer>
+  <layer x="120" y="644" width="220">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:4px">
+      <p style="font-size:32px">金</p>
+      <p style="font-size:28px; color:#9a9488">#e4b33a</p>
+    </div>
+  </layer>
+  <layer x="460" y="644" width="220">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:4px">
+      <p style="font-size:32px">银</p>
+      <p style="font-size:28px; color:#9a9488">#d5d8e0</p>
+    </div>
+  </layer>
+  <layer x="800" y="644" width="220">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:4px">
+      <p style="font-size:32px">铜</p>
+      <p style="font-size:28px; color:#9a9488">#c86a3e</p>
+    </div>
+  </layer>
+  <layer x="1140" y="644" width="220">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:4px">
+      <p style="font-size:32px">铁</p>
+      <p style="font-size:28px; color:#9a9488">#8b939c</p>
+    </div>
+  </layer>
+
+  <layer x="64" y="748">
+    <p style="font-size:28px; color:#c8c2b6">塑料 · 粗糙从 0.12 到 0.92</p>
+  </layer>
+  <layer x="60" y="956" width="200">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:4px">
+      <p style="font-size:32px">白</p>
+      <p style="font-size:28px; color:#9a9488">0.12</p>
+    </div>
+  </layer>
+  <layer x="290" y="956" width="200">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:4px">
+      <p style="font-size:32px">红</p>
+      <p style="font-size:28px; color:#9a9488">0.28</p>
+    </div>
+  </layer>
+  <layer x="520" y="956" width="200">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:4px">
+      <p style="font-size:32px">蓝</p>
+      <p style="font-size:28px; color:#9a9488">0.44</p>
+    </div>
+  </layer>
+  <layer x="750" y="956" width="200">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:4px">
+      <p style="font-size:32px">绿</p>
+      <p style="font-size:28px; color:#9a9488">0.6</p>
+    </div>
+  </layer>
+  <layer x="980" y="956" width="200">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:4px">
+      <p style="font-size:32px">黄</p>
+      <p style="font-size:28px; color:#9a9488">0.76</p>
+    </div>
+  </layer>
+  <layer x="1210" y="956" width="200">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:4px">
+      <p style="font-size:32px">紫</p>
+      <p style="font-size:28px; color:#9a9488">0.92</p>
+    </div>
+  </layer>
+</layer>

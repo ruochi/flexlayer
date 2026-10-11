@@ -1,13 +1,16 @@
 /**
- * 金属和玻璃共用的一张固定工作室环境。
- * 灯是竖向柔光板，方位和仰角都躲开 0°、90°、180°、270°，板子自己也从竖直偏开一点。
- * 白、黑和中间的灰过渡都有，接近商业静物的布灯。粗糙度只决定取哪一层模糊，一次双线性采样。
+ * 金属、塑料和玻璃共用的一张固定工作室环境。
+ * 灯是圆角矩形。主灯是左上方一块大圆角正方形，从正左向中间偏 30°。暗面另有一条窄长的边缘光条。
+ * 几块板的顶部停在不同高度，互不相接，也不收到天顶。
+ * 方位和仰角躲开 0°、90°、180°、270°，板子也从竖直偏开一点。
+ * 白、黑和灰过渡都有。粗糙度先把这张环境模糊，噪点也写进这张图，再拿它贴到反射上。越高越糊，噪点越密。
  */
 
 const WIDTH = 128
 const HEIGHT = 64
 const LEVELS = 5
-const RADII = [0, 1, 3, 7, 16]
+/** 各层相对清晰环境的高斯标准差，单位是贴图像素。从清晰图各模糊一次，不在天顶把方框模糊叠成尖角。 */
+const SIGMAS = [0, 0.7, 1.5, 2.6, 4]
 
 const ROOM = { r: 12, g: 12, b: 14 }
 
@@ -16,28 +19,31 @@ type Panel = {
   az: number
   /** 仰角，度。正数朝上。 */
   el: number
-  /** 窄边、长边的半宽，度。长边沿灯板方向。 */
+  /** 半宽、半高，度。不含圆角外的羽化。 */
   across: number
   along: number
+  /** 圆角半径，度。不超过短边的一半。 */
+  radius: number
+  /** 形状外侧的羽化，度。 */
+  feather: number
   /** 相对竖直偏转的角度。0 是正竖直。 */
   lean: number
-  feather: number
   r: number
   g: number
   b: number
 }
 
 /**
- * 主灯在左前方，右侧一块辅灯，中间留黑，边上用灰把黑和白接上。
+ * 左上方一块大圆角正方形，从正左向中间偏 30°，再往上抬一点，顶边不到天顶。
+ * 右后一条窄长圆角条，顶边更低，接不到主灯。
+ * 左后一块暗灰，把主灯外侧的黑边抬起来。右前方再垫一块更暗的灰，暗谷不落在肢体上。
  * 角度都不落在 90° 的整数倍上。
  */
 const PANELS: Panel[] = [
-  { az: -38, el: 16, across: 16, along: 72, lean: 13, feather: 11, r: 252, g: 252, b: 255 },
-  { az: -16, el: 10, across: 7, along: 60, lean: -9, feather: 14, r: 156, g: 158, b: 164 },
-  { az: 64, el: 12, across: 10, along: 66, lean: -15, feather: 13, r: 240, g: 242, b: 246 },
-  { az: 158, el: 6, across: 12, along: 56, lean: -11, feather: 18, r: 228, g: 230, b: 234 },
-  { az: 86, el: -6, across: 8, along: 48, lean: 11, feather: 16, r: 108, g: 110, b: 116 },
-  { az: -72, el: 8, across: 12, along: 54, lean: 10, feather: 18, r: 78, g: 80, b: 86 },
+  { az: -68, el: 24, across: 38, along: 38, radius: 18, feather: 20, lean: -3, r: 200, g: 202, b: 208 },
+  { az: 150, el: -6, across: 8, along: 28, radius: 7, feather: 5, lean: 2, r: 214, g: 216, b: 220 },
+  { az: -156, el: 4, across: 26, along: 20, radius: 10, feather: 18, lean: -3, r: 86, g: 88, b: 94 },
+  { az: 96, el: -2, across: 24, along: 16, radius: 8, feather: 14, lean: 3, r: 40, g: 42, b: 46 },
 ]
 
 const SAMPLE = { r: 0, g: 0, b: 0 }
@@ -48,14 +54,6 @@ function clamp01(n: number) {
   return n
 }
 
-function window1d(distance: number, half: number, feather: number) {
-  if (distance <= half) return 1
-  if (distance >= half + feather) return 0
-  const t = (distance - half) / feather
-  const s = t * t * (3 - 2 * t)
-  return 1 - s
-}
-
 function wrapSigned(d: number) {
   let x = d
   while (x > 0.5) x -= 1
@@ -63,16 +61,36 @@ function wrapSigned(d: number) {
   return x
 }
 
-/** 灯板在经纬上的权重。窄边沿方位，偏 lean 度之后不再是正竖直。 */
+/** 圆角矩形的有符号距离。负值在内部。 */
+function roundedRect(x: number, y: number, halfW: number, halfH: number, radius: number) {
+  const rad = Math.min(Math.max(radius, 0), halfW, halfH)
+  const qx = Math.abs(x) - (halfW - rad)
+  const qy = Math.abs(y) - (halfH - rad)
+  return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - rad
+}
+
+function feathered(distance: number, feather: number) {
+  if (distance <= 0) return 1
+  if (feather <= 0 || distance >= feather) return 0
+  const t = distance / feather
+  const s = t * t * (3 - 2 * t)
+  return 1 - s
+}
+
+/**
+ * 圆角矩形柔光板。顶边由 along 决定，不到天顶，几块板的顶也不会接到一起。
+ */
 function panelWeight(u: number, v: number, panel: Panel) {
+  const elev = (0.5 - v) * 180
   const az = wrapSigned(u - panel.az / 360) * 360
-  const el = (0.5 - v) * 180 - panel.el
+  const el = elev - panel.el
   const lean = (panel.lean * Math.PI) / 180
   const c = Math.cos(lean)
   const s = Math.sin(lean)
-  const across = Math.abs(az * c + el * s)
-  const along = Math.abs(-az * s + el * c)
-  return window1d(across, panel.across, panel.feather) * window1d(along, panel.along, panel.feather)
+  const across = az * c + el * s
+  const along = -az * s + el * c
+  const dist = roundedRect(across, along, panel.across, panel.along, panel.radius)
+  return feathered(dist, panel.feather)
 }
 
 function paintStudio(): Uint8Array {
@@ -100,45 +118,143 @@ function paintStudio(): Uint8Array {
   return data
 }
 
-function blur(src: Uint8Array, radius: number): Uint8Array {
-  if (radius <= 0) return src
-  const span = radius * 2 + 1
-  const horizontal = new Uint8Array(src.length)
+/** 纬度过了天顶就翻到对面那条经线。 */
+function wrapLatLong(x: number, y: number) {
+  let xx = x
+  let yy = y
+  if (yy < 0 || yy >= HEIGHT) {
+    xx += WIDTH >> 1
+    yy = yy < 0 ? -yy - 1 : HEIGHT * 2 - 1 - yy
+  }
+  xx %= WIDTH
+  if (xx < 0) xx += WIDTH
+  if (yy < 0) yy = 0
+  if (yy >= HEIGHT) yy = HEIGHT - 1
+  return (yy * WIDTH + xx) * 3
+}
+
+/** 高斯模糊。经度绕回，纬度跨过天顶，避免方框模糊在极点夹住后收成尖角。 */
+function blur(src: Uint8Array, sigma: number): Uint8Array {
+  if (sigma <= 0) return src
+  const radius = Math.max(1, Math.ceil(sigma * 3))
+  const weight = new Float64Array(radius * 2 + 1)
+  let sum = 0
+  for (let k = -radius; k <= radius; k++) {
+    const g = Math.exp(-0.5 * (k / sigma) ** 2)
+    weight[k + radius] = g
+    sum += g
+  }
+  for (let i = 0; i < weight.length; i++) weight[i]! /= sum
+  const horizontal = new Float64Array(src.length)
   for (let y = 0; y < HEIGHT; y++) {
     for (let x = 0; x < WIDTH; x++) {
       let r = 0
       let g = 0
       let b = 0
       for (let k = -radius; k <= radius; k++) {
-        const sx = (x + k + WIDTH) % WIDTH
-        const i = (y * WIDTH + sx) * 3
-        r += src[i]!
-        g += src[i + 1]!
-        b += src[i + 2]!
+        const i = (y * WIDTH + ((x + k) % WIDTH + WIDTH) % WIDTH) * 3
+        const w = weight[k + radius]!
+        r += src[i]! * w
+        g += src[i + 1]! * w
+        b += src[i + 2]! * w
       }
       const o = (y * WIDTH + x) * 3
-      horizontal[o] = Math.round(r / span)
-      horizontal[o + 1] = Math.round(g / span)
-      horizontal[o + 2] = Math.round(b / span)
+      horizontal[o] = r
+      horizontal[o + 1] = g
+      horizontal[o + 2] = b
     }
   }
   const out = new Uint8Array(src.length)
+  const lat = (row: number) => {
+    const el = (0.5 - (row + 0.5) / HEIGHT) * Math.PI
+    return Math.max(0.05, Math.cos(el))
+  }
   for (let y = 0; y < HEIGHT; y++) {
     for (let x = 0; x < WIDTH; x++) {
       let r = 0
       let g = 0
       let b = 0
+      let wsum = 0
       for (let k = -radius; k <= radius; k++) {
-        const sy = Math.min(HEIGHT - 1, Math.max(0, y + k))
-        const i = (sy * WIDTH + x) * 3
-        r += horizontal[i]!
-        g += horizontal[i + 1]!
-        b += horizontal[i + 2]!
+        const row = y + k
+        const i = wrapLatLong(x, row)
+        const wrappedRow = row < 0 ? -row - 1 : row >= HEIGHT ? HEIGHT * 2 - 1 - row : row
+        const w = weight[k + radius]! * lat(Math.max(0, Math.min(HEIGHT - 1, wrappedRow)))
+        r += horizontal[i]! * w
+        g += horizontal[i + 1]! * w
+        b += horizontal[i + 2]! * w
+        wsum += w
       }
       const o = (y * WIDTH + x) * 3
-      out[o] = Math.round(r / span)
-      out[o + 1] = Math.round(g / span)
-      out[o + 2] = Math.round(b / span)
+      out[o] = Math.max(0, Math.min(255, Math.round(r / wsum)))
+      out[o + 1] = Math.max(0, Math.min(255, Math.round(g / wsum)))
+      out[o + 2] = Math.max(0, Math.min(255, Math.round(b / wsum)))
+    }
+  }
+  return out
+}
+
+function grain(dx: number, dy: number, dz: number) {
+  const freq = 26
+  const x = dx * freq
+  const y = dy * freq
+  const z = dz * freq
+  const x0 = Math.floor(x)
+  const y0 = Math.floor(y)
+  const z0 = Math.floor(z)
+  const fade = (t: number) => t * t * (3 - 2 * t)
+  const tx = fade(x - x0)
+  const ty = fade(y - y0)
+  const tz = fade(z - z0)
+  const at = (ix: number, iy: number, iz: number) => {
+    let h = Math.imul(ix, 374761393) + Math.imul(iy, 668265263) + Math.imul(iz, 1440671489)
+    h = Math.imul(h ^ (h >>> 13), 1274126177)
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296 * 2 - 1
+  }
+  const lerp = (a: number, b: number, t: number) => a + (b - a) * t
+  const x00 = lerp(at(x0, y0, z0), at(x0 + 1, y0, z0), tx)
+  const x10 = lerp(at(x0, y0 + 1, z0), at(x0 + 1, y0 + 1, z0), tx)
+  const x01 = lerp(at(x0, y0, z0 + 1), at(x0 + 1, y0, z0 + 1), tx)
+  const x11 = lerp(at(x0, y0 + 1, z0 + 1), at(x0 + 1, y0 + 1, z0 + 1), tx)
+  return lerp(lerp(x00, x10, ty), lerp(x01, x11, ty), tz)
+}
+
+/** 模糊层在靠近天顶时收回亮度。天顶在球上是一个点，亮部伸到那里会收成尖角。 */
+function settlePole(src: Uint8Array): Uint8Array {
+  const out = new Uint8Array(src)
+  for (let y = 0; y < HEIGHT; y++) {
+    const el = Math.abs((0.5 - (y + 0.5) / HEIGHT) * 180)
+    const over = (el - 66) / 16
+    if (over <= 0) continue
+    const t = over >= 1 ? 1 : over * over * (3 - 2 * over)
+    const keep = 1 - t
+    for (let x = 0; x < WIDTH; x++) {
+      const i = (y * WIDTH + x) * 3
+      out[i] = Math.round(ROOM.r + (out[i]! - ROOM.r) * keep)
+      out[i + 1] = Math.round(ROOM.g + (out[i + 1]! - ROOM.g) * keep)
+      out[i + 2] = Math.round(ROOM.b + (out[i + 2]! - ROOM.b) * keep)
+    }
+  }
+  return out
+}
+
+/** 把噪点写进已经模糊好的环境。粗糙越高，振幅越大。 */
+function addGrain(src: Uint8Array, roughness: number): Uint8Array {
+  if (roughness <= 0.02) return src
+  const amp = roughness * roughness * 0.55
+  const out = new Uint8Array(src.length)
+  for (let y = 0; y < HEIGHT; y++) {
+    const el = (0.5 - (y + 0.5) / HEIGHT) * Math.PI
+    const cy = Math.cos(el)
+    const sy = Math.sin(el)
+    for (let x = 0; x < WIDTH; x++) {
+      const az = ((x + 0.5) / WIDTH) * Math.PI * 2
+      const speck = grain(Math.sin(az) * cy, sy, Math.cos(az) * cy) * amp
+      const scale = 1 + speck
+      const i = (y * WIDTH + x) * 3
+      out[i] = Math.max(0, Math.min(255, Math.round(src[i]! * scale)))
+      out[i + 1] = Math.max(0, Math.min(255, Math.round(src[i + 1]! * scale)))
+      out[i + 2] = Math.max(0, Math.min(255, Math.round(src[i + 2]! * scale)))
     }
   }
   return out
@@ -146,10 +262,11 @@ function blur(src: Uint8Array, radius: number): Uint8Array {
 
 const maps: Uint8Array[] = []
 {
-  let level = paintStudio()
+  const sharp = paintStudio()
   for (let i = 0; i < LEVELS; i++) {
-    maps.push(i === 0 ? level : blur(level, RADII[i]!))
-    level = maps[i]!
+    const sigma = SIGMAS[i]!
+    const blurred = sigma <= 0 ? sharp : settlePole(blur(sharp, sigma))
+    maps.push(addGrain(blurred, i / (LEVELS - 1)))
   }
 }
 
@@ -196,13 +313,14 @@ export function studioAt(x: number, y: number, z: number, roughness: number) {
   const i1 = Math.min(LEVELS - 1, i0 + 1)
   const f = t - i0
   sample(maps[i0]!, u, v)
-  if (f <= 1e-4 || i0 === i1) return SAMPLE
-  const r0 = SAMPLE.r
-  const g0 = SAMPLE.g
-  const b0 = SAMPLE.b
-  sample(maps[i1]!, u, v)
-  SAMPLE.r = r0 + (SAMPLE.r - r0) * f
-  SAMPLE.g = g0 + (SAMPLE.g - g0) * f
-  SAMPLE.b = b0 + (SAMPLE.b - b0) * f
+  if (f > 1e-4 && i0 !== i1) {
+    const r0 = SAMPLE.r
+    const g0 = SAMPLE.g
+    const b0 = SAMPLE.b
+    sample(maps[i1]!, u, v)
+    SAMPLE.r = r0 + (SAMPLE.r - r0) * f
+    SAMPLE.g = g0 + (SAMPLE.g - g0) * f
+    SAMPLE.b = b0 + (SAMPLE.b - b0) * f
+  }
   return SAMPLE
 }

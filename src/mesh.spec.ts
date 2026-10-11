@@ -396,17 +396,27 @@ describe('网格绘制', () => {
     expect(named.issues.filter((issue) => issue.code === 'invalid-attr')).toEqual([])
   }, 30000)
 
-  it('塑料高光比磨砂更亮，背光一面仍暗', async () => {
+  it('塑料用磨砂明暗叠环境，不加缩成一点的高光', async () => {
     const paint = (material: string) =>
       renderFvg(
         `<layer width="180" height="180" background="#101010" perspective="700"><sphere cx="90" cy="90" r="50" fill="#888888"${material} /></layer>`,
       )
     const plain = await imageOf((await paint('')).png)
     const plastic = await imageOf((await paint(' material="plastic"')).png)
-    expect(brightest(plastic).sum).toBeGreaterThan(240 * 3 - 30)
-    expect(brightest(plain).sum).toBeLessThan(160 * 3)
-    const shade = (image: ImageSample, x: number, y: number) => image.at(x, y)[0]!
-    expect(Math.abs(shade(plastic, 110, 120) - shade(plain, 110, 120))).toBeLessThan(20)
+    const lum = (image: ImageSample, x: number, y: number) => image.at(x, y).reduce((sum, channel, index) => (index < 3 ? sum + channel : sum), 0)
+    const peakP = brightest(plastic)
+    const peakM = brightest(plain)
+    expect(peakP.sum).toBeGreaterThan(peakM.sum + 20)
+    expect(peakP.sum).toBeLessThan(200 * 3)
+    let band = 0
+    for (let y = 0; y < plastic.height; y++) {
+      for (let x = 0; x < plastic.width; x++) {
+        if (lum(plastic, x, y) > peakP.sum - 40) band++
+      }
+    }
+    expect(band).toBeGreaterThan(40)
+    expect(lum(plastic, 70, 70)).toBeGreaterThan(lum(plastic, 115, 120) + 15)
+    expect(lum(plain, 70, 70)).toBeGreaterThan(lum(plain, 115, 120) + 15)
   }, 30000)
 
   it('金属映竖向灯板，亮带和暗带偏开正中，中间有灰过渡', async () => {

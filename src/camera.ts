@@ -6,6 +6,7 @@ import {
   flattenReason,
   has3dPose,
   hasPerspective,
+  splitsForCamera,
   poseMatrix,
   project,
   type Perspective,
@@ -690,13 +691,10 @@ export function cameraItems(layer: LayerLayoutNode): CameraItem[] {
       return
     }
     const nested = node.kind === 'layer' && hasPerspective(node.perspective)
-    const descend =
-      !nested &&
-      (descended || !!node.preserve3d) &&
-      !flattenReason(node) &&
-      (node.kind === 'layer' || node.kind === 'flex')
+    // 没写 preserve-3d 的旋转卡片不拆开。没有姿态的 flex 只在子孙要单独进镜头时穿过。
+    const descend = splitsForCamera(node, descended)
     const posed = descended || has3dPose(node) || !!layer.cameraMoved
-    if (descend) {
+    if (descend && (node.kind === 'layer' || node.kind === 'flex')) {
       if (hasChrome(node)) {
         push({ kind: 'chrome', node, toLayer, posed, opacity, depth: centerDepth(node, toLayer) })
       }

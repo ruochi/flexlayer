@@ -83,7 +83,7 @@ export default canvas.create(
 | 图片 | `<img src="cover.png" style="width:320px; height:180px">`。`image` 同样可用 | `invalid-attr` |
 | 图标 | `<span class="material-symbols-outlined">home</span>`。字重写 `font-weight`，字号和颜色跟周围文字 | `missing-icon` |
 | 字形渐变 | `<p style="fill:linear-gradient(to right, #2f7bff, #b423c4)">`。`color` 和 `background-color` 只写纯色，底板渐变写 `background` | `invalid-attr` |
-| 描边 | 形状 `stroke="#fff" stroke-width="4"` 居中。沿墨迹写 `stroke="6 #000 outside"`。文字 `style="stroke:#000; stroke-width:6"`，默认外侧 | `invalid-attr` |
+| 描边 | 形状 `stroke="#fff" stroke-width="4"` 居中。沿墨迹写 `stroke="6 #000 outside"`。文字 `style="stroke:#000; stroke-width:6"`，默认外侧。有 `background` 时绕着底板 | `invalid-attr` |
 | 整棵子树的效果 | `<layer grade="lomo" overlay="#00000066">` | `invalid-attr` |
 | 调色 | `<layer grade="lomo 0.8, fade 0.1">` | `invalid-attr` |
 | 结构化数据 | `data={{ values: [1, 2] }}`。`.layer` 写 `data='{"values":[1,2]}'`，`draw` 读 `el.data` | `invalid-attr`、`emit-data` |
@@ -96,14 +96,14 @@ export default canvas.create(
 | 蒙版运算 | `<mask><rect … /><circle op="subtract" /></mask>`。默认 `add`，分组用 `<g>`。不要写 `mask-image` | `invalid-attr` |
 | 黑白图和编号 | `<img channel="luma">`、`<img pick="3 5">`。缓存写 `derive="subject"` | `invalid-attr`、`missing-mask` |
 | 羽化、反选、预览 | `<mask feather="8" invert="true">`、`<preview of="#cut" />` | `invalid-attr` |
-| 透视 | `<layer perspective="900"><rect rotateY="20" z="40" /></layer>`。平行投影写 `perspective="parallel"`，没有近大远小 | `invalid-attr`、`flatten-3d` |
+| 透视 | `<layer perspective="900"><rect rotateY="20" z="40" /></layer>`。`preserve-3d` 穿过没有姿态的 flex 时，卡片仍是一张图。平行投影写 `perspective="parallel"`，没有近大远小 | `invalid-attr`、`flatten-3d` |
 | 球体、圆柱、圆环、线管、长方体、拉伸、glb | `<layer perspective="700"><sphere cx="80" cy="80" r="40" /></layer>`。圆柱 `cx cy r height`，圆环 `cx cy r tube`，线管 `d` 和 `r`。`box` 的 `rx` 圆棱，`round` 选边；圆柱的 `rx` 圆口。`model` 只写 `src`，尺寸写在外包 layer | `flatten-3d`、`missing-model` |
 
 `align-items` 默认 `center`。竖排要左对齐时写 `align-items:flex-start`。横排按文字基线对齐写 `align-items:baseline`，同一行被撑高后 `center` 和 `end` 按新的行盒再排，竖排写了仍按 `flex-start`。`letter-spacing` 可以写 `em`。`justify-content` 只管这一层的主轴。`align-content` 默认 `flex-start`，管的是 `flex-wrap` 之后的多行。
 
 没写 `display:flex` 的 `div` 里直接放 `p`、`h1`–`h3`、`div`、写了宽高的 `layer` 时，从上到下排。只放文字和行内标签时，`div` 仍是文字盒子。`p`、`h1`–`h3`、`span` 里可以放 `<img>`，不要放块级标签或 `layer`。图标写成 `<span class="material-symbols-outlined">home</span>`。容器上的字号、字重、字体、颜色、字距和 `text-align` 会传给没写这些的 `p`、`div`、`span`；`h1`–`h3` 仍用自己的默认字号和字重。`color` 和 `background-color` 只写纯色。字形渐变写 `style="fill:linear-gradient(...)"`。盒子渐变写 `background:linear-gradient(...)`。行内 `background` 高亮这一段的行盒。
 
-带 `perspective` 的 layer 里，没有网格时直接子元素按中心深度从远到近画。出现 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 时近的盖住远的。`perspective="parallel"` 是平行投影，视线平行于 z，没有近大远小，也没有镜头平面。不在透视里时 `z` 不改变顺序，并报 `flatten-3d`。网格可以写 `material="matte"`（默认的磨砂塑料）、`material="plastic"`、`material="metal 0.35"` 或 `material="glass"`。金属和玻璃映同一张固定的工作室环境。灯是偏开的竖向柔光板，有黑、白和灰过渡，不是横条，也不是上亮下暗。`stroke-width="3 2 1"` 依次是轮廓、折棱和隐藏线。两只都写了 `stroke` 的网格相互穿过时描出交界线，算折棱，颜色和宽度跟后写的那只；面贴面不描。`halo="3"` 让可见线在交叉处把更远的线断开。共用一个角的棱不断开，线管端面和自己的轮廓也不切开。
+带 `perspective` 的 layer 里，没有网格时直接子元素按中心深度从远到近画。出现 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 时近的盖住远的。`perspective="parallel"` 是平行投影，视线平行于 z，没有近大远小，也没有镜头平面。不在透视里时 `z` 不改变顺序，并报 `flatten-3d`。网格可以写 `material="matte"`（默认的磨砂塑料）、`material="plastic"`、`material="metal 0.35"` 或 `material="glass"`。`plastic` 和 `metal` 都用磨砂明暗做底，再叠同一张工作室环境，金属更实、塑料更透，没有缩成一点的高光。粗糙度先模糊环境，噪点写进这张图再取样，越高越糊，噪点越密。主灯是左上方一块大圆角正方形，从正左向中间偏 30°，不和其他板在顶部相接，也不收到天顶。暗面有一条贴着轮廓的边缘光。有黑、白和灰过渡。`stroke-width="3 2 1"` 依次是轮廓、折棱和隐藏线。两只都写了 `stroke` 的网格相互穿过时描出交界线，算折棱，颜色和宽度跟后写的那只；面贴面不描。`halo="3"` 让可见线在交叉处把更远的线断开。共用一个角的棱不断开，线管端面和自己的轮廓也不切开。
 
 ## 字体、配色、图片
 
