@@ -411,6 +411,8 @@ export type LayoutNodeBase = {
   filters?: AppliedFilter[]
   /** 报告里的源码位置。draw 运行出错时用它，优先于元素标签本身的位置。 */
   source?: string
+  /** 子元素沿父链进入外层镜头。压平效果仍会把子树收成一张图。 */
+  preserve3d?: boolean
 }
 
 export type LayerLayoutNode = LayoutNodeBase & {
@@ -420,6 +422,13 @@ export type LayerLayoutNode = LayoutNodeBase & {
   overflow?: 'visible' | 'hidden'
   /** 直接子元素共用的视距，像素。灭点是这一层盒子的中心。`parallel` 是平行投影。 */
   perspective?: number | 'parallel'
+  /** 列主序视图矩阵。缺省是单位矩阵，不乘。 */
+  cameraView?: number[]
+  /** 灭点相对盒子中心的偏移，像素。不写是 0。 */
+  vanishX?: number
+  vanishY?: number
+  /** 机位不是「只有焦距、对准盒子中心」时为真。没有三维姿态的子元素也要投影。 */
+  cameraMoved?: boolean
   /**
    * 蒙版内容，坐标系是这一层的局部像素。
    * 绘制时只取 alpha，不进入 children，不参与布局。

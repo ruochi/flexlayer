@@ -157,8 +157,28 @@ export namespace JSX {
         rotateY?: number | string
         /** 像素，正方向朝观众 */
         z?: number | string
-        /** 直接子元素的视距，像素 */
+        /** 直接子元素的视距，像素。camera="focal …" 的简写 */
         perspective?: number | string
+        /**
+         * 镜头。字符串按逗号分段，或传对象。
+         * perspective="900" 等于 focal 900，perspective="parallel" 等于 parallel。
+         */
+        camera?:
+          | string
+          | {
+              focal?: number
+              parallel?: boolean
+              fov?: number
+              lens?: number
+              at?: [number, number, number]
+              orbit?: [number, number]
+              roll?: number
+              distance?: number
+              from?: [number, number, number]
+              vanish?: [number, number]
+            }
+        /** 子元素沿父链进入外层镜头 */
+        'preserve-3d'?: boolean | string
         scale?: number | string
         /** 支点。九宫格，或 `120 80`、`30% 40%` */
         origin?: string
@@ -368,7 +388,7 @@ export namespace JSX {
     h3: FvgHtml
     p: FvgHtml
     /** 排布容器。可以直接放文字、图片，以及写了宽高的 layer。 */
-    div: FvgHtml
+    div: FvgHtml & { 'preserve-3d'?: boolean | string }
     span: FvgHtml
     strong: FvgHtml
     b: FvgHtml

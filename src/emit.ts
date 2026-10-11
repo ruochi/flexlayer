@@ -1,3 +1,4 @@
+import { formatCamera } from './camera.js'
 import type { FvgNode } from './parse.js'
 import { readDrawFunction } from './syntax.js'
 import type { DrawFn, Issue } from './types.js'
@@ -90,11 +91,20 @@ function emitData(node: FvgNode, path: string, issues: Issue[]): string {
   return ` data='${quoted}'`
 }
 
+function emitCamera(node: FvgNode): string {
+  if (node.camera == null || node.attrs.camera != null) return ''
+  const text = formatCamera(node.camera)
+  if (text == null) return ''
+  return ` camera="${escapeAttr(text)}"`
+}
+
 function attrText(node: FvgNode, path: string, issues: Issue[]): string {
   return (
     Object.entries(node.attrs)
       .map(([key, value]) => ` ${key}="${escapeAttr(value)}"`)
-      .join('') + emitData(node, path, issues)
+      .join('') +
+    emitCamera(node) +
+    emitData(node, path, issues)
   )
 }
 

@@ -1,10 +1,10 @@
 import { filtersInPaintOrder, getFilter } from './filter.js'
 import { MESH_TAGS } from './tags.js'
 import { apply, applyToBox, aroundPivot, IDENTITY, intersectBox, matrixScale, multiply, originOffset, translated, type Matrix } from './matrix.js'
-import { applyPoseMatrix, behindCamera, has3dPose, hasPerspective, planeDepth, poseMatrix, posePoint, project as projectPoint, type Perspective } from './perspective.js'
+import { applyPoseMatrix, behindCamera, cameraSceneCustom, flattenReason, has3dPose, hasPerspective, planeDepth, poseMatrix, posePoint, project as projectPoint, type Perspective } from './perspective.js'
 import { maskStats } from './mask-stats.js'
 import { innerInkStrokeReach, outerInkStrokeReach } from './style.js'
-import type { Box, ElementReport, FvgDocument, FvgReport, InlineOwner, Issue, LayoutNode, MeshLayoutNode, TextLayoutNode } from './types.js'
+import type { Box, ElementReport, FvgDocument, FvgReport, InlineOwner, Issue, LayerLayoutNode, LayoutNode, MeshLayoutNode, TextLayoutNode } from './types.js'
 import { boxToRect, emptyBox, translateBox, unionBoxes } from './types.js'
 import { viewMatrix } from './view.js'
 
@@ -126,6 +126,33 @@ function projectMeshInk(node: MeshLayoutNode, view: MeshView, toLayer: Mat4): Bo
 
 function inkOverlap(a: Box, b: Box): boolean {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
+}
+
+function quadsOverlap(a: Quad, b: Quad): boolean {
+  const polys = [a, b]
+  for (const poly of polys) {
+    for (let i = 0; i < 4; i++) {
+      const p = poly[i]!
+      const n = poly[(i + 1) % 4]!
+      const axis = { x: -(n.y - p.y), y: n.x - p.x }
+      let a0 = Infinity
+      let a1 = -Infinity
+      let b0 = Infinity
+      let b1 = -Infinity
+      for (const point of a) {
+        const d = point.x * axis.x + point.y * axis.y
+        a0 = Math.min(a0, d)
+        a1 = Math.max(a1, d)
+      }
+      for (const point of b) {
+        const d = point.x * axis.x + point.y * axis.y
+        b0 = Math.min(b0, d)
+        b1 = Math.max(b1, d)
+      }
+      if (a1 <= b0 + 1e-3 || b1 <= a0 + 1e-3) return false
+    }
+  }
+  return true
 }
 
 /** 同一个公式里的记号是按数学排版规则摆的，着墨盒相交（积分下限、开方指数）不算重叠。 */
@@ -366,6 +393,14 @@ function inlineElementReports(
   return out
 }
 
+type CameraCtx = {
+  layer: LayerLayoutNode
+  /** 当前节点的父级内容坐标到镜头空间（已乘视图矩阵）。 */
+  toLocal: number[]
+  mapLayerLocal: (x: number, y: number) => Pt | null
+  canvasClip?: Box
+}
+
 function walk(
   node: LayoutNode,
   parentMatrix: Matrix,
@@ -380,6 +415,7 @@ function walk(
   meshView: MeshView | undefined,
   inkSlack: number[],
   maskIssues: Issue[],
+  cameraCtx?: CameraCtx,
 ) {
   const absX = ox + node.x
   const absY = oy + node.y
@@ -577,7 +613,64 @@ function walk(
         : undefined
 
     const start = elements.length
-    for (const ch of node.children) {
+    const opensOwn = node.kind === 'layer' && hasPerspective(node.perspective)
+    const projectChildren = opensOwn
+      ? cameraSceneCustom(node)
+      : !!(cameraCtx && node.preserve3d && !flattenReason(node))
+    if (projectChildren) {
+      const camera = opensOwn ? node : cameraCtx!.layer
+      const toContent = opensOwn ? (node.cameraView ?? IDENTITY4) : mul4(cameraCtx!.toLocal, translation4(inset, insetY))
+      const map = opensOwn ? mapLayerLocal : cameraCtx!.mapLayerLocal
+      const clipForChild = opensOwn ? (childPlane ? childPlane.canvasClip : childClip) : cameraCtx!.canvasClip
+      const vx = camera.width / 2 + (camera.vanishX ?? 0)
+      const vy = camera.height / 2 + (camera.vanishY ?? 0)
+      const perspective = camera.perspective!
+      for (const ch of node.children) {
+        const toLayer = mul4(toContent, poseMatrix(ch))
+        const nested = ch.kind === 'layer' && hasPerspective(ch.perspective)
+        const descend = !nested && !!ch.preserve3d && !flattenReason(ch) && (ch.kind === 'layer' || ch.kind === 'flex')
+        const posed = !opensOwn || !!node.cameraMoved || has3dPose(ch) || descend
+        const center = applyPoseMatrix(toLayer, ch.width / 2, ch.height / 2, 0)
+        const behind = behindCamera(center.z, perspective)
+        const project: Projector = (u, v) => {
+          if (behind) return null
+          const q = projectPoint(vx, vy, perspective, applyPoseMatrix(toLayer, u, v, 0))
+          if (!q) return null
+          return map(q.x, q.y)
+        }
+        const childView: MeshView = {
+          perspective,
+          vx,
+          vy,
+          mapLayerLocal: map,
+          toParent: toContent,
+          canvasClip: clipForChild,
+        }
+        const nextCtx: CameraCtx | undefined = descend
+          ? { layer: camera, toLocal: toLayer, mapLayerLocal: map, canvasClip: clipForChild }
+          : undefined
+        if (!posed) {
+          walk(ch, contentMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, childPlane, false, childView, inkSlack, maskIssues)
+          continue
+        }
+        walk(
+          ch,
+          contentMatrix,
+          opacity,
+          absX + inset,
+          absY + insetY,
+          childClip,
+          elements,
+          effects,
+          { project, toPlane: IDENTITY, canvasClip: clipForChild },
+          true,
+          childView,
+          inkSlack,
+          maskIssues,
+          nextCtx,
+        )
+      }
+    } else for (const ch of node.children) {
       if (opens && has3dPose(ch)) {
         walk(
           ch,
@@ -744,7 +837,8 @@ export function buildReport(doc: FvgDocument): FvgReport {
       const b = textInks[j]!
       const formula = mathRootPath(a.path)
       if (formula && formula === mathRootPath(b.path)) continue
-      if (inkOverlap(a.ink, b.ink)) {
+      const overlap = a.quad && b.quad ? quadsOverlap(a.quad, b.quad) : inkOverlap(a.ink, b.ink)
+      if (overlap) {
         issues.push({
           level: 'warn',
           code: 'text-overlap',
@@ -806,6 +900,7 @@ const EXPECT_CODES = new Set([
   'effect-clipped',
   'view-outside',
   'flatten-3d',
+  'flattened-3d',
   'behind-camera',
   'emit-draw',
   'emit-data',
