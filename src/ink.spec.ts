@@ -260,6 +260,17 @@ describe('ink-inset', () => {
     expect(hit?.hint).toContain('anchor-box="ink"')
   })
 
+  it('开了镜头的层不报 ink-inset', async () => {
+    const { report } = await renderLayer(
+      `<layer width="800" height="600" background="#111">
+        <layer x="0" y="0" width="800" height="600" anchor="left" camera="900">
+          <layer x="400" y="200"><h1 style="font-size:80px; white-space:nowrap">层</h1></layer>
+        </layer>
+      </layer>`,
+    )
+    expect(report.issues.some((issue) => issue.code === 'ink-inset' && issue.path === 'layer/layer[0]')).toBe(false)
+  })
+
   it('24px 小字不提示', async () => {
     const { report } = await renderLayer(
       `<layer width="400" height="200" background="transparent" color="#111">

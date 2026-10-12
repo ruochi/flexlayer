@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { beforeAll, describe, expect, it } from 'vitest'
@@ -116,5 +116,39 @@ export const composition: Composition = {
     expect(err).toContain('overflow-canvas')
     expect(result.stdout.subarray(0, 8).toString('utf8')).not.toContain('ffmpeg')
     expect(result.status).toBe(1)
+  })
+
+  it('--watch 在文件改完后再渲染一次', async () => {
+    const watchDir = mkdtempSync(join(tmpdir(), 'flexlayer-watch-'))
+    const file = join(watchDir, 'card.layer')
+    const out = join(watchDir, 'card.png')
+    writeFileSync(file, `<layer width="20" height="16" background="#000"></layer>`)
+    const child = spawn(tsxBin, [cliPath, 'render', file, '-o', out, '--watch'], { cwd: pkgDir })
+    let text = ''
+    let err = ''
+    child.stdout.on('data', (chunk: Buffer) => {
+      text += chunk.toString('utf8')
+    })
+    child.stderr.on('data', (chunk: Buffer) => {
+      err += chunk.toString('utf8')
+    })
+    const waitFor = async (count: number) => {
+      const start = Date.now()
+      while (Date.now() - start < 20000) {
+        if (text.split('✓').length - 1 >= count) return
+        await new Promise((resolve) => setTimeout(resolve, 40))
+      }
+      throw new Error(`没等到 ${count} 次渲染\n${text}\n${err}`)
+    }
+    try {
+      await waitFor(1)
+      expect(text).toContain('20×16')
+      writeFileSync(file, `<layer width="28" height="16" background="#111"></layer>`)
+      await waitFor(2)
+      expect(text).toContain('28×16')
+      expect(text).toContain('watching')
+    } finally {
+      child.kill('SIGKILL')
+    }
   })
 })

@@ -4,7 +4,7 @@
 
 Flex Layer 用标签描述一帧画面：图形用 SVG 的写法，文字用 HTML 的写法，布局用 CSS flexbox。渲染器读入 `.layer`，输出 PNG 和一份布局报告。
 
-规范见 [SPEC.md](SPEC.md)。给模型的入口见 [AGENTS.md](AGENTS.md)，一页写法见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，字体、图片和配色见 [docs/RESOURCES.md](docs/RESOURCES.md)。当前版本是 0.4.2。
+规范见 [SPEC.md](SPEC.md)。给模型的入口见 [AGENTS.md](AGENTS.md)，一页写法见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，字体、图片和配色见 [docs/RESOURCES.md](docs/RESOURCES.md)。当前版本是 0.4.3。
 
 `layer` 上的 `camera` 是这一层的镜头。不写时，有网格、`ground` 或 `rotateX`、`rotateY`、`z` 的最外层用自己的 `height` 当视距。`rotateX`、`rotateY`、`z` 写在要转动或推近的那一层上。`sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 和这些平面共用同一台视距。例子：`npx tsx src/cli.ts render examples/perspective.layer -o perspective.png`，`npx tsx src/cli.ts render examples/meshes.layer -o meshes.png`，`npx tsx src/cli.ts render examples/solids.layer -o solids.png`，`npx tsx src/cli.ts render examples/rounded.layer -o rounded.png`。
 
@@ -20,7 +20,7 @@ npx skills add ruochi/flexlayer
 
 ## 安装
 
-需要 Node.js 20 或更高版本。
+需要 Node.js 20 或更高版本。`package.json` 的 `engines` 写了 `>=20`。用 Node 18 跑命令时，入口会直接说明要换版本，而不是抛出 yoga-layout 的 `ERR_REQUIRE_ESM`。
 
 ```bash
 npm install
@@ -42,6 +42,7 @@ npx tsx src/cli.ts render examples/hello.layer -o hello.png --report hello.json
 npx tsx src/cli.ts render examples/draw-layer.layer -o draw-layer.png   # layer + <draw>
 npx tsx src/cli.ts render examples/hello.layer --debug --scale 0.5
 npx tsx src/cli.ts check examples/hello.layer
+npx tsx src/cli.ts render examples/hello.layer -o hello.png --watch
 npx tsx src/cli.ts render examples/hello.tsx -o hello.png --emit hello.out.layer
 npx tsx src/cli.ts render examples/slide.tsx --frame 1 -o slide.png
 ```

@@ -1,3 +1,4 @@
+import './assert-node.js'
 import {
   Align,
   Edge,
@@ -73,6 +74,7 @@ import type {
   DrawComputedStyle,
   FlexLayoutNode,
   LayerDocument,
+  MinFontSpec,
   GroupLayoutNode,
   ImageLayoutNode,
   Issue,
@@ -658,6 +660,38 @@ function computeDrawStyle(node: LayerNode, ctx: LayoutContext, style: Record<str
   return { color, fontFamily, fontSize, fontWeight, opacity }
 }
 
+function readOnOff(raw: string | undefined): { off: boolean; invalid: boolean } {
+  if (raw == null || raw.trim() === '') return { off: false, invalid: false }
+  const text = raw.trim().toLowerCase()
+  if (text === 'true' || text === '1' || text === 'yes') return { off: false, invalid: false }
+  if (text === 'false' || text === '0' || text === 'no') return { off: true, invalid: false }
+  return { off: false, invalid: true }
+}
+
+/** 不写时既投影子也接影子。只有写成 false 才记下来。 */
+function shadowToggles(node: LayerNode, ctx: LayoutContext): { castShadow?: false; receiveShadow?: false } {
+  const out: { castShadow?: false; receiveShadow?: false } = {}
+  const pairs = [
+    ['cast-shadow', 'castShadow'],
+    ['receive-shadow', 'receiveShadow'],
+  ] as const
+  for (const [key, field] of pairs) {
+    const raw = node.attrs[key]
+    const read = readOnOff(raw)
+    if (read.invalid) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `无法解析 ${key}: ${raw}`,
+        hint: '写成 true 或 false。不写时这只网格或平面既投影子，也接影子',
+      })
+    }
+    if (read.off) out[field] = false
+  }
+  return out
+}
+
 function layoutDrawMeta(node: LayerNode, ctx: LayoutContext) {
   const style = parseStyle(node.attrs.style)
   const loc = node.drawLoc ?? node.loc
@@ -668,6 +702,7 @@ function layoutDrawMeta(node: LayerNode, ctx: LayoutContext) {
     style,
     computed: computeDrawStyle(node, ctx, style),
     text: directTextContent(node),
+    ...shadowToggles(node, ctx),
     ...(loc ? { source: formatSourceLoc(loc) } : {}),
   }
 }
@@ -3045,6 +3080,8 @@ function anchorTouchesSide(anchor: Anchor): 'left' | 'right' | null {
 function maybeInkInset(node: LayoutNode, anchor: Anchor, ctx: LayoutContext) {
   const side = anchorTouchesSide(anchor)
   if (!side || (node.kind !== 'layer' && node.kind !== 'flex')) return
+  // 开了镜头的层，布局盒子和投影后的着墨本来就不该对齐。
+  if (node.kind === 'layer' && node.perspective != null) return
   const fontSize = maxTextFontSize(node)
   if (fontSize <= 0) return
   const ink = inkInLocal(node, 1)
@@ -3166,14 +3203,49 @@ function laidNeedsCamera(node: LayoutNode): boolean {
   return false
 }
 
+function readSceneShadows(raw: string | undefined, hostsCamera: boolean, ctx: LayoutContext): { shadows?: 'none' } {
+  if (raw == null || raw.trim() === '') return {}
+  const text = raw.trim().toLowerCase()
+  if (!hostsCamera) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: 'shadows 只写在开了镜头的 layer 上',
+      hint: '要关掉这一台场景的硬边影子，写在取景的 layer 上：shadows="none"。深度遮挡还在',
+    })
+    return {}
+  }
+  if (text === 'none') return { shadows: 'none' }
+  if (text === 'auto') return {}
+  ctx.issues.push({
+    level: 'warn',
+    code: 'invalid-attr',
+    path: ctx.pathPrefix,
+    message: `无法解析 shadows: ${raw}`,
+    hint: '写成 shadows="none" 关掉主光影子，或不写（auto）',
+  })
+  return {}
+}
+
 function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
   if (ctx.pathPrefix === 'layer') ctx.issues.push(...originValueIssues(node.attrs.origin, ctx.pathPrefix))
+  if (ctx.pathPrefix !== 'layer' && node.attrs['min-font'] != null && node.attrs['min-font'].trim() !== '') {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: 'min-font 只写在根 layer 上',
+      hint: '例如 <layer width="1240" height="1754" min-font="print">。screen 是屏幕档，print 适合海报注释，也可以写像素',
+    })
+  }
   const appearance = readAttrAppearance(node.attrs)
   // 根节点的 background 是画布底色，由 paintDocument 绘制。layer 自身不填色。
   appearance.background = undefined
   const fixedW = parseNumber(node.attrs.width)
   const fixedH = parseNumber(node.attrs.height)
   const hostsCamera = wroteCameraAttr(node) || (!ctx.ancestorCamera && rawNeedsCamera(node))
+  const sceneShadows = readSceneShadows(node.attrs.shadows, hostsCamera, ctx)
   const layerCtx = withLayerText({ ...ctx, ancestorCamera: Boolean(hostsCamera || ctx.ancestorCamera) }, node)
 
   const childFvg = node.children.filter((c) => typeof c !== 'string') as LayerNode[]
@@ -3409,6 +3481,7 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
     ...(vanishY != null ? { vanishY } : {}),
     ...(cameraMoved ? { cameraMoved: true } : {}),
     ...(dof ? { dof } : {}),
+    ...sceneShadows,
     ...sharpOf(node.attrs, ctx),
     ...(preserve.value ? { preserve3d: true } : {}),
     ...(mask ? { mask } : {}),
@@ -3716,6 +3789,7 @@ export function layoutSync(rootNode: LayerNode, assets: LayoutAssets): LayerDocu
     }
   }
   const root = layoutLayer(rootNode, paintCtx)
+  const minFont = readMinFont(attrs['min-font'], issues)
 
   root.width = width
   root.height = height
@@ -3753,6 +3827,7 @@ export function layoutSync(rootNode: LayerNode, assets: LayoutAssets): LayerDocu
     background,
     color,
     fontFamily,
+    minFont,
     safe,
     root,
     issues,
@@ -3823,6 +3898,23 @@ function noteStructuredData(node: LayerNode, path: string, issues: Issue[]): voi
     noteStructuredData(child, `${path}/${child.tag}[${index}]`, issues)
     index++
   }
+}
+
+function readMinFont(raw: string | undefined, issues: Issue[]): MinFontSpec {
+  if (raw == null || raw.trim() === '' || raw.trim().toLowerCase() === 'screen') return { mode: 'screen' }
+  const text = raw.trim().toLowerCase()
+  if (text === 'print') return { mode: 'print' }
+  if (text === 'none') return { mode: 'none' }
+  const px = Number(text)
+  if (Number.isFinite(px) && px >= 0) return px === 0 ? { mode: 'none' } : { mode: 'px', px }
+  issues.push({
+    level: 'warn',
+    code: 'invalid-attr',
+    path: 'layer',
+    message: `无法解析 min-font: ${raw}`,
+    hint: '写成 screen、print、none，或像素，例如 min-font="16"。screen 是 min(宽, 高) / 1080 × 24，print 是 × 12',
+  })
+  return { mode: 'screen' }
 }
 
 export async function layoutSource(source: string | LayerNode, baseDir: string): Promise<LayerDocument> {

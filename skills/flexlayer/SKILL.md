@@ -64,5 +64,6 @@ export default canvas.create(
 - `node_modules/flexlayer/SPEC.md`
 - `node_modules/flexlayer/docs/CHEATSHEET.md`
 - `node_modules/flexlayer/docs/RESOURCES.md`
+- `node_modules/flexlayer/docs/attrs.json` 逐个属性，按名字查
 
 同一份也在 https://github.com/ruochi/flexlayer 的 `SPEC.md`。写错时以报告里的问题码和 `hint` 为准。

@@ -228,6 +228,7 @@ function hashKind(node: LayoutNode): string | null {
       shadowBlur: node.shadowBlur,
       shadowOpacity: node.shadowOpacity,
       shadowColor: node.shadowColor,
+      receiveShadow: node.receiveShadow !== false,
     })
   }
   if (node.kind === 'mesh') {
@@ -242,6 +243,8 @@ function hashKind(node: LayoutNode): string | null {
       strokeWidths: node.strokeWidths,
       halo: node.halo,
       hidden: node.hidden,
+      castShadow: node.castShadow !== false,
+      receiveShadow: node.receiveShadow !== false,
     })
   }
   return ''
@@ -253,7 +256,8 @@ function hashKind(node: LayoutNode): string | null {
  */
 export function meshSceneCacheKey(scene: MeshCacheScene): string | null {
   const parts: string[] = [
-    'mesh-scene-v3',
+    'mesh-scene-v4',
+    scene.layer.shadows === 'none' ? 'shadows none' : 'shadows',
     scene.layer.dof ? `dof ${qnum(scene.layer.dof.aperture)} ${qnum(scene.layer.dof.focus)} ${qnum(scene.layer.dof.maxBlur)}` : 'dof',
     String(qnum(scene.layer.width)),
     String(qnum(scene.layer.height)),
@@ -281,6 +285,8 @@ export function meshSceneCacheKey(scene: MeshCacheScene): string | null {
       halo: node.halo,
       hidden: node.hidden,
       sharp: node.sharp === true,
+      castShadow: node.castShadow !== false,
+      receiveShadow: node.receiveShadow !== false,
       toLayer: instance.toLayer,
     })
     if (body == null) return null
@@ -293,6 +299,7 @@ export function meshSceneCacheKey(scene: MeshCacheScene): string | null {
       shadowOpacity: instance.node.shadowOpacity,
       shadowColor: instance.node.shadowColor,
       opacity: instance.node.opacity,
+      receiveShadow: instance.node.receiveShadow !== false,
       instOpacity: instance.opacity ?? 1,
       toLayer: instance.toLayer,
     })
@@ -307,6 +314,8 @@ export function meshSceneCacheKey(scene: MeshCacheScene): string | null {
       h: plane.node.height,
       origin: plane.node.origin ?? null,
       sharp: plane.node.sharp === true,
+      castShadow: plane.node.castShadow !== false,
+      receiveShadow: plane.node.receiveShadow !== false,
       toLayer: plane.toLayer,
     })
     if (pose == null) return null

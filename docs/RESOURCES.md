@@ -19,6 +19,7 @@
 | `Kai` | 楷体、霞鹜文楷 | 400、700 | 简体 | 楷体 | 霞鹜文楷 |
 | `Brush` | 书法、毛笔 | 400 | 简体 | 书法标题 | Ma Shan Zheng |
 | `Inter` | | 400、700 | 拉丁 | 英文正文 | Inter |
+| `JetBrainsMono` | jetbrains mono、等宽 | 400、700 | 拉丁 | 代码与等宽 | JetBrains Mono |
 | `Playfair` | Playfair Display | 400、700 | 拉丁 | 英文标题 | Playfair Display |
 | `Baskerville` | Libre Baskerville | 400、700 | 拉丁 | 英文正文衬线 | Libre Baskerville |
 | `Oswald` | | 400、700 | 拉丁 | 窄标题 | Oswald |

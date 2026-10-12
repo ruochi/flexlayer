@@ -22,14 +22,15 @@
 | 线条 | `<layer><line x1 y1 x2 y2 /></layer>` | `invalid-child` |
 | 文字位置 | `<layer x="120" y="64"><h1>…</h1></layer>` | `invalid-attr` |
 | 位置 | `layer`、`use`、`rect`、`box` 用 `x` `y`。圆、椭圆、球用 `cx` `cy` | `invalid-attr` |
-| 竖排对齐 | `align-items` 默认 `center`。左对齐写 `align-items:flex-start` | |
+| 竖排对齐 | `align-items` 默认 `center`（CSS 是 `stretch`）。左对齐写 `align-items:flex-start`。块级 `div` 仍是 `stretch` | |
 | 渐变 | 字形 `style="fill:linear-gradient(...)"`。`color` 只写纯色 | `invalid-attr` |
 | 描边 | 只写 `stroke`。形状可加 `stroke-width`；沿墨迹写 `stroke="6 #000 outside"` | `invalid-attr` |
 | 整棵子树的效果 | `<layer grade="lomo" overlay="#00000066">` | `invalid-attr` |
-| 网格 | `<layer><sphere cx="80" cy="80" r="40" /></layer>`。不写 `camera` 时视距等于 height | `flatten-3d` |
+| 网格 | `<layer><sphere cx="80" cy="80" r="40" /></layer>`。不写 `camera` 时视距等于 height。不要硬边影子时，取景层写 `shadows="none"`，或网格 `cast-shadow="false"`、平面 `receive-shadow="false"` | `flatten-3d` |
 | 地面 | `<ground y="520" rotateX="70" shadow-blur="16" />`。旋转和 `box` 一样。不写 `fill` 时只有影子 | `invalid-attr` |
 | 结构化数据 | `data={{ values: [1, 2] }}`。`.layer` 写 `data='{"values":[1,2]}'` | `invalid-attr` |
-| 故意出现的问题 | `expect="overflow-canvas: 出血图"`。没出现报 `unused-expect` | `unused-expect` |
+| 故意出现的问题 | `expect="overflow-canvas: 出血图"`。写在根上覆盖整棵子树。没出现报 `unused-expect` | `unused-expect` |
+| 最小字号 | 根上 `min-font="print"` 或 `min-font="16"`。不写按屏幕 `min(宽, 高) / 1080 × 24`。多处过小合并成一条 | `min-font-size` |
 
 ## 按主题去哪一章
 
@@ -40,6 +41,7 @@
 | 公式 | SPEC 第 4.1 节 |
 | `canvas.create`、动画、`glyph` | SPEC 第 5.4 节、第 13 章、第 15 章 |
 | 问题码和报告字段 | SPEC 第 10 章 |
+| 某个属性怎么写 | [docs/attrs.json](docs/attrs.json)，按名字查 |
 
 flex 的默认值、文字盒子里不能嵌套块级标签、图标写法，都在 SPEC 第 4、5 章，不要在这里再记一份。
 

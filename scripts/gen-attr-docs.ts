@@ -3,6 +3,7 @@ import {
   JSX_EFFECT_NAMES,
   JSX_GRADE_NAMES,
   JSX_OVERLAY_NAMES,
+  attrCatalog,
   effectCheatLine,
   jsxFieldBlock,
   ownershipTableBody,
@@ -21,6 +22,7 @@ function fill(path: string, marker: string, body: string, kind: 'html' | 'line' 
   writeFileSync(path, next)
 }
 
+writeFileSync('docs/attrs.json', `${JSON.stringify(attrCatalog(), null, 2)}\n`)
 fill('SPEC.md', 'attrs:ownership', ownershipTableBody())
 fill('docs/CHEATSHEET.md', 'attrs:effects', effectCheatLine())
 for (const file of ['src/jsx-intrinsics.ts']) {

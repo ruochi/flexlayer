@@ -6,7 +6,7 @@ import { apply, applyToBox, aroundPivot, IDENTITY, intersectBox, matrixScale, mu
 import { applyPoseMatrix, behindCamera, cameraSceneCustom, has3dPose, hasPerspective, planeDepth, poseMatrix, posePoint, project as projectPoint, splitsForCamera, type Perspective } from './perspective.js'
 import { maskStats } from './mask-stats.js'
 import { innerInkStrokeReach, outerInkStrokeReach } from './style.js'
-import type { Box, ElementReport, LayerDocument, LayerReport, InlineOwner, Issue, LayerLayoutNode, LayoutNode, MeshLayoutNode, TextLayoutNode } from './types.js'
+import type { Box, ElementReport, LayerDocument, LayerReport, InlineOwner, Issue, LayerLayoutNode, LayoutNode, MeshLayoutNode, MinFontSpec, TextLayoutNode } from './types.js'
 import { boxToRect, emptyBox, translateBox, unionBoxes } from './types.js'
 import { viewMatrix } from './view.js'
 
@@ -833,6 +833,7 @@ export function buildReport(doc: LayerDocument): LayerReport {
 
   const issues: Issue[] = [...doc.issues, ...maskIssues]
   const visible = elements.filter((el) => el.opacity >= VISIBLE_OPACITY && hasArea(el.ink))
+  const minFontHits: Array<{ path: string; shown: number; floor: number; message: string }> = []
 
   for (let index = 0; index < elements.length; index++) {
     const el = elements[index]!
@@ -881,14 +882,14 @@ export function buildReport(doc: LayerDocument): LayerReport {
           hint: '被取景窗或 overflow="hidden" 裁掉的边不算。裁完仍露在安全区外的字要往里移',
         })
       }
-      const minFs = (Math.min(doc.width, doc.height) / 1080) * 24
+      const minFs = minFontFloor(doc)
       const shownSize = (el.fontSize ?? 0) * (el.screenScale ?? 1)
-      if (shownSize < minFs - 1e-3) {
+      if (minFs != null && shownSize < minFs - 1e-3) {
         const sized = el.screenScale != null ? `屏幕上的字号 ${shownSize.toFixed(1)}px` : `字号 ${el.fontSize}px`
-        issues.push({
-          level: 'warn',
-          code: 'min-font-size',
+        minFontHits.push({
           path: el.path,
+          shown: shownSize,
+          floor: minFs,
           message: `${sized} 小于建议最小 ${minFs.toFixed(1)}px`,
         })
       }
@@ -905,6 +906,26 @@ export function buildReport(doc: LayerDocument): LayerReport {
         })
       }
     }
+  }
+
+  if (minFontHits.length === 1) {
+    const hit = minFontHits[0]!
+    issues.push({
+      level: 'warn',
+      code: 'min-font-size',
+      path: hit.path,
+      message: hit.message,
+      hint: '根上写 min-font="print" 或 min-font="16"。screen 是 min(宽, 高) / 1080 × 24',
+    })
+  } else if (minFontHits.length > 1) {
+    const smallest = minFontHits.reduce((best, hit) => (hit.shown < best.shown ? hit : best))
+    issues.push({
+      level: 'warn',
+      code: 'min-font-size',
+      path: smallest.path,
+      message: `${minFontHits.length} 处字号小于建议最小 ${smallest.floor.toFixed(1)}px`,
+      hint: `最小的是 ${smallest.shown.toFixed(1)}px（${smallest.path}）。海报写 min-font="print"，或直接写像素 min-font="16"。min-font="none" 关掉这条`,
+    })
   }
 
   const textInks = visible.filter((e) => e.lines != null && !e.inline)
@@ -1047,6 +1068,14 @@ function applyExpects(root: LayoutNode, issues: Issue[]) {
       expect: { code: decl.code },
     })
   }
+}
+
+function minFontFloor(doc: LayerDocument): number | null {
+  const spec: MinFontSpec = doc.minFont ?? { mode: 'screen' }
+  if (spec.mode === 'none') return null
+  if (spec.mode === 'px') return spec.px
+  const ratio = spec.mode === 'print' ? 12 : 24
+  return (Math.min(doc.width, doc.height) / 1080) * ratio
 }
 
 function formatFrameSpan(frames: Array<[number, number]> | undefined, frame: number | undefined): string {

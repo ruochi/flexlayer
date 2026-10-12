@@ -150,6 +150,22 @@ export const REGISTERED_FONTS: CatalogFont[] = [
     ],
   },
   {
+    family: 'JetBrainsMono',
+    title: 'JetBrains Mono',
+    role: 'google',
+    source: 'JetBrains Mono（Google Fonts，拉丁子集）',
+    license: 'OFL',
+    covers: '拉丁',
+    use: '代码与等宽',
+    sample: 'const n = 1',
+    weights: '400、700',
+    aliases: ['jetbrains mono', 'jetbrains-mono', '等宽'],
+    faces: [
+      woff('jetbrains-mono', V, 'jetbrains-mono-latin-400-normal.woff', 400, 'JetBrainsMono'),
+      woff('jetbrains-mono', V, 'jetbrains-mono-latin-700-normal.woff', 700, 'JetBrainsMonoBold'),
+    ],
+  },
+  {
     family: 'Playfair',
     title: 'Playfair Display',
     role: 'google',

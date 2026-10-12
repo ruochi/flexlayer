@@ -147,6 +147,30 @@ describe('view', () => {
     expect(tall.issues.find((issue) => issue.code === 'min-font-size')?.message).toContain('24.0px')
   })
 
+  it('min-font 可改档，多处过小合并成一条', async () => {
+    const poster = `<layer width="1240" height="1240" safe="0" min-font="print"><p style="font-size:18px; white-space:nowrap">注释</p></layer>`
+    const print = await checkLayer(poster)
+    expect(print.issues.some((issue) => issue.code === 'min-font-size')).toBe(false)
+    const fixed = await checkLayer(poster.replace('min-font="print"', 'min-font="16"'))
+    expect(fixed.issues.some((issue) => issue.code === 'min-font-size')).toBe(false)
+    const off = await checkLayer(
+      `<layer width="1080" height="1080" safe="0" min-font="none"><p style="font-size:8px">甲</p><p style="font-size:9px">乙</p></layer>`,
+    )
+    expect(off.issues.some((issue) => issue.code === 'min-font-size')).toBe(false)
+
+    const many = await checkLayer(
+      `<layer width="1080" height="1080" safe="0"><p style="font-size:12px">甲</p><p style="font-size:10px">乙</p><p style="font-size:14px">丙</p></layer>`,
+    )
+    const hits = many.issues.filter((issue) => issue.code === 'min-font-size')
+    expect(hits).toHaveLength(1)
+    expect(hits[0]?.message).toContain('3 处')
+    expect(hits[0]?.message).toContain('24.0px')
+    expect(hits[0]?.hint).toContain('10.0px')
+
+    const nested = await checkLayer(`<layer width="200" height="80"><layer min-font="print"><p style="font-size:40px">甲</p></layer></layer>`)
+    expect(nested.issues.some((issue) => issue.message.includes('min-font 只写在根'))).toBe(true)
+  })
+
   it('最小字号和模糊外扩按屏幕尺寸', async () => {
     const shrunk = await checkLayer(
       `<layer width="1080" height="1080" safe="0"><p style="font-size:30px; white-space:nowrap; scale:0.5">字</p></layer>`,

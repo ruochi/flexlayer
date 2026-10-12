@@ -41,6 +41,10 @@ type LayerPositioned = LayerGraphic & {
   'anchor-box'?: string
   /** 不吃景深 */
   sharp?: boolean | string
+  /** 不写时投影子。false 时不写入主光阴影图 */
+  'cast-shadow'?: boolean | string
+  /** 不写时接影子。false 时主光被挡住也不变暗 */
+  'receive-shadow'?: boolean | string
 }
 
 /** circle、ellipse、sphere、cylinder、torus 的圆心。 */
@@ -185,6 +189,10 @@ export namespace JSX {
             }
         /** 子元素沿父链进入外层镜头 */
         'preserve-3d'?: boolean | string
+        /** 这台镜头的主光影子。none 关掉硬边影子，深度遮挡还在 */
+        shadows?: 'none' | 'auto' | string
+        /** 只在根上。screen、print、none，或最小像素 */
+        'min-font'?: number | string
         scale?: number | string
         /** 支点。九宫格，或 `120 80`、`30% 40%` */
         origin?: string

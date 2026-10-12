@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ATTRS,
   ATTR_ORDER,
+  attrCatalog,
   EFFECT_ATTRS,
   HTML_STYLE_ATTRS,
   JSX_EFFECT_NAMES,
@@ -69,7 +70,9 @@ describe('属性注册表', () => {
     ])
   })
 
-  it('SPEC 归属表和速查效果行由注册表生成', () => {
+  it('属性目录和 SPEC 归属表、速查效果行由注册表生成', () => {
+    const catalog = readFileSync(new URL('../docs/attrs.json', import.meta.url), 'utf8')
+    expect(catalog).toBe(`${JSON.stringify(attrCatalog(), null, 2)}\n`)
     const spec = readFileSync(new URL('../SPEC.md', import.meta.url), 'utf8')
     const cheat = readFileSync(new URL('../docs/CHEATSHEET.md', import.meta.url), 'utf8')
     expect(between(spec, 'attrs:ownership')).toBe(ownershipTableBody())

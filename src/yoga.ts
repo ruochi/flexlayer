@@ -1,3 +1,4 @@
+import './assert-node.js'
 import Yoga from 'yoga-layout'
 
 export type YogaApi = typeof Yoga

@@ -32,6 +32,8 @@ export type AttrDef = {
   misplacedHint?: string
   /** 写进 style 时的 hint */
   styleHint?: string
+  /** 给按属性检索的目录。和 CSS 不一致、或容易放错时写在这里 */
+  note?: string
 }
 
 /** 和 serialize 的属性顺序一致，改顺序会改变生成的 .layer。 */
@@ -45,6 +47,7 @@ export const ATTR_ORDER = [
   'background',
   'color',
   'font-family',
+  'min-font',
   'safe',
   'view',
   'x',
@@ -76,6 +79,9 @@ export const ATTR_ORDER = [
   'hidden',
   'halo',
   'material',
+  'shadows',
+  'cast-shadow',
+  'receive-shadow',
   'shadow-blur',
   'shadow-opacity',
   'shadow-color',
@@ -124,6 +130,30 @@ export const ATTRS: AttrDef[] = [
     styleHint: '不要写进 style；写在 layer 的属性上，例如 <layer camera="900">',
   },
   {
+    name: 'shadows',
+    layerOnlyAttr: true,
+    forbidInStyle: true,
+    docGroup: 'layer-only',
+    syntax: 'auto | none',
+    defaultValue: 'auto',
+    example: 'none',
+    note: '写在开了镜头的 layer 上。none 不建主光阴影图，深度遮挡还在。单只网格用 cast-shadow，平面用 receive-shadow',
+    misplacedHint: '写在取景的 layer 上，例如 <layer camera="900" shadows="none">',
+    styleHint: '不要写进 style；写在 layer 的属性上',
+  },
+  {
+    name: 'min-font',
+    layerOnlyAttr: true,
+    forbidInStyle: true,
+    docGroup: 'layer',
+    syntax: 'screen | print | none | px',
+    defaultValue: 'screen',
+    example: 'print',
+    note: '只写在根上。screen 是 min(宽, 高) / 1080 × 24，print 是 × 12。写成数字就是屏幕像素下限，none 关掉 min-font-size',
+    misplacedHint: '只写在根 layer 上，例如 <layer width="1240" height="1754" min-font="print">',
+    styleHint: '不要写进 style；写在根 layer 的属性上',
+  },
+  {
     name: 'preserve-3d',
     forbidInStyle: true,
     example: 'true',
@@ -150,7 +180,15 @@ export const ATTRS: AttrDef[] = [
   { name: 'border', warnOnHtmlAttr: true, docGroup: 'html' },
   { name: 'border-radius', warnOnHtmlAttr: true, docGroup: 'html' },
   { name: 'max-width', warnOnHtmlAttr: true, docGroup: 'html' },
-  { name: 'align-items', warnOnHtmlAttr: true, docGroup: 'html' },
+  {
+    name: 'align-items',
+    warnOnHtmlAttr: true,
+    docGroup: 'html',
+    syntax: 'center | flex-start | flex-end | stretch | baseline',
+    defaultValue: 'center',
+    example: 'flex-start',
+    note: 'CSS 的初始值是 stretch。flex 容器这里默认 center，是为了海报里图文并排时交叉轴居中；column 忘写时子项会居中。没写 display:flex、但放了块级子元素的 div 仍按 stretch 把文字拉到列宽。要跟 CSS 一样就写 align-items:stretch',
+  },
   { name: 'align-content', warnOnHtmlAttr: true, docGroup: 'html' },
   { name: 'justify-content', warnOnHtmlAttr: true, docGroup: 'html' },
   { name: 'flex-wrap', warnOnHtmlAttr: true, docGroup: 'html' },
@@ -186,6 +224,24 @@ export const ATTRS: AttrDef[] = [
   { name: 'hidden', docGroup: 'graphic' },
   { name: 'halo', docGroup: 'graphic', syntax: 'px', example: '3' },
   { name: 'material', docGroup: 'graphic', syntax: 'matte | plastic | metal | glass [roughness]', example: 'metal 0.35' },
+  {
+    name: 'cast-shadow',
+    forbidInStyle: true,
+    docGroup: 'graphic',
+    syntax: 'true | false',
+    defaultValue: 'true',
+    example: 'false',
+    note: '网格、平面和 ground 都能写。false 时不写入这台场景的主光阴影图。玻璃本来就不投这张影子',
+  },
+  {
+    name: 'receive-shadow',
+    forbidInStyle: true,
+    docGroup: 'graphic',
+    syntax: 'true | false',
+    defaultValue: 'true',
+    example: 'false',
+    note: 'false 时主光被挡住也不变暗。半透明平面要保持干净时写在这张平面上',
+  },
   {
     name: 'shadow-blur',
     docGroup: 'graphic',
@@ -400,6 +456,21 @@ function namesIn(group: DocGroup): string {
   return ATTRS.filter((attr) => attr.docGroup === group)
     .map((attr) => `\`${attr.name}\``)
     .join('、')
+}
+
+/** 逐个属性，给按需检索。顺序与注册表一致。 */
+export function attrCatalog(): Array<Record<string, string | boolean | null>> {
+  return ATTRS.map((attr) => ({
+    name: attr.name,
+    group: attr.docGroup ?? null,
+    syntax: attr.syntax ?? null,
+    default: attr.defaultValue ?? null,
+    example: attr.example ?? null,
+    layerOnly: attr.layerOnlyAttr === true,
+    htmlUsesStyle: attr.warnOnHtmlAttr === true,
+    note: attr.note ?? null,
+    misplacedHint: attr.misplacedHint ?? null,
+  }))
 }
 
 /** SPEC 归属总表（不含表头）。 */

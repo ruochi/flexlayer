@@ -425,6 +425,10 @@ export type LayoutNodeBase = {
   preserve3d?: boolean
   /** 不吃景深。这一层表面保持清楚，仍挡住后面的东西。 */
   sharp?: boolean
+  /** 不写入这台场景的主光阴影图。不写时不透明表面会投影子。 */
+  castShadow?: false
+  /** 主光被挡住时不变暗。不写时接影子。 */
+  receiveShadow?: false
 }
 
 export type LayerLayoutNode = LayoutNodeBase & {
@@ -443,6 +447,8 @@ export type LayerLayoutNode = LayoutNodeBase & {
   cameraMoved?: boolean
   /** 写了 aperture 才有。平行投影没有。 */
   dof?: DofSpec
+  /** 这台镜头不建主光阴影图。深度遮挡仍在。不写时不透明表面互相投影子。 */
+  shadows?: 'none'
   /**
    * 蒙版内容，坐标系是这一层的局部像素。
    * 绘制时只取 alpha，不进入 children，不参与布局。
@@ -590,12 +596,17 @@ export type LayoutNode =
 /** `view="x y w h"`。x y 是舞台坐标，w h 是被取的宽高。 */
 export type ViewRect = { x: number; y: number; width: number; height: number }
 
+/** 根上的 `min-font`。`screen` 是 min(宽, 高) / 1080 × 24，`print` 是 × 12。 */
+export type MinFontSpec = { mode: 'screen' | 'print' | 'none' } | { mode: 'px'; px: number }
+
 export type LayerDocument = {
   width: number
   height: number
   background: string
   color: string
   fontFamily: string
+  /** 不写时按 screen。 */
+  minFont?: MinFontSpec
   safe: { top: number; right: number; bottom: number; left: number }
   root: LayerLayoutNode
   issues: Issue[]

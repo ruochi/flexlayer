@@ -21,6 +21,7 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
  * `camera="parallel"` 时不除视距，屏幕坐标就是层坐标。
  * 正对镜头的面是 fill，侧面按内置主光和补光变暗。
  * 主光沿固定方向打一张正交深度图：不透明三角形互相挡住这盏光时，主光不计。
+ * `shadows="none"` 不建这张图。`cast-shadow="false"` 的批次不写入，`receive-shadow="false"` 的表面不变暗。
  * glb 用文件里的底色乘这套明暗。
  * 写了 stroke 时，在超采样缓冲上按屏幕像素描折棱和轮廓，再和填充一起平均缩回。
  * 两只都写了 stroke 的网格相互穿过时，交界线算折棱，颜色和宽度跟后写的那只。
@@ -95,6 +96,10 @@ type Batch = {
   doubleSided: boolean
   shaded: boolean
   depthWrite: boolean
+  /** 不透明时写入主光阴影图。 */
+  castShadow: boolean
+  /** 被挡住时按主光变暗。 */
+  receiveShadow: boolean
   /** lambert 是默认磨砂（matte）和平面的明暗。glass 不写主光阴影，半透明时不写深度。 */
   material: 'lambert' | 'plastic' | 'metal' | 'glass'
   roughness: number
@@ -1487,7 +1492,7 @@ function buildShadowMap(batches: Batch[], authored: Vert[][], pixels: number): S
   }
   const [la, lb, lc] = SCREEN_SCRATCH
   batches.forEach((batch, batchIndex) => {
-    if (batch.material === 'glass') return
+    if (!batch.castShadow || batch.material === 'glass') return
     if (!batch.texture && batch.a < 128) return
     const verts = authored[batchIndex]!
     const buf = light[batchIndex]!
@@ -2384,7 +2389,7 @@ function paintGrounds(
     const shade = new Float32Array(count)
     const fill = ground.node.fill ? fillBytes(ground.node.fill, opacity) : null
     const ink = fillBytes(ground.node.shadowColor, opacity * ground.node.shadowOpacity)
-    const wantShadow = shadow != null && ink[3] > 0
+    const wantShadow = shadow != null && ink[3] > 0 && ground.node.receiveShadow !== false
     for (let iy = 0; iy < ph; iy++) {
       const sy = originY + (iy + 0.5) / pixelScale
       const row = iy * pw
@@ -2501,13 +2506,14 @@ function rasterize(
   const color = buffers.color
   const depth = buffers.depth
   const owners = buffers.owners
-  const shadow = buildShadowMap(batches, authored, Math.max(layer.width, layer.height) * base * 2)
+  const shadow = layer.shadows === 'none' ? null : buildShadowMap(batches, authored, Math.max(layer.width, layer.height) * base * 2)
   const near = perspective === 'parallel' ? Number.POSITIVE_INFINITY : perspective * (1 - 1e-3)
   const camera: ShadeCamera =
     perspective === 'parallel' ? { x: 0, y: 0, z: 0, parallel: true } : { x: vx, y: vy, z: perspective }
   const [sa, sb, sc] = SCREEN_SCRATCH
   const paintBatch = (batchIndex: number) => {
     const batch = batches[batchIndex]!
+    const received = batch.receiveShadow ? shadow : null
     const verts = authored[batchIndex]!
     const screen = projected[batchIndex]!
     if (batch.material === 'glass' && verts.length > 0) {
@@ -2546,7 +2552,7 @@ function rasterize(
             loadScreen(sb, b, screen, i1),
             loadScreen(sc, c, screen, i2),
             batch,
-            shadow,
+            received,
             writeOwner,
           )
         ) {
@@ -2560,7 +2566,7 @@ function rasterize(
             sb,
             sc,
             batch,
-            shadow,
+            received,
             camera,
           )
         }
@@ -2579,7 +2585,7 @@ function rasterize(
           projectClipped(clipped[k]!, perspective, px, py, originX, originY, pixelScale),
           projectClipped(clipped[k + 1]!, perspective, px, py, originX, originY, pixelScale),
           batch,
-          shadow,
+          received,
           camera,
         )
       }
@@ -3577,6 +3583,8 @@ function planeBatch(plane: SoftwareMeshInput['planes'][number], raster: Software
     doubleSided: true,
     shaded: false,
     depthWrite: true,
+    castShadow: plane.node.castShadow !== false,
+    receiveShadow: plane.node.receiveShadow !== false,
     material: 'lambert',
     roughness: 1,
     texture: solid ? null : pixels.data,
@@ -3703,6 +3711,8 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
           doubleSided: prim.doubleSided,
           shaded: true,
           depthWrite: node.material?.kind === 'glass' && prim.color[3] < 255 ? false : prim.color[3] >= 255,
+          castShadow: node.castShadow !== false,
+          receiveShadow: node.receiveShadow !== false,
           material: shadeMaterial(node.material?.kind),
           roughness: node.material?.roughness ?? 1,
           texture: null,
@@ -3735,6 +3745,8 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
       doubleSided: node.mesh.type === 'extrude',
       shaded: !fillNone,
       depthWrite: glass && a < 255 ? false : fillNone || a >= 255,
+      castShadow: node.castShadow !== false,
+      receiveShadow: node.receiveShadow !== false,
       material: shadeMaterial(node.material?.kind),
       roughness: node.material?.roughness ?? 1,
       texture: null,

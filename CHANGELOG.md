@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.3
+
+开了镜头的那一层可以写 `shadows="none"`，不再给平面和地面投主光的硬边影子，深度遮挡还在。网格、平面和 `ground` 还可以写 `cast-shadow="false"`、`receive-shadow="false"`。不写时和以前一样，不透明表面互相投影子。
+
+根上的 `min-font` 可以写成 `screen`（默认，`min(宽, 高) / 1080 × 24`）、`print`（× 12）、像素，或 `none`。同一张图里多处过小的字合并成一条 `min-font-size`。开了镜头的 layer 不再报 `ink-inset`。
+
+`package.json` 写了 `engines.node >=20`。命令行在加载布局引擎之前检查版本，Node 18 会说明要换到 20 或更高，而不是抛出 yoga-layout 的 `ERR_REQUIRE_ESM`。
+
+内置 `JetBrainsMono`（别名 `jetbrains mono`、`等宽`）。`render` 和 `check` 可以加 `--watch`，源文件和它引用的相对路径一变就再跑一遍。
+
+属性目录在 `docs/attrs.json`，由 `npm run docs:attrs` 从注册表生成。`align-items` 仍默认 `center`：海报里图文并排时交叉轴居中；没写 `display:flex` 的块级 `div` 仍按 `stretch` 拉满列宽。要跟 CSS 一样就写 `align-items:stretch`。
+
 ## 0.4.2
 
 `--refine` 改回 BiRefNet 512。lite 512 在夜里的钟楼上输出全是负的 logits，遮罩是空的，位置也是 `null`。深度会话仍在载入抠图模型之前放掉。

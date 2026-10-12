@@ -104,6 +104,26 @@ describe('软件光栅', () => {
     expect([right[0], right[1], right[2]]).toEqual([0xa9, 0xdc, 0xff])
   })
 
+  it('shadows、cast-shadow、receive-shadow 可以关掉平面上的硬边影子', async () => {
+    const scene = (extra: string) => `
+      <layer width="240" height="240" background="#ffffff" camera="800" ${extra.includes('shadows') ? extra : ''}>
+        <rect x="10" y="100" width="220" height="120" fill="#ffffff" ${extra.includes('receive-shadow') ? extra : ''} />
+        <sphere cx="70" cy="70" r="24" z="70" fill="#ff2244" ${extra.includes('cast-shadow') ? extra : ''} />
+      </layer>`
+    const lit = await render(scene(''))
+    const dark = await pixelAt(lit.png, 112, 130)
+    expect(dark[0]).toBeLessThan(180)
+    for (const extra of ['shadows="none"', 'cast-shadow="false"', 'receive-shadow="false"']) {
+      const { png } = await render(scene(extra))
+      const shade = await pixelAt(png, 112, 130)
+      const open = await pixelAt(png, 210, 200)
+      expect(shade[0], extra).toBeGreaterThan(245)
+      expect(shade[1], extra).toBeGreaterThan(245)
+      expect(shade[2], extra).toBeGreaterThan(245)
+      expect(open[0], extra).toBeGreaterThan(245)
+    }
+  })
+
   it('球体沿主光在平面上投下影子，没挡住的地方仍是 fill', async () => {
     const { png } = await render(`
       <layer width="240" height="240" background="#ffffff" camera="800">

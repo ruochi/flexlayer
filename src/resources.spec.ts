@@ -32,6 +32,8 @@ describe('可用资源', () => {
     expect(effectiveFontWeight('Inter', 500)).toBe(400)
     expect(effectiveFontWeight('Bebas', 700)).toBe(400)
     expect(effectiveFontWeight('楷体', 600)).toBe(700)
+    expect(effectiveFontWeight('JetBrainsMono', 650)).toBe(700)
+    expect(effectiveFontWeight('等宽', 400)).toBe(400)
     expect(effectiveFontWeight('ChillDuanSans', 450)).toBe(450)
   })
 
