@@ -39,7 +39,7 @@ npx flexlayer render scene.tsx --frames out/ --from 0 --to 90
 
 检查抠图结果或黑白蒙版用 `await analyzeImage('cut.png')`：返回留下的比例 `area`、外接矩形 `ink`、碎片数 `pieces`、洞数 `holes`、软边宽度 `softEdge` 和轮廓 `d`，坐标是图片像素。`d` 直接写进 `<mask><path d /></mask>`。
 
-抠主体不在渲染器里，`analyzeImage` 只量已经抠好的图。包 `flexlayer-select` 不在 npm 上。在仓库里进入 `packages/select`，执行 `npm ci && npm run build`，第一次下载的是 fp16，大约 470MB。然后 `npx flexlayer-select cutout photo.jpg --preset portrait` 写出缓存。标记里写 `<img src="photo.jpg" derive="subject" />`，预览写 `<preview of="#cut" show="overlay checker black white edges" />`。`show` 是合法属性。正常成片不画预览，`npx flexlayer render scene.layer --preview out.png` 才出拼图。蒙版层自己的 `shadow`、`glow` 和外侧 `stroke` 按留下的轮廓伸出蒙版。
+抠主体和分层不在渲染器里，`analyzeImage` 只量已经抠好的图。包 `flexlayer-select` 不在 npm 上。在仓库里进入 `packages/select`，执行 `npm ci && npm run build`。分层：`npx flexlayer-select layers photo.jpg --title 长安夜`，深度模型 q4f16 大约 19MB。`--refine` 才下载 BiRefNet 的 fp16，大约 470MB。写出 `photo.subject.png`、`photo.plate.png`、`photo.scene.json`。`.tsx` 里 `scene('photo.jpg').fit(title)` 把字夹进两层之间。净背景在蒙版里写 `derive="plate"`。只抠主体时仍用 `npx flexlayer-select cutout photo.jpg --preset portrait`。预览写 `<preview of="#cut" show="overlay checker black white edges" />`。`show` 是合法属性。正常成片不画预览，`npx flexlayer render scene.layer --preview out.png` 才出拼图。蒙版层自己的 `shadow`、`glow` 和外侧 `stroke` 按留下的轮廓伸出蒙版。
 
 ```tsx
 /** @jsxImportSource flexlayer */
@@ -94,7 +94,7 @@ export default canvas.create(
 | 公式字体 | 不写 `font-family`。说明文字用 `<mtext>` | `invalid-attr` |
 | 整层裁切 | `<layer><mask><circle cx="160" cy="90" r="90" /></mask>…</layer>` | `invalid-child` |
 | 蒙版运算 | `<mask><rect … /><circle op="subtract" /></mask>`。默认 `add`，分组用 `<g>`。不要写 `mask-image` | `invalid-attr` |
-| 黑白图和编号 | `<img channel="luma">`、`<img pick="3 5">`。缓存写 `derive="subject"` | `invalid-attr`、`missing-mask` |
+| 黑白图和编号 | `<img channel="luma">`、`<img pick="3 5">`。缓存写 `derive="subject"`，净背景写 `derive="plate"` | `invalid-attr`、`missing-mask` |
 | 羽化、反选、预览 | `<mask feather="8" invert="true">`、`<preview of="#cut" />` | `invalid-attr` |
 | 透视 | `<layer perspective="900"><rect rotateY="20" z="40" /></layer>`。`preserve-3d` 穿过没有姿态的 flex 时，卡片仍是一张图。平行投影写 `perspective="parallel"`，没有近大远小 | `invalid-attr`、`flatten-3d` |
 | 球体、圆柱、圆环、线管、长方体、拉伸、glb | `<layer perspective="700"><sphere cx="80" cy="80" r="40" /></layer>`。圆柱 `cx cy r height`，圆环 `cx cy r tube`，线管 `d` 和 `r`。`box` 的 `rx` 圆棱，`round` 选边；圆柱的 `rx` 圆口。`model` 只写 `src`，尺寸写在外包 layer | `flatten-3d`、`missing-model` |

@@ -3,6 +3,7 @@ export { canvas, create, type CreatedLayer, type PlacedChar, type PlacedElement,
 export { registerComponent, arrowComponent, type ComponentFn, type ComponentProps } from './components.js'
 export { glyph, type Glyph, type GlyphInk, type GlyphOptions } from './glyph.js'
 export { analyzeImage, type AnalyzeImageOptions, type ImageAnalysis, type ImageChannel, type ImagePart } from './analyze-image.js'
+export { fitTitle, scene, titleCovered, type MeasuredLine, type Scene, type SceneBox, type TitleFit } from './scene.js'
 export { getFilter, listFilters, registerFilter, unregisterFilter } from './filter.js'
 export type { FilterParseResult, FilterPixels, LayerFilter } from './filter.js'
 export { renderComposition, renderFrames, createContactSheet, contactSheetFromPngs, interpolate, spring, sequence, random, noise, Easing } from './frame.js'

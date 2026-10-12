@@ -2509,8 +2509,8 @@ function derivedBitmap(node: FvgNode, ctx: LayoutContext, bitmap: ImageLayoutNod
       level: 'warn',
       code: 'invalid-attr',
       path: ctx.pathPrefix,
-      message: `derive 只能是 subject、mask 或 regions，收到 ${derive}`,
-      hint: '主体写 derive="subject"',
+      message: `derive 只能是 subject、mask、regions 或 plate，收到 ${derive}`,
+      hint: '主体写 derive="subject"，净背景写 derive="plate"',
     })
     return bitmap
   }

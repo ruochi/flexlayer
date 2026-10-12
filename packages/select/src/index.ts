@@ -1,4 +1,7 @@
 export { runSelect, type SelectHooks } from './cli.js'
+export { layers, type DepthEstimator, type LayersOptions, type LayersResult } from './layers.js'
+export { splitLayers, type SplitInput, type SplitResult } from './split.js'
+export { estimateDepth, DEPTH_DTYPE, DEPTH_MODEL_ID } from './depth.js'
 export { cutout, writeAnswers, type CutoutAnalysis, type CutoutOptions, type CutoutResult, type Segmenter } from './cutout.js'
 export { answersFromChoices, applyAnswers, cutoutMarkup, type Answer } from './markup.js'
 export { isPreset, PRESETS, type Preset } from './preset.js'

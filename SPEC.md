@@ -142,7 +142,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 没写 `fill` 时按 `#fff` 画满。实心形状是硬边；`fill` 的 alpha 和渐变里的透明处是软边。颜色不算，只看 alpha。没画到的像素藏起来。每一项先画进自己的缓冲，再按 `op` 合成。默认 `add`，后写的盖住先写的，和以前只叠形状一样；半透明不会把底下挖空。`subtract` 从已有选区里挖掉，`intersect` 只留重叠，`xor` 留下只出现在一边的部分。要挖洞也可以用带洞的 `path`。`<g>` 先把里面的步骤合成一组，再按这一组自己的 `op` 贴上。形状自己的 `rotate`、`scale` 仍然有效。`op` 写在 mask 外面报 `invalid-attr`。
 
-`img` 默认用自己的 alpha。`channel="luma"` 改读亮度，用来认黑白蒙版。`pick="3 5"` 只留下灰度值正好是这些编号的像素，0 是背景；写了 `pick` 又没写 `channel` 时按亮度读，并且不做平滑，避免边上冒出别的编号。这两个属性只写在 mask 里的 `img` 上。`derive="subject"`、`derive="mask"` 或 `derive="regions"` 不直接画 `src`，改读旁边的缓存：`photo.jpg` 对应 `photo.subject.png` 和 `photo.cutout.json`。缓存没有时报 `missing-mask`（error），`hint` 是要跑的命令。原图哈希和配方对不上时报 `stale-mask`（warn），文件还在就先画出来。网址和 data URL 不能 `derive`。
+`img` 默认用自己的 alpha。`channel="luma"` 改读亮度，用来认黑白蒙版。`pick="3 5"` 只留下灰度值正好是这些编号的像素，0 是背景；写了 `pick` 又没写 `channel` 时按亮度读，并且不做平滑，避免边上冒出别的编号。这两个属性只写在 mask 里的 `img` 上。`derive="subject"`、`derive="mask"`、`derive="regions"` 或 `derive="plate"` 不直接画 `src`，改读旁边的缓存：`photo.jpg` 对应 `photo.subject.png`、`photo.plate.png` 和 `photo.cutout.json`。`plate` 是净背景，主体的位置已经用周围的颜色填上。缓存没有时报 `missing-mask`（error），`hint` 是要跑的命令。原图哈希和配方对不上时报 `stale-mask`（warn），文件还在就先画出来。网址和 data URL 不能 `derive`。
 
 `<mask feather="8" invert="true">` 在全部步骤之后做。`feather` 是羽化半径，单位像素。`invert` 反选。写在别的标签上会 `warn`。
 
@@ -396,6 +396,46 @@ npx flexlayer-select apply photo.jpg --add 2 --subtract 1
 ```
 
 这会在 `<mask>` 里加上 `derive="regions"` 的 `img`，`pick` 是编号，`op` 是 `add` 或 `subtract`。标记里的 `<preview>` 不进成片，用 `--preview` 才出拼图。缓存给第 4 章的 `derive` 读。没装这个包时，`flexlayer select` 只提示在 `packages/select` 里安装，不指向 npm。
+
+### 分层 layers
+
+字要夹在照片中间时，先分两层，再摆字。渲染器仍然不跑模型。`flexlayer-select layers` 写缓存，`.tsx` 里用 `scene` 读数。
+
+```bash
+npx flexlayer-select layers photo.jpg --title 长安夜
+npx flexlayer-select layers photo.jpg --title 长安夜 --refine
+```
+
+默认只跑深度模型 Depth Anything V2 Small 的 q4f16（Apache-2.0，大约 19MB），从伸进远处的那一尖往下长出主体，地面留在背景里。`--refine` 再跑 BiRefNet，边用抠图模型的，深度只把远处粘上来的部分去掉。深度没有明显起伏时不分，`flat` 为真，主体是空的。
+
+`photo.jpg` 旁边得到：
+
+| 文件 | 内容 |
+| --- | --- |
+| `photo.depth.png` | 远近图，越亮越近 |
+| `photo.subject.png` | 主体。软边减过原来的背景色，alpha 是选区 |
+| `photo.plate.png` | 净背景。主体的位置用周围颜色填上，背景要模糊时用它，避免主体的颜色晕出去 |
+| `photo.scene.json` | 天空范围、主体框、尖的位置、每一列的顶边 |
+| `photo.layers.layer` | 照片在后，主体在前。写了 `--title` 时，标题夹在两层之间 |
+| `photo.cutout.json` | 原图哈希和 `tool: "layers"`。`derive` 靠它认缓存 |
+
+`--cover` 默认 0.2，是中间那个字被主体挡住的比例。标题字号按图高的 0.236 取，1440 高的图大约是 340px。照片保持清楚，只在标题后面压一条暗色。主体层带一圈暖色 `glow`。
+
+`.tsx` 里自己摆时读 `scene`。它是同步的，和 `glyph` 一样。缓存没有、或原图哈希对不上时抛错。
+
+```tsx
+import { canvas, scene } from 'flexlayer'
+
+const photo = scene('photo.jpg')
+const title = canvas.create(
+  <layer x={0} y={0} font-family="Song">
+    <h1 style="font-size:340px; white-space:nowrap">长安夜</h1>
+  </layer>,
+)
+const at = photo.fit(title, { cover: 0.2 })
+```
+
+`at.x`、`at.y` 是标题层的位置，`at.covered` 是每个字被挡住的比例。净背景要模糊时，`<img src="photo.plate.png">` 或在蒙版里写 `derive="plate"`。主体直接画 `photo.subject.png`，它已经带 alpha。
 
 ### 图标
 
