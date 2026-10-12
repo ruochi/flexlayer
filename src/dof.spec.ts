@@ -2,7 +2,7 @@ import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { describe, expect, it } from 'vitest'
 import { emitLayer } from './emit.js'
 import { h } from './h.js'
-import { checkFvg, renderLayer } from './render.js'
+import { checkLayer, renderLayer } from './render.js'
 
 async function pixels(png: Buffer) {
   const image = await loadImage(png)
@@ -68,7 +68,7 @@ describe('景深', () => {
     const held = at(sharp.data, sharp.width, 136, 90)
     expect(held[0]).toBeLessThan(25)
 
-    const report = await checkFvg(scene)
+    const report = await checkLayer(scene)
     const near = report.elements.find((el) => el.tag === 'rect' && el.defocus != null && el.defocus > 8)
     expect(near?.defocus).toBeCloseTo(12, 0)
   })
@@ -117,14 +117,14 @@ describe('景深', () => {
   })
 
   it('有网格时平面仍按自己的深度糊，parallel 忽略景深', async () => {
-    const report = await checkFvg(`<layer width="180" height="140" background="#111" camera="focal 300, aperture 18">
+    const report = await checkLayer(`<layer width="180" height="140" background="#111" camera="focal 300, aperture 18">
       <rect x="40" y="40" width="60" height="40" fill="#fff" z="120" />
       <sphere cx="130" cy="70" r="18" fill="#f00" />
     </layer>`)
     expect(report.issues.filter((issue) => issue.level === 'error')).toEqual([])
     const rect = report.elements.find((el) => el.tag === 'rect')
     expect(rect?.defocus).toBeCloseTo(12, 0)
-    const parallel = await checkFvg(
+    const parallel = await checkLayer(
       `<layer width="80" height="60" camera="parallel, aperture 8"><rect width="20" height="20" fill="#fff" /></layer>`,
     )
     expect(parallel.issues.some((issue) => issue.level === 'info' && issue.message.includes('aperture'))).toBe(true)

@@ -9,7 +9,7 @@ import { canvas } from './canvas.js'
 import { initFontsForMeasure } from './fonts.js'
 import { h } from './h.js'
 import { layoutSource } from './layout.js'
-import { checkFvg, renderFvg, renderPreview } from './render.js'
+import { checkLayer, renderLayer, renderPreview } from './render.js'
 
 beforeAll(async () => {
   for (const dir of [join(homedir(), '.cache', 'flexlayer', 'fonts'), '/tmp/flexlayer-test']) {
@@ -34,7 +34,7 @@ function pngDataUrl(width: number, height: number, paint: (ctx: CanvasRenderingC
 
 describe('mask', () => {
   it('圆形 mask 留下圆心，清掉角上的像素，画布底色还在', async () => {
-    const { png, report } = await renderFvg(`
+    const { png, report } = await renderLayer(`
       <layer width="80" height="80" background="#0000ff">
         <mask><circle cx="40" cy="40" r="18" /></mask>
         <rect x="0" y="0" width="80" height="80" fill="#ff0000"  />
@@ -52,7 +52,7 @@ describe('mask', () => {
   })
 
   it('省略 fill 的多边形是不透明的', async () => {
-    const { png } = await renderFvg(`
+    const { png } = await renderLayer(`
       <layer width="40" height="40" background="#00ff00">
         <mask><polygon points="0,0 40,0 40,40 0,40" /></mask>
         <rect x="0" y="0" width="40" height="40" fill="#ff0000"  />
@@ -64,7 +64,7 @@ describe('mask', () => {
   })
 
   it('渐变 alpha 从上到下淡出', async () => {
-    const { png } = await renderFvg(`
+    const { png } = await renderLayer(`
       <layer width="40" height="40" background="#0000ff">
         <mask>
           <rect x="0" y="0" width="40" height="40" fill="linear-gradient(to bottom, #fff, #fff0)"  />
@@ -79,7 +79,7 @@ describe('mask', () => {
   })
 
   it('后写的透明形状不会把先写的挖空', async () => {
-    const { png } = await renderFvg(`
+    const { png } = await renderLayer(`
       <layer width="40" height="40" background="#00ff00">
         <mask>
           <rect x="0" y="0" width="40" height="40" fill="#fff"  />
@@ -94,7 +94,7 @@ describe('mask', () => {
   })
 
   it('带洞的 path 中间露底', async () => {
-    const { png } = await renderFvg(`
+    const { png } = await renderLayer(`
       <layer width="40" height="40" background="#00ff00">
         <mask>
           <path d="M0 0 H40 V40 H0 Z M10 10 V30 H30 V10 H10 Z" fill="#fff" />
@@ -110,7 +110,7 @@ describe('mask', () => {
   })
 
   it('形状的 rotate 照常改变蒙版', async () => {
-    const { png } = await renderFvg(`
+    const { png } = await renderLayer(`
       <layer width="80" height="80" background="#000000">
         <mask>
           <rect x="0" y="30" width="80" height="20" fill="#fff" rotate="90"  />
@@ -125,7 +125,7 @@ describe('mask', () => {
   })
 
   it('模糊之后再裁，mask 边外保持底色', async () => {
-    const { png } = await renderFvg(`
+    const { png } = await renderLayer(`
       <layer width="100" height="100" background="#000000" blur="8">
         <mask><rect x="40" y="0" width="20" height="100"  /></mask>
         <rect x="0" y="0" width="100" height="100" fill="#ffffff"  />
@@ -140,7 +140,7 @@ describe('mask', () => {
   })
 
   it('阴影在 mask 外面被裁掉', async () => {
-    const { png } = await renderFvg(`
+    const { png } = await renderLayer(`
       <layer width="90" height="60" background="#000000">
         <mask><circle cx="30" cy="30" r="16" /></mask>
         <rect x="20" y="20" width="20" height="20" fill="#ffffff" shadow="24 0 0 #ff0000" />
@@ -153,7 +153,7 @@ describe('mask', () => {
   })
 
   it('overflow=hidden 先裁子元素，mask 不会把盒子外的像素找回来', async () => {
-    const { png } = await renderFvg(`
+    const { png } = await renderLayer(`
       <layer width="100" height="80" background="#000000">
         <layer x="0" y="0" width="40" height="40" overflow="hidden">
           <mask><rect x="-10" y="0" width="90" height="40"  /></mask>
@@ -172,7 +172,7 @@ describe('mask', () => {
       ctx.fillStyle = '#ffffff'
       ctx.fillRect(0, 0, 20, 40)
     })
-    const { png } = await renderFvg(`
+    const { png } = await renderLayer(`
       <layer width="40" height="40" background="#00ff00">
         <mask><img src="${src}" style="width:40px; height:40px" /></mask>
         <rect x="0" y="0" width="40" height="40" fill="#ff0000"  />
@@ -197,7 +197,7 @@ describe('mask', () => {
     expect(card.height).toBe(16)
     expect(card.mask).toHaveLength(1)
     expect(card.children).toHaveLength(1)
-    const report = await checkFvg(
+    const report = await checkLayer(
       `<layer width="40" height="40"><mask><circle cx="0" cy="0" r="200" /></mask><rect x="0" y="0" width="10" height="10" fill="#fff"  /></layer>`,
     )
     expect(report.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
@@ -205,34 +205,34 @@ describe('mask', () => {
   })
 
   it('被 mask 挡住、落到画布外的内容不报 overflow-canvas', async () => {
-    const hidden = await checkFvg(
+    const hidden = await checkLayer(
       `<layer width="80" height="80" background="#000"><mask><circle cx="40" cy="40" r="24" /></mask><rect x="-30" y="-30" width="140" height="140" fill="#fff"  /></layer>`,
     )
     expect(hidden.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
-    const shown = await checkFvg(
+    const shown = await checkLayer(
       `<layer width="80" height="80" background="#000"><mask><rect x="-8" y="0" width="96" height="80"  /></mask><rect x="-8" y="0" width="96" height="80" fill="#fff"  /></layer>`,
     )
     expect(shown.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(true)
   })
 
   it('mask 挡住的光晕不报 effect-clipped', async () => {
-    const masked = await checkFvg(
+    const masked = await checkLayer(
       `<layer width="80" height="80" background="#000"><mask><circle cx="40" cy="40" r="18" /></mask><rect x="0" y="0" width="80" height="80" fill="#fff" glow="36 #fff"  /></layer>`,
     )
     expect(masked.issues.some((issue) => issue.code === 'effect-clipped')).toBe(false)
-    const open = await checkFvg(
+    const open = await checkLayer(
       `<layer width="80" height="80" background="#000"><rect x="0" y="0" width="80" height="80" fill="#fff" glow="36 #fff"  /></layer>`,
     )
     expect(open.issues.some((issue) => issue.code === 'effect-clipped')).toBe(true)
   })
 
   it('空 mask、第二个 mask、放错位置都会 warn', async () => {
-    const empty = await checkFvg(`<layer width="40" height="40" background="#00ff00"><mask></mask><rect x="0" y="0" width="40" height="40" fill="#ff0000"  /></layer>`)
+    const empty = await checkLayer(`<layer width="40" height="40" background="#00ff00"><mask></mask><rect x="0" y="0" width="40" height="40" fill="#ff0000"  /></layer>`)
     expect(empty.issues.some((issue) => issue.code === 'empty-mask')).toBe(true)
-    const { png } = await renderFvg(`<layer width="40" height="40" background="#00ff00"><mask></mask><rect x="0" y="0" width="40" height="40" fill="#ff0000"  /></layer>`)
+    const { png } = await renderLayer(`<layer width="40" height="40" background="#00ff00"><mask></mask><rect x="0" y="0" width="40" height="40" fill="#ff0000"  /></layer>`)
     expect((await pixelAt(png, 20, 20))[0]).toBeGreaterThan(200)
 
-    const extra = await checkFvg(`
+    const extra = await checkLayer(`
       <layer width="40" height="40" background="#00ff00">
         <mask><circle cx="20" cy="20" r="8" /></mask>
         <mask><rect x="0" y="0" width="40" height="40"  /></mask>
@@ -240,7 +240,7 @@ describe('mask', () => {
       </layer>
     `)
     expect(extra.issues.some((issue) => issue.message.includes('一个 mask'))).toBe(true)
-    const extraPng = await renderFvg(`
+    const extraPng = await renderLayer(`
       <layer width="40" height="40" background="#00ff00">
         <mask><circle cx="20" cy="20" r="8" /></mask>
         <mask><rect x="0" y="0" width="40" height="40"  /></mask>
@@ -252,16 +252,16 @@ describe('mask', () => {
     expect(corner[1]).toBeGreaterThan(200)
     expect(mid[0]).toBeGreaterThan(200)
 
-    const line = await checkFvg(`<layer width="40" height="40"><mask><line x1="0" y1="0" x2="10" y2="10" /></mask></layer>`)
+    const line = await checkLayer(`<layer width="40" height="40"><mask><line x1="0" y1="0" x2="10" y2="10" /></mask></layer>`)
     expect(line.issues.some((issue) => issue.code === 'invalid-child' && issue.message.includes('line'))).toBe(true)
 
-    const flex = await checkFvg(`<layer width="80" height="40"><div style="display:flex"><mask><circle cx="10" cy="10" r="4" /></mask></div></layer>`)
+    const flex = await checkLayer(`<layer width="80" height="40"><div style="display:flex"><mask><circle cx="10" cy="10" r="4" /></mask></div></layer>`)
     expect(flex.issues.some((issue) => issue.code === 'invalid-child' && issue.message.includes('直接子元素'))).toBe(true)
 
-    const onShape = await checkFvg(`<layer width="40" height="40"><rect width="20" height="20"><mask><circle cx="10" cy="10" r="4" /></mask></rect></layer>`)
+    const onShape = await checkLayer(`<layer width="40" height="40"><rect width="20" height="20"><mask><circle cx="10" cy="10" r="4" /></mask></rect></layer>`)
     expect(onShape.issues.some((issue) => issue.code === 'invalid-child' && issue.message.includes('直接子元素'))).toBe(true)
 
-    const styled = await checkFvg(`<layer width="40" height="40"><rect x="15" y="15" width="10" height="10" style="mask: url(#a)" /></layer>`)
+    const styled = await checkLayer(`<layer width="40" height="40"><rect x="15" y="15" width="10" height="10" style="mask: url(#a)" /></layer>`)
     expect(styled.issues.some((issue) => issue.message.includes('style'))).toBe(true)
   })
 
@@ -356,7 +356,7 @@ describe('mask', () => {
   })
 
   it('报告里带 mask 的 layer 写出统计，ink 是画布坐标', async () => {
-    const report = await checkFvg(
+    const report = await checkLayer(
       `<layer width="100" height="100"><layer id="cut" x="20" y="30" width="40" height="40"><mask><rect x="0" y="0" width="20" height="40" /></mask><rect width="40" height="40" fill="#fff" /></layer></layer>`,
     )
     const cut = report.elements.find((el) => el.id === 'cut')
@@ -365,7 +365,7 @@ describe('mask', () => {
   })
 
   it('symbol 里的 mask 跟着 use 生效', async () => {
-    const { png } = await renderFvg(`
+    const { png } = await renderLayer(`
       <layer width="40" height="40" background="#00ff00">
         <symbol id="card" width="40" height="40">
           <mask><circle cx="20" cy="20" r="10" /></mask>
@@ -381,7 +381,7 @@ describe('mask', () => {
   })
 
   it('subtract 挖掉中间，intersect 只留重叠', async () => {
-    const cut = await renderFvg(`
+    const cut = await renderLayer(`
       <layer width="40" height="40" background="#00ff00">
         <mask>
           <rect x="0" y="0" width="40" height="40" />
@@ -393,7 +393,7 @@ describe('mask', () => {
     expect((await pixelAt(cut.png, 2, 2))[0]).toBeGreaterThan(200)
     expect((await pixelAt(cut.png, 20, 20))[1]).toBeGreaterThan(200)
 
-    const both = await renderFvg(`
+    const both = await renderLayer(`
       <layer width="40" height="40" background="#00ff00">
         <mask>
           <rect x="0" y="0" width="30" height="40" />
@@ -406,7 +406,7 @@ describe('mask', () => {
     expect((await pixelAt(both.png, 20, 20))[0]).toBeGreaterThan(200)
     expect((await pixelAt(both.png, 36, 20))[1]).toBeGreaterThan(200)
 
-    const xor = await renderFvg(`
+    const xor = await renderLayer(`
       <layer width="40" height="40" background="#00ff00">
         <mask>
           <rect x="0" y="0" width="40" height="40" />
@@ -420,7 +420,7 @@ describe('mask', () => {
   })
 
   it('g 先加再减，整体再交到一个框里', async () => {
-    const { png } = await renderFvg(`
+    const { png } = await renderLayer(`
       <layer width="40" height="40" background="#00ff00">
         <mask>
           <g>
@@ -442,7 +442,7 @@ describe('mask', () => {
       ctx.fillStyle = '#000000'
       ctx.fillRect(20, 0, 20, 40)
     })
-    const luma = await renderFvg(`
+    const luma = await renderLayer(`
       <layer width="40" height="40" background="#00ff00">
         <mask><img src="${gray}" channel="luma" style="width:40px; height:40px" /></mask>
         <rect width="40" height="40" fill="#ff0000" />
@@ -457,7 +457,7 @@ describe('mask', () => {
       ctx.fillStyle = '#050505'
       ctx.fillRect(20, 0, 20, 40)
     })
-    const picked = await renderFvg(`
+    const picked = await renderLayer(`
       <layer width="40" height="40" background="#00ff00">
         <mask><img src="${regions}" pick="5" style="width:40px; height:40px" /></mask>
         <rect width="40" height="40" fill="#ff0000" />
@@ -468,7 +468,7 @@ describe('mask', () => {
   })
 
   it('CSS 的 mask-image 报 invalid-attr，并提示 mask 标签', async () => {
-    const report = await checkFvg(`<layer width="40" height="40"><rect width="20" height="20" style="mask-image:url(a.png)" /></layer>`)
+    const report = await checkLayer(`<layer width="40" height="40"><rect width="20" height="20" style="mask-image:url(a.png)" /></layer>`)
     const issue = report.issues.find((item) => item.message.includes('mask-image'))
     expect(issue?.code).toBe('invalid-attr')
     expect(issue?.hint).toContain('<mask>')
@@ -489,7 +489,7 @@ describe('mask', () => {
   })
 
   it('没碰到选区的 subtract 报 mask-op-noop，并写出每一步', async () => {
-    const report = await checkFvg(`
+    const report = await checkLayer(`
       <layer width="40" height="40">
         <mask>
           <rect x="0" y="0" width="10" height="40" />
@@ -505,7 +505,7 @@ describe('mask', () => {
   })
 
   it('蒙版层自己的描边和阴影跟着留下的轮廓，父层也一样', async () => {
-    const sticker = await renderFvg(`
+    const sticker = await renderLayer(`
       <layer width="140" height="110" background="#000000">
         <layer x="20" y="20" width="70" height="60" stroke="6 #ffffff">
           <mask><circle cx="35" cy="30" r="18" /></mask>
@@ -522,7 +522,7 @@ describe('mask', () => {
     expect(rim[2]).toBeGreaterThan(200)
     expect(outsideRect[0]).toBeLessThan(20)
 
-    const shadow = await renderFvg(`
+    const shadow = await renderLayer(`
       <layer width="140" height="90" background="#000000">
         <layer x="10" y="10" width="60" height="60" shadow="28 0 0 #ff0000">
           <mask><circle cx="30" cy="30" r="18" /></mask>
@@ -537,7 +537,7 @@ describe('mask', () => {
     expect(cast[0]).toBeGreaterThan(150)
     expect(rectCast[0]).toBeLessThan(30)
 
-    const parent = await renderFvg(`
+    const parent = await renderLayer(`
       <layer width="160" height="120" background="#000000" stroke="6 #ff0000">
         <layer x="20" y="20" width="80" height="60">
           <mask><circle cx="40" cy="30" r="20" /></mask>
@@ -554,7 +554,7 @@ describe('mask', () => {
   })
 
   it('preview 的 show 不是不认识的属性', async () => {
-    const report = await checkFvg(`
+    const report = await checkLayer(`
       <layer width="80" height="40">
         <layer id="cut" width="40" height="40">
           <mask><circle cx="20" cy="20" r="16" /></mask>
@@ -564,7 +564,7 @@ describe('mask', () => {
       </layer>
     `)
     expect(report.issues.filter((issue) => issue.message.includes('不认识的属性'))).toEqual([])
-    const typo = await checkFvg(`<layer width="40" height="40"><rect x="0" y="0" width="20" height="20" fill="#fff" show="1" /></layer>`)
+    const typo = await checkLayer(`<layer width="40" height="40"><rect x="0" y="0" width="20" height="20" fill="#fff" show="1" /></layer>`)
     const hit = typo.issues.find((issue) => issue.message.includes('不认识的属性 show'))
     expect(hit?.hint).toContain('shadow')
   })
@@ -579,7 +579,7 @@ describe('mask', () => {
         <preview of="#cut" show="overlay" />
       </layer>
     `
-    const { png, report } = await renderFvg(source)
+    const { png, report } = await renderLayer(source)
     expect(report.elements.some((el) => el.tag === 'preview')).toBe(false)
     expect((await pixelAt(png, 5, 20))[0]).toBeGreaterThan(200)
     expect((await pixelAt(png, 30, 20))[0]).toBeLessThan(20)
@@ -598,7 +598,7 @@ describe('mask', () => {
       ctx.fillRect(0, 0, 8, 8)
     })
     writeFileSync(join(dir, 'photo.png'), Buffer.from(photo.slice(photo.indexOf(',') + 1), 'base64'))
-    const missing = await checkFvg(`<layer width="8" height="8"><mask><img src="photo.png" derive="subject" style="width:8px; height:8px" /></mask></layer>`, { baseDir: dir })
+    const missing = await checkLayer(`<layer width="8" height="8"><mask><img src="photo.png" derive="subject" style="width:8px; height:8px" /></mask></layer>`, { baseDir: dir })
     const missingIssue = missing.issues.find((issue) => issue.code === 'missing-mask')
     expect(missingIssue?.level).toBe('error')
     expect(missingIssue?.hint).toContain('flexlayer-select cutout')
@@ -609,12 +609,12 @@ describe('mask', () => {
     })
     writeFileSync(join(dir, 'photo.subject.png'), Buffer.from(subject.slice(subject.indexOf(',') + 1), 'base64'))
     writeFileSync(join(dir, 'photo.cutout.json'), JSON.stringify({ srcHash: 'nope', preset: 'portrait' }))
-    const stale = await checkFvg(`<layer width="8" height="8"><mask><img src="photo.png" derive="subject" style="width:8px; height:8px" /></mask><rect width="8" height="8" fill="#fff" /></layer>`, { baseDir: dir })
+    const stale = await checkLayer(`<layer width="8" height="8"><mask><img src="photo.png" derive="subject" style="width:8px; height:8px" /></mask><rect width="8" height="8" fill="#fff" /></layer>`, { baseDir: dir })
     expect(stale.issues.some((issue) => issue.code === 'stale-mask')).toBe(true)
 
     const hash = createHash('sha256').update(readFileSync(join(dir, 'photo.png'))).digest('hex')
     writeFileSync(join(dir, 'photo.cutout.json'), JSON.stringify({ srcHash: hash, preset: 'portrait' }))
-    const { png } = await renderFvg(`<layer width="8" height="8" background="#00ff00"><mask><img src="photo.png" derive="subject" style="width:8px; height:8px" /></mask><rect width="8" height="8" fill="#ff0000" /></layer>`, { baseDir: dir })
+    const { png } = await renderLayer(`<layer width="8" height="8" background="#00ff00"><mask><img src="photo.png" derive="subject" style="width:8px; height:8px" /></mask><rect width="8" height="8" fill="#ff0000" /></layer>`, { baseDir: dir })
     expect((await pixelAt(png, 1, 4))[0]).toBeGreaterThan(200)
     expect((await pixelAt(png, 6, 4))[1]).toBeGreaterThan(200)
   })

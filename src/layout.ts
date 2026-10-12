@@ -12,8 +12,8 @@ import { attachDrawTags } from './draw-tag.js'
 import { collectFilters, mergeFilters, type FilterIssue } from './filter.js'
 import { checkDerive, isDeriveKind } from './derive.js'
 import { imageInk, peekLayerImage, preloadLayerImageSync, preloadLayerImagesSync, parseObjectFit, parseObjectPosition } from './image.js'
-import type { FvgNode } from './parse.js'
-import { parseFvg } from './parse.js'
+import type { LayerNode } from './parse.js'
+import { parseLayer } from './parse.js'
 import { ensureBuiltinFontsSync, primaryFontFamily, registerFontsFromDocumentSync } from './fonts.js'
 import { classAttr, ICON_FONT_FAMILY, symbolsClassOf } from './icons.js'
 import { materialize } from './components.js'
@@ -63,7 +63,7 @@ import { applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset
 import { layoutMath } from './math/layout.js'
 import { asBlockFlow, checkChildAttrs, checkTextBoxChildren, haloAttrIssues, hasTwoPoint, hiddenAttrIssues, isDisplayFlex, isHtmlTag, legacyCenterIssues, materialAttrIssues, originValueIssues, rowColumnHint, styleIssues, typoAttrIssues } from './rules.js'
 import { fitViewAspect, parseView, viewExceeds } from './view.js'
-import { canonicalTag, FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag } from './tags.js'
+import { FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag, tagSpellingHint } from './tags.js'
 import { boundsOf, parseSvgTransform } from './svg-transform.js'
 import type {
   Anchor,
@@ -72,7 +72,7 @@ import type {
   CustomLayoutNode,
   DrawComputedStyle,
   FlexLayoutNode,
-  FvgDocument,
+  LayerDocument,
   GroupLayoutNode,
   ImageLayoutNode,
   Issue,
@@ -114,7 +114,7 @@ export type LayoutContext = {
   maxContentWidth: number
   issues: Issue[]
   pathPrefix: string
-  symbols: Map<string, FvgNode>
+  symbols: Map<string, LayerNode>
   useStack: string[]
   /** 解析 img 的相对路径。 */
   baseDir: string
@@ -187,7 +187,7 @@ function nodePath(prefix: string, tag: string, index: number): string {
   return `${prefix}/${tag}[${index}]`
 }
 
-function track(ctx: LayoutContext, path: string, node: FvgNode) {
+function track(ctx: LayoutContext, path: string, node: LayerNode) {
   if (!node.loc || ctx.sources.has(path)) return
   ctx.sources.set(path, formatSourceLoc(node.loc))
 }
@@ -361,7 +361,7 @@ function readEffects(
   const parsedGlass = parseGlass(glassRaw)
   if (parsedGlass) out.glass = parsedGlass
   else if (glassRaw && glassRaw.trim() !== 'none') {
-    warnInvalid(ctx, 'glass', glassRaw, '写成 regular、clear、thick，或 24 #ffffff33')
+    warnInvalid(ctx, 'glass', glassRaw, '写成 clear、regular、thick，或 clear, blur 8, tint #fff2')
   }
 
   if (out.glass && out.backdropBlur != null) {
@@ -576,7 +576,7 @@ function flexDirectionOf(style: Record<string, string>): 'row' | 'column' {
   return style['flex-direction']?.trim().toLowerCase() === 'column' ? 'column' : 'row'
 }
 
-function directTextContent(node: FvgNode): string {
+function directTextContent(node: LayerNode): string {
   const parts: string[] = []
   for (const c of node.children) {
     if (typeof c === 'string') {
@@ -621,7 +621,7 @@ function inheritTextContext(ctx: LayoutContext, tag: string, style: Record<strin
 }
 
 /** 嵌套 layer 上的颜色和字体，和根上的写法同一条继承路径。 */
-function withLayerText(ctx: LayoutContext, node: FvgNode): LayoutContext {
+function withLayerText(ctx: LayoutContext, node: LayerNode): LayoutContext {
   const next: LayoutContext = { ...ctx }
   const family = node.attrs['font-family']?.trim()
   if (family) next.fontFamily = family
@@ -638,7 +638,7 @@ function withLayerText(ctx: LayoutContext, node: FvgNode): LayoutContext {
   return next
 }
 
-function computeDrawStyle(node: FvgNode, ctx: LayoutContext, style: Record<string, string>): DrawComputedStyle {
+function computeDrawStyle(node: LayerNode, ctx: LayoutContext, style: Record<string, string>): DrawComputedStyle {
   const tag = node.tag.toLowerCase()
   const fontSize =
     parsePx(style['font-size']) ??
@@ -655,7 +655,7 @@ function computeDrawStyle(node: FvgNode, ctx: LayoutContext, style: Record<strin
   return { color, fontFamily, fontSize, fontWeight, opacity }
 }
 
-function layoutDrawMeta(node: FvgNode, ctx: LayoutContext) {
+function layoutDrawMeta(node: LayerNode, ctx: LayoutContext) {
   const style = parseStyle(node.attrs.style)
   const loc = node.drawLoc ?? node.loc
   return {
@@ -669,7 +669,7 @@ function layoutDrawMeta(node: FvgNode, ctx: LayoutContext) {
   }
 }
 
-function layoutCustomDraw(node: FvgNode, ctx: LayoutContext): CustomLayoutNode | null {
+function layoutCustomDraw(node: LayerNode, ctx: LayoutContext): CustomLayoutNode | null {
   if (!node.draw) return null
   let x = 0
   let y = 0
@@ -706,7 +706,7 @@ function layoutCustomDraw(node: FvgNode, ctx: LayoutContext): CustomLayoutNode |
   }
 }
 
-function layoutUnknownOrCustom(node: FvgNode, ctx: LayoutContext): LayoutNode | null {
+function layoutUnknownOrCustom(node: LayerNode, ctx: LayoutContext): LayoutNode | null {
   if (node.tag === 'preview') {
     ctx.issues.push({
       level: 'warn',
@@ -720,14 +720,7 @@ function layoutUnknownOrCustom(node: FvgNode, ctx: LayoutContext): LayoutNode | 
   warnNestedMasks(node, ctx)
   const custom = layoutCustomDraw(node, ctx)
   if (custom) return custom
-  const retired = node.tag === 'Row' || node.tag === 'Column'
-  ctx.issues.push({
-    level: 'warn',
-    code: 'unknown-tag',
-    path: ctx.pathPrefix,
-    message: `未知标签 ${node.tag}`,
-    hint: retired ? rowColumnHint(node.tag) : undefined,
-  })
+  ctx.issues.push(unknownTagIssue(node.tag, ctx.pathPrefix))
   return null
 }
 
@@ -856,7 +849,7 @@ function lineInk(box: Box, strokeWidth: number): Box {
   }
 }
 
-function usesOwnCoords(node: FvgNode, kind: LayoutNode['kind']): boolean {
+function usesOwnCoords(node: LayerNode, kind: LayoutNode['kind']): boolean {
   if (kind === 'line' || kind === 'group') return true
   if (node.tag === 'circle' || node.tag === 'ellipse' || node.tag === 'sphere' || node.tag === 'cylinder' || node.tag === 'torus') return true
   if (node.tag === 'rect') return true
@@ -943,7 +936,7 @@ function sanitizeTextPaints(segments: TextSegment[], ctx: LayoutContext): TextSe
   })
 }
 
-function layoutTextBox(node: FvgNode, ctx: LayoutContext, contentWidthLimit?: number): TextLayoutNode {
+function layoutTextBox(node: LayerNode, ctx: LayoutContext, contentWidthLimit?: number): TextLayoutNode {
   warnNestedMasks(node, ctx)
   const style = parseStyle(node.attrs.style)
   const tag = node.tag.toLowerCase()
@@ -1100,7 +1093,7 @@ function displaySrc(src: string): string {
   return src.length > 160 ? `${src.slice(0, 157)}…` : src
 }
 
-function layoutImage(node: FvgNode, ctx: LayoutContext): ImageLayoutNode {
+function layoutImage(node: LayerNode, ctx: LayoutContext): ImageLayoutNode {
   warnNestedMasks(node, ctx)
   const style = parseStyle(node.attrs.style)
   const appearance = readHtmlAppearance(style)
@@ -1214,7 +1207,7 @@ function layoutImage(node: FvgNode, ctx: LayoutContext): ImageLayoutNode {
   return laid
 }
 
-function warnNestedMasks(node: FvgNode, ctx: LayoutContext) {
+function warnNestedMasks(node: LayerNode, ctx: LayoutContext) {
   node.children.forEach((child, index) => {
     if (typeof child === 'string' || child.tag !== 'mask') return
     ctx.issues.push({
@@ -1227,7 +1220,7 @@ function warnNestedMasks(node: FvgNode, ctx: LayoutContext) {
   })
 }
 
-function layoutShape(node: FvgNode, ctx: LayoutContext, _defaultStroke: string): ShapeLayoutNode {
+function layoutShape(node: LayerNode, ctx: LayoutContext, _defaultStroke: string): ShapeLayoutNode {
   warnNestedMasks(node, ctx)
   const appearance = readAttrAppearance(node.attrs)
   let x = 0
@@ -1369,7 +1362,7 @@ function readDepth(raw: string | undefined, fallback: number, ctx: LayoutContext
   return parsed
 }
 
-function readMeshLines(node: FvgNode, ctx: LayoutContext): { stroke: string; strokeWidths: [number, number, number]; hidden: string; halo: number } {
+function readMeshLines(node: LayerNode, ctx: LayoutContext): { stroke: string; strokeWidths: [number, number, number]; hidden: string; halo: number } {
   const rawStroke = strokeTakesInk(node.attrs.stroke) ? undefined : node.attrs.stroke
   const rawHidden = node.attrs.hidden
   const rawWidth = node.attrs['stroke-width']
@@ -1518,7 +1511,7 @@ function readMeshMaterial(raw: string | undefined, ctx: LayoutContext, tag: stri
   return { kind, roughness }
 }
 
-function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
+function layoutMesh(node: LayerNode, ctx: LayoutContext): MeshLayoutNode {
   warnNestedMasks(node, ctx)
   const appearance = readAttrAppearance(node.attrs)
   const fill = readPaint(node.attrs.fill ?? '#000000', '#000000', ctx, 'fill')
@@ -1755,7 +1748,7 @@ function layoutMesh(node: FvgNode, ctx: LayoutContext): MeshLayoutNode {
   }
 }
 
-function layoutLineNode(node: FvgNode, ctx: LayoutContext, defaultStroke: string): LineLayoutNode {
+function layoutLineNode(node: LayerNode, ctx: LayoutContext, defaultStroke: string): LineLayoutNode {
   warnNestedMasks(node, ctx)
   let geom: LineGeometry
   if (node.tag === 'line') {
@@ -1839,12 +1832,12 @@ type FlexMeasure = {
   preferredCross: number
   isText: boolean
   /** 最终按分配宽度重排时用的源节点。 */
-  source?: FvgNode
+  source?: LayerNode
   /** `align-self`，没写就用这一层的 `align-items`。量的时候还没有，排进去之后才写上。 */
   crossAlign?: string
 }
 
-function fontDecl(node: FvgNode): { family: string; src: string } | null {
+function fontDecl(node: LayerNode): { family: string; src: string } | null {
   if (node.tag.toLowerCase() !== FONT_TAG) return null
   return { family: node.attrs.family ?? '', src: node.attrs.src ?? '' }
 }
@@ -1859,11 +1852,11 @@ function warnMisplacedFont(ctx: LayoutContext, path: string) {
   })
 }
 
-function prepareHtmlBox(node: FvgNode): FvgNode {
+function prepareHtmlBox(node: LayerNode): LayerNode {
   return asBlockFlow(node)
 }
 
-function measureFlexChild(raw: FvgNode, ctx: LayoutContext, direction: 'row' | 'column', crossAlign?: string): FlexMeasure | null {
+function measureFlexChild(raw: LayerNode, ctx: LayoutContext, direction: 'row' | 'column', crossAlign?: string): FlexMeasure | null {
   const node = prepareHtmlBox(materialize(raw))
   if (node.tag === 'symbol' || node.tag === 'draw' || node.tag === 'preview') {
     if (node.tag === 'preview') {
@@ -2025,7 +2018,7 @@ function measureFlexChild(raw: FvgNode, ctx: LayoutContext, direction: 'row' | '
       isText: false,
     }
   }
-  ctx.issues.push({ level: 'warn', code: 'unknown-tag', path: ctx.pathPrefix, message: `未知标签 ${node.tag}` })
+  ctx.issues.push(unknownTagIssue(node.tag, ctx.pathPrefix))
   return null
 }
 
@@ -2150,7 +2143,7 @@ function alignFlexBaselines(children: LayoutNode[], baseline: boolean[], crossAl
   }
 }
 
-function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
+function layoutFlex(node: LayerNode, ctx: LayoutContext): FlexLayoutNode {
   const style = parseStyle(node.attrs.style)
   const childCtx = inheritTextContext(ctx, node.tag, style)
   const direction = flexDirectionOf(style)
@@ -2166,7 +2159,7 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
 
   const fixedW = parsePx(style.width)
   const fixedH = parsePx(style.height)
-  const childNodes = node.children.filter((c) => typeof c !== 'string') as FvgNode[]
+  const childNodes = node.children.filter((c) => typeof c !== 'string') as LayerNode[]
   const measures: FlexMeasure[] = []
   for (let i = 0; i < childNodes.length; i++) {
     const ch = childNodes[i]!
@@ -2365,7 +2358,7 @@ function layoutFlex(node: FvgNode, ctx: LayoutContext): FlexLayoutNode {
   }
 }
 
-function layoutUse(node: FvgNode, ctx: LayoutContext): LayerLayoutNode | null {
+function layoutUse(node: LayerNode, ctx: LayoutContext): LayerLayoutNode | null {
   warnNestedMasks(node, ctx)
   const href = (node.attrs.href || node.attrs['xlink:href'] || '').trim()
   const id = href.startsWith('#') ? href.slice(1) : href
@@ -2426,7 +2419,7 @@ function layoutUse(node: FvgNode, ctx: LayoutContext): LayerLayoutNode | null {
   }
 }
 
-function placeInLayer(node: FvgNode, laid: LayoutNode) {
+function placeInLayer(node: LayerNode, laid: LayoutNode) {
   if (usesOwnCoords(node, laid.kind)) return
   const html = isHtmlTag(node.tag)
   const x = html ? 0 : (parseNumber(node.attrs.x) ?? 0)
@@ -2440,7 +2433,7 @@ function placeInLayer(node: FvgNode, laid: LayoutNode) {
 const MASK_OPS = new Set(['add', 'subtract', 'intersect', 'xor'])
 const PREVIEW_SHOWS = ['overlay', 'checker', 'black', 'white', 'edges'] as const
 
-function maskImageFields(node: FvgNode, ctx: LayoutContext): { maskChannel?: 'alpha' | 'luma'; maskPick?: number[] } {
+function maskImageFields(node: LayerNode, ctx: LayoutContext): { maskChannel?: 'alpha' | 'luma'; maskPick?: number[] } {
   const out: { maskChannel?: 'alpha' | 'luma'; maskPick?: number[] } = {}
   const channel = node.attrs.channel?.trim()
   if (channel) {
@@ -2491,7 +2484,7 @@ function maskImageFields(node: FvgNode, ctx: LayoutContext): { maskChannel?: 'al
   return out
 }
 
-function derivedBitmap(node: FvgNode, ctx: LayoutContext, bitmap: ImageLayoutNode['bitmap']): ImageLayoutNode['bitmap'] {
+function derivedBitmap(node: LayerNode, ctx: LayoutContext, bitmap: ImageLayoutNode['bitmap']): ImageLayoutNode['bitmap'] {
   const derive = node.attrs.derive?.trim()
   if (!derive) return bitmap
   if (!ctx.inMask) {
@@ -2560,7 +2553,7 @@ function derivedBitmap(node: FvgNode, ctx: LayoutContext, bitmap: ImageLayoutNod
   return peeked.image
 }
 
-function applyMaskOp(node: FvgNode, laid: LayoutNode, ctx: LayoutContext) {
+function applyMaskOp(node: LayerNode, laid: LayoutNode, ctx: LayoutContext) {
   const raw = node.attrs.op?.trim()
   if (!raw) return
   if (!ctx.inMask) {
@@ -2586,7 +2579,7 @@ function applyMaskOp(node: FvgNode, laid: LayoutNode, ctx: LayoutContext) {
   laid.maskOp = raw as MaskOp
 }
 
-function notePreview(node: FvgNode, ctx: LayoutContext, path: string) {
+function notePreview(node: LayerNode, ctx: LayoutContext, path: string) {
   track(ctx, path, node)
   const of = node.attrs.of?.trim().replace(/^#/, '') ?? ''
   if (!of) {
@@ -2621,7 +2614,7 @@ function notePreview(node: FvgNode, ctx: LayoutContext, path: string) {
   ctx.previews.push(spec)
 }
 
-function warnFeatherInvert(node: FvgNode, ctx: LayoutContext) {
+function warnFeatherInvert(node: LayerNode, ctx: LayoutContext) {
   if (node.tag === 'mask') return
   for (const key of ['feather', 'invert'] as const) {
     if (!node.attrs[key]?.trim()) continue
@@ -2636,7 +2629,7 @@ function warnFeatherInvert(node: FvgNode, ctx: LayoutContext) {
 }
 
 /** 把 mask 里的形状和图片排进 layer 的局部坐标。空的或全被忽略时不生效。 */
-function layoutMask(maskNode: FvgNode, ctx: LayoutContext): { shapes: LayoutNode[]; feather?: number; invert?: boolean } | undefined {
+function layoutMask(maskNode: LayerNode, ctx: LayoutContext): { shapes: LayoutNode[]; feather?: number; invert?: boolean } | undefined {
   if (maskNode.attrs.style != null && maskNode.attrs.style.trim() !== '') {
     ctx.issues.push({
       level: 'warn',
@@ -2691,8 +2684,8 @@ function layoutMask(maskNode: FvgNode, ctx: LayoutContext): { shapes: LayoutNode
   return { shapes: laid, ...(feather != null ? { feather } : {}), ...(invert ? { invert } : {}) }
 }
 
-function layoutMaskEntries(parent: FvgNode, ctx: LayoutContext): LayoutNode[] {
-  const children = parent.children.filter((c) => typeof c !== 'string') as FvgNode[]
+function layoutMaskEntries(parent: LayerNode, ctx: LayoutContext): LayoutNode[] {
+  const children = parent.children.filter((c) => typeof c !== 'string') as LayerNode[]
   const laid: LayoutNode[] = []
   for (let i = 0; i < children.length; i++) {
     const ch = children[i]!
@@ -2726,7 +2719,7 @@ function layoutMaskEntries(parent: FvgNode, ctx: LayoutContext): LayoutNode[] {
   return laid
 }
 
-function layoutMaskGroup(node: FvgNode, ctx: LayoutContext): GroupLayoutNode {
+function layoutMaskGroup(node: LayerNode, ctx: LayoutContext): GroupLayoutNode {
   const appearance = readAttrAppearance(node.attrs)
   const parsed = parseSvgTransform(node.attrs.transform)
   if (parsed.error) {
@@ -2772,11 +2765,11 @@ function layoutMaskGroup(node: FvgNode, ctx: LayoutContext): GroupLayoutNode {
   }
 }
 
-const measuredBoxes = new WeakMap<FvgNode, { width: number; height: number }>()
+const measuredBoxes = new WeakMap<LayerNode, { width: number; height: number }>()
 
 /** 量过的层用自己的宽度换行，和 canvas.create 同一次计算。没量过的层继续用父级的可用宽度。 */
 /** 写了宽度的 layer 用这个宽度换行。宽高都写时再减去这一层的 safe，和量尺寸时同一条规则。 */
-function contentWidthFor(node: FvgNode, fixedW: number | undefined, parentMax: number): number {
+function contentWidthFor(node: LayerNode, fixedW: number | undefined, parentMax: number): number {
   if (fixedW == null) return parentMax
   const heightSet = node.attrs.height != null && node.attrs.height !== ''
   if (!heightSet) return fixedW
@@ -2785,7 +2778,7 @@ function contentWidthFor(node: FvgNode, fixedW: number | undefined, parentMax: n
   return Math.max(0, fixedW - safe.left - safe.right)
 }
 
-function layoutGroup(node: FvgNode, ctx: LayoutContext): GroupLayoutNode {
+function layoutGroup(node: LayerNode, ctx: LayoutContext): GroupLayoutNode {
   warnNestedMasks(node, ctx)
   const appearance = readAttrAppearance(node.attrs)
   const parsed = parseSvgTransform(node.attrs.transform)
@@ -2804,7 +2797,7 @@ function layoutGroup(node: FvgNode, ctx: LayoutContext): GroupLayoutNode {
     paintStroke: strokeTakesInk(node.attrs.stroke) ? ctx.paintStroke : (node.attrs.stroke ?? ctx.paintStroke),
   }
   const children: LayoutNode[] = []
-  const childFvg = node.children.filter((c) => typeof c !== 'string') as FvgNode[]
+  const childFvg = node.children.filter((c) => typeof c !== 'string') as LayerNode[]
   for (let i = 0; i < childFvg.length; i++) {
     const raw = childFvg[i]!
     const concrete = materialize(raw)
@@ -2997,7 +2990,7 @@ function applyInkAnchor(node: LayoutNode, x: number, y: number, anchor: Anchor, 
   }
 }
 
-function readLayerView(node: FvgNode, layerW: number, layerH: number, ctx: LayoutContext) {
+function readLayerView(node: LayerNode, layerW: number, layerH: number, ctx: LayoutContext) {
   const raw = node.attrs.view
   if (raw == null || raw.trim() === '') return undefined
   const widthSet = node.attrs.width != null && node.attrs.width.trim() !== ''
@@ -3036,7 +3029,7 @@ function readLayerView(node: FvgNode, layerW: number, layerH: number, ctx: Layou
   return fitted.view
 }
 
-function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
+function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
   if (ctx.pathPrefix === 'layer') ctx.issues.push(...originValueIssues(node.attrs.origin, ctx.pathPrefix))
   const appearance = readAttrAppearance(node.attrs)
   // 根节点的 background 是画布底色，由 paintDocument 绘制。layer 自身不填色。
@@ -3045,8 +3038,8 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
   const fixedH = parseNumber(node.attrs.height)
   const layerCtx = withLayerText(ctx, node)
 
-  const childFvg = node.children.filter((c) => typeof c !== 'string') as FvgNode[]
-  let chosenMask: FvgNode | undefined
+  const childFvg = node.children.filter((c) => typeof c !== 'string') as LayerNode[]
+  let chosenMask: LayerNode | undefined
   let chosenMaskPath = ''
   for (let i = 0; i < childFvg.length; i++) {
     const ch = childFvg[i]!
@@ -3316,7 +3309,7 @@ function layoutLayer(node: FvgNode, ctx: LayoutContext): LayerLayoutNode {
   return laid
 }
 
-function noteAttrTypos(node: FvgNode, path: string, issues: Issue[]) {
+function noteAttrTypos(node: LayerNode, path: string, issues: Issue[]) {
   const concrete = materialize(node)
   issues.push(...typoAttrIssues(concrete, path))
   issues.push(...hiddenAttrIssues(concrete, path))
@@ -3331,7 +3324,7 @@ function noteAttrTypos(node: FvgNode, path: string, issues: Issue[]) {
   }
 }
 
-function collectSymbols(node: FvgNode, symbols: Map<string, FvgNode>, issues: Issue[], path: string) {
+function collectSymbols(node: LayerNode, symbols: Map<string, LayerNode>, issues: Issue[], path: string) {
   if (node.tag === 'symbol') {
     const id = node.attrs.id?.trim()
     if (!id) {
@@ -3357,7 +3350,7 @@ function collectSymbols(node: FvgNode, symbols: Map<string, FvgNode>, issues: Is
   })
 }
 
-function collectFontDecls(node: FvgNode, out: Array<{ family: string; src: string }>) {
+function collectFontDecls(node: LayerNode, out: Array<{ family: string; src: string }>) {
   const concrete = materialize(node)
   const font = fontDecl(concrete)
   if (font?.family && font.src) out.push(font)
@@ -3367,9 +3360,9 @@ function collectFontDecls(node: FvgNode, out: Array<{ family: string; src: strin
 }
 
 /** 这一层实际会拿来排文字的字体名。 */
-export function fontFamiliesOf(node: FvgNode): string[] {
+export function fontFamiliesOf(node: LayerNode): string[] {
   const out = new Set<string>()
-  const visit = (current: FvgNode) => {
+  const visit = (current: LayerNode) => {
     const concrete = materialize(current)
     const add = (raw: string | undefined) => {
       const name = primaryFontFamily(raw)
@@ -3386,7 +3379,7 @@ export function fontFamiliesOf(node: FvgNode): string[] {
   return [...out]
 }
 
-function collectFontFamilies(node: FvgNode, out: Set<string>) {
+function collectFontFamilies(node: LayerNode, out: Set<string>) {
   const concrete = materialize(node)
   const style = parseStyle(concrete.attrs.style)
   if (style['font-family']) out.add(style['font-family'])
@@ -3397,7 +3390,7 @@ function collectFontFamilies(node: FvgNode, out: Set<string>) {
   }
 }
 
-function collectImageSrcs(node: FvgNode, out: string[]) {
+function collectImageSrcs(node: LayerNode, out: string[]) {
   const concrete = materialize(node)
   if ((concrete.tag === 'img' || concrete.tag === 'image') && concrete.attrs.src?.trim()) out.push(concrete.attrs.src)
   for (const child of concrete.children) {
@@ -3406,7 +3399,7 @@ function collectImageSrcs(node: FvgNode, out: string[]) {
 }
 
 /** canvas.create 量到的布局尺寸。最终排版不一致时报 measure-mismatch。 */
-export function noteMeasuredSize(node: FvgNode, width: number, height: number) {
+export function noteMeasuredSize(node: LayerNode, width: number, height: number) {
   measuredBoxes.set(node, { width, height })
 }
 
@@ -3415,7 +3408,7 @@ function formatSize(n: number): string {
   return String(Object.is(rounded, -0) ? 0 : rounded)
 }
 
-function noteMeasureMismatch(node: FvgNode, width: number, height: number, ctx: LayoutContext) {
+function noteMeasureMismatch(node: LayerNode, width: number, height: number, ctx: LayoutContext) {
   const expected = measuredBoxes.get(node)
   if (!expected) return
   if (Math.abs(expected.width - width) <= 0.5 && Math.abs(expected.height - height) <= 0.5) return
@@ -3436,9 +3429,9 @@ export type MeasureEnv = {
 }
 
 /** 同步量一个 layer。字体、图片和 Yoga 需要先准备好。 */
-export function measureLayer(node: FvgNode, env: MeasureEnv): { laid: LayerLayoutNode; issues: Issue[] } {
+export function measureLayer(node: LayerNode, env: MeasureEnv): { laid: LayerLayoutNode; issues: Issue[] } {
   const issues: Issue[] = []
-  const symbols = new Map<string, FvgNode>()
+  const symbols = new Map<string, LayerNode>()
   collectSymbols(node, symbols, issues, 'layer')
   noteAttrTypos(node, 'layer', issues)
   attachDrawTags(node, issues, 'layer')
@@ -3474,7 +3467,7 @@ export type PrepareOptions = {
 }
 
 /** 准备字体、图片和 Yoga，并在这个进程里记住。已经备过的直接跳过。 */
-export function prepareAssetsSync(root: FvgNode | null, baseDir: string, options: PrepareOptions = {}): LayoutAssets {
+export function prepareAssetsSync(root: LayerNode | null, baseDir: string, options: PrepareOptions = {}): LayoutAssets {
   getYoga()
   const fontNodes = [...(options.fonts ?? [])]
   if (root) {
@@ -3501,15 +3494,29 @@ export function prepareAssetsSync(root: FvgNode | null, baseDir: string, options
 }
 
 /** 异步外壳。实际准备是同步的，同一进程里多帧接着用，不会重新开始。 */
-export async function prepareAssets(root: FvgNode | null, baseDir: string, options: PrepareOptions = {}): Promise<LayoutAssets> {
+export async function prepareAssets(root: LayerNode | null, baseDir: string, options: PrepareOptions = {}): Promise<LayoutAssets> {
   return prepareAssetsSync(root, baseDir, options)
 }
 
-export function readLayerRoot(source: string | FvgNode): { root: FvgNode; fonts: Array<{ family: string; src: string }> } {
-  const nodes = typeof source === 'string' ? parseFvg(source) : [source]
-  for (const node of nodes) canonicalizeTree(node)
+function unknownTagIssue(tag: string, path: string): Issue {
+  const spelling = tagSpellingHint(tag)
+  if (spelling) {
+    return { level: 'error', code: 'unknown-tag', path, message: `未知标签 ${tag}`, hint: spelling }
+  }
+  const retired = tag === 'Row' || tag === 'Column'
+  return {
+    level: 'warn',
+    code: 'unknown-tag',
+    path,
+    message: `未知标签 ${tag}`,
+    ...(retired ? { hint: rowColumnHint(tag) } : {}),
+  }
+}
+
+export function readLayerRoot(source: string | LayerNode): { root: LayerNode; fonts: Array<{ family: string; src: string }> } {
+  const nodes = typeof source === 'string' ? parseLayer(source) : [source]
   const fonts: Array<{ family: string; src: string }> = []
-  let root: FvgNode | null = null
+  let root: LayerNode | null = null
   for (const node of nodes) {
     const font = fontDecl(node)
     if (font) fonts.push(font)
@@ -3520,7 +3527,7 @@ export function readLayerRoot(source: string | FvgNode): { root: FvgNode; fonts:
 }
 
 /** 同步排版。字体、图片和 Yoga 由 prepareAssetsSync 记住，多帧不会重新准备。 */
-export function layoutSync(rootNode: FvgNode, assets: LayoutAssets): FvgDocument {
+export function layoutSync(rootNode: LayerNode, assets: LayoutAssets): LayerDocument {
   const baseDir = assets.baseDir
   const attrs = rootNode.attrs
   const width = parseNumber(attrs.width) ?? 1080
@@ -3532,7 +3539,7 @@ export function layoutSync(rootNode: FvgNode, assets: LayoutAssets): FvgDocument
 
   const issues: Issue[] = []
   const sources = new Map<string, string>()
-  const symbols = new Map<string, FvgNode>()
+  const symbols = new Map<string, LayerNode>()
   collectSymbols(rootNode, symbols, issues, 'layer')
   noteAttrTypos(rootNode, 'layer', issues)
   if (attrs.style?.trim()) {
@@ -3545,9 +3552,9 @@ export function layoutSync(rootNode: FvgNode, assets: LayoutAssets): FvgDocument
     })
   }
   if (rootNode.tag !== 'layer') {
-    throw new Error(`Flex Layer 根元素必须是 <layer>，收到 <${rootNode.tag}>`)
+    const hint = tagSpellingHint(rootNode.tag)
+    throw new Error(`Flex Layer 根元素必须是 <layer>，收到 <${rootNode.tag}>${hint ? `。${hint}` : ''}`)
   }
-  noteTagSpellings(rootNode, 'layer', issues)
   noteStructuredData(rootNode, 'layer', issues)
   noteCameraPlacement(rootNode, 'layer', issues)
   issues.push(...legacyCenterIssues(rootNode, 'layer'))
@@ -3646,19 +3653,8 @@ function collectLayerIds(node: LayoutNode, ids: Set<string>) {
   }
 }
 
-function canonicalizeTree(node: FvgNode): void {
-  const next = canonicalTag(node.tag)
-  if (next !== node.tag) {
-    node.writtenTag ??= node.tag
-    node.tag = next
-  }
-  for (const child of node.children) {
-    if (typeof child !== 'string') canonicalizeTree(child)
-  }
-}
-
 /** camera 对象和 preserve-3d 的位置。字符串 camera 由 layer-only 检查。 */
-function noteCameraPlacement(node: FvgNode, path: string, issues: Issue[]): void {
+function noteCameraPlacement(node: LayerNode, path: string, issues: Issue[]): void {
   const flex = isTextBoxTag(node.tag) && isDisplayFlex(node.attrs.style)
   if (node.camera !== undefined && node.tag !== 'layer') {
     issues.push({
@@ -3687,7 +3683,7 @@ function noteCameraPlacement(node: FvgNode, path: string, issues: Issue[]): void
 }
 
 /** 对象属性不能塞进字符串。`data` 解析失败是 error。 */
-function noteStructuredData(node: FvgNode, path: string, issues: Issue[]): void {
+function noteStructuredData(node: LayerNode, path: string, issues: Issue[]): void {
   for (const name of node.badAttrs ?? []) {
     issues.push({
       level: 'warn',
@@ -3714,29 +3710,10 @@ function noteStructuredData(node: FvgNode, path: string, issues: Issue[]): void 
   }
 }
 
-/** 源码里写了大写标签时记一条 info，渲染仍用规范小写。 */
-function noteTagSpellings(node: FvgNode, path: string, issues: Issue[]): void {
-  if (node.writtenTag && node.writtenTag !== node.tag) {
-    issues.push({
-      level: 'info',
-      code: 'non-canonical',
-      path,
-      message: `标签 <${node.writtenTag}> 应写成 <${node.tag}>`,
-      hint: `改成 <${node.tag}>`,
-    })
-  }
-  let index = 0
-  for (const child of node.children) {
-    if (typeof child === 'string') continue
-    noteTagSpellings(child, `${path}/${child.tag}[${index}]`, issues)
-    index++
-  }
-}
-
-export async function layoutSource(source: string | FvgNode, baseDir: string): Promise<FvgDocument> {
+export async function layoutSource(source: string | LayerNode, baseDir: string): Promise<LayerDocument> {
   const opened = readLayerRoot(source)
   const assets = await prepareAssets(opened.root, baseDir, { fonts: opened.fonts })
   return layoutSync(opened.root, assets)
 }
 
-export type { FvgDocument }
+export type { LayerDocument }

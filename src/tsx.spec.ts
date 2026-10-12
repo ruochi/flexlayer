@@ -10,7 +10,7 @@ import { emitLayer } from './emit.js'
 import { h } from './h.js'
 import { Fragment, jsx, jsxDEV, type JsxSource } from './jsx-runtime.js'
 import { loadLayerFile } from './load-source.js'
-import { checkFvg, renderFvg } from './render.js'
+import { checkLayer, renderLayer } from './render.js'
 import { nondeterministicCalls, readDrawFunction } from './syntax.js'
 import { typecheckLayerFile } from './typecheck.js'
 
@@ -150,7 +150,7 @@ describe('JSX 类型', () => {
     const loaded = await loadLayerFile(file)
     expect(loaded.kind).toBe('node')
     if (loaded.kind !== 'node') return
-    const report = await checkFvg(loaded.node, { baseDir: dir })
+    const report = await checkLayer(loaded.node, { baseDir: dir })
     const html = report.issues.filter((issue) => issue.code === 'invalid-attr' && issue.path.includes('p['))
     expect(html.map((issue) => issue.message).join(' ')).toMatch(/fill/)
     expect(html.map((issue) => issue.message).join(' ')).toMatch(/stroke/)
@@ -174,7 +174,7 @@ describe('JSX 类型', () => {
       const loaded = await loadLayerFile(file)
       expect(loaded.kind).toBe('node')
       if (loaded.kind !== 'node') continue
-      const report = await checkFvg(loaded.node, { baseDir: dir })
+      const report = await checkLayer(loaded.node, { baseDir: dir })
       const text = report.issues
         .filter((issue) => issue.code === 'invalid-attr')
         .map((issue) => `${issue.message} ${issue.hint ?? ''}`)
@@ -284,21 +284,21 @@ describe('emitLayer', () => {
     const node = h('layer', { width: '240', height: '80' }, h('p', { style: 'font-size:24px' }, "'{}'", ' ×', '3', '个'))
     const emitted = emitLayer(node)
     expect(emitted.issues).toEqual([])
-    const report = await checkFvg(emitted.source)
+    const report = await checkLayer(emitted.source)
     const text = report.elements.find((el) => el.tag === 'p')?.lines?.map((line) => line.text).join('\n')
     expect(text).toBe("'{}' ×3个")
   })
 
   it('<draw> 引用外部变量时不让整张图退出', async () => {
     const source = `<layer width="40" height="40" background="#000">\n  <rect width="10" height="10" fill="#fff">\n    <draw>\nctx.fillStyle = OUT\n</draw>\n  </rect>\n</layer>`
-    const report = await checkFvg(source)
+    const report = await checkLayer(source)
     const issue = report.issues.find((item) => item.code === 'invalid-draw')
     expect(issue?.level).toBe('error')
     expect(issue?.message).toContain('OUT')
     expect(issue?.path).toBe('layer/rect[0]/draw[0]')
     expect(issue?.source).toBe('3:5')
-    const { renderFvg } = await import('./render.js')
-    await expect(renderFvg(source)).resolves.toMatchObject({ png: expect.any(Buffer) })
+    const { renderLayer } = await import('./render.js')
+    await expect(renderLayer(source)).resolves.toMatchObject({ png: expect.any(Buffer) })
   })
 })
 
@@ -307,7 +307,7 @@ describe('load .tsx', () => {
     const loaded = await loadLayerFile(join(pkgDir, 'examples', 'hello.tsx'))
     expect(loaded.kind).toBe('node')
     if (loaded.kind !== 'node') return
-    const report = await checkFvg(loaded.node, { baseDir: join(pkgDir, 'examples') })
+    const report = await checkLayer(loaded.node, { baseDir: join(pkgDir, 'examples') })
     expect(report.width).toBe(1080)
     expect(report.height).toBe(1920)
     expect(report.issues.filter((issue) => issue.level === 'error')).toEqual([])
@@ -317,7 +317,7 @@ describe('load .tsx', () => {
     expect(emitted.source).toContain('比特币减半')
     expect(emitted.source).toContain('3.125 BTC')
     expect(emitted.issues).toEqual([])
-    const again = await checkFvg(emitted.source, { baseDir: join(pkgDir, 'examples') })
+    const again = await checkLayer(emitted.source, { baseDir: join(pkgDir, 'examples') })
     expect(again.issues.filter((issue) => issue.level === 'error')).toEqual([])
   })
 
@@ -411,7 +411,7 @@ describe('load .tsx', () => {
       undefined,
     )
     if (!node || Array.isArray(node)) throw new Error('expected node')
-    const report = await checkFvg(node, { baseDir: pkgDir })
+    const report = await checkLayer(node, { baseDir: pkgDir })
     const issue = report.issues.find((item) => item.code === 'invalid-attr')
     expect(issue?.source).toMatch(/t\.tsx:4:3/)
   })
@@ -443,7 +443,7 @@ describe('load .tsx', () => {
       const loaded = await loadLayerFile(scene)
       expect(loaded.kind).toBe('node')
       if (loaded.kind !== 'node') return
-      const report = await checkFvg(loaded.node, { baseDir: dir })
+      const report = await checkLayer(loaded.node, { baseDir: dir })
       const attrSource = report.issues.find((issue) => issue.code === 'invalid-attr')?.source ?? ''
       const fileOf = (source: string) => source.replace(/:\d+:\d+$/, '')
       expect(fileOf(typeSource)).toBe(scene)
@@ -484,7 +484,7 @@ describe('load .tsx', () => {
     const parts = []
     for (const frame of frames) {
       const node = composition.component({ frame, fps: composition.fps, t: frame / composition.fps })
-      const report = await checkFvg(node, { baseDir: dir })
+      const report = await checkLayer(node, { baseDir: dir })
       parts.push({ frame, issues: report.issues })
     }
     const overflow = mergeFrameIssues(parts).filter((issue) => issue.code === 'overflow-canvas')
@@ -530,9 +530,9 @@ export default <layer width="48" height="48"><badge /></layer>
     const loaded = await loadLayerFile(file)
     expect(loaded.kind).toBe('node')
     if (loaded.kind !== 'node') return
-    const report = await checkFvg(loaded.node)
+    const report = await checkLayer(loaded.node)
     expect(report.issues.filter((issue) => issue.code === 'unknown-tag')).toEqual([])
-    const { png } = await renderFvg(loaded.node)
+    const { png } = await renderLayer(loaded.node)
     const { createCanvas, loadImage } = await import('@napi-rs/canvas')
     const img = await loadImage(png)
     const canvasEl = createCanvas(img.width, img.height)
@@ -577,7 +577,7 @@ export default (
     const loaded = await loadLayerFile(file)
     expect(loaded.kind).toBe('node')
     if (loaded.kind !== 'node') return
-    const { png } = await renderFvg(loaded.node)
+    const { png } = await renderLayer(loaded.node)
     const { createCanvas, loadImage } = await import('@napi-rs/canvas')
     const img = await loadImage(png)
     const canvasEl = createCanvas(img.width, img.height)

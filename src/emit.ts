@@ -1,5 +1,5 @@
 import { formatCamera } from './camera.js'
-import type { FvgNode } from './parse.js'
+import type { LayerNode } from './parse.js'
 import { readDrawFunction } from './syntax.js'
 import type { DrawFn, Issue } from './types.js'
 
@@ -64,7 +64,7 @@ function jsonReady(value: unknown, seen: WeakSet<object>): boolean {
   return ok
 }
 
-function emitData(node: FvgNode, path: string, issues: Issue[]): string {
+function emitData(node: LayerNode, path: string, issues: Issue[]): string {
   if (node.data === undefined) return ''
   if (!jsonReady(node.data, new WeakSet())) {
     issues.push({
@@ -91,14 +91,14 @@ function emitData(node: FvgNode, path: string, issues: Issue[]): string {
   return ` data='${quoted}'`
 }
 
-function emitCamera(node: FvgNode): string {
+function emitCamera(node: LayerNode): string {
   if (node.camera == null || node.attrs.camera != null) return ''
   const text = formatCamera(node.camera)
   if (text == null) return ''
   return ` camera="${escapeAttr(text)}"`
 }
 
-function attrText(node: FvgNode, path: string, issues: Issue[]): string {
+function attrText(node: LayerNode, path: string, issues: Issue[]): string {
   return (
     Object.entries(node.attrs)
       .map(([key, value]) => ` ${key}="${escapeAttr(value)}"`)
@@ -109,7 +109,7 @@ function attrText(node: FvgNode, path: string, issues: Issue[]): string {
 }
 
 /** 有文本子节点时按源码顺序拼回去，不在标签交界处另加空格或换行。 */
-function emitInline(node: FvgNode, path: string, issues: Issue[]): string {
+function emitInline(node: LayerNode, path: string, issues: Issue[]): string {
   const attrs = attrText(node, path, issues)
   let elementIndex = 0
   let inner = ''
@@ -125,7 +125,7 @@ function emitInline(node: FvgNode, path: string, issues: Issue[]): string {
   return `<${node.tag}${attrs}>${inner}</${node.tag}>`
 }
 
-function emitNode(node: FvgNode, indent: string, path: string, issues: Issue[]): string {
+function emitNode(node: LayerNode, indent: string, path: string, issues: Issue[]): string {
   const attrs = attrText(node, path, issues)
   const hasText = node.children.some((child) => typeof child === 'string')
   if (hasText && node.tag !== 'draw' && !node.draw) return `${indent}${emitInline(node, path, issues)}\n`
@@ -156,7 +156,7 @@ function emitNode(node: FvgNode, indent: string, path: string, issues: Issue[]):
 }
 
 /** 把节点树写回 `.layer` 文本。闭包里的 draw 会留下 warn，不把读不到的函数体写回去。 */
-export function emitLayer(node: FvgNode): EmitResult {
+export function emitLayer(node: LayerNode): EmitResult {
   const issues: Issue[] = []
   const source = emitNode(node, '', 'layer', issues).replace(/\n$/, '')
   return { source: `${source}\n`, issues }

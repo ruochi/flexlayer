@@ -477,8 +477,8 @@ const GLASS_PRESETS: Record<GlassVariant, Omit<GlassValue, 'variant' | 'tint'>> 
 
 /**
  * `glass` 语法：
- * - 空格：`clear` / `regular` / `thick`；`24` 或 `24px`（其余按 regular）；`clear #a8c8ff20`；`regular 8 #ffffff22`
- * - 逗号：`clear, blur 8, tint #fff2`。第一项是预设，后面用 `blur` / `tint` / `refraction` / `specular` / `bezel` / `dispersion` 覆盖
+ * - 预设名：`clear` / `regular` / `thick`
+ * - 逗号：`clear, blur 8, tint #fff2`。第一项只能是预设名，后面用 `blur` / `tint` / `refraction` / `specular` / `bezel` / `dispersion` 覆盖
  */
 function looksLikeColorToken(token: string): boolean {
   const t = token.trim()
@@ -525,32 +525,10 @@ function finishGlass(
   }
 }
 
-/** 空格写法：`clear` / `regular 8 #ffffff22` / `0`。 */
-function parseGlassLegacy(value: string): GlassValue | undefined {
-  const tokens = splitCssTokens(value)
-  if (tokens.length < 1 || tokens.length > 3) return undefined
-  let variant: GlassVariant = 'regular'
-  let blur: number | undefined
-  let tint: string | undefined
-  let sawVariant = false
-  for (const token of tokens) {
-    const key = token.toLowerCase()
-    if (key === 'regular' || key === 'clear' || key === 'thick') {
-      variant = key
-      sawVariant = true
-      continue
-    }
-    const px = parsePx(token)
-    if (px !== undefined) {
-      if (px < 0 || blur !== undefined) return undefined
-      blur = px
-      continue
-    }
-    if (tint !== undefined || !looksLikeColorToken(token)) return undefined
-    tint = token
-  }
-  if (!sawVariant && blur === undefined && tint === undefined) return undefined
-  return finishGlass(variant, blur, tint, {})
+function parseGlassPreset(token: string): GlassVariant | undefined {
+  const key = token.toLowerCase()
+  if (key === 'clear' || key === 'regular' || key === 'thick') return key
+  return undefined
 }
 
 function parseUnit(token: string, min: number, max: number): number | undefined {
@@ -575,12 +553,10 @@ function parseGlassNamed(value: string): GlassValue | undefined {
     if (tokens.length === 0) return undefined
     const head = tokens[0]!.toLowerCase()
     if (!GLASS_NAMED.has(head)) {
-      if (i !== 0) return undefined
-      const legacy = parseGlassLegacy(clauses[i]!)
-      if (!legacy) return undefined
-      variant = legacy.variant
-      blur = legacy.blur
-      tint = legacy.tint
+      if (i !== 0 || tokens.length !== 1) return undefined
+      const preset = parseGlassPreset(tokens[0]!)
+      if (!preset) return undefined
+      variant = preset
       continue
     }
     if (head === 'blur') {
@@ -606,8 +582,13 @@ function parseGlassNamed(value: string): GlassValue | undefined {
 
 export function parseGlass(value: string | undefined): GlassValue | undefined {
   if (!value || value.trim() === 'none') return undefined
-  if (splitCommaClauses(value).length > 1) return parseGlassNamed(value)
-  return parseGlassLegacy(value)
+  const clauses = splitCommaClauses(value)
+  if (clauses.length === 1) {
+    const preset = parseGlassPreset(clauses[0]!.trim())
+    if (!preset) return undefined
+    return finishGlass(preset, undefined, undefined, {})
+  }
+  return parseGlassNamed(value)
 }
 
 export function parseFontWeight(value: string | undefined): number | undefined {

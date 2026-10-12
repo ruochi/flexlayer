@@ -105,9 +105,10 @@ describe('style', () => {
     expect(strokeTakesInk('none')).toBe(false)
     expect(parseGlass('thick')).toMatchObject({ variant: 'thick', blur: 36, refraction: 0.5 })
     expect(parseGlass('clear')).toMatchObject({ variant: 'clear', blur: 0, refraction: 1 })
-    expect(parseGlass('24 #ffffff33')).toMatchObject({ variant: 'regular', blur: 24, tint: '#ffffff33' })
-    expect(parseGlass('clear 0 #a8c8ff20')).toMatchObject({ variant: 'clear', blur: 0, tint: '#a8c8ff20' })
-    expect(parseGlass('0')).toMatchObject({ variant: 'regular', blur: 0 })
+    expect(parseGlass('24 #ffffff33')).toBeUndefined()
+    expect(parseGlass('clear 0 #a8c8ff20')).toBeUndefined()
+    expect(parseGlass('0')).toBeUndefined()
+    expect(parseGlass('regular, blur 24, tint #ffffff33')).toMatchObject({ variant: 'regular', blur: 24, tint: '#ffffff33' })
     expect(parseGlass('nope')).toBeUndefined()
     expect(parseGlass('clear, blur 8, tint #fff2')).toMatchObject({
       variant: 'clear',

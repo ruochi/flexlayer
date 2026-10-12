@@ -1,5 +1,5 @@
 import { isGradient } from '../gradient.js'
-import type { FvgNode } from '../parse.js'
+import type { LayerNode } from '../parse.js'
 import { parseBorder, parseEdges, parseNumber, parsePx, parseScale, parseStyle, ZERO_EDGES } from '../style.js'
 import { layoutText } from '../text.js'
 import type {
@@ -121,11 +121,11 @@ function base(path: string, tag: string, width: number, height: number, ctx: Ctx
   }
 }
 
-function elements(node: FvgNode): FvgNode[] {
-  return node.children.filter((c): c is FvgNode => typeof c !== 'string')
+function elements(node: LayerNode): LayerNode[] {
+  return node.children.filter((c): c is LayerNode => typeof c !== 'string')
 }
 
-function directText(node: FvgNode): string {
+function directText(node: LayerNode): string {
   return node.children
     .filter((c): c is string => typeof c === 'string')
     .join('')
@@ -162,13 +162,13 @@ function canonicalMathFamily(family: string): string | null {
   return ['stixtwomath', 'stix two math', 'stixmath', 'stix'].includes(name) ? MATH_FONT_FAMILY : null
 }
 
-function requestedFamily(node: FvgNode): string | undefined {
+function requestedFamily(node: LayerNode): string | undefined {
   const style = parseStyle(node.attrs.style)['font-family']?.trim()
   return style || node.attrs['font-family']?.trim() || node.attrs.fontfamily?.trim() || undefined
 }
 
 /** 字母、数字、运算符不跟普通字体走。写了别的 `font-family` 就报并忽略。`mtext` 除外。 */
-function rejectTextFont(node: FvgNode, path: string, ctx: Ctx): void {
+function rejectTextFont(node: LayerNode, path: string, ctx: Ctx): void {
   if (node.tag.toLowerCase() === 'mtext') return
   const family = requestedFamily(node)
   if (!family || canonicalMathFamily(family)) return
@@ -195,7 +195,7 @@ function solidMathColor(raw: string | undefined, issues: Issue[], path: string, 
   return fallback
 }
 
-function styled(node: FvgNode, ctx: Ctx, path: string): Ctx {
+function styled(node: LayerNode, ctx: Ctx, path: string): Ctx {
   rejectTextFont(node, path, ctx)
   const style = parseStyle(node.attrs.style)
   const size = parsePx(style['font-size'])
@@ -215,7 +215,7 @@ function scriptCtx(ctx: Ctx, cramped = ctx.cramped): Ctx {
   return { ...ctx, size: clampSize(ctx.size * scale, ctx), level: ctx.level + 1, display: false, cramped }
 }
 
-function childPaths(parent: string, children: FvgNode[]): string[] {
+function childPaths(parent: string, children: LayerNode[]): string[] {
   const counts = new Map<string, number>()
   return children.map((ch) => {
     const tag = ch.tag.toLowerCase()
@@ -349,7 +349,7 @@ function emptyBox(tag: string, path: string, ctx: Ctx, width = 0, ascent = 0, de
 }
 
 /** 运算符本体：直接是 `mo`，或只包着一个 `mo` 的 `mrow`。 */
-function coreOperator(node: FvgNode | undefined): FvgNode | null {
+function coreOperator(node: LayerNode | undefined): LayerNode | null {
   if (!node) return null
   const tag = node.tag.toLowerCase()
   if (tag === 'mo') return node
@@ -360,7 +360,7 @@ function coreOperator(node: FvgNode | undefined): FvgNode | null {
   return null
 }
 
-function coreText(node: FvgNode | undefined): string {
+function coreText(node: LayerNode | undefined): string {
   if (!node) return ''
   const tag = node.tag.toLowerCase()
   if (tag === 'mo' || tag === 'mi' || tag === 'mn' || tag === 'mtext') return directText(node)
@@ -371,7 +371,7 @@ function coreText(node: FvgNode | undefined): string {
   return ''
 }
 
-function layoutToken(node: FvgNode, tag: string, path: string, ctx0: Ctx, position: 'first' | 'last' | 'middle' | 'only'): MBox {
+function layoutToken(node: LayerNode, tag: string, path: string, ctx0: Ctx, position: 'first' | 'last' | 'middle' | 'only'): MBox {
   const ctx = styled(node, ctx0, path)
   let text = directText(node)
   if (tag === 'mtext') {
@@ -417,7 +417,7 @@ function centerOnAxis(box: MBox, ctx: Ctx): MBox {
   return { ...box, ascent: box.ascent + shift, descent: box.descent - shift }
 }
 
-function stretchedFence(node: FvgNode, path: string, ctx0: Ctx, target: number, atom: Atom): MBox {
+function stretchedFence(node: LayerNode, path: string, ctx0: Ctx, target: number, atom: Atom): MBox {
   const ctx = styled(node, ctx0, path)
   const text = normalizeOperator(directText(node))
   const natural = naturalVerticalSize(text, ctx.size)
@@ -429,13 +429,13 @@ function stretchedFence(node: FvgNode, path: string, ctx0: Ctx, target: number, 
   return box
 }
 
-function isStretchyFence(node: FvgNode): boolean {
+function isStretchyFence(node: LayerNode): boolean {
   if (node.tag.toLowerCase() !== 'mo') return false
   if (node.attrs.stretchy === 'false') return false
   return operatorInfo(normalizeOperator(directText(node)), 'middle').stretchy
 }
 
-function layoutRow(nodes: FvgNode[], tag: string, path: string, ctx: Ctx): MBox {
+function layoutRow(nodes: LayerNode[], tag: string, path: string, ctx: Ctx): MBox {
   const paths = childPaths(path, nodes)
   const kids = nodes.filter((n) => n.tag.toLowerCase() !== 'annotation' && n.tag.toLowerCase() !== 'annotation-xml')
   const position = (i: number): 'first' | 'last' | 'middle' | 'only' =>
@@ -569,7 +569,7 @@ function isDifferential(boxes: MBox[], i: number): boolean {
   return boxes[i + 1]?.node.tag === 'mi'
 }
 
-function layoutFrac(node: FvgNode, path: string, ctx: Ctx): MBox {
+function layoutFrac(node: LayerNode, path: string, ctx: Ctx): MBox {
   const kids = elements(node)
   const paths = childPaths(path, kids)
   const childSize = ctx.display ? ctx.size : clampSize(ctx.size * MFRAC_SCRIPT_SCALE, ctx)
@@ -638,13 +638,13 @@ function radical(baseBox: MBox, path: string, ctx: Ctx): { items: Array<{ box: M
   return { items, width: surdWidth + baseBox.width, ascent: top + extra, descent }
 }
 
-function layoutSqrt(node: FvgNode, path: string, ctx: Ctx): MBox {
+function layoutSqrt(node: LayerNode, path: string, ctx: Ctx): MBox {
   const inner = layoutRow(elements(node), 'mrow', `${path}/mrow[0]`, { ...ctx, cramped: true })
   const r = radical(inner, path, ctx)
   return boxOf(compose('msqrt', path, ctx, r.items, { width: r.width, ascent: r.ascent, descent: r.descent }), 'ord')
 }
 
-function layoutRoot(node: FvgNode, path: string, ctx: Ctx): MBox {
+function layoutRoot(node: LayerNode, path: string, ctx: Ctx): MBox {
   const kids = elements(node)
   const paths = childPaths(path, kids)
   const baseBox = kids[0]
@@ -663,7 +663,7 @@ function layoutRoot(node: FvgNode, path: string, ctx: Ctx): MBox {
 }
 
 /** `∑`、`lim` 这类算符的上下限：display 时放在上下方，行内放到右侧。 */
-function hasMovableLimits(base: FvgNode | undefined): boolean {
+function hasMovableLimits(base: LayerNode | undefined): boolean {
   const op = coreOperator(base)
   const word = coreText(base)
   if (op?.attrs.movablelimits === 'false') return false
@@ -673,7 +673,7 @@ function hasMovableLimits(base: FvgNode | undefined): boolean {
 }
 
 function layoutScripts(
-  node: FvgNode,
+  node: LayerNode,
   tag: 'msub' | 'msup' | 'msubsup',
   path: string,
   ctx: Ctx,
@@ -745,7 +745,7 @@ function layoutScripts(
   return boxOf(compose(outTag, path, ctx, items, { width }), b.atom, { op: b.op })
 }
 
-function layoutUnderOver(node: FvgNode, tag: 'munder' | 'mover' | 'munderover', path: string, ctx: Ctx): MBox {
+function layoutUnderOver(node: LayerNode, tag: 'munder' | 'mover' | 'munderover', path: string, ctx: Ctx): MBox {
   const kids = elements(node)
   const paths = childPaths(path, kids)
   const under = tag === 'mover' ? undefined : kids[1]
@@ -765,9 +765,9 @@ function layoutUnderOver(node: FvgNode, tag: 'munder' | 'mover' | 'munderover', 
 
 /** 上下限和上下方的标记。`paths` 按 kids 顺序。 */
 function limits(
-  baseNode: FvgNode | undefined,
-  underNode: FvgNode | undefined,
-  overNode: FvgNode | undefined,
+  baseNode: LayerNode | undefined,
+  underNode: LayerNode | undefined,
+  overNode: LayerNode | undefined,
   paths: string[],
   path: string,
   tag: string,
@@ -780,7 +780,7 @@ function limits(
   const overPath = underNode ? paths[2] : paths[1]
   const limitOp = Boolean(b.op?.largeop || b.op?.movableLimits)
   const scriptStyle = scriptCtx(ctx)
-  const lowerScript = (n: FvgNode, p: string, isAccent: boolean, cramped: boolean): MBox => {
+  const lowerScript = (n: LayerNode, p: string, isAccent: boolean, cramped: boolean): MBox => {
     const sctx = isAccent ? { ...ctx, display: false } : { ...scriptStyle, cramped: cramped || scriptStyle.cramped }
     const text = normalizeOperator(coreText(n))
     if (coreOperator(n) && n.attrs.stretchy !== 'false') {
@@ -863,15 +863,15 @@ function alignList(raw: string | undefined): string[] {
   return (raw ?? '').trim().split(/\s+/).filter(Boolean)
 }
 
-function layoutTable(node: FvgNode, path: string, ctx0: Ctx): MBox {
+function layoutTable(node: LayerNode, path: string, ctx0: Ctx): MBox {
   const ctx: Ctx = { ...ctx0, display: false }
   const rowsSrc = elements(node)
   const rowPaths = childPaths(path, rowsSrc)
   const rowGap = lengthOf(node.attrs.rowspacing, ctx, ctx.size * MTABLE_ROW_GAP_EM)
   const colGap = lengthOf(node.attrs.columnspacing, ctx, ctx.size * MTABLE_COLUMN_GAP_EM)
   const tableAlign = alignList(node.attrs.columnalign)
-  type Cell = { box: MBox; align: string; node: FvgNode }
-  const rows: Array<{ cells: Cell[]; path: string; tag: string; src: FvgNode }> = []
+  type Cell = { box: MBox; align: string; node: LayerNode }
+  const rows: Array<{ cells: Cell[]; path: string; tag: string; src: LayerNode }> = []
   rowsSrc.forEach((tr, r) => {
     const trTag = tr.tag.toLowerCase()
     const rowAlign = alignList(tr.attrs.columnalign)
@@ -925,7 +925,7 @@ function layoutTable(node: FvgNode, path: string, ctx0: Ctx): MBox {
   return boxOf(compose('mtable', path, ctx, items, { width: tableWidth }), 'ord')
 }
 
-function lowerNode(node: FvgNode, path: string, ctx0: Ctx, position: 'first' | 'last' | 'middle' | 'only'): MBox {
+function lowerNode(node: LayerNode, path: string, ctx0: Ctx, position: 'first' | 'last' | 'middle' | 'only'): MBox {
   const tag = node.tag.toLowerCase()
   if (!MATH_TAGS.has(tag) || tag === 'math') {
     ctx0.warnings.push(`未知标签 ${node.tag}`)
@@ -967,7 +967,7 @@ function lowerNode(node: FvgNode, path: string, ctx0: Ctx, position: 'first' | '
  * `rowAlign` 是外面横排 flex 的交叉轴对齐。居中时上下补白，让基线落在盒子中心下方 0.35em，
  * 和居中放着的同字号文字基线对齐；顶端、底端对齐时只补到一行文字的高度。
  */
-export function layoutMath(node: FvgNode, host: MathLayoutHost, rowAlign?: string): FlexLayoutNode {
+export function layoutMath(node: LayerNode, host: MathLayoutHost, rowAlign?: string): FlexLayoutNode {
   const style = parseStyle(node.attrs.style)
   const fontSize = parsePx(style['font-size']) ?? 40
   const color = solidMathColor(style.color ?? node.attrs.mathcolor, host.issues, host.pathPrefix, host.color)

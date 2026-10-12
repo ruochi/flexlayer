@@ -1,5 +1,5 @@
 import { filterIsLayerOnly, listFilters } from './filter.js'
-import type { FvgChild, FvgNode } from './parse.js'
+import type { LayerChild, LayerNode } from './parse.js'
 import { ATTRS, ATTR_ORDER, HTML_STYLE_ATTRS, attrByName, issueFor } from './schema.js'
 import { cssPropertyNames, diagnoseStyle, parseNumber, parseStyle, readOrigin } from './style.js'
 import { MATH_TAGS } from './math/rules.js'
@@ -59,7 +59,7 @@ const FLOW_TEXT_KEYS = [
 ] as const
 
 /** 没写 display:flex 的 div，只要放了行内标签容不下的子元素，就按块级容器排。 */
-export function divHasFlowBreak(node: FvgNode): boolean {
+export function divHasFlowBreak(node: LayerNode): boolean {
   if (node.tag.toLowerCase() !== 'div') return false
   if (isDisplayFlex(node.attrs.style)) return false
   return node.children.some((child) => typeof child !== 'string' && !isInlineTag(child.tag))
@@ -83,16 +83,16 @@ function blockFlowStyle(style: string | undefined): string {
   return [base, ...extra].filter((part) => part).join(';')
 }
 
-function anonymousTextBox(run: FvgChild[], style: string): FvgNode {
+function anonymousTextBox(run: LayerChild[], style: string): LayerNode {
   const attrs: Record<string, string> = {}
   if (style) attrs.style = style
   return { tag: 'div', attrs, children: run }
 }
 
-function blockFlowChildren(node: FvgNode): FvgChild[] {
+function blockFlowChildren(node: LayerNode): LayerChild[] {
   const textStyle = inheritedTextStyle(node.attrs.style)
-  const out: FvgChild[] = []
-  let run: FvgChild[] = []
+  const out: LayerChild[] = []
+  let run: LayerChild[] = []
   const flush = () => {
     if (run.length === 0) return
     const blank = run.every((child) => typeof child === 'string' && child.trim() === '')
@@ -112,7 +112,7 @@ function blockFlowChildren(node: FvgNode): FvgChild[] {
 }
 
 /** 文字盒子里直接放了 img 时，改成横向排布，文字和图片并排。 */
-export function textBoxNeedsInlineRow(node: FvgNode): boolean {
+export function textBoxNeedsInlineRow(node: LayerNode): boolean {
   if (!isTextBoxTag(node.tag) || isDisplayFlex(node.attrs.style)) return false
   let image = false
   for (const child of node.children) {
@@ -124,11 +124,11 @@ export function textBoxNeedsInlineRow(node: FvgNode): boolean {
   return image
 }
 
-export function asInlineRow(node: FvgNode): FvgNode {
+export function asInlineRow(node: LayerNode): LayerNode {
   if (!textBoxNeedsInlineRow(node)) return node
   const textStyle = inheritedTextStyle(node.attrs.style)
-  const children: FvgChild[] = []
-  let run: FvgChild[] = []
+  const children: LayerChild[] = []
+  let run: LayerChild[] = []
   const flush = () => {
     if (run.length === 0) return
     const blank = run.every((child) => typeof child === 'string' && child.trim() === '')
@@ -164,7 +164,7 @@ export function asInlineRow(node: FvgNode): FvgNode {
  * 等同于补上 display:flex、flex-direction:column，没写 align-items 时把文字块拉到这一列的宽度。
  * 只含文字和行内标签的 div 原样返回，仍是文字盒子。
  */
-export function asBlockFlow(node: FvgNode): FvgNode {
+export function asBlockFlow(node: LayerNode): LayerNode {
   if (!divHasFlowBreak(node)) return node
   return {
     ...node,
@@ -187,7 +187,7 @@ export function isHtmlTag(tag: string): boolean {
   return isTextBoxTag(tag) || isImageTag(tag)
 }
 
-function usesAttributes(node: FvgNode): boolean {
+function usesAttributes(node: LayerNode): boolean {
   return (
     node.tag === 'layer' ||
     node.tag === 'symbol' ||
@@ -247,7 +247,7 @@ function legacyCenterHint(attrs: Record<string, string>): string {
 }
 
 /** layer、use、rect、box、extrude、tube 上的 cx、cy 已忽略。hint 给出等价的 x、y。 */
-export function legacyCenterIssues(node: FvgNode, path: string): Issue[] {
+export function legacyCenterIssues(node: LayerNode, path: string): Issue[] {
   if (!LEGACY_CENTER_TAGS.has(node.tag)) return []
   if (!present(node.attrs, 'cx') && !present(node.attrs, 'cy')) return []
   return [
@@ -322,13 +322,13 @@ export function suggestNames(raw: string, candidates: Iterable<string>): string[
   return hits
 }
 
-function attrCandidates(node: FvgNode): Iterable<string> {
+function attrCandidates(node: LayerNode): Iterable<string> {
   if (isHtmlTag(node.tag) || isTextBoxTag(node.tag)) return [...HTML_STYLE_ATTRS, 'style', 'id', 'src', 'alt', 'class']
   return KNOWN_ATTRS
 }
 
 /** 和这个标签上可能出现的属性编辑距离不超过 2 时，返回最近的名字。并列超过 3 个就不当成拼写。 */
-export function suggestAttrs(raw: string, node?: FvgNode): string[] {
+export function suggestAttrs(raw: string, node?: LayerNode): string[] {
   if (!raw.trim() || KNOWN_ATTRS.has(raw)) return []
   const local = node ? TAG_LOCAL_ATTRS[node.tag.toLowerCase()] : undefined
   if (local?.includes(raw.trim())) return []
@@ -336,7 +336,7 @@ export function suggestAttrs(raw: string, node?: FvgNode): string[] {
 }
 
 /** `material` 是网格的磨砂、塑料、金属或玻璃，不写在平面上。层上的 `glass` 仍是透镜。 */
-export function materialAttrIssues(node: FvgNode, path: string): Issue[] {
+export function materialAttrIssues(node: LayerNode, path: string): Issue[] {
   if (!present(node.attrs, 'material')) return []
   if (isMeshTag(node.tag)) return []
   return [
@@ -351,7 +351,7 @@ export function materialAttrIssues(node: FvgNode, path: string): Issue[] {
 }
 
 /** `halo` 是网格可见线在交叉处留出的断开，不写在平面、线条或文字上。 */
-export function haloAttrIssues(node: FvgNode, path: string): Issue[] {
+export function haloAttrIssues(node: LayerNode, path: string): Issue[] {
   if (!present(node.attrs, 'halo')) return []
   if (isMeshTag(node.tag)) return []
   return [
@@ -366,7 +366,7 @@ export function haloAttrIssues(node: FvgNode, path: string): Issue[] {
 }
 
 /** `hidden` 是网格被挡住的棱，不写在平面、线条或文字上。 */
-export function hiddenAttrIssues(node: FvgNode, path: string): Issue[] {
+export function hiddenAttrIssues(node: LayerNode, path: string): Issue[] {
   if (!present(node.attrs, 'hidden')) return []
   if (isMeshTag(node.tag)) return []
   return [
@@ -381,7 +381,7 @@ export function hiddenAttrIssues(node: FvgNode, path: string): Issue[] {
 }
 
 /** 拼写接近已知属性时报 warn。完全对不上的名字仍留给 draw。 */
-export function typoAttrIssues(node: FvgNode, path: string): Issue[] {
+export function typoAttrIssues(node: LayerNode, path: string): Issue[] {
   const out: Issue[] = []
   for (const key of Object.keys(node.attrs)) {
     if (!present(node.attrs, key)) continue
@@ -404,7 +404,7 @@ export function typoAttrIssues(node: FvgNode, path: string): Issue[] {
  * 样式表里不认识或写错的声明。布局仍按默认值排，这里只负责报出来。
  * 属性表已经规定「不能写进 style」的名字由归属检查报，这里不再报第二次。
  */
-export function styleIssues(node: FvgNode, path: string): Issue[] {
+export function styleIssues(node: LayerNode, path: string): Issue[] {
   if (!present(node.attrs, 'style')) return []
   const style = parseStyle(node.attrs.style)
   const owned = new Set<string>([...FORBID_IN_STYLE, ...registeredLayerOnlyNames()])
@@ -447,7 +447,7 @@ export function originValueIssues(raw: string | undefined, path: string): Issue[
 }
 
 /** 只检查归属表里的已知属性。拼写接近已知属性的名字会 warn，其余留给 draw。 */
-export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: string): Issue[] {
+export function checkChildAttrs(node: LayerNode, parent: 'layer' | 'flex', path: string): Issue[] {
   const out: Issue[] = []
   const attrs = node.attrs
   const positioned =
@@ -820,7 +820,7 @@ export function checkChildAttrs(node: FvgNode, parent: 'layer' | 'flex', path: s
   return out
 }
 
-export function checkTextBoxChildren(node: FvgNode, path: string): Issue[] {
+export function checkTextBoxChildren(node: LayerNode, path: string): Issue[] {
   const out: Issue[] = []
   for (const child of node.children) {
     if (typeof child === 'string') continue

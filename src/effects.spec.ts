@@ -3,7 +3,7 @@ import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { initFontsForMeasure } from './fonts.js'
-import { checkFvg, renderFvg } from './render.js'
+import { checkLayer, renderLayer } from './render.js'
 
 beforeAll(async () => {
   await initFontsForMeasure({ fontsCacheDir: join(homedir(), '.cache', 'flexlayer', 'fonts') })
@@ -24,7 +24,7 @@ async function pixels(png: Buffer) {
 
 describe('绘制', () => {
   it('Path 画在路径坐标上，不再叠加盒子偏移', async () => {
-    const { png } = await renderFvg(
+    const { png } = await renderLayer(
       `<layer width="200" height="200" background="#ffffff"><path d="M 80 90 L 140 90" stroke="#0000ff" stroke-width="4" /></layer>`,
     )
     const { at } = await pixels(png)
@@ -36,7 +36,7 @@ describe('绘制', () => {
   })
 
   it('夜空渐变上深下浅，月晕染到圆的外面', async () => {
-    const { png } = await renderFvg(
+    const { png } = await renderLayer(
       `<layer width="120" height="120" background="#ffffff"><rect x="0" y="0" width="120" height="120" fill="linear-gradient(#102038, #d8e2ea)" /><circle cx="60" cy="60" r="16" fill="#f4efe4" glow="18 #f4efe4" /></layer>`,
     )
     const { at } = await pixels(png)
@@ -48,7 +48,7 @@ describe('绘制', () => {
   })
 
   it('同一 symbol 可以摆两次', async () => {
-    const { png } = await renderFvg(
+    const { png } = await renderLayer(
       `<layer width="80" height="40" background="#ffffff"><symbol id="dot"><circle cx="8" cy="8" r="6" fill="#ff0000" /></symbol><use href="#dot" x="8" y="12" /><use href="#dot" x="48" y="12" /></layer>`,
     )
     const { at } = await pixels(png)
@@ -58,10 +58,10 @@ describe('绘制', () => {
   })
 
   it('内阴影压暗圆角矩形内侧', async () => {
-    const { png, report } = await renderFvg(
+    const { png, report } = await renderLayer(
       `<layer width="120" height="80" background="#ffffff"><rect x="20" y="15" width="80" height="50" rx="8" fill="#6aa1ff" inner-shadow="0 6 8 #000000aa" /></layer>`,
     )
-    const plain = await renderFvg(
+    const plain = await renderLayer(
       `<layer width="120" height="80" background="#ffffff"><rect x="20" y="15" width="80" height="50" rx="8" fill="#6aa1ff" /></layer>`,
     )
     const { at } = await pixels(png)
@@ -75,10 +75,10 @@ describe('绘制', () => {
   })
 
   it('图层模糊把硬边染开', async () => {
-    const sharp = await renderFvg(
+    const sharp = await renderLayer(
       `<layer width="80" height="80" background="#000000"><rect x="30" y="30" width="20" height="20" fill="#ffffff" /></layer>`,
     )
-    const soft = await renderFvg(
+    const soft = await renderLayer(
       `<layer width="80" height="80" background="#000000"><rect x="30" y="30" width="20" height="20" fill="#ffffff" blur="6" /></layer>`,
     )
     const a = await pixels(sharp.png)
@@ -95,8 +95,8 @@ describe('绘制', () => {
         <rect x="0" y="30" width="120" height="8" fill="#f4efe4" />
         <rect x="25" y="20" width="70" height="40" rx="8" fill="#ffffff55" ${backdrop} />
       </layer>`
-    const withBlur = await renderFvg(scene('backdrop-blur="8"'))
-    const without = await renderFvg(scene(''))
+    const withBlur = await renderLayer(scene('backdrop-blur="8"'))
+    const without = await renderLayer(scene(''))
     const a = await pixels(withBlur.png)
     const b = await pixels(without.png)
     // 条纹上方：有 backdrop 时奶油色会渗上来
@@ -104,10 +104,10 @@ describe('绘制', () => {
     expect(withBlur.report.elements.some((el) => el.backdropBlur === 8)).toBe(true)
   })
   it('filter grayscale 去掉饱和色', async () => {
-    const color = await renderFvg(
+    const color = await renderLayer(
       `<layer width="40" height="40" background="#000000"><rect x="5" y="5" width="30" height="30" fill="#ff0000" /></layer>`,
     )
-    const gray = await renderFvg(
+    const gray = await renderLayer(
       `<layer width="40" height="40" background="#000000"><rect x="5" y="5" width="30" height="30" fill="#ff0000" filter="grayscale(1)" /></layer>`,
     )
     const c = await pixels(color.png)
@@ -117,7 +117,7 @@ describe('绘制', () => {
   })
 
   it('noise 与 blend 进入报告', async () => {
-    const { report } = await renderFvg(
+    const { report } = await renderLayer(
       `<layer width="60" height="60" background="#112233"><rect x="10" y="10" width="40" height="40" fill="#3ecfc4" noise="0.2" blend="multiply" inner-glow="10 #ffffff" /></layer>`,
     )
     const el = report.elements.find((e) => e.tag === 'rect')
@@ -127,14 +127,14 @@ describe('绘制', () => {
   })
 
   it('layer overlay 纯色叠加变暗，并进入报告', async () => {
-    const plain = await renderFvg(
+    const plain = await renderLayer(
       `<layer width="80" height="80" background="#000000">
         <layer x="10" y="10" width="60" height="60">
           <rect x="0" y="0" width="60" height="60" fill="#ffffff" />
         </layer>
       </layer>`,
     )
-    const over = await renderFvg(
+    const over = await renderLayer(
       `<layer width="80" height="80" background="#000000">
         <layer x="10" y="10" width="60" height="60" overlay="#00000088">
           <rect x="0" y="0" width="60" height="60" fill="#ffffff" />
@@ -151,7 +151,7 @@ describe('绘制', () => {
   })
 
   it('layer overlay 渐变 + multiply', async () => {
-    const { png, report } = await renderFvg(
+    const { png, report } = await renderLayer(
       `<layer width="100" height="40" background="#ffffff">
         <layer width="100" height="40" overlay="linear-gradient(to right, #ff0000, #0000ff) multiply">
           <rect x="0" y="0" width="100" height="40" fill="#ffffff" />
@@ -169,7 +169,7 @@ describe('绘制', () => {
   })
 
   it('layer grade 调整子树颜色，报告里有展开后的参数', async () => {
-    const { png, report } = await renderFvg(
+    const { png, report } = await renderLayer(
       `<layer width="80" height="80" background="#000000">
         <layer x="10" y="10" width="60" height="60" grade="mono, contrast 1">
           <rect x="0" y="0" width="60" height="60" fill="#e04020" />
@@ -184,7 +184,7 @@ describe('绘制', () => {
   })
 
   it('grade-mask 透明处保持原图', async () => {
-    const { png } = await renderFvg(
+    const { png } = await renderLayer(
       `<layer width="100" height="40" background="#000000">
         <layer x="0" y="0" width="100" height="40" grade="mono" grade-mask="linear-gradient(to right, #fff0 50%, #fff 50%)">
           <rect x="0" y="0" width="100" height="40" fill="#e04020" />
@@ -199,7 +199,7 @@ describe('绘制', () => {
   })
 
   it('根 layer 的 grade 作用到画布底色', async () => {
-    const { png } = await renderFvg(`<layer width="40" height="40" background="#e04020" grade="mono"></layer>`)
+    const { png } = await renderLayer(`<layer width="40" height="40" background="#e04020" grade="mono"></layer>`)
     const [r, g, b] = (await pixels(png)).at(20, 20)
     expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeLessThanOrEqual(3)
   })
@@ -211,7 +211,7 @@ describe('绘制', () => {
           <rect x="0" y="0" width="40" height="40" fill="#808080" />
         </layer>
       </layer>`
-    const graded = await pixels((await renderFvg(scene('grade="mono"'))).png)
+    const graded = await pixels((await renderLayer(scene('grade="mono"'))).png)
     let redder = 0
     for (let y = 12; y < 48; y++) {
       for (let x = 12; x < 48; x++) {
@@ -223,7 +223,7 @@ describe('绘制', () => {
   })
 
   it('Rect 上的 overlay 不生效', async () => {
-    const { png, report } = await renderFvg(
+    const { png, report } = await renderLayer(
       `<layer width="60" height="60" background="#000000">
         <rect x="10" y="10" width="40" height="40" fill="#ffffff" overlay="#ff0000" />
       </layer>`,
@@ -243,8 +243,8 @@ describe('绘制', () => {
         <rect x="165" y="0" width="75" height="200" fill="#00e5ff" />
         <circle cx="100" cy="100" r="80" fill="#ffffff00" ${glass} />
       </layer>`
-    const withGlass = await renderFvg(scene('glass="clear"'))
-    const plain = await renderFvg(scene(''))
+    const withGlass = await renderLayer(scene('glass="clear"'))
+    const plain = await renderLayer(scene(''))
     const g = await pixels(withGlass.png)
     const p = await pixels(plain.png)
     expect(g.at(100, 100)).toEqual(p.at(100, 100))
@@ -262,7 +262,7 @@ describe('绘制', () => {
 
   it('文字投影跟随字形墨迹，不是整块盒子', async () => {
     // 「一」只有中间横笔；红影右移 20px。盒子上沿内侧若出现红斑，说明仍按 box 投影。
-    const { png, report } = await renderFvg(
+    const { png, report } = await renderLayer(
       `<layer width="200" height="100" background="#ffffff" color="#0000ff">
         <layer x="100" y="50" anchor="center">
           <h1 style="font-size:64px; color:#0000ff; shadow:20 0 0 #ff0000">一</h1>
@@ -290,7 +290,7 @@ describe('绘制', () => {
   })
 
   it('stroke-dasharray 在线条和形状上留下空隙，写错会警告', async () => {
-    const { png } = await renderFvg(`
+    const { png } = await renderLayer(`
       <layer width="160" height="90" background="#000000">
         <line x1="10" y1="20" x2="150" y2="20" stroke="#ffffff" stroke-width="4" stroke-dasharray="12 12" />
         <rect x="20" y="46" width="120" height="28" fill="none" stroke="#ffffff" stroke-width="4" stroke-dasharray="12,12" />
@@ -305,14 +305,14 @@ describe('绘制', () => {
     const edgeOff = (at(38, 46)[0] ?? 0) < 30
     expect(edgeOn).toBe(true)
     expect(edgeOff).toBe(true)
-    const bad = await checkFvg(
+    const bad = await checkLayer(
       `<layer width="80" height="40"><line x1="0" y1="10" x2="40" y2="10" stroke="#fff" stroke-dasharray="8 foo" /></layer>`,
     )
     expect(bad.issues.some((issue) => issue.code === 'invalid-attr' && issue.message.includes('stroke-dasharray'))).toBe(true)
   })
 
   it('layer 上的 shadow 跟着子树，透视和网格也能投下', async () => {
-    const flat = await renderFvg(`
+    const flat = await renderLayer(`
       <layer width="200" height="160" background="#ffffff">
         <layer x="60" y="40" width="80" height="40" shadow="0 28 0 #ff0000">
           <rect x="0" y="0" width="80" height="40" fill="#0000ff" />
@@ -326,7 +326,7 @@ describe('绘制', () => {
     expect(below[0]).toBeGreaterThan(200)
     expect(below[2]).toBeLessThan(40)
 
-    const inside = await checkFvg(`
+    const inside = await checkLayer(`
       <layer width="200" height="160" background="#ffffff">
         <layer x="60" y="40" width="80" height="40" shadow="0 28 0 #ff0000">
           <rect x="0" y="0" width="80" height="40" fill="#0000ff" />
@@ -335,7 +335,7 @@ describe('绘制', () => {
     `)
     expect(inside.issues.some((issue) => issue.code === 'effect-clipped')).toBe(false)
 
-    const tilted = await renderFvg(`
+    const tilted = await renderLayer(`
       <layer width="240" height="220" background="#ffffff" perspective="800">
         <layer x="70" y="55" width="100" height="50" rotateY="18" shadow="0 36 0 #ff0000">
           <rect x="0" y="0" width="100" height="50" fill="#0000ff" />
@@ -352,7 +352,7 @@ describe('绘制', () => {
     }
     expect(red).toBeGreaterThan(20)
 
-    const mesh = await renderFvg(`
+    const mesh = await renderLayer(`
       <layer width="180" height="150" background="#ffffff" perspective="500" shadow="0 48 0 #ff0000">
         <box x="70" y="32" width="40" height="36" depth="16" fill="#0000ff" />
       </layer>
@@ -367,7 +367,7 @@ describe('绘制', () => {
   }, 30000)
 
   it('空心图形和图层上的光影只跟着描边，不填满内部', async () => {
-    const shadow = await renderFvg(`
+    const shadow = await renderLayer(`
       <layer width="220" height="140" background="#ffffff">
         <circle cx="70" cy="70" r="36" fill="none" stroke="#2244aa" stroke-width="8" shadow="70 0 0 #ff0000" />
       </layer>
@@ -380,7 +380,7 @@ describe('绘制', () => {
     expect(ring[0]).toBeGreaterThan(180)
     expect(ring[2]).toBeLessThan(80)
 
-    const layer = await renderFvg(`
+    const layer = await renderLayer(`
       <layer width="160" height="160" background="#101014">
         <layer x="20" y="20" width="120" height="120" glow="0 #ff88aa" shadow="0 0 0 #000000">
           <circle cx="60" cy="60" r="40" fill="none" stroke="#2244aa" stroke-width="8" />
@@ -447,33 +447,33 @@ function barTop(
 
 describe('墨迹 spread 与 stroke', () => {
   const bar = (style: string) =>
-    `<Layer width="420" height="240" background="#00aa00">
-      <Layer cx="24" cy="16" anchor="top-left">
+    `<layer width="420" height="240" background="#00aa00">
+      <layer cx="24" cy="16" anchor="top-left">
         <h1 style="font-size:150px; font-weight:700; color:#ffffff; ${style}">一</h1>
-      </Layer>
-    </Layer>`
+      </layer>
+    </layer>`
 
   it('文字 shadow 的 spread 按字形外扩，spread 0 与无投影一致', async () => {
-    const spread = await renderFvg(
-      `<Layer width="420" height="240" background="#e8dcc4">
-        <Layer cx="24" cy="16" anchor="top-left">
+    const spread = await renderLayer(
+      `<layer width="420" height="240" background="#e8dcc4">
+        <layer cx="24" cy="16" anchor="top-left">
           <h1 style="font-size:150px; font-weight:700; color:#ffffff; shadow:0 0 0 6 #1b1612">一</h1>
-        </Layer>
-      </Layer>`,
+        </layer>
+      </layer>`,
     )
-    const zero = await renderFvg(
-      `<Layer width="420" height="240" background="#e8dcc4">
-        <Layer cx="24" cy="16" anchor="top-left">
+    const zero = await renderLayer(
+      `<layer width="420" height="240" background="#e8dcc4">
+        <layer cx="24" cy="16" anchor="top-left">
           <h1 style="font-size:150px; font-weight:700; color:#ffffff; shadow:0 0 0 0 #1b1612">一</h1>
-        </Layer>
-      </Layer>`,
+        </layer>
+      </layer>`,
     )
-    const plain = await renderFvg(
-      `<Layer width="420" height="240" background="#e8dcc4">
-        <Layer cx="24" cy="16" anchor="top-left">
+    const plain = await renderLayer(
+      `<layer width="420" height="240" background="#e8dcc4">
+        <layer cx="24" cy="16" anchor="top-left">
           <h1 style="font-size:150px; font-weight:700; color:#ffffff">一</h1>
-        </Layer>
-      </Layer>`,
+        </layer>
+      </layer>`,
     )
     const s = await pixels(spread.png)
     const z = await pixels(zero.png)
@@ -491,13 +491,13 @@ describe('墨迹 spread 与 stroke', () => {
 
   it('文字 glow 写 spread 时外圈更亮', async () => {
     const scene = (glow: string) =>
-      `<Layer width="420" height="240" background="#000000">
-        <Layer cx="24" cy="16" anchor="top-left">
+      `<layer width="420" height="240" background="#000000">
+        <layer cx="24" cy="16" anchor="top-left">
           <h1 style="font-size:150px; font-weight:700; color:#ffffff; glow:${glow}">一</h1>
-        </Layer>
-      </Layer>`
-    const tight = await pixels((await renderFvg(scene('8 0 #ff6600'))).png)
-    const wide = await pixels((await renderFvg(scene('8 16 #ff6600'))).png)
+        </layer>
+      </layer>`
+    const tight = await pixels((await renderLayer(scene('8 0 #ff6600'))).png)
+    const wide = await pixels((await renderLayer(scene('8 16 #ff6600'))).png)
     const edge = barTop(tight.at, tight.width, tight.height, isWhite)
     const far = edge.top - 14
     expect(wide.at(edge.midX, far)[0]!).toBeGreaterThan(tight.at(edge.midX, far)[0]! + 25)
@@ -512,12 +512,12 @@ describe('墨迹 spread 与 stroke', () => {
     ctx.arc(40, 40, 16, 0, Math.PI * 2)
     ctx.fill()
     const src = `data:image/png;base64,${canvas.toBuffer('image/png').toString('base64')}`
-    const { png } = await renderFvg(
-      `<Layer width="160" height="160" background="#ffffff">
-        <Layer x="40" y="40">
+    const { png } = await renderLayer(
+      `<layer width="160" height="160" background="#ffffff">
+        <layer x="40" y="40">
           <img src="${src}" style="width:80px; height:80px; shadow:0 0 0 8 #112233" />
-        </Layer>
-      </Layer>`,
+        </layer>
+      </layer>`,
     )
     const { at } = await pixels(png)
     // 圆心 (80,80)，半径 16。spread 8 后约到半径 24；盒子角仍是白底。
@@ -529,10 +529,10 @@ describe('墨迹 spread 与 stroke', () => {
   })
 
   it('形状的纯色 stroke 仍居中，文字的颜色加宽度沿外侧描', async () => {
-    const shape = await renderFvg(
-      `<Layer width="120" height="80" background="#ffffff">
+    const shape = await renderLayer(
+      `<layer width="120" height="80" background="#ffffff">
         <rect x="20" y="20" width="40" height="30" fill="#000000" stroke="#ff0000" stroke-width="4" />
-      </Layer>`,
+      </layer>`,
     )
     const rect = shape.report.elements.find((el) => el.tag === 'rect')
     expect(rect?.inkStroke).toBeUndefined()
@@ -541,8 +541,8 @@ describe('墨迹 spread 与 stroke', () => {
     expect(at(21, 35)[0]!).toBeGreaterThan(200)
     expect(at(16, 35)[0]!).toBeGreaterThan(240)
     expect(at(16, 35)[1]!).toBeGreaterThan(240)
-    const text = await renderFvg(
-      `<Layer width="200" height="80"><h1 style="font-size:40px; color:#ffffff; stroke:#000000; stroke-width:6">一</h1></Layer>`,
+    const text = await renderLayer(
+      `<layer width="200" height="80"><h1 style="font-size:40px; color:#ffffff; stroke:#000000; stroke-width:6">一</h1></layer>`,
     )
     expect(text.report.elements.find((el) => el.tag === 'h1')?.inkStroke).toEqual([
       { width: 6, color: '#000000', position: 'outside' },
@@ -550,7 +550,7 @@ describe('墨迹 spread 与 stroke', () => {
   })
 
   it('白字 stroke 外圈是黑色，字内仍是白色', async () => {
-    const { png, report } = await renderFvg(bar('stroke:6 #000000'))
+    const { png, report } = await renderLayer(bar('stroke:6 #000000'))
     const { at, width, height } = await pixels(png)
     const edge = barTop(at, width, height, isWhite)
     expect(edge.count).toBeGreaterThan(40)
@@ -563,8 +563,8 @@ describe('墨迹 spread 与 stroke', () => {
   })
 
   it('inside 只描字形内侧', async () => {
-    const plain = await pixels((await renderFvg(bar(''))).png)
-    const { png } = await renderFvg(bar('stroke:6 #000000 inside'))
+    const plain = await pixels((await renderLayer(bar(''))).png)
+    const { png } = await renderLayer(bar('stroke:6 #000000 inside'))
     const stroked = await pixels(png)
     const edge = barTop(plain.at, plain.width, plain.height, isWhite)
     expect(isGreen(stroked.at(edge.midX, edge.top - 3))).toBe(true)
@@ -573,8 +573,8 @@ describe('墨迹 spread 与 stroke', () => {
   })
 
   it('center 内外各约一半', async () => {
-    const plain = await pixels((await renderFvg(bar(''))).png)
-    const stroked = await pixels((await renderFvg(bar('stroke:6 #000000 center'))).png)
+    const plain = await pixels((await renderLayer(bar(''))).png)
+    const stroked = await pixels((await renderLayer(bar('stroke:6 #000000 center'))).png)
     const edge = barTop(plain.at, plain.width, plain.height, isWhite)
     // 外半约 3px：紧贴笔画外侧是黑，再往外回到背景。内半盖住笔画上沿。
     expect(isBlack(stroked.at(edge.midX, edge.top - 2))).toBe(true)
@@ -584,12 +584,12 @@ describe('墨迹 spread 与 stroke', () => {
   })
 
   it('双层描边按到墨迹的总距离分带', async () => {
-    const scene = `<Layer width="460" height="260" background="#0000ff">
-      <Layer cx="30" cy="20" anchor="top-left">
+    const scene = `<layer width="460" height="260" background="#0000ff">
+      <layer cx="30" cy="20" anchor="top-left">
         <h1 style="font-size:150px; font-weight:700; color:#00ff00; stroke:6 #ffffff, 14 #ff0000">一</h1>
-      </Layer>
-    </Layer>`
-    const { png, report } = await renderFvg(scene)
+      </layer>
+    </layer>`
+    const { png, report } = await renderLayer(scene)
     const { at, width, height } = await pixels(png)
     const edge = barTop(at, width, height, (p) => p[1]! > 180 && p[0]! < 80)
     expect(isWhite(at(edge.midX, edge.top - 3))).toBe(true)
@@ -603,24 +603,24 @@ describe('墨迹 spread 与 stroke', () => {
 
   it('Layer 上的描边把重叠的字合成一圈', async () => {
     const one = (shift: number) =>
-      `<Layer width="420" height="240" background="#00aa00">
-        <Layer x="${40 + shift}" y="30">
+      `<layer width="420" height="240" background="#00aa00">
+        <layer x="${40 + shift}" y="30">
           <h1 style="font-size:140px; font-weight:700; color:#ffffff">口</h1>
-        </Layer>
-      </Layer>`
-    const left = await pixels((await renderFvg(one(0))).png)
-    const right = await pixels((await renderFvg(one(48))).png)
+        </layer>
+      </layer>`
+    const left = await pixels((await renderLayer(one(0))).png)
+    const right = await pixels((await renderLayer(one(48))).png)
     const both = await pixels(
       (
-        await renderFvg(
-          `<Layer width="420" height="240" background="#00aa00" stroke="8 #ff0000">
-            <Layer x="40" y="30">
+        await renderLayer(
+          `<layer width="420" height="240" background="#00aa00" stroke="8 #ff0000">
+            <layer x="40" y="30">
               <h1 style="font-size:140px; font-weight:700; color:#ffffff">口</h1>
-            </Layer>
-            <Layer x="88" y="30">
+            </layer>
+            <layer x="88" y="30">
               <h1 style="font-size:140px; font-weight:700; color:#ffffff">口</h1>
-            </Layer>
-          </Layer>`,
+            </layer>
+          </layer>`,
         )
       ).png,
     )
@@ -646,14 +646,14 @@ describe('墨迹 spread 与 stroke', () => {
 
   it('渐变 overlay 染本体，不染外侧描边', async () => {
     const scene = (overlay: string) =>
-      `<Layer width="360" height="200" background="#222222">
-        <Layer cx="16" cy="12" anchor="top-left" ${overlay}>
+      `<layer width="360" height="200" background="#222222">
+        <layer cx="16" cy="12" anchor="top-left" ${overlay}>
           <h1 style="font-size:130px; font-weight:700; color:#ffffff; stroke:6 #000000">一</h1>
-        </Layer>
-      </Layer>`
-    const plain = await pixels((await renderFvg(scene(''))).png)
+        </layer>
+      </layer>`
+    const plain = await pixels((await renderLayer(scene(''))).png)
     const graded = await pixels(
-      (await renderFvg(scene('overlay="linear-gradient(to right, #ff0000, #0000ff)"'))).png,
+      (await renderLayer(scene('overlay="linear-gradient(to right, #ff0000, #0000ff)"'))).png,
     )
     const edge = barTop(plain.at, plain.width, plain.height, isWhite)
     const left = graded.at(edge.x0 + 12, edge.top + 3)
@@ -665,11 +665,11 @@ describe('墨迹 spread 与 stroke', () => {
 
   it('shadow 轮廓带着外侧描边', async () => {
     const scene = (stroke: string) =>
-      `<Layer width="180" height="180" background="#000000">
+      `<layer width="180" height="180" background="#000000">
         <rect x="60" y="50" width="40" height="40" fill="#ffffff" shadow="0 36 0 #ff0000" ${stroke} />
-      </Layer>`
-    const plain = await pixels((await renderFvg(scene(''))).png)
-    const stroked = await pixels((await renderFvg(scene('stroke="10 #0000ff"'))).png)
+      </layer>`
+    const plain = await pixels((await renderLayer(scene(''))).png)
+    const stroked = await pixels((await renderLayer(scene('stroke="10 #0000ff"'))).png)
     const bottomRed = (at: (x: number, y: number) => readonly number[]) => {
       let yMax = 0
       for (let y = 0; y < 180; y++) {
@@ -681,10 +681,10 @@ describe('墨迹 spread 与 stroke', () => {
   })
 
   it('描边颜色可以是渐变，坐标跟着元素盒子', async () => {
-    const { png, report } = await renderFvg(
-      `<Layer width="200" height="80" background="#000000">
+    const { png, report } = await renderLayer(
+      `<layer width="200" height="80" background="#000000">
         <rect x="60" y="28" width="80" height="24" fill="#222222" stroke="8 linear-gradient(to right, #ff0000, #0000ff)" />
-      </Layer>`,
+      </layer>`,
     )
     const { at } = await pixels(png)
     // 矩形左缘 x=60，描边再向左 8px；右缘 x=140。
@@ -694,7 +694,7 @@ describe('墨迹 spread 与 stroke', () => {
   })
 
   it('旋转后的距离描边沿斜边过渡，填充边上不露黑缝', async () => {
-    const { png } = await renderFvg(
+    const { png } = await renderLayer(
       `<layer width="240" height="240" background="#000000">
         <rect x="40" y="70" width="160" height="80" fill="#ffffff" stroke="8 #ff0000 outside" rotate="24" />
       </layer>`,
@@ -728,17 +728,17 @@ describe('墨迹 spread 与 stroke', () => {
   })
 
   it('描边贴近画布边缘时报 effect-clipped', async () => {
-    const { report } = await renderFvg(
-      `<Layer width="120" height="80" background="#ffffff">
+    const { report } = await renderLayer(
+      `<layer width="120" height="80" background="#ffffff">
         <rect x="9" y="25" width="30" height="30" fill="#000000" stroke="20 #ff0000" />
-      </Layer>`,
+      </layer>`,
     )
     expect(report.issues.some((issue) => issue.code === 'effect-clipped')).toBe(true)
   })
 
   it('文字 inner-shadow 的 spread 向笔画内侧扩', async () => {
-    const none = await pixels((await renderFvg(bar('inner-shadow:0 0 0 0 #000000'))).png)
-    const spread = await pixels((await renderFvg(bar('inner-shadow:0 0 0 6 #000000'))).png)
+    const none = await pixels((await renderLayer(bar('inner-shadow:0 0 0 0 #000000'))).png)
+    const spread = await pixels((await renderLayer(bar('inner-shadow:0 0 0 6 #000000'))).png)
     const edge = barTop(none.at, none.width, none.height, isWhite)
     const rim = (at: (x: number, y: number) => readonly number[]) => at(edge.midX, edge.top + 2)
     expect(rim(none.at)[0]!).toBeGreaterThan(220)
@@ -746,29 +746,29 @@ describe('墨迹 spread 与 stroke', () => {
   })
 
   it('宽内描边提示会填死字腔，解析失败带 hint', async () => {
-    const wide = await renderFvg(
-      `<Layer width="200" height="80"><h1 style="font-size:40px; stroke:8 #000 inside">口</h1></Layer>`,
+    const wide = await renderLayer(
+      `<layer width="200" height="80"><h1 style="font-size:40px; stroke:8 #000 inside">口</h1></layer>`,
     )
-    const narrow = await renderFvg(
-      `<Layer width="400" height="220"><h1 style="font-size:180px; stroke:6 #000 inside">口</h1></Layer>`,
+    const narrow = await renderLayer(
+      `<layer width="400" height="220"><h1 style="font-size:180px; stroke:6 #000 inside">口</h1></layer>`,
     )
     expect(wide.report.issues.some((issue) => issue.code === 'stroke-fill')).toBe(true)
     expect(narrow.report.issues.some((issue) => issue.code === 'stroke-fill')).toBe(false)
-    const bad = await renderFvg(`<Layer width="200" height="80"><h1 style="stroke:6 outside">字</h1></Layer>`)
+    const bad = await renderLayer(`<layer width="200" height="80"><h1 style="stroke:6 outside">字</h1></layer>`)
     const issue = bad.report.issues.find((item) => item.code === 'invalid-attr' && item.message.includes('stroke'))
     expect(issue?.hint).toContain('6 #000 outside')
-    const legacy = await renderFvg(`<Layer width="200" height="80"><h1 style="ink-stroke:6 #000">字</h1></Layer>`)
+    const legacy = await renderLayer(`<layer width="200" height="80"><h1 style="ink-stroke:6 #000">字</h1></layer>`)
     expect(legacy.report.issues.some((item) => item.message.includes('ink-stroke'))).toBe(true)
     expect(legacy.report.elements.find((el) => el.tag === 'h1')?.inkStroke).toBeUndefined()
-    const alias = await renderFvg(
-      `<Layer width="200" height="80"><h1 style="-webkit-text-stroke:2px #000; outline:2px solid #000">字</h1></Layer>`,
+    const alias = await renderLayer(
+      `<layer width="200" height="80"><h1 style="-webkit-text-stroke:2px #000; outline:2px solid #000">字</h1></layer>`,
     )
     const info = alias.report.issues.find((item) => item.code === 'non-canonical' && item.hint?.includes('stroke'))
     expect(info).toBeTruthy()
   })
 
   it('layer 的描边和阴影罩住 g 里的路径，效果仍只记在 layer 上', async () => {
-    const { png, report } = await renderFvg(
+    const { png, report } = await renderLayer(
       `<layer width="160" height="160" background="#ffffff" stroke="8 #0000ff" shadow="16 0 0 0 #00ff00">
         <g transform="translate(10,0)">
           <g>
@@ -792,7 +792,7 @@ describe('墨迹 spread 与 stroke', () => {
   })
 
   it('layer 的内侧描边切进 g 里的路径', async () => {
-    const { png } = await renderFvg(
+    const { png } = await renderLayer(
       `<layer width="160" height="160" background="#ffffff" stroke="6 #0000ff inside">
         <g><path d="M40 40 H80 V80 H40 Z" fill="#ff0000" /></g>
       </layer>`,
@@ -804,7 +804,7 @@ describe('墨迹 spread 与 stroke', () => {
   })
 
   it('普通文字盒的描边绕着背景，贴边时提示超出', async () => {
-    const centered = await renderFvg(`
+    const centered = await renderLayer(`
       <layer width="360" height="220" background="#ffffff" color="#111111">
         <div style="display:flex; width:360px; height:220px; align-items:center; justify-content:center">
           <p style="font-size:32px; background:#f4efe6; stroke:8 #e00000; padding:20px">卡片</p>
@@ -820,7 +820,7 @@ describe('墨迹 spread 与 stroke', () => {
     const pad = at(Math.round(box.left + 8), Math.round(box.top + 8))
     expect(pad[0]).toBeGreaterThan(220)
     expect(pad[1]).toBeGreaterThan(200)
-    const flush = await renderFvg(`
+    const flush = await renderLayer(`
       <layer width="360" height="200" background="#ffffff" color="#111111">
         <p style="font-size:32px; background:#f4efe6; stroke:8 #e00000; padding:20px">卡片</p>
       </layer>`)
@@ -833,7 +833,7 @@ describe('墨迹 spread 与 stroke', () => {
   })
 
   it('有背景的盒子，描边绕着背景', async () => {
-    const { png, report } = await renderFvg(`
+    const { png, report } = await renderLayer(`
       <layer width="360" height="240" background="#ffffff" color="#111111">
         <div style="display:flex; width:360px; height:240px; align-items:center; justify-content:center">
           <div style="display:flex; width:200px; height:100px; background:#f4efe6; stroke:8 #e00000; align-items:center; justify-content:center">
@@ -865,7 +865,7 @@ describe('墨迹 spread 与 stroke', () => {
         </layer>
       </layer>`
     for (const source of [scene, wrapped]) {
-      const { png, report } = await renderFvg(source)
+      const { png, report } = await renderLayer(source)
       expect(report.issues.filter((issue) => issue.level === 'error')).toEqual([])
       const img = await loadImage(png)
       const canvas = createCanvas(img.width, img.height)

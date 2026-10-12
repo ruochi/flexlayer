@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { registerComponent } from './components.js'
 import { ensureBuiltinFontsSync, fontReady, registerFontPath, resolveFontSrcSync } from './fonts.js'
 import { fontFamiliesOf, measureLayer, noteMeasuredSize, parseSafe, prepareAssetsSync, type MeasureEnv } from './layout.js'
-import type { FvgNode } from './parse.js'
+import type { LayerNode } from './parse.js'
 import { divHasFlowBreak, isDisplayFlex } from './rules.js'
 import { placedElements, placedRootMask, type PlacedElement, type PlacedMask } from './placed-elements.js'
 import { placedText, type PlacedText } from './placed-text.js'
@@ -60,7 +60,7 @@ export type LayerBox = {
 export type { PlacedElement, PlacedMask } from './placed-elements.js'
 export type { PlacedChar, PlacedLine, PlacedText } from './placed-text.js'
 
-export type CreatedLayer = FvgNode & LayerBox & {
+export type CreatedLayer = LayerNode & LayerBox & {
   issues: Issue[]
   /**
    * `rotate`、`scale` 之后的外接矩形。`left` 到 `height` 仍是没转之前的布局盒。
@@ -112,7 +112,7 @@ function topLeft(x: number, y: number, w: number, h: number, anchor: Anchor): { 
   }
 }
 
-function wraps(node: FvgNode): boolean {
+function wraps(node: LayerNode): boolean {
   const flex = isDisplayFlex(node.attrs.style)
   if (isTextBoxTag(node.tag) && !flex && !divHasFlowBreak(node)) {
     return !/white-space\s*:\s*nowrap/.test(node.attrs.style ?? '')
@@ -120,7 +120,7 @@ function wraps(node: FvgNode): boolean {
   return node.children.some((child) => typeof child !== 'string' && wraps(child))
 }
 
-function measure(node: FvgNode, maxContentWidth: number) {
+function measure(node: LayerNode, maxContentWidth: number) {
   const env: MeasureEnv = {
     baseDir: layerBaseDir(),
     color: node.attrs.color ?? '#111111',
@@ -130,7 +130,7 @@ function measure(node: FvgNode, maxContentWidth: number) {
   return measureLayer(node, env)
 }
 
-function contentLimit(node: FvgNode, width: number | undefined, both: boolean): number {
+function contentLimit(node: LayerNode, width: number | undefined, both: boolean): number {
   if (width == null) return UNLIMITED
   if (!both) return width
   const height = parseNumber(node.attrs.height) ?? width
@@ -142,7 +142,7 @@ function contentLimit(node: FvgNode, width: number | undefined, both: boolean): 
  * 同步量一个已经写好的 `<layer>`。字体和图片在这一次调用里准备，并在进程里记住。
  * 只写了宽或只写了高、且里面没有会换行的文字时，另一边按比例放缩。
  */
-export function create(node: FvgNode): CreatedLayer {
+export function create(node: LayerNode): CreatedLayer {
   if (!node || typeof node !== 'object' || node.tag !== 'layer') {
     throw new Error('canvas.create 只接受 <layer>')
   }
@@ -218,7 +218,7 @@ function multiplyScaleAttr(existing: string | undefined, factor: number): string
 }
 
 /** 绕 origin（默认中心）做 rotate、scale 之后的轴对齐外接矩形。 */
-function rotatedBoxOf(node: FvgNode, box: LayerBox): LayerBox {
+function rotatedBoxOf(node: LayerNode, box: LayerBox): LayerBox {
   const pivot = originOffset(parseOrigin(node.attrs.origin), box.width, box.height)
   const scale = parseScale(node.attrs.scale)
   const visual = applyToBox(

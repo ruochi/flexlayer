@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { loadImage, createCanvas } from '@napi-rs/canvas'
-import { renderFvg } from './render.js'
+import { renderLayer } from './render.js'
 import { visiblePlaneWindow } from './plane-crop.js'
 
 async function pixelAt(png: Buffer, x: number, y: number) {
@@ -40,7 +40,7 @@ describe('大平面只画取景窗里的一块', () => {
   })
 
   it('正对镜头的超大纯色平面，画面中间就是这个颜色', async () => {
-    const { png } = await renderFvg(
+    const { png } = await renderLayer(
       `<layer width="320" height="200" background="#101820" perspective="600"><rect x="-2000" y="-800" width="5000" height="5000" fill="#3d8bfd" z="1" /></layer>`,
     )
     const px = await pixelAt(png, 160, 100)
@@ -52,7 +52,7 @@ describe('大平面只画取景窗里的一块', () => {
   })
 
   it('大层上的色块仍落在它投影到的位置', async () => {
-    const { png } = await renderFvg(
+    const { png } = await renderLayer(
       `<layer width="320" height="200" background="#101820" perspective="600"><layer x="-1000" y="-400" width="2400" height="1600" z="1"><rect width="2400" height="1600" fill="#224466" /><rect x="1160" y="500" width="80" height="40" fill="#ff00aa" /></layer></layer>`,
     )
     const pink = await pixelAt(png, 180, 110)
@@ -64,7 +64,7 @@ describe('大平面只画取景窗里的一块', () => {
   })
 
   it('斜放的大地仍铺在画面下半', async () => {
-    const { png } = await renderFvg(
+    const { png } = await renderLayer(
       `<layer width="320" height="200" background="#101820" perspective="500"><rect x="-2340" y="-1820" width="5000" height="4000" fill="#3d8bfd" rotateX="82" /></layer>`,
     )
     const sky = await pixelAt(png, 160, 24)
@@ -75,7 +75,7 @@ describe('大平面只画取景窗里的一块', () => {
   })
 
   it('和球体同一台镜头里的大地，颜色留在球的外面', async () => {
-    const { png } = await renderFvg(
+    const { png } = await renderLayer(
       `<layer width="320" height="200" background="#101820" perspective="600"><rect x="-2000" y="-800" width="5000" height="5000" fill="#3d8bfd" z="1" /><sphere cx="160" cy="70" r="24" fill="#ffcc00" /></layer>`,
     )
     const ground = await pixelAt(png, 30, 170)

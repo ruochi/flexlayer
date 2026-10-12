@@ -10,8 +10,8 @@ import { homedir } from 'node:os'
 import { initFontsForMeasure } from './fonts.js'
 import { parseObjectPosition } from './image.js'
 import { layoutSource } from './layout.js'
-import { parseFvg } from './parse.js'
-import { renderFvg } from './render.js'
+import { parseLayer } from './parse.js'
+import { renderLayer } from './render.js'
 import type { ImageLayoutNode } from './types.js'
 
 beforeAll(async () => {
@@ -49,7 +49,7 @@ async function pixelAt(png: Buffer, x: number, y: number) {
 
 describe('img', () => {
   it('空元素，不吞掉后面的标签', () => {
-    const [layer] = parseFvg('<layer><img src="a.png"><p>后</p></layer>')
+    const [layer] = parseLayer('<layer><img src="a.png"><p>后</p></layer>')
     const tags = layer!.children.filter((child) => typeof child !== 'string').map((child) => (child as { tag: string }).tag)
     expect(tags).toEqual(['img', 'p'])
   })
@@ -117,7 +117,7 @@ describe('img', () => {
   })
 
   it('绘制 contain、cover 和圆角', async () => {
-    const fitted = await renderFvg(
+    const fitted = await renderLayer(
       `<layer width="80" height="80" background="#000000"><layer x="20" y="20"><img src="${SPLIT}" style="width:40px; height:40px; object-fit:contain" /></layer></layer>`,
     )
     const red = await pixelAt(fitted.png, 30, 40)
@@ -130,13 +130,13 @@ describe('img', () => {
     expect(letterbox[0]).toBeLessThan(20)
     expect(letterbox[2]).toBeLessThan(20)
 
-    const covered = await renderFvg(
+    const covered = await renderLayer(
       `<layer width="80" height="80" background="#000000"><layer x="20" y="20"><img src="${SPLIT}" style="width:40px; height:40px; object-fit:cover" /></layer></layer>`,
     )
     const coverTop = await pixelAt(covered.png, 30, 22)
     expect(coverTop[0]).toBeGreaterThan(200)
 
-    const rounded = await renderFvg(
+    const rounded = await renderLayer(
       `<layer width="100" height="100" background="#000000"><layer x="30" y="30"><img src="${RED}" style="width:40px; height:40px; border-radius:20px" /></layer></layer>`,
     )
     const center = await pixelAt(rounded.png, 50, 50)
