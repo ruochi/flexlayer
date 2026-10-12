@@ -517,7 +517,7 @@ describe('layoutSource', () => {
     expect(fits.issues.some((issue) => issue.code === 'flex-overflow')).toBe(false)
   })
 
-  it('align-content 缺省贴起点，写了 center 才把多行居中', async () => {
+  it('align-content 缺省把多行拉开，写了 flex-start 才贴起点', async () => {
     const place = async (align: string | undefined) => {
       const extra = align ? `; align-content:${align}` : ''
       const doc = await layoutSource(
@@ -527,12 +527,35 @@ describe('layoutSource', () => {
       const column = doc.root.children[0] as { children: Array<{ y: number }> }
       return column.children.map((child) => child.y)
     }
-    const start = await place(undefined)
+    const stretched = await place(undefined)
+    expect(stretched[0]).toBeCloseTo(0)
+    expect(stretched[1]).toBeCloseTo(100)
+    const start = await place('flex-start')
     expect(start[0]).toBeCloseTo(0)
     expect(start[1]).toBeCloseTo(40)
     const centered = await place('center')
     expect(centered[0]).toBeGreaterThan(20)
     expect(centered[1]! - centered[0]!).toBeCloseTo(40)
+  })
+
+  it('align-items 缺省是 stretch，较窄的子项贴着起点', async () => {
+    const doc = await layoutSource(
+      `<layer width="400" height="240" safe="0"><div style="display:flex; width:200px; height:200px"><div style="width:40px; height:40px; background:#fff"></div><div style="width:40px; height:80px; background:#fff"></div></div></layer>`,
+      process.cwd(),
+    )
+    const row = doc.root.children[0] as { children: Array<{ y: number; height: number }> }
+    expect(row.children[0]!.height).toBeCloseTo(40)
+    expect(row.children[0]!.y).toBeCloseTo(0)
+    expect(row.children[1]!.y).toBeCloseTo(0)
+  })
+
+  it('flex-shrink 缺省是 1，图片和形状不会比内容更小', async () => {
+    const doc = await layoutSource(
+      `<layer width="200" height="80" safe="0"><div style="display:flex; width:50px"><div style="width:80px; height:20px; background:#fff"></div></div></layer>`,
+      process.cwd(),
+    )
+    const row = doc.root.children[0] as { children: Array<{ width: number }> }
+    expect(row.children[0]!.width).toBeCloseTo(80)
   })
 
   it('wrap-reverse 把第一行放到交叉轴末端', async () => {

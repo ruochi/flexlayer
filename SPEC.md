@@ -197,7 +197,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 - 根号：`msqrt` 的根号随内容变高，`mroot` 的指数是 0.55 倍字号，放在根号左上的勾里。
 - 矩阵：同一列对齐，列间距 0.8em，每行至少 1.2em 高、行间再留 0.2em，整张表以数学轴居中。`columnalign`（`left`、`center`、`right`）写在 `mtable`、`mtr` 或 `mtd` 上，`rowspacing`、`columnspacing` 写在 `mtable` 上。
 
-`<math>` 的盒子至少有一行文字高（基线上方 0.95em，下方 0.25em）。放进横排 flex 且交叉轴居中（`align-items` 默认 `center`）时，盒子上下补齐，基线落在盒子中心下方 0.35em，和居中放着的同字号文字基线对齐。公式很高时，补齐会在一侧留出空白。横排写了 `align-items:baseline` 时不再补白，公式自己的基线和旁边文字的第一行基线对齐。例子见 [examples/math.layer](examples/math.layer)。
+`<math>` 的盒子至少有一行文字高（基线上方 0.95em，下方 0.25em）。放进横排 flex 且写了 `align-items:center` 时，盒子上下补齐，基线落在盒子中心下方 0.35em，和居中放着的同字号文字基线对齐。公式很高时，补齐会在一侧留出空白。横排写了 `align-items:baseline` 时不再补白，公式自己的基线和旁边文字的第一行基线对齐。例子见 [examples/math.layer](examples/math.layer)。
 
 ```html
 <symbol id="dew" width="28" height="28">
@@ -244,17 +244,16 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | `gap` | `0` | 子元素间距。`row-gap`、`column-gap` 可以分开写，没写的那边沿用 `gap` |
 | `flex-wrap` | `nowrap` | `nowrap`、`wrap`、`wrap-reverse`。主轴放不下时换行 |
 | `padding` | `0` | 1 到 4 个值，同 CSS |
-| `align-items` | `center` | `start`、`center`、`end`、`stretch`、`baseline`。默认 `center`，CSS 里是 `stretch`。管一行里的交叉轴。`baseline` 在横排把第一行文字基线对齐；图片、`layer`、形状对齐到下边缘。竖排没有这条基线，按 `flex-start` |
-| `align-content` | `flex-start` | `start`、`center`、`end`、`stretch`、`space-between`、`space-around`、`space-evenly`。多行在交叉轴上怎么排。默认贴起点，不是 `align-items` 的 `center` |
+| `align-items` | `stretch` | `start`、`center`、`end`、`stretch`、`baseline`。和 CSS 一样。管一行里的交叉轴。有确定交叉尺寸的子项贴着起点；没写交叉尺寸的会被拉满。`baseline` 在横排把第一行文字基线对齐；图片、`layer`、形状对齐到下边缘。竖排没有这条基线，按 `flex-start` |
+| `align-content` | `stretch` | `start`、`center`、`end`、`stretch`、`space-between`、`space-around`、`space-evenly`。多行在交叉轴上怎么排。和 CSS 一样，多余空间分给每一行 |
 | `justify-content` | `start` | `start`、`center`、`end`、`space-between`、`space-around`、`space-evenly` |
 | `background`、`border`、`border-radius` | 无 | 同 CSS，border 只支持实线 |
 
 子元素可以写的 flex 属性：`flex-grow`、`flex-shrink`、`align-self`、`width`、`height`。
 
-- 文字默认 `flex-shrink:1`，空间不够时会换行变窄，但不会窄过最长的一个不可断开的词。
-- 形状和图片默认 `flex-shrink:0`，不会被压扁。
-- `align-items` 默认 `center`，CSS 里是 `stretch`。竖排 column 没写时，较窄的子项在交叉轴居中；和容器同宽的子项看起来仍贴着起点。左对齐写 `align-items:flex-start` 或 `start`。交叉轴位置由这一层自己的 `align-items` 决定，在子项上写 `justify-content` 改不了。横排要按文字基线对齐写 `align-items:baseline`，`align-self` 同样可以写 `baseline`。同一行被基线撑高后，`center` 和 `end` 的子项按新的行盒再排，`start` 仍贴着行的起点。竖排写了 `baseline` 按 `flex-start`。
-- `align-content` 默认 `flex-start`。它排的是换行以后的多行，不是一行里面的子项。容器写死了高度、行又没占满时，行贴着起点；要居中写 `align-content:center`。
+- `flex-shrink` 默认 `1`，和 CSS 一样。最小尺寸是内容尺寸：文字空间不够时会换行变窄，但不会窄过最长的一个不可断开的词；图片和形状不会被压到比自身更小。容器更窄时子项探出去，报 `flex-overflow`。不想缩小就写 `flex-shrink:0`。
+- `align-items` 默认 `stretch`，和 CSS 一样。竖排 column 没写时，文字块拉到这一列的宽度；有确定交叉尺寸、又比容器窄的子项贴着起点。要居中写 `align-items:center`，左对齐且保持内容宽度写 `align-items:flex-start` 或 `start`。交叉轴位置由这一层自己的 `align-items` 决定，在子项上写 `justify-content` 改不了。横排要按文字基线对齐写 `align-items:baseline`，`align-self` 同样可以写 `baseline`。同一行被基线撑高后，`center` 和 `end` 的子项按新的行盒再排，`start` 和 `stretch` 仍贴着行的起点。竖排写了 `baseline` 按 `flex-start`。
+- `align-content` 默认 `stretch`，和 CSS 一样。它排的是换行以后的多行，不是一行里面的子项。容器写死了交叉轴尺寸、行又没占满时，多出来的空间分给每一行。要贴起点写 `align-content:flex-start`，要整组居中写 `align-content:center`。
 - `flex-wrap:wrap` 之后，`flex-overflow` 看的是换行后的子元素有没有超出写死的宽高。换行能放下就不报；容器高度不够、下一行仍探出去，才报。
 
 **可用宽度**：放在 layer 里、没写 `width` 的 flex 容器，最宽只能到 layer 的宽度（根 layer 要减去左右安全区）。
@@ -283,13 +282,13 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | `fill` | 字形的颜料，写在 `style` 里。没写时用 `color`。可以是纯色，或第 8 章的 `linear-gradient()`、`radial-gradient()`、`gradient()`。写在文字盒子上时，整段按这一层的盒子取样；写在行内标签上时，只铺这一段的行盒，这一段里的汉字和英文单词共用这一段。不继承：没写的子元素继续用 `color`。形状的 `fill` 仍是属性，见第 7 章 |
 | （字重规则） | `ChillDuanSans` 按可变字重绘制，字重轴约 300 到 800，中间的字重不会收成 400 和 700 两档。登记了多档文件的字体取最近的一档。只登记了一档的字体，例如 `Brush`、`Bebas`，请求别的字重仍用这一档。自带 `<font>` 且文件没有字重轴的，按 400 |
 | `writing-mode` | `horizontal-tb`（默认）或 `vertical-rl`。竖排时字从上到下，列从右到左，`letter-spacing` 是字与字之间的额外间距 |
-| `line-height` | 倍数（`1.4`）或像素（`24px`）。`normal` 按 1.2。单行默认 1.2，多行默认 1.4。`%`、`em` 等报 `invalid-attr`。像素行高按像素继承，不跟子元素的字号再乘一次 |
+| `line-height` | 倍数（`1.2`）或像素（`24px`）。`normal` 和没写时都按 1.2，和 CSS 的 `normal` 同一档。`%`、`em` 等报 `invalid-attr`。像素行高按像素继承，不跟子元素的字号再乘一次 |
 | `text-align` | `left`（默认）、`center`、`right` |
 | `width`、`height` | 外框尺寸（含 padding 和 border） |
 | `max-width` | 最大外框宽度，超出就换行，盒子贴合最长的一行 |
 | `padding`、`background`、`background-color`、`border`、`border-radius` | `background-color` 只收纯色。`background` 收纯色，以及 CSS 的 `linear-gradient()`、`radial-gradient()`，不收 `gradient()`。文字盒子的 `background` 铺满外框。行内 `span`、`strong`、`b`、`em`、`i`、`u` 的 `background` 或 `background-color` 铺在这一段的行盒上，用来高亮一个词。行内背景不从文字盒子继承；嵌在里面的行内标签没写时，沿用包着它的那一层 |
 | `white-space: nowrap` | 禁止换行 |
-| `text-wrap` | `balance`（默认，各行长度尽量均匀）或 `wrap`（尽量填满每一行） |
+| `text-wrap` | `wrap`（默认，尽量填满每一行，和 CSS 一样）或 `balance`（各行长度尽量均匀） |
 
 ### 5.3 换行规则
 

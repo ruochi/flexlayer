@@ -796,20 +796,22 @@ function mapJustify(v: string | undefined): Justify {
 }
 
 function mapAlign(v: string | undefined): Align {
-  switch ((v ?? 'center').trim().toLowerCase()) {
+  switch ((v ?? 'stretch').trim().toLowerCase()) {
     case 'start':
     case 'flex-start':
       return Align.FlexStart
     case 'end':
     case 'flex-end':
       return Align.FlexEnd
+    case 'center':
+      return Align.Center
     case 'stretch':
       return Align.Stretch
     case 'baseline':
       // 竖排没有文字基线，横排也先按起点排，再在后面把基线对齐。
       return Align.FlexStart
     default:
-      return Align.Center
+      return Align.Stretch
   }
 }
 
@@ -828,9 +830,12 @@ function mapWrap(v: string | undefined): Wrap {
   }
 }
 
-/** 缺省 flex-start。和 align-items 的缺省 center 不是同一件事。 */
+/** 缺省 stretch，和 CSS 的 align-content 初始值一致。 */
 function mapAlignContent(v: string | undefined): Align {
-  switch ((v ?? 'flex-start').trim()) {
+  switch ((v ?? 'stretch').trim().toLowerCase()) {
+    case 'start':
+    case 'flex-start':
+      return Align.FlexStart
     case 'center':
       return Align.Center
     case 'end':
@@ -845,15 +850,15 @@ function mapAlignContent(v: string | undefined): Align {
     case 'space-evenly':
       return Align.SpaceEvenly
     default:
-      return Align.FlexStart
+      return Align.Stretch
   }
 }
 
-function parseFlexGrowShrink(style: Record<string, string>, isText: boolean): { grow: number; shrink: number } {
+function parseFlexGrowShrink(style: Record<string, string>): { grow: number; shrink: number } {
   const flex = style.flex?.trim()
   if (flex === '1') return { grow: 1, shrink: 1 }
   const grow = parseNumber(style['flex-grow']) ?? 0
-  const shrink = parseNumber(style['flex-shrink']) ?? (isText ? 1 : 0)
+  const shrink = parseNumber(style['flex-shrink']) ?? 1
   return { grow, shrink }
 }
 
@@ -1012,7 +1017,7 @@ function layoutTextBox(node: LayerNode, ctx: LayoutContext, contentWidthLimit?: 
   )
   const paintedSegments = sanitizeTextPaints(segments, ctx)
   const nowrap = style['white-space'] === 'nowrap' || (symbols != null && !style['white-space'])
-  const textWrap = style['text-wrap'] === 'wrap' ? 'wrap' : 'balance'
+  const textWrap = style['text-wrap']?.trim().toLowerCase() === 'balance' ? 'balance' : 'wrap'
   const fixedW = parsePx(style.width)
   const fixedH = parsePx(style.height)
   const maxW = parsePx(style['max-width']) ?? contentWidthLimit
@@ -1029,7 +1034,7 @@ function layoutTextBox(node: LayerNode, ctx: LayoutContext, contentWidthLimit?: 
     })
   }
   const specifiedLine = parseLineHeight(style['line-height']) ?? (symbols && !style['line-height'] ? { unit: 'ratio' as const, value: 1 } : ctx.lineHeight)
-  const fallbackRatio = segments.length > 1 && !vertical ? 1.4 : 1.2
+  const fallbackRatio = 1.2
   const lineHeightPx = specifiedLine?.unit === 'px' ? specifiedLine.value : undefined
   const lineHeightRatio = specifiedLine == null ? fallbackRatio : specifiedLine.unit === 'ratio' ? specifiedLine.value : fontSize > 0 ? specifiedLine.value / fontSize : fallbackRatio
 
@@ -2177,7 +2182,7 @@ function contentBaseline(node: LayoutNode): number {
 }
 
 function crossPlace(align: string | undefined): 'start' | 'center' | 'end' {
-  switch ((align ?? 'center').trim().toLowerCase()) {
+  switch ((align ?? 'stretch').trim().toLowerCase()) {
     case 'start':
     case 'flex-start':
     case 'stretch':
@@ -2305,7 +2310,7 @@ function layoutFlex(node: LayerNode, ctx: LayoutContext): FlexLayoutNode {
     const path = nodePath(ctx.pathPrefix, ch.tag, i)
     track(ctx, path, ch)
     const selfAlign = parseStyle(ch.attrs.style)['align-self']?.trim().toLowerCase()
-    const crossAlign = !selfAlign || selfAlign === 'auto' ? (style['align-items'] ?? 'center') : selfAlign
+    const crossAlign = !selfAlign || selfAlign === 'auto' ? (style['align-items'] ?? 'stretch') : selfAlign
     const m = measureFlexChild(ch, { ...childCtx, pathPrefix: path }, direction, crossAlign)
     if (m) measures.push({ ...m, crossAlign })
   }
@@ -2357,12 +2362,12 @@ function layoutFlex(node: LayerNode, ctx: LayoutContext): FlexLayoutNode {
     const m = measures[i]!
     const childFvg = m.source ?? childNodes[i]!
     const chParsed = parseStyle(childFvg.attrs.style)
-    const { grow, shrink } = parseFlexGrowShrink(chParsed, m.isText)
+    const { grow, shrink } = parseFlexGrowShrink(chParsed)
     const yn = Yoga.Node.createWithConfig(config)
     yn.setFlexGrow(grow)
     yn.setFlexShrink(shrink)
     yn.setFlexBasisAuto()
-    yn.setAlignSelf(mapAlign(m.crossAlign ?? 'center'))
+    yn.setAlignSelf(mapAlign(m.crossAlign ?? 'stretch'))
     const textSource = m.source
     const columnText = direction === 'column' && m.isText && textSource != null && m.node.kind === 'text'
     if (columnText) {
@@ -2387,6 +2392,7 @@ function layoutFlex(node: LayerNode, ctx: LayoutContext): FlexLayoutNode {
     } else {
       yn.setWidth(m.preferredCross === Infinity ? crossAvailable : m.preferredCross)
       yn.setHeight(m.preferredMain)
+      yn.setMinHeight(m.minMain)
       yn.setMinWidth(m.isText ? m.minMain : 0)
     }
     yogaChildren.push(yn)

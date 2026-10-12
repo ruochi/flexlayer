@@ -695,7 +695,7 @@ const STYLE_CHECKS: Record<string, (value: string) => StyleDiagnostic | null> = 
   color: () => null,
   fill: () => null,
   'letter-spacing': (value) => (parseLetterSpacing(value, 16) == null ? { hint: '写成 0、2px 或 0.05em' } : null),
-  'line-height': (value) => (parseLineHeight(value) == null ? { hint: '写成倍数 1.4，或像素 24px' } : null),
+  'line-height': (value) => (parseLineHeight(value) == null ? { hint: '写成倍数 1.2，或像素 24px' } : null),
   'text-align': (value) => keywordHint(value, ['left', 'center', 'right', 'start', 'end'], '写成 left、center 或 right'),
   'white-space': (value) => keywordHint(value, ['normal', 'nowrap'], '写成 normal 或 nowrap'),
   'text-wrap': (value) => keywordHint(value, ['wrap', 'balance'], '写成 wrap 或 balance'),

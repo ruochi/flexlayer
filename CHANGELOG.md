@@ -10,7 +10,9 @@
 
 内置 `JetBrainsMono`（别名 `jetbrains mono`、`等宽`）。`render` 和 `check` 可以加 `--watch`，源文件和它引用的相对路径一变就再跑一遍。
 
-属性目录在 `docs/attrs.json`，由 `npm run docs:attrs` 从注册表生成。`align-items` 仍默认 `center`：海报里图文并排时交叉轴居中；没写 `display:flex` 的块级 `div` 仍按 `stretch` 拉满列宽。要跟 CSS 一样就写 `align-items:stretch`。
+属性目录在 `docs/attrs.json`，由 `npm run docs:attrs` 从注册表生成。
+
+flex 和文字的默认值改成和 CSS 一致。`align-items`、`align-content` 默认 `stretch`，`flex-shrink` 默认 `1`，`text-wrap` 默认 `wrap`，行高默认 `1.2`。图片和形状的最小尺寸仍是内容尺寸，不会被压到比自身更小。要交叉轴居中写 `align-items:center`。
 
 ## 0.4.2
 

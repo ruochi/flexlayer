@@ -22,7 +22,7 @@
 | 线条 | `<layer><line x1 y1 x2 y2 /></layer>` | `invalid-child` |
 | 文字位置 | `<layer x="120" y="64"><h1>…</h1></layer>` | `invalid-attr` |
 | 位置 | `layer`、`use`、`rect`、`box` 用 `x` `y`。圆、椭圆、球用 `cx` `cy` | `invalid-attr` |
-| 竖排对齐 | `align-items` 默认 `center`（CSS 是 `stretch`）。左对齐写 `align-items:flex-start`。块级 `div` 仍是 `stretch` | |
+| 竖排对齐 | `align-items` 默认 `stretch`，和 CSS 一样。要居中写 `align-items:center` | |
 | 渐变 | 字形 `style="fill:linear-gradient(...)"`。`color` 只写纯色 | `invalid-attr` |
 | 描边 | 只写 `stroke`。形状可加 `stroke-width`；沿墨迹写 `stroke="6 #000 outside"` | `invalid-attr` |
 | 整棵子树的效果 | `<layer grade="lomo" overlay="#00000066">` | `invalid-attr` |

@@ -148,9 +148,7 @@ export function asInlineRow(node: LayerNode): LayerNode {
     run.push(child)
   }
   flush()
-  const parsed = parseStyle(node.attrs.style)
   const extra = ['display:flex', 'flex-direction:row']
-  if (!parsed['align-items']) extra.push('align-items:center')
   const base = node.attrs.style?.trim().replace(/;+\s*$/, '')
   return {
     ...node,
