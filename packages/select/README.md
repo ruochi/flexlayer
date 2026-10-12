@@ -6,22 +6,20 @@
 
 ```bash
 npx flexlayer-select mask photo.jpg
-npx flexlayer-select mask photo.jpg --front 0.7 --refine
+npx flexlayer-select mask photo.jpg --point 820,640 --point 860,900 --refine
 ```
 
-默认只跑深度模型 Depth Anything V2 Small 的 q4f16（Apache-2.0，大约 19MB）。前景从伸进远处的尖往下长，地面留在外面。`--refine` 再跑下面的 BiRefNet，边用抠图模型，深度只去掉远处粘上的部分。
+默认只跑深度模型 Depth Anything V2 Small 的 q4f16（Apache-2.0，大约 19MB）。不写点，前景从伸进远处的尖往下长，地面留在外面。`--point` 可以写多次，点在要留下的地方；多个点按这些点里最近和最远连成一段，连在一起的留下。`--refine` 再跑下面的 BiRefNet，边用抠图模型，深度只去掉没点到的那一段。
 
-写出 `photo.foreground.png` 和 `photo.foreground.json`。遮罩里白的地方是前景。json 带这张遮罩的文件名，前景的 `x`、`y`、`width`、`height`，以及这次的 `front`。没有前景时位置和大小是 `null`。
+写出 `photo.foreground.png` 和 `photo.foreground.json`。遮罩里白的地方是前景。json 带这张遮罩的文件名，前景的 `x`、`y`、`width`、`height`，以及这次的 `points`。没有前景时位置和大小是 `null`。没写点时 `points` 是 `[]`。
 
-`--front` 是前后分界，0 到 1，默认 0.5。调大，遮罩变大；调小，只留更靠近镜头的一段。
-
-程序里用 `foregroundMask('photo.jpg', { front: 0.7 })`，返回同一组字段，`mask` 是写出来的路径。标记里用 `<mask><img src="photo.foreground.png" channel="luma" /></mask>` 罩住原图。
+程序里用 `foregroundMask('photo.jpg', { points: [{ x: 820, y: 640 }, { x: 860, y: 900 }] })`，返回同一组字段，`mask` 是写出来的路径。标记里用 `<mask><img src="photo.foreground.png" channel="luma" /></mask>` 罩住原图。
 
 ---
 
 抠主体：
 
-模型是 [BiRefNet](https://huggingface.co/onnx-community/BiRefNet_512x512-ONNX) 的 ONNX 版（MIT）。这个包不在 npm 上，要从本仓库安装。第一次 `cutout` 下载 fp16 权重到 `~/.cache/flexlayer/models`，大约 470MB。fp32 大约 940MB，这里不用。`@huggingface/transformers` 是可选依赖，`npm ci` 会装上。
+模型是 [BiRefNet lite](https://huggingface.co/studioludens/birefnet-lite-512) 的 512 输入 ONNX。这个包不在 npm 上，要从本仓库安装。第一次 `cutout` 或 `--refine` 下载 fp16 权重到 `~/.cache/flexlayer/models`，大约 100MB。完整的 512 fp16 大约 470MB，中间结果会到 3GB，这里不用。`@huggingface/transformers` 是可选依赖，`npm ci` 会装上。
 
 ```bash
 cd packages/select

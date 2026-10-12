@@ -474,6 +474,69 @@ describe('网格绘制', () => {
     }
   })
 
+  it('粗糙度越高，金属和玻璃的暗部越抬起来，噪点不跟着变密', async () => {
+    const lum = (px: Uint8ClampedArray) => 0.2126 * px[0]! + 0.7152 * px[1]! + 0.0722 * px[2]!
+    const disk = (image: ImageSample) => {
+      let sum = 0
+      let n = 0
+      const lums: number[] = []
+      for (let y = 0; y < image.height; y++) {
+        for (let x = 0; x < image.width; x++) {
+          const dx = x - 90
+          const dy = y - 90
+          if (dx * dx + dy * dy > 40 * 40) continue
+          const value = lum(image.at(x, y))
+          lums.push(value)
+          sum += value
+          n++
+        }
+      }
+      let diffs = 0
+      let pairs = 0
+      for (let y = 0; y < image.height; y++) {
+        for (let x = 0; x < image.width - 1; x++) {
+          const dx = x - 90
+          const dy = y - 90
+          const dx2 = x + 1 - 90
+          if (dx * dx + dy * dy > 36 * 36 || dx2 * dx2 + dy * dy > 36 * 36) continue
+          diffs += Math.abs(lum(image.at(x, y)) - lum(image.at(x + 1, y)))
+          pairs++
+        }
+      }
+      lums.sort((a, b) => a - b)
+      return {
+        mean: sum / n,
+        p10: lums[Math.floor(lums.length * 0.1)]!,
+        p90: lums[Math.floor(lums.length * 0.9)]!,
+        noise: diffs / pairs,
+      }
+    }
+    const metal = async (rough: string) =>
+      disk(await imageOf((await renderFvg(
+        `<layer width="180" height="180" background="#101010" perspective="700"><sphere cx="90" cy="90" r="50" fill="#d8d8d8" material="metal ${rough}" /></layer>`,
+      )).png))
+    const glass = async (rough: string) =>
+      disk(await imageOf((await renderFvg(
+        `<layer width="180" height="180" background="#000000" perspective="700"><rect x="10" y="10" width="160" height="160" fill="#ff0000" /><sphere cx="90" cy="90" r="50" fill="#ffffff66" material="glass ${rough}" /></layer>`,
+      )).png))
+    const sharp = await metal('0.05')
+    const rough = await metal('1')
+    expect(rough.mean).toBeGreaterThan(sharp.mean + 30)
+    expect(rough.p10).toBeGreaterThan(sharp.p10 + 30)
+    expect(sharp.p90).toBeGreaterThan(200)
+    expect(rough.p90).toBeGreaterThan(180)
+    expect(sharp.noise).toBeLessThan(6)
+    expect(rough.noise).toBeLessThan(6)
+    const clear = await glass('0.08')
+    const frosted = await glass('1')
+    expect(frosted.p10).toBeGreaterThan(clear.p10 + 25)
+    expect(frosted.mean).toBeGreaterThan(clear.mean + 5)
+    expect(frosted.p90).toBeLessThan(clear.p90)
+    expect(frosted.p90).toBeGreaterThan(160)
+    expect(clear.noise).toBeLessThan(6)
+    expect(frosted.noise).toBeLessThan(6)
+  }, 30000)
+
   it('玻璃把主灯加进球里，没照到的地方透出后面，前面的不透明球盖住它', async () => {
     const { png } = await renderFvg(`
       <layer width="180" height="180" background="#000000" perspective="700">
