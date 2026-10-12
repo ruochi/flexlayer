@@ -1,6 +1,6 @@
 {
   "name": "flexlayer",
-  "version": "0.2.55",
+  "version": "0.2.56",
   "description": "Flex Layer: AI-friendly 2D frame markup with flex layout, HTML text and SVG-style shapes, rendered to PNG",
   "type": "module",
   "main": "dist/index.js",
@@ -27,14 +27,14 @@
     "README.md",
     "LICENSE",
     "SPEC.md",
-    "docs",
-    "plugins"
+    "docs"
   ],
   "scripts": {
     "prepare": "npm run build",
     "build": "tsc",
     "test": "vitest run",
     "pythagoras": "tsx examples/render-pythagoras.ts",
+    "bench": "node scripts/bench-mesh.mjs",
     "flexlayer": "tsx src/cli.ts",
     "docs:attrs": "tsx scripts/gen-attr-docs.ts",
     "gallery": "tsx scripts/render-gallery.ts"

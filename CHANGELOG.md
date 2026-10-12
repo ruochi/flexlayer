@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.56
+
+去掉各平台的插件清单，只留 `skills/flexlayer/SKILL.md` 一份。`AGENTS.md` 收成入口，细则留在 SPEC。删掉已经落地的 `docs/PLAN.md`；效果和公式的实现备注并进 `docs/IMPLEMENTATION.md`；`docs/proposals/3D.md` 只留还没做的点选、作者灯光和 `Scene3D`。网格基准挪到 `scripts/bench-mesh.mjs`。勾股演示的视频和大图不再入库。
+
 ## 0.2.55
 
 实现提交：`8c4fbc361ac37e5fd594e1f9230c7d64435f8812`
