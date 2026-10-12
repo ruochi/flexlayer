@@ -1,5 +1,5 @@
 export { renderFvg, checkFvg, renderLayer, checkLayer, type RenderResult } from './render.js'
-export { canvas, create, type CreatedLayer, type PlacedChar, type PlacedElement, type PlacedLine, type PlacedMask, type PlacedText } from './canvas.js'
+export { canvas, create, type CreatedLayer, type MeshEdgeKind, type MeshPoint, type MeshProjectedEdge, type PlacedChar, type PlacedElement, type PlacedLine, type PlacedMask, type PlacedText } from './canvas.js'
 export { registerComponent, arrowComponent, type ComponentFn, type ComponentProps } from './components.js'
 export { glyph, type Glyph, type GlyphInk, type GlyphOptions } from './glyph.js'
 export { analyzeImage, type AnalyzeImageOptions, type ImageAnalysis, type ImageChannel, type ImagePart } from './analyze-image.js'

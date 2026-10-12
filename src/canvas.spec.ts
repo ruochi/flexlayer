@@ -495,6 +495,136 @@ describe('canvas.create', () => {
     expect(canvas.create(h('layer', { width: '10', height: '10' })).elements).toEqual([])
   })
 
+  it('透视里的网格带回投影后的顶点和轮廓，球只给圆', () => {
+    const scene = canvas.create(
+      h(
+        'layer',
+        { width: '480', height: '360', perspective: '2000' },
+        h('rect', { id: 'card', x: '16', y: '16', width: '40', height: '24', fill: '#fff' }),
+        h('box', { id: 'cube', x: '160', y: '120', width: '160', height: '120', depth: '80', fill: '#fff' }),
+        h('sphere', { id: 'ball', cx: '80', cy: '280', r: '36', fill: '#fff' }),
+      ),
+    )
+    const card = scene.elements.find((element) => element.id === 'card')!
+    const cube = scene.elements.find((element) => element.id === 'cube')!
+    const ball = scene.elements.find((element) => element.id === 'ball')!
+    expect(card.points).toBeUndefined()
+    expect(card.edges).toBeUndefined()
+    expect(card.d).toBeUndefined()
+    expect(cube.points).toHaveLength(8)
+    const visible = cube.points!.filter((point) => point.visible)
+    const hidden = cube.points!.filter((point) => point.hidden)
+    expect(visible).toHaveLength(4)
+    expect(hidden).toHaveLength(4)
+    expect(cube.edges!.some((edge) => edge.kind === 'outline')).toBe(true)
+    expect(cube.edges!.some((edge) => edge.kind === 'hidden')).toBe(true)
+    for (const edge of cube.edges!) {
+      expect(cube.points![edge.a]).toBeDefined()
+      expect(cube.points![edge.b]).toBeDefined()
+    }
+    expect(cube.d).toMatch(/^M /)
+    expect(cube.d).toContain('Z')
+    const xs = visible.map((point) => point.x).sort((a, b) => a - b)
+    const ys = visible.map((point) => point.y).sort((a, b) => a - b)
+    expect(xs[0]).toBeGreaterThan(155)
+    expect(xs[0]).toBeLessThan(165)
+    expect(xs[3]).toBeGreaterThan(315)
+    expect(xs[3]).toBeLessThan(325)
+    expect(ys[0]).toBeGreaterThan(115)
+    expect(ys[0]).toBeLessThan(125)
+    expect(ys[3]).toBeGreaterThan(235)
+    expect(ys[3]).toBeLessThan(245)
+    expect(ball.points).toBeUndefined()
+    expect(ball.edges).toBeUndefined()
+    expect(ball.d).toMatch(/^M /)
+    expect(ball.d).toContain('Z')
+    const nums = ball.d!.match(/-?\d+(?:\.\d+)?/g)!.map(Number)
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    for (let i = 0; i < nums.length; i += 2) {
+      minX = Math.min(minX, nums[i]!)
+      minY = Math.min(minY, nums[i + 1]!)
+      maxX = Math.max(maxX, nums[i]!)
+      maxY = Math.max(maxY, nums[i + 1]!)
+    }
+    expect(minX).toBeGreaterThan(40)
+    expect(minX).toBeLessThan(48)
+    expect(maxX).toBeGreaterThan(112)
+    expect(maxX).toBeLessThan(120)
+    expect(minY).toBeGreaterThan(240)
+    expect(minY).toBeLessThan(248)
+    expect(maxY).toBeGreaterThan(312)
+    expect(maxY).toBeLessThan(320)
+
+    const flat = canvas.create(h('layer', { width: '200', height: '200' }, h('box', { width: '40', height: '40', depth: '40' })))
+    expect(flat.elements[0]!.points).toBeUndefined()
+    expect(flat.elements[0]!.d).toBeUndefined()
+  })
+
+  it('嵌套相机的投影跟着层的位置走，近的网格挡住远的角', () => {
+    const alone = canvas.create(
+      h(
+        'layer',
+        { width: '240', height: '180', perspective: '4000' },
+        h('box', { id: 'cube', x: '40', y: '30', width: '80', height: '60', depth: '40' }),
+      ),
+    )
+    const nested = canvas.create(
+      h(
+        'layer',
+        { width: '480', height: '360' },
+        h(
+          'layer',
+          { x: '100', y: '80', width: '240', height: '180', perspective: '4000' },
+          h('box', { id: 'cube', x: '40', y: '30', width: '80', height: '60', depth: '40' }),
+        ),
+      ),
+    )
+    const a = alone.elements.find((element) => element.id === 'cube')!
+    const b = nested.elements.find((element) => element.id === 'cube')!
+    expect(b.points).toHaveLength(a.points!.length)
+    b.points!.forEach((point, index) => {
+      const from = a.points![index]!
+      expect(point.x).toBeCloseTo(from.x + 100, 1)
+      expect(point.y).toBeCloseTo(from.y + 80, 1)
+      expect(point.hidden).toBe(from.hidden)
+    })
+    const scaled = canvas.create(
+      h(
+        'layer',
+        { width: '500', height: '400' },
+        h(
+          'layer',
+          { x: '10', y: '20', width: '240', height: '180', perspective: '4000', scale: '2', origin: 'top-left' },
+          h('box', { id: 'cube', x: '40', y: '30', width: '80', height: '60', depth: '40' }),
+        ),
+      ),
+    )
+    const grown = scaled.elements.find((element) => element.id === 'cube')!
+    grown.points!.forEach((point, index) => {
+      const from = a.points![index]!
+      expect(point.x).toBeCloseTo(10 + from.x * 2, 1)
+      expect(point.y).toBeCloseTo(20 + from.y * 2, 1)
+    })
+
+    const stacked = canvas.create(
+      h(
+        'layer',
+        { width: '480', height: '360', perspective: '2000' },
+        h('box', { id: 'far', x: '160', y: '110', width: '160', height: '140', depth: '40', z: '-60' }),
+        h('box', { id: 'near', x: '160', y: '110', width: '160', height: '140', depth: '40', z: '60' }),
+      ),
+    )
+    const far = stacked.elements.find((element) => element.id === 'far')!
+    const near = stacked.elements.find((element) => element.id === 'near')!
+    expect(far.points).toHaveLength(8)
+    expect(far.points!.every((point) => point.hidden)).toBe(true)
+    expect(near.points!.filter((point) => point.visible)).toHaveLength(4)
+    expect(near.edges!.some((edge) => edge.kind === 'outline')).toBe(true)
+  })
+
   it('字体还没注册时直接报错，注册后再按真字体量', () => {
     const src = ['/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf', '/usr/share/fonts/truetype/croscore/Cousine-Regular.ttf'].find(
       (path) => existsSync(path),

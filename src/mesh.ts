@@ -65,7 +65,7 @@ function stripMeshes(node: LayoutNode): LayoutNode | null {
   return paintable(node) ? node : null
 }
 
-type MeshInstance = { node: MeshLayoutNode; toLayer: Mat4; opacity: number }
+export type MeshInstance = { node: MeshLayoutNode; toLayer: Mat4; opacity: number }
 type PlaneInstance = { node: LayoutNode; peeled: LayoutNode; toLayer: Mat4 }
 
 function collectMeshes(node: LayoutNode, toParent: Mat4, ancestorOpacity: number, out: MeshInstance[]) {
@@ -95,6 +95,18 @@ export type MeshRaster = {
   localY: number
   /** 内容坐标里的可见多边形。缺省时用位图四角。 */
   polygon?: Array<{ u: number; v: number }>
+}
+
+/** 这一层相机里的网格，和绘制走同一条收集：嵌套的另一台相机会停在自己那一层。 */
+export function collectMeshInstances(layer: LayerLayoutNode): MeshInstance[] {
+  const perspective = layer.perspective
+  const meshes: MeshInstance[] = []
+  if (typeof perspective !== 'number' || !(perspective > 0)) return meshes
+  for (const child of layer.children) {
+    if (planeDepth(child) >= perspective) continue
+    collectMeshes(child, IDENTITY, 1, meshes)
+  }
+  return meshes
 }
 
 /** 画进父层的网格画面。x、y 可以是负的，这样物体能溢出所在 layer。 */

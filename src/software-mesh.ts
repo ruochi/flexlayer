@@ -57,7 +57,7 @@ export type SoftwareMeshInput = {
   clip?: MeshClip
 }
 
-type MeshEdge = {
+export type MeshEdge = {
   a: number
   b: number
   n0: [number, number, number]
@@ -557,11 +557,11 @@ function fillBytes(fill: string, opacity: number): [number, number, number, numb
   return [r, g, b, byte(alpha * opacity * 255)]
 }
 
-function transformPoint(toLayer: Mat4, ox: number, oy: number, gx: number, gy: number, gz: number) {
+export function transformPoint(toLayer: Mat4, ox: number, oy: number, gx: number, gy: number, gz: number) {
   return applyPoseMatrix(toLayer, gx + ox, oy - gy, gz)
 }
 
-function transformNormal(toLayer: Mat4, nx: number, ny: number, nz: number) {
+export function transformNormal(toLayer: Mat4, nx: number, ny: number, nz: number) {
   const x = nx
   const y = -ny
   const z = nz
@@ -1285,6 +1285,49 @@ function buildModel(node: MeshLayoutNode): ModelPrim[] {
   const built = buildModelFresh(node)
   if (key) touchCache(modelCache, key, built, GEOMETRY_CAP)
   return built
+}
+
+export type MeshPrim = {
+  positions: Float32Array
+  normals: Float32Array
+  indices: Uint32Array
+  /** 0–255。几何体是不透明，模型图元用文件里的透明度。 */
+  alpha: number
+  doubleSided: boolean
+}
+
+/** 一只网格的图元。模型和几何体都从这里拿，投影和绘制用同一份顶点。 */
+export function meshPrims(node: MeshLayoutNode): MeshPrim[] {
+  if (node.mesh.type === 'model') {
+    return buildModel(node).map((prim) => ({
+      positions: prim.positions,
+      normals: prim.normals,
+      indices: prim.indices,
+      alpha: prim.color[3],
+      doubleSided: prim.doubleSided,
+    }))
+  }
+  const geometry = geometryOf(node)
+  if (!geometry) return []
+  return [
+    {
+      positions: geometry.positions,
+      normals: geometry.normals,
+      indices: geometry.indices,
+      alpha: 255,
+      doubleSided: node.mesh.type === 'extrude',
+    },
+  ]
+}
+
+/** 和绘制同一套：不写深度的表面不挡住后面的棱。 */
+export function meshWritesDepth(node: MeshLayoutNode, opacity: number, primAlpha = 255): boolean {
+  const glass = node.material?.kind === 'glass'
+  if (node.mesh.type === 'model') return glass && primAlpha < 255 ? false : primAlpha >= 255
+  const clear = node.fill === 'none' || node.fill === 'transparent'
+  const fillNone = clear && !glass
+  const a = fillNone || clear ? 0 : fillBytes(node.fill, opacity)[3]
+  return glass && a < 255 ? false : fillNone || a >= 255
 }
 
 type Texel = { r: number; g: number; b: number; a: number }
@@ -2602,6 +2645,29 @@ function extractEdges(positions: Float32Array, indices: Uint32Array): MeshEdge[]
   return edges
 }
 
+const edgeCache = new Map<string, MeshEdge[]>()
+
+/** 同一只网格的局部几何不变时，折棱表可以接着用。姿态变了也不用重算。 */
+function geomKey(positions: Float32Array, indices: Uint32Array): string {
+  let hash = 2166136261
+  const pos = new Uint8Array(positions.buffer, positions.byteOffset, positions.byteLength)
+  const idx = new Uint8Array(indices.buffer, indices.byteOffset, indices.byteLength)
+  for (let i = 0; i < pos.length; i++) hash = Math.imul(hash ^ pos[i]!, 16777619)
+  for (let i = 0; i < idx.length; i++) hash = Math.imul(hash ^ idx[i]!, 16777619)
+  return `${positions.length}:${indices.length}:${hash >>> 0}`
+}
+
+export function meshEdges(positions: Float32Array, indices: Uint32Array): MeshEdge[] {
+  if (indices.length < 3) return NO_EDGES
+  const key = geomKey(positions, indices)
+  const hit = edgeCache.get(key)
+  if (hit) return hit
+  const edges = extractEdges(positions, indices)
+  if (edgeCache.size > 128) edgeCache.clear()
+  edgeCache.set(key, edges)
+  return edges
+}
+
 function meshLineFields(
   node: MeshLayoutNode,
   opacity: number,
@@ -2613,7 +2679,7 @@ function meshLineFields(
   const outline = sphereOutlineOf(node)
   if (!lines) return { edges: NO_EDGES, lines: null, outline, owner }
   return {
-    edges: extractEdges(positions, indices),
+    edges: meshEdges(positions, indices),
     lines,
     outline,
     owner,
@@ -2857,7 +2923,7 @@ function chainHidden(runs: PointRun[]): ChainPoint[][] {
   return out
 }
 
-function sphereRing(center: { x: number; y: number; z: number }, radius: number, vx: number, vy: number, perspective: Perspective): Vert[] | null {
+export function sphereRing(center: { x: number; y: number; z: number }, radius: number, vx: number, vy: number, perspective: Perspective): Vert[] | null {
   if (perspective === 'parallel') {
     const count = 72
     const ring: Vert[] = []
@@ -2969,10 +3035,38 @@ function sphereSurface(
 function roundSphere(batch: Batch): { x: number; y: number; z: number; radius: number } | null {
   const outline = batch.outline
   if (!outline) return null
-  const c = transformPoint(batch.toLayer, batch.originX, batch.originY, outline.x, outline.y, outline.z)
-  const px = transformPoint(batch.toLayer, batch.originX, batch.originY, outline.x + outline.r, outline.y, outline.z)
-  const py = transformPoint(batch.toLayer, batch.originX, batch.originY, outline.x, outline.y + outline.r, outline.z)
-  const pz = transformPoint(batch.toLayer, batch.originX, batch.originY, outline.x, outline.y, outline.z + outline.r)
+  return uniformSphere(
+    batch.toLayer,
+    batch.originX,
+    batch.originY,
+    outline.x,
+    outline.y,
+    outline.z,
+    outline.r,
+  )
+}
+
+/** 三轴半径差不多时，轮廓用这个球，不再把细分三角的边当成折点。 */
+export function layerSphere(node: MeshLayoutNode, toLayer: Mat4): { x: number; y: number; z: number; radius: number } | null {
+  const outline = sphereOutlineOf(node)
+  if (!outline) return null
+  const origin = originOffset(node.origin, node.width, node.height)
+  return uniformSphere(toLayer, origin.x, origin.y, outline.x, outline.y, outline.z, outline.r)
+}
+
+function uniformSphere(
+  toLayer: Mat4,
+  originX: number,
+  originY: number,
+  x: number,
+  y: number,
+  z: number,
+  radius: number,
+): { x: number; y: number; z: number; radius: number } | null {
+  const c = transformPoint(toLayer, originX, originY, x, y, z)
+  const px = transformPoint(toLayer, originX, originY, x + radius, y, z)
+  const py = transformPoint(toLayer, originX, originY, x, y + radius, z)
+  const pz = transformPoint(toLayer, originX, originY, x, y, z + radius)
   const rx = Math.hypot(px.x - c.x, px.y - c.y, px.z - c.z)
   const ry = Math.hypot(py.x - c.x, py.y - c.y, py.z - c.z)
   const rz = Math.hypot(pz.x - c.x, pz.y - c.y, pz.z - c.z)
