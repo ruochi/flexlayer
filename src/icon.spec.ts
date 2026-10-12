@@ -116,6 +116,55 @@ describe('图标', () => {
     expect(seg.text).toBe(String.fromCodePoint(0xe9b2))
   })
 
+  it('着墨停在基线上方时，圆里的图标仍在正中', async () => {
+    const names = ['home', 'menu', 'electric_car', 'neurology', 'pill', 'solar_power']
+    const doc = await layoutSource(
+      `<layer width="960" height="200" color="#ffffff">
+        <div style="display:flex; align-items:center; gap:16px">
+          ${names
+            .map(
+              (name) =>
+                `<div style="display:flex; width:140px; height:140px; align-items:center; justify-content:center"><span class="material-symbols-outlined" style="font-size:80px">${name}</span></div>`,
+            )
+            .join('')}
+        </div>
+      </layer>`,
+      process.cwd(),
+    )
+    expect(doc.issues.filter((issue) => issue.level === 'error')).toEqual([])
+    const centers: number[] = []
+    for (const name of names) {
+      const icon = findSpan(doc.root, name)
+      if (!icon) throw new Error(`expected ${name}`)
+      const line = icon.textLayout.lines[0]!
+      const ink = line.ink
+      expect(ink.x + ink.width / 2).toBeCloseTo(icon.width / 2, 0)
+      expect(ink.y + ink.height / 2).toBeCloseTo(icon.height / 2, 0)
+      centers.push(icon.y + ink.y + ink.height / 2)
+    }
+    for (const y of centers) expect(y).toBeCloseTo(centers[0]!, 0)
+  })
+
+  it('跟文字按基线对齐时，图标基线仍贴着文字', async () => {
+    const doc = await layoutSource(
+      `<layer width="320" height="120">
+        <div style="display:flex; align-items:baseline; gap:8px">
+          <span class="material-symbols-outlined" style="font-size:48px">home</span>
+          <span style="font-size:32px">家</span>
+        </div>
+      </layer>`,
+      process.cwd(),
+    )
+    const row = doc.root.children[0]
+    if (!row || row.kind !== 'flex') throw new Error('expected row')
+    const icon = row.children.find((node) => node.kind === 'text' && node.tag === 'span' && node.text === 'home')
+    const label = row.children.find((node) => node.kind === 'text' && node.text === '家')
+    if (!icon || icon.kind !== 'text' || !label || label.kind !== 'text') throw new Error('expected icon and label')
+    const iconBaseline = icon.y + icon.padding.top + icon.textLayout.lines[0]!.baselineY
+    const labelBaseline = label.y + label.padding.top + label.textLayout.lines[0]!.baselineY
+    expect(iconBaseline).toBeCloseTo(labelBaseline, 0)
+  })
+
   it('不同字重画出来不一样', async () => {
     const paint = (weight: number) =>
       renderLayer(
