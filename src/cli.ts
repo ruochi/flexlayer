@@ -10,10 +10,10 @@ import type { Composition, FrameInput } from './frame.js'
 import { createContactSheet, renderFrames } from './frame.js'
 import { loadLayerFile, type LoadedLayer } from './load-source.js'
 import { formatIssueLine } from './report.js'
-import { checkFvg, renderFvg, renderPreview } from './render.js'
+import { checkLayer, renderLayer, renderPreview } from './render.js'
 import { typecheckLayerFile } from './typecheck.js'
-import type { FvgNode } from './parse.js'
-import type { FvgReport, Issue } from './types.js'
+import type { LayerNode } from './parse.js'
+import type { LayerReport, Issue } from './types.js'
 
 const CONTACT_LIMIT = 300
 
@@ -91,7 +91,7 @@ function frameInput(frame: number, fps: number): FrameInput {
   return { frame, fps, t: frame / fps }
 }
 
-function appendIssues(report: FvgReport, extra: Issue[]) {
+function appendIssues(report: LayerReport, extra: Issue[]) {
   if (extra.length === 0) return
   report.issues = [...extra, ...report.issues]
 }
@@ -100,7 +100,7 @@ let say = (line: string) => {
   console.log(line)
 }
 
-async function emitNode(node: Parameters<typeof emitLayer>[0], emit: string | undefined, report: FvgReport) {
+async function emitNode(node: Parameters<typeof emitLayer>[0], emit: string | undefined, report: LayerReport) {
   if (!emit) return
   const emitted = emitLayer(node)
   appendIssues(report, emitted.issues)
@@ -109,16 +109,16 @@ async function emitNode(node: Parameters<typeof emitLayer>[0], emit: string | un
   say(`✓ ${emit}`)
 }
 
-function failIfErrors(report: FvgReport) {
+function failIfErrors(report: LayerReport) {
   const errors = report.issues.filter((issue) => issue.level === 'error').length
   if (errors > 0) process.exit(1)
 }
 
-function printIssues(report: FvgReport) {
+function printIssues(report: LayerReport) {
   for (const issue of report.issues) say(formatIssueLine(issue))
 }
 
-function printCheckResult(report: FvgReport) {
+function printCheckResult(report: LayerReport) {
   printIssues(report)
   if (report.issues.length === 0) say('✓ 0 issues')
 }
@@ -183,7 +183,7 @@ async function main() {
   if ((args.framesArg || args.rgba || args.from != null || args.to != null || args.step != null) && loaded.kind !== 'composition') usage()
   if (args.emit && loaded.kind === 'markup') throw new Error('--emit 只用于 .tsx 等会展开的源文件')
 
-  const attachFileIssues = (report: FvgReport) => {
+  const attachFileIssues = (report: LayerReport) => {
     if (loaded.kind !== 'markup') appendIssues(report, loaded.issues)
     appendIssues(report, typeIssues)
   }
@@ -191,7 +191,7 @@ async function main() {
   if (args.cmd === 'check') {
     if (loaded.kind !== 'composition') {
       const node = loaded.kind === 'markup' ? loaded.source : loaded.node
-      const report = await checkFvg(node, { baseDir })
+      const report = await checkLayer(node, { baseDir })
       if (typeof node !== 'string') await emitNode(node, args.emit, report)
       attachFileIssues(report)
       printCheckResult(report)
@@ -206,11 +206,11 @@ async function main() {
     const sample = args.framesArg != null ? checkSample(args.framesArg, args.step) : args.frame
     const frames = sampleFrames(duration, sample)
     const parts: Array<{ frame: number; issues: Issue[] }> = []
-    let report: FvgReport | undefined
-    let emitAt: FvgNode | undefined
+    let report: LayerReport | undefined
+    let emitAt: LayerNode | undefined
     for (const frame of frames) {
       const node = loaded.composition.component(frameInput(frame, loaded.composition.fps))
-      const one = await checkFvg(node, { baseDir })
+      const one = await checkLayer(node, { baseDir })
       if (!report) report = one
       if (frame === (args.frame ?? 0)) emitAt = node
       parts.push({ frame, issues: one.issues })
@@ -232,7 +232,7 @@ async function main() {
       }
       const input = frameInput(args.frame, comp.fps)
       const node = comp.component(input)
-      const { png, report } = await renderFvg(node, {
+      const { png, report } = await renderLayer(node, {
         baseDir,
         scale: args.scale,
         debug: args.debug,
@@ -280,7 +280,7 @@ async function main() {
     }
 
     const parts: Array<{ frame: number; issues: Issue[] }> = []
-    let report: FvgReport | undefined
+    let report: LayerReport | undefined
     let count = 0
     for await (const rendered of renderFrames(comp, {
       baseDir,
@@ -329,7 +329,7 @@ async function main() {
   }
 
   const source = loaded.kind === 'markup' ? loaded.source : loaded.node
-  const { png, report } = await renderFvg(source, { baseDir, scale: args.scale, debug: args.debug, meshSamples: args.meshSamples })
+  const { png, report } = await renderLayer(source, { baseDir, scale: args.scale, debug: args.debug, meshSamples: args.meshSamples })
   if (loaded.kind === 'node') await emitNode(loaded.node, args.emit, report)
   attachFileIssues(report)
   const outPath = outPng(abs, args.out)

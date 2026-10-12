@@ -1,4 +1,4 @@
-/** 文档根与定位容器都是 layer；仍接受旧根标签 fvg / FVG，以及大小写不规范的写法。 */
+/** 文档根与定位容器都是小写的 layer。大小写不同的标签不归一。 */
 const KNOWN_TAGS = new Set([
   'layer',
   'rect',
@@ -67,16 +67,21 @@ export const FONT_TAG = 'font'
 /** HTML 图片。`image` 与 `img` 是同一个标签。 */
 const IMAGE_TAGS = new Set(['img', 'image'])
 
-/** 已知标签归一成小写。`fvg` 是旧根标签，归一成 `layer`。不认识的标签保持原样。 */
+/** 标签必须已经是规范里的小写。不认识的、以及只是大小写不同的，保持原样。 */
 export function canonicalTag(tag: string): string {
-  const lower = tag.toLowerCase()
-  if (lower === 'fvg') return 'layer'
-  if (KNOWN_TAGS.has(lower)) return lower
   return tag
 }
 
+/** 大写或旧根标签 fvg 写成了已知标签时，给出对应的小写写法。 */
+export function tagSpellingHint(tag: string): string | undefined {
+  const lower = tag.toLowerCase()
+  if (lower === 'fvg') return '改成 <layer>'
+  if (lower !== tag && KNOWN_TAGS.has(lower)) return `改成 <${lower}>`
+  return undefined
+}
+
 export function isImageTag(tag: string): boolean {
-  return IMAGE_TAGS.has(tag.toLowerCase())
+  return IMAGE_TAGS.has(tag)
 }
 
 export function isRootTag(tag: string): boolean {
@@ -101,9 +106,4 @@ const MASK_CONTENT_TAGS = new Set(['rect', 'circle', 'ellipse', 'polygon', 'path
 export function isMaskContentTag(tag: string): boolean {
   const canonical = canonicalTag(tag)
   return MASK_CONTENT_TAGS.has(canonical) || isImageTag(canonical)
-}
-
-/** 旧根标签 fvg 归一成 layer */
-export function normalizeRootTag(tag: string): string {
-  return canonicalTag(tag) === 'layer' ? 'layer' : tag
 }

@@ -1,9 +1,9 @@
 import { createCanvas, loadImage, type Canvas } from '@napi-rs/canvas'
-import type { FvgNode } from './parse.js'
+import type { LayerNode } from './parse.js'
 import { prepareAssets } from './layout.js'
 import { renderToCanvas } from './render.js'
 import { setFontsCacheDir } from './fonts.js'
-import type { FvgReport, RenderOptions } from './types.js'
+import type { LayerReport, RenderOptions } from './types.js'
 
 export type FrameInput = {
   frame: number
@@ -17,7 +17,7 @@ export type Composition = {
   height: number
   fps: number
   durationInFrames: number
-  component: (input: FrameInput) => FvgNode
+  component: (input: FrameInput) => LayerNode
 }
 
 export type RenderCompositionOptions = Pick<RenderOptions, 'scale' | 'baseDir' | 'fontsCacheDir' | 'debug' | 'meshSamples' | 'meshCache'>
@@ -40,12 +40,12 @@ export type RenderedFrame = {
   height: number
   png?: Buffer
   rgba?: Buffer
-  report: FvgReport
+  report: LayerReport
 }
 
 export type RenderCompositionResult = {
   frames: Buffer[]
-  reports: FvgReport[]
+  reports: LayerReport[]
   contactSheet: Buffer
 }
 
@@ -388,7 +388,7 @@ export async function renderComposition(
   assertComposition(comp)
   const scale = options.scale ?? 1
   const frames: Buffer[] = []
-  const reports: FvgReport[] = []
+  const reports: LayerReport[] = []
   const sheet = createContactSheet({
     count: comp.durationInFrames,
     width: Math.max(1, Math.round(comp.width * scale)),

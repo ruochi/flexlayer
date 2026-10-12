@@ -1,5 +1,5 @@
 import type { CanvasRenderingContext2D } from '@napi-rs/canvas'
-import { h, interpolate, spring, type Composition, type DrawElSnapshot, type FvgNode } from '../src/index.js'
+import { h, interpolate, spring, type Composition, type DrawElSnapshot, type LayerNode } from '../src/index.js'
 
 const W = 1920
 const H = 1080
@@ -218,7 +218,7 @@ function squareOn(p: Pt, q: Pt, out: Pt, progress: number, color: string, fill: 
   })
 }
 
-function grid(p: Pt, q: Pt, out: Pt, cells: number, color: string, opacity: number): FvgNode[] {
+function grid(p: Pt, q: Pt, out: Pt, cells: number, color: string, opacity: number): LayerNode[] {
   const along: Pt = [(q[0] - p[0]) / cells, (q[1] - p[1]) / cells]
   const across: Pt = [out[0] / cells, out[1] / cells]
   const line = (from: Pt, to: Pt) =>
@@ -231,7 +231,7 @@ function grid(p: Pt, q: Pt, out: Pt, cells: number, color: string, opacity: numb
       'stroke-width': '2',
       opacity: n(opacity),
     })
-  const lines: FvgNode[] = []
+  const lines: LayerNode[] = []
   for (let k = 1; k < cells; k++) {
     const s1 = add(p, along, k)
     lines.push(line(s1, add(s1, out)))

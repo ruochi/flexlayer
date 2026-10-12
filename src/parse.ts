@@ -1,4 +1,3 @@
-import { canonicalTag } from './tags.js'
 import type { DrawFn } from './types.js'
 
 /** JSX 自动运行时记下来的位置。行和列都从 1 开始。 */
@@ -8,10 +7,10 @@ export type SourceLoc = {
   column: number
 }
 
-export type FvgNode = {
+export type LayerNode = {
   tag: string
   attrs: Record<string, string>
-  children: FvgChild[]
+  children: LayerChild[]
   draw?: DrawFn
   /** 结构化数据。不进 `attrs`，`draw` 里从 `el.data` 读。 */
   data?: unknown
@@ -21,15 +20,13 @@ export type FvgNode = {
   badAttrs?: string[]
   /** `.layer` 里 `data` 不是合法 JSON 时的原文。 */
   dataError?: string
-  /** 源码里的标签名。仅当和规范小写不同时记下，用来报 non-canonical。 */
-  writtenTag?: string
   /** `.tsx` 里这个标签所在的位置。`.layer` 解析出来的节点没有。 */
   loc?: SourceLoc
   /** `<draw>` 正文所在的位置。运行出错时报告用它，而不是父标签的位置。 */
   drawLoc?: SourceLoc
 }
 
-export type FvgChild = string | FvgNode
+export type LayerChild = string | LayerNode
 
 const VOID_TAGS = new Set(['br', 'font', 'img', 'image', 'sphere', 'box', 'cylinder', 'torus', 'tube', 'extrude', 'model'])
 
@@ -73,7 +70,7 @@ function parseAttrs(text: string): Record<string, string> {
   return attrs
 }
 
-function takeData(node: FvgNode) {
+function takeData(node: LayerNode) {
   if (!Object.prototype.hasOwnProperty.call(node.attrs, 'data')) return
   const raw = node.attrs.data ?? ''
   delete node.attrs.data
@@ -84,10 +81,8 @@ function takeData(node: FvgNode) {
   }
 }
 
-function nodeFor(raw: string, attrs: Record<string, string>, children: FvgChild[]): FvgNode {
-  const tag = canonicalTag(raw)
-  const node: FvgNode = { tag, attrs, children }
-  if (raw !== tag) node.writtenTag = raw
+function nodeFor(raw: string, attrs: Record<string, string>, children: LayerChild[]): LayerNode {
+  const node: LayerNode = { tag: raw, attrs, children }
   takeData(node)
   return node
 }
@@ -103,15 +98,15 @@ function lineColAt(lineStarts: number[], index: number): { line: number; column:
   return { line: lo + 1, column: index - lineStarts[lo]! + 1 }
 }
 
-/** 解析 Flex Layer 标记。已知标签归一成小写；不认识的标签保持原样。 */
-export function parseFvg(source: string): FvgNode[] {
+/** 解析 Flex Layer 标记。标签保持源码里的大小写；不认识的标签也保持原样。 */
+export function parseLayer(source: string): LayerNode[] {
   const src = source.replace(/<!--[\s\S]*?-->/g, '').replace(/<\?xml[\s\S]*?\?>/g, '')
   const lineStarts = [0]
   for (let i = 0; i < src.length; i++) {
     if (src.charCodeAt(i) === 10) lineStarts.push(i + 1)
   }
-  const root: FvgNode = { tag: '#root', attrs: {}, children: [] }
-  const stack: FvgNode[] = [root]
+  const root: LayerNode = { tag: '#root', attrs: {}, children: [] }
+  const stack: LayerNode[] = [root]
   let pos = 0
 
   const pushText = (text: string) => {
@@ -129,7 +124,7 @@ export function parseFvg(source: string): FvgNode[] {
     CLOSE_TAG_RE.lastIndex = lt
     const close = CLOSE_TAG_RE.exec(src)
     if (close) {
-      const idx = findOpen(stack, canonicalTag(close[1]))
+      const idx = findOpen(stack, close[1])
       if (idx > 0) stack.length = idx
       pos = lt + close[0].length
       continue
@@ -143,7 +138,7 @@ export function parseFvg(source: string): FvgNode[] {
       continue
     }
     const raw = open[1]
-    const tag = canonicalTag(raw)
+    const tag = raw
     const attrs = parseAttrs(open[2] ?? '')
     // <draw> 正文是原始 JS，里面的 < 不要当标签解析
     if (tag === 'draw' && !open[3]) {
@@ -162,10 +157,10 @@ export function parseFvg(source: string): FvgNode[] {
     pos = lt + open[0].length
   }
 
-  return root.children.filter((c): c is FvgNode => typeof c !== 'string')
+  return root.children.filter((c): c is LayerNode => typeof c !== 'string')
 }
 
-function findOpen(stack: FvgNode[], tag: string): number {
+function findOpen(stack: LayerNode[], tag: string): number {
   for (let i = stack.length - 1; i > 0; i--) {
     if (stack[i].tag === tag) return i
   }

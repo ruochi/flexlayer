@@ -5,8 +5,8 @@ import { create } from './canvas.js'
 import { emitLayer } from './emit.js'
 import { initFontsForMeasure } from './fonts.js'
 import { h } from './h.js'
-import { parseFvg } from './parse.js'
-import { checkFvg, renderFvg } from './render.js'
+import { parseLayer } from './parse.js'
+import { checkLayer, renderLayer } from './render.js'
 
 beforeAll(async () => {
   for (const dir of [join(homedir(), '.cache', 'flexlayer', 'fonts'), '/tmp/flexlayer-test']) {
@@ -36,12 +36,12 @@ describe('data', () => {
     const watchedRect = watched.children[0]
     expect(typeof watchedRect !== 'string' && watchedRect.attrs.values).toBeUndefined()
     expect(typeof watchedRect !== 'string' && watchedRect.badAttrs).toEqual(['values'])
-    const watchedReport = await checkFvg(watched)
+    const watchedReport = await checkLayer(watched)
     expect(seen).toEqual([])
     expect(watchedReport.issues).toContainEqual(
       expect.objectContaining({ code: 'invalid-attr', hint: '结构化数据放进 data', path: 'layer/rect[0]' }),
     )
-    await renderFvg(watched)
+    await renderLayer(watched)
     expect(seen[0]).toEqual({ values: [3, 5, 8], label: "it's" })
 
     const root = h(
@@ -61,23 +61,23 @@ describe('data', () => {
         },
       }),
     )
-    const { png } = await renderFvg(root)
+    const { png } = await renderLayer(root)
 
     const emitted = emitLayer(root)
     expect(emitted.issues).toEqual([])
     expect(emitted.source).toContain(`data='{"values":[3,5,8],"label":"it&apos;s"}'`)
     expect(emitted.source).not.toContain('[object Object]')
-    const parsed = parseFvg(emitted.source)[0]
+    const parsed = parseLayer(emitted.source)[0]
     const parsedRect = parsed?.children.find((child) => typeof child !== 'string' && child.tag === 'rect')
     expect(typeof parsedRect !== 'string' && parsedRect && parsedRect.data).toEqual({ values: [3, 5, 8], label: "it's" })
 
-    const again = await renderFvg(emitted.source)
+    const again = await renderLayer(emitted.source)
     expect(again.png.equals(png)).toBe(true)
     expect(again.report.issues.filter((issue) => issue.level === 'error')).toEqual([])
   })
 
   it('非法 JSON 是 error，Map 和循环引用不写回', async () => {
-    const bad = await checkFvg(`<layer width="40" height="40" background="#000"><rect width="10" height="10" x="0" y="0" fill="#fff" data="{oops}" /></layer>`)
+    const bad = await checkLayer(`<layer width="40" height="40" background="#000"><rect width="10" height="10" x="0" y="0" fill="#fff" data="{oops}" /></layer>`)
     expect(bad.issues).toContainEqual(expect.objectContaining({ code: 'invalid-attr', level: 'error', message: 'data 不是合法的 JSON' }))
 
     const mapped = emitLayer(h('layer', { width: '10', height: '10', data: new Map([['a', 1]]) }))

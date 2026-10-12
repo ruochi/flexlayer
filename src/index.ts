@@ -1,4 +1,4 @@
-export { renderFvg, checkFvg, renderLayer, checkLayer, type RenderResult } from './render.js'
+export { renderLayer, checkLayer, type RenderResult } from './render.js'
 export { canvas, create, type CreatedLayer, type PlacedChar, type PlacedElement, type PlacedLine, type PlacedMask, type PlacedText } from './canvas.js'
 export { registerComponent, arrowComponent, type ComponentFn, type ComponentProps } from './components.js'
 export { glyph, type Glyph, type GlyphInk, type GlyphOptions } from './glyph.js'
@@ -19,7 +19,7 @@ export type {
 } from './frame.js'
 export { mergeFrameIssues, sampleFrames } from './check-frames.js'
 export type { SampleSpec } from './check-frames.js'
-export { parseFvg } from './parse.js'
+export { parseLayer } from './parse.js'
 export { zoomView } from './view.js'
 export { h } from './h.js'
 export { emitLayer } from './emit.js'
@@ -27,7 +27,7 @@ export { formatSourceLoc } from './source-loc.js'
 export type { SourceLoc } from './parse.js'
 export { buildReport, formatIssueLine } from './report.js'
 export type {
-  FvgReport,
+  LayerReport,
   RenderOptions,
   Issue,
   ElementReport,
@@ -36,6 +36,6 @@ export type {
   DrawElSnapshot,
   DrawComputedStyle,
 } from './types.js'
-export type { FvgNode, FvgChild } from './parse.js'
+export type { LayerNode, LayerChild } from './parse.js'
 export { resources, palettes, images, grades, glass, blends } from './resources.js'
 export type { FontResource, ImageResource } from './resources.js'

@@ -16,7 +16,7 @@
 | 规则 | 这样写 | 问题码 |
 | --- | --- | --- |
 | HTML 用 `style`，layer 和图形用属性 | `<p style="font-size:40px">`、`<circle fill="#fff">` | `invalid-attr` |
-| 标签一律小写 | `<circle>`、`<div style="display:flex">`。大写会渲染并报 info | `non-canonical` |
+| 标签一律小写 | `<circle>`、`<div style="display:flex">`。大写或 `fvg` 不渲染 | `unknown-tag` |
 | 嵌套 layer 不写 `background` | 色块用 `<rect fill>`、HTML `background` 或 `<draw>`。根节点的 `background` 才是画布底色 | `invalid-attr` |
 | 排布 | `<div style="display:flex; flex-direction:column">` | `unknown-tag` |
 | 线条 | `<layer><line x1 y1 x2 y2 /></layer>` | `invalid-child` |
@@ -47,4 +47,4 @@ flex 的默认值、文字盒子里不能嵌套块级标签、图标写法，都
 - 字体名用 [docs/RESOURCES.md](docs/RESOURCES.md) 里的，不要编造字体文件地址。
 - 实现备注在 [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md)。还没做的点选、作者灯光和 `Scene3D` 在 [docs/proposals/3D.md](docs/proposals/3D.md)。
 - 自动化：`npm test`，`npm run gallery`。
-- 合并进 `main` 时，把根 `package.json` 和 `package-lock.json` 的 `version` 补丁号加一。
+- 合并进 `main` 时，把根 `package.json` 和 `package-lock.json` 的 `version` 补丁号加一。删掉还能用的旧写法时升次版本号。

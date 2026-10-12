@@ -8,7 +8,7 @@ import {
   unregisterFilter,
   type FilterPixels,
 } from './filter.js'
-import { checkFvg, renderFvg } from './render.js'
+import { checkLayer, renderLayer } from './render.js'
 
 const EXTRA = ['wash', 'set-red', 'add-red', 'cast', 'cast-local']
 
@@ -74,7 +74,7 @@ describe('滤镜接口', () => {
       apply: wash,
       pad: () => 6,
     })
-    const { png, report } = await renderFvg(
+    const { png, report } = await renderLayer(
       `<layer width="40" height="40" background="#ffffff"><layer width="40" height="40" grade="mono" wash="1"><rect x="0" y="0" width="40" height="40" fill="#224488" /></layer></layer>`,
     )
     const { at } = await pixels(png)
@@ -99,7 +99,7 @@ describe('滤镜接口', () => {
       },
       apply: wash,
     })
-    const { png } = await renderFvg(
+    const { png } = await renderLayer(
       `<layer width="40" height="20" background="#ffffff"><layer width="40" height="20" wash="1" wash-mask="linear-gradient(to right, #fff0 50%, #fff 50%)"><rect x="0" y="0" width="40" height="20" fill="#808080" /></layer></layer>`,
     )
     const { at } = await pixels(png)
@@ -129,7 +129,7 @@ describe('滤镜接口', () => {
       },
     })
     const scene = `<layer width="16" height="16" background="#ffffff"><layer width="16" height="16" set-red="on" add-red="on"><rect x="0" y="0" width="16" height="16" fill="#000000" /></layer></layer>`
-    const first = await pixels((await renderFvg(scene)).png)
+    const first = await pixels((await renderLayer(scene)).png)
     expect(first.at(8, 8)[0]).toBe(50)
 
     unregisterFilter('set-red')
@@ -154,7 +154,7 @@ describe('滤镜接口', () => {
         for (let i = 0; i < data.length; i += 4) if (data[i + 3]) data[i] = 20
       },
     })
-    const second = await pixels((await renderFvg(scene)).png)
+    const second = await pixels((await renderLayer(scene)).png)
     expect(second.at(8, 8)[0]).toBe(20)
   })
 
@@ -177,11 +177,11 @@ describe('滤镜接口', () => {
       apply: blue,
     })
     const onRoot = await pixels(
-      (await renderFvg(`<layer width="20" height="20" background="#e04020" cast="on"></layer>`)).png,
+      (await renderLayer(`<layer width="20" height="20" background="#e04020" cast="on"></layer>`)).png,
     )
     expect(onRoot.at(10, 10)[2]).toBe(255)
     const local = await pixels(
-      (await renderFvg(`<layer width="20" height="20" background="#e04020" cast-local="on"></layer>`)).png,
+      (await renderLayer(`<layer width="20" height="20" background="#e04020" cast-local="on"></layer>`)).png,
     )
     expect(local.at(10, 10)[2]).toBeLessThan(80)
   })
@@ -199,15 +199,15 @@ describe('滤镜接口', () => {
       },
       apply: wash,
     })
-    const bad = await checkFvg(`<layer width="40" height="40" wash="2" wash-mask="#fff"></layer>`)
+    const bad = await checkLayer(`<layer width="40" height="40" wash="2" wash-mask="#fff"></layer>`)
     expect(bad.issues.some((issue) => issue.message.includes('wash') && issue.hint?.includes('0 到 1'))).toBe(true)
-    const maskOnly = await checkFvg(`<layer width="40" height="40" wash-mask="#fff"></layer>`)
+    const maskOnly = await checkLayer(`<layer width="40" height="40" wash-mask="#fff"></layer>`)
     expect(maskOnly.issues.some((issue) => issue.message.includes('wash-mask'))).toBe(true)
-    const onRect = await checkFvg(
+    const onRect = await checkLayer(
       `<layer width="40" height="40"><rect x="0" y="0" width="10" height="10" fill="#888" wash="1" /></layer>`,
     )
     expect(onRect.issues.some((issue) => issue.code === 'invalid-attr' && issue.message.includes('wash'))).toBe(true)
-    const inStyle = await checkFvg(`<layer width="80" height="40"><p style="wash:1">甲</p></layer>`)
+    const inStyle = await checkLayer(`<layer width="80" height="40"><p style="wash:1">甲</p></layer>`)
     expect(inStyle.issues.some((issue) => issue.code === 'invalid-attr' && issue.message.includes('wash'))).toBe(true)
   })
 })

@@ -1,6 +1,6 @@
-import { h, type FvgProps } from './h.js'
+import { h, type LayerProps } from './h.js'
 import { JSX as JsxTypes } from './jsx-intrinsics.js'
-import type { FvgChild, FvgNode, SourceLoc } from './parse.js'
+import type { LayerChild, LayerNode, SourceLoc } from './parse.js'
 
 /**
  * 自定义标签往这个接口上加。`jsxImportSource` 看的是本模块，不是包根。
@@ -42,20 +42,20 @@ function locFrom(source: JsxSource | undefined): SourceLoc | undefined {
   }
 }
 
-function normalizeChildren(children: unknown): FvgChild[] {
+function normalizeChildren(children: unknown): LayerChild[] {
   if (children == null || typeof children === 'boolean') return []
   if (Array.isArray(children)) {
-    const out: FvgChild[] = []
+    const out: LayerChild[] = []
     for (const child of children) out.push(...normalizeChildren(child))
     return out
   }
   if (typeof children === 'string') return [children]
   if (typeof children === 'number') return [String(children)]
-  if (typeof children === 'object') return [children as FvgChild]
+  if (typeof children === 'object') return [children as LayerChild]
   return []
 }
 
-function createElement(type: JsxType, props: FvgProps | null, source?: JsxSource): FvgNode | FvgChild[] | null {
+function createElement(type: JsxType, props: LayerProps | null, source?: JsxSource): LayerNode | LayerChild[] | null {
   const raw = props ?? {}
   if (type === Fragment) return normalizeChildren(raw.children)
   if (typeof type === 'function') {
@@ -63,7 +63,7 @@ function createElement(type: JsxType, props: FvgProps | null, source?: JsxSource
     if (rendered == null || typeof rendered === 'boolean') return null
     if (Array.isArray(rendered)) return normalizeChildren(rendered)
     if (typeof rendered === 'string' || typeof rendered === 'number') return [String(rendered)]
-    if (typeof rendered === 'object' && rendered && 'tag' in rendered) return rendered as FvgNode
+    if (typeof rendered === 'object' && rendered && 'tag' in rendered) return rendered as LayerNode
     const name = type.name || 'Anonymous'
     throw new Error(`组件 ${name} 必须返回一个 Flex Layer 元素`)
   }
@@ -76,33 +76,33 @@ function createElement(type: JsxType, props: FvgProps | null, source?: JsxSource
   return node
 }
 
-type RenderFn<P> = (props: P) => FvgNode | FvgChild[] | null | undefined
+type RenderFn<P> = (props: P) => LayerNode | LayerChild[] | null | undefined
 
-export function jsx(type: string, props: FvgProps | null, key?: string): FvgNode
-export function jsx(type: typeof Fragment, props: FvgProps | null, key?: string): FvgChild[]
-export function jsx<P>(type: RenderFn<P>, props: P | null, key?: string): FvgNode | FvgChild[] | null
-export function jsx(type: JsxType, props: FvgProps | null, _key?: string): FvgNode | FvgChild[] | null {
+export function jsx(type: string, props: LayerProps | null, key?: string): LayerNode
+export function jsx(type: typeof Fragment, props: LayerProps | null, key?: string): LayerChild[]
+export function jsx<P>(type: RenderFn<P>, props: P | null, key?: string): LayerNode | LayerChild[] | null
+export function jsx(type: JsxType, props: LayerProps | null, _key?: string): LayerNode | LayerChild[] | null {
   return createElement(type, props)
 }
 
-export function jsxs(type: string, props: FvgProps | null, key?: string): FvgNode
-export function jsxs(type: typeof Fragment, props: FvgProps | null, key?: string): FvgChild[]
-export function jsxs<P>(type: RenderFn<P>, props: P | null, key?: string): FvgNode | FvgChild[] | null
-export function jsxs(type: JsxType, props: FvgProps | null, _key?: string): FvgNode | FvgChild[] | null {
+export function jsxs(type: string, props: LayerProps | null, key?: string): LayerNode
+export function jsxs(type: typeof Fragment, props: LayerProps | null, key?: string): LayerChild[]
+export function jsxs<P>(type: RenderFn<P>, props: P | null, key?: string): LayerNode | LayerChild[] | null
+export function jsxs(type: JsxType, props: LayerProps | null, _key?: string): LayerNode | LayerChild[] | null {
   return createElement(type, props)
 }
 
-export function jsxDEV(type: string, props: FvgProps | null, key: string | undefined, isStatic: boolean, source?: JsxSource, self?: unknown): FvgNode
-export function jsxDEV(type: typeof Fragment, props: FvgProps | null, key: string | undefined, isStatic: boolean, source?: JsxSource, self?: unknown): FvgChild[]
-export function jsxDEV<P>(type: RenderFn<P>, props: P | null, key: string | undefined, isStatic: boolean, source?: JsxSource, self?: unknown): FvgNode | FvgChild[] | null
+export function jsxDEV(type: string, props: LayerProps | null, key: string | undefined, isStatic: boolean, source?: JsxSource, self?: unknown): LayerNode
+export function jsxDEV(type: typeof Fragment, props: LayerProps | null, key: string | undefined, isStatic: boolean, source?: JsxSource, self?: unknown): LayerChild[]
+export function jsxDEV<P>(type: RenderFn<P>, props: P | null, key: string | undefined, isStatic: boolean, source?: JsxSource, self?: unknown): LayerNode | LayerChild[] | null
 export function jsxDEV(
   type: JsxType,
-  props: FvgProps | null,
+  props: LayerProps | null,
   _key: string | undefined,
   _isStatic: boolean,
   source?: JsxSource,
   _self?: unknown,
-): FvgNode | FvgChild[] | null {
+): LayerNode | LayerChild[] | null {
   return createElement(type, props, source)
 }
 

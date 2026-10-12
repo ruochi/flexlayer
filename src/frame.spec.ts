@@ -7,7 +7,7 @@ import { initFontsForMeasure } from './fonts.js'
 import { mergeFrameIssues, sampleFrames } from './check-frames.js'
 import { Easing, interpolate, noise, random, renderComposition, renderFrames, sequence, spring, type Composition } from './frame.js'
 import { formatIssueLine } from './report.js'
-import { renderFvg } from './render.js'
+import { renderLayer } from './render.js'
 
 beforeAll(async () => {
   for (const dir of [join(homedir(), '.cache', 'flexlayer', 'fonts'), '/tmp/flexlayer-test']) {
@@ -55,8 +55,8 @@ describe('el.t', () => {
         },
       }),
     )
-    await renderFvg(root)
-    await renderFvg(root, { t: 1.5 })
+    await renderLayer(root)
+    await renderLayer(root, { t: 1.5 })
     expect(seen).toEqual([0, 1.5])
   })
 })
