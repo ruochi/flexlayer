@@ -37,7 +37,7 @@ npx flexlayer render scene.tsx --frames out/ --from 0 --to 90
 
 文件头写 `/** @jsxImportSource flexlayer */`。`canvas.create` 的参数必须是 `<layer>`。返回的 `left` `top` `right` `bottom` 是没转之前的布局盒；接着摆下一块用 `rotatedBox.bottom`。贴着某个圆或矩形用 `elements[].box`，躲开转过的图形用 `ink`。
 
-检查抠图结果或黑白蒙版用 `await analyzeImage('cut.png')`：返回留下的比例 `area`、外接矩形 `ink`、碎片数 `pieces`、洞数 `holes`、软边宽度 `softEdge` 和轮廓 `d`，坐标是图片像素。`d` 直接写进 `<mask><path d /></mask>`。
+检查抠图结果或黑白蒙版用 `analyzeImage('cut.png')`，同步返回留下的比例 `area`、外接矩形 `ink`、碎片数 `pieces`、洞数 `holes`、软边宽度 `softEdge` 和轮廓 `d`，坐标是图片像素。`d` 直接写进 `<mask><path d /></mask>`。
 
 抠主体和前景遮罩不在渲染器里，`analyzeImage` 只量已经抠好的图。包 `flexlayer-select` 不在 npm 上。在仓库里进入 `packages/select`，执行 `npm ci && npm run build`。前景遮罩：`npx flexlayer-select mask photo.jpg`，深度模型 q4f16 大约 19MB。返回 `photo.foreground.png` 和前景的 `x` `y` `width` `height`。不写点，从伸进远处的尖往下长。要留下某一块写 `--point x,y`，可以写多次。标记里用 `<mask><img src="photo.foreground.png" channel="luma" /></mask>` 罩住原图。`--refine` 才下载 BiRefNet lite 的 fp16，大约 100MB。深度模型会先放掉。只抠主体时仍用 `npx flexlayer-select cutout photo.jpg --preset portrait`。预览写 `<preview of="#cut" show="overlay checker black white edges" />`。`show` 是合法属性。正常成片不画预览，`npx flexlayer render scene.layer --preview out.png` 才出拼图。蒙版层自己的 `shadow`、`glow` 和外侧 `stroke` 按留下的轮廓伸出蒙版。
 
