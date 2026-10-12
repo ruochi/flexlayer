@@ -24,7 +24,7 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
  * 写了 stroke 时，在超采样缓冲上按屏幕像素描折棱和轮廓，再和填充一起平均缩回。
  * 两只都写了 stroke 的网格相互穿过时，交界线算折棱，颜色和宽度跟后写的那只。
  * hidden 只画被这只网格自己挡住的棱，虚线是 6 实 4 空。交界线被这两只中任意一只挡住时同样算隐藏线。
- * 不写 material 时是磨砂：主光乘 fill。plastic 和 metal 用同一套磨砂明暗，再叠竖向工作室环境，没有缩成一点的高光。glass 后画，边缘映环境。
+ * 不写 material 时是磨砂：主光乘 fill。plastic 和 metal 用同一套磨砂明暗，再叠竖向工作室环境，没有缩成一点的高光。glass 是假玻璃，后画：反射留着主灯，折射再按位置扫这张环境。
  * 同一条折线上的短段接成一条再取虚线相位，圆弧不会接成实线。
  */
 
@@ -258,10 +258,6 @@ function clamp01(n: number) {
   return n
 }
 
-function shininess(roughness: number) {
-  return 2 ** (8 * (1 - clamp01(roughness)))
-}
-
 function shadeNormal(nx: number, ny: number, nz: number, back: boolean) {
   let x = nx
   let y = -ny
@@ -283,6 +279,102 @@ function reflectView(v: { x: number; y: number; z: number }, n: { x: number; y: 
   return unit(2 * d * n.x - v.x, 2 * d * n.y - v.y, 2 * d * n.z - v.z)
 }
 
+/**
+ * 反射：主灯在方位 -68°、仰角 24°。少转 20°、少抬 8°，方窗停在形体里偏左上。
+ * 轮廓光：边缘光条在方位 150°、仰角 -6°。掠射时把反射往这条窄光上靠，轮廓才亮。
+ * 折射：进玻璃再从背面出来，按离开形体中心的位置轻轻扫过环境，不把主灯铺满正面。
+ */
+const GLASS_AZ = ((-68 + 20) * Math.PI) / 180
+const GLASS_EL = ((24 - 8) * Math.PI) / 180
+const GLASS_RIM_AZ = (150 * Math.PI) / 180
+const GLASS_RIM_EL = (-6 * Math.PI) / 180
+const GLASS_IOR = 1.5
+/** 平面上离开中心的距离。扫过暗部和边缘光，不扫进整块主灯。 */
+const GLASS_FAN = 0.007
+const glassCenter = { x: 0, y: 0, z: 0 }
+
+function glassReflect(dir: { x: number; y: number; z: number }) {
+  const len = Math.hypot(dir.x, dir.y, dir.z) || 1
+  const dx = dir.x / len
+  const dy = dir.y / len
+  const dz = dir.z / len
+  const az = Math.atan2(dx, dz) + GLASS_AZ
+  let el = Math.asin(Math.max(-1, Math.min(1, dy))) + GLASS_EL
+  const limit = Math.PI / 2 - 1e-4
+  if (el > limit) el = limit
+  if (el < -limit) el = -limit
+  const cel = Math.cos(el)
+  return { x: Math.sin(az) * cel, y: Math.sin(el), z: Math.cos(az) * cel }
+}
+
+/** v 从表面指向来的那一侧，n 也指向那一侧。eta 是入射介质 / 折射介质。全反射时返回 null。 */
+function refractView(
+  v: { x: number; y: number; z: number },
+  n: { x: number; y: number; z: number },
+  eta: number,
+): { x: number; y: number; z: number } | null {
+  const ix = -v.x
+  const iy = -v.y
+  const iz = -v.z
+  const ndoti = n.x * ix + n.y * iy + n.z * iz
+  const k = 1 - eta * eta * (1 - ndoti * ndoti)
+  if (k <= 0) return null
+  const s = eta * ndoti + Math.sqrt(k)
+  return unit(eta * ix - s * n.x, eta * iy - s * n.y, eta * iz - s * n.z)
+}
+
+/** 假厚度：进去之后再从对面出来。半径消掉了，平面正入射时背面法线是 -n。 */
+function sphereExit(
+  n: { x: number; y: number; z: number },
+  inside: { x: number; y: number; z: number },
+): { x: number; y: number; z: number } | null {
+  const ndotT = n.x * inside.x + n.y * inside.y + n.z * inside.z
+  const n2 = {
+    x: n.x - 2 * ndotT * inside.x,
+    y: n.y - 2 * ndotT * inside.y,
+    z: n.z - 2 * ndotT * inside.z,
+  }
+  return refractView({ x: -inside.x, y: -inside.y, z: -inside.z }, { x: -n2.x, y: -n2.y, z: -n2.z }, GLASS_IOR)
+}
+
+/** 把方向往目标方位、仰角拉近。pull 为 1 时贴在目标上。 */
+function aimToward(dir: { x: number; y: number; z: number }, azTarget: number, elTarget: number, pull: number) {
+  const len = Math.hypot(dir.x, dir.y, dir.z) || 1
+  const dx = dir.x / len
+  const dy = dir.y / len
+  const dz = dir.z / len
+  let az = Math.atan2(dx, dz)
+  let el = Math.asin(Math.max(-1, Math.min(1, dy)))
+  let dAz = azTarget - az
+  if (dAz > Math.PI) dAz -= Math.PI * 2
+  if (dAz < -Math.PI) dAz += Math.PI * 2
+  az += dAz * pull
+  el += (elTarget - el) * pull
+  const limit = Math.PI / 2 - 1e-4
+  if (el > limit) el = limit
+  if (el < -limit) el = -limit
+  const cel = Math.cos(el)
+  return { x: Math.sin(az) * cel, y: Math.sin(el), z: Math.cos(az) * cel }
+}
+
+function glassTransmit(
+  v: { x: number; y: number; z: number },
+  n: { x: number; y: number; z: number },
+  x: number,
+  y: number,
+  z: number,
+) {
+  const inside = refractView(v, n, 1 / GLASS_IOR)
+  if (!inside) return null
+  const exit = sphereExit(n, inside)
+  if (!exit) return null
+  const ox = x - glassCenter.x
+  const oy = glassCenter.y - y
+  const oz = z - glassCenter.z
+  const nd = ox * n.x + oy * n.y + oz * n.z
+  return unit(exit.x + (ox - n.x * nd) * GLASS_FAN, exit.y + (oy - n.y * nd) * GLASS_FAN, exit.z + (oz - n.z * nd) * GLASS_FAN)
+}
+
 type ShadeCamera = { x: number; y: number; z: number; parallel?: boolean }
 
 /**
@@ -298,7 +390,7 @@ function envOverMatte(channel: number, shade: number, envC: number, darken: numb
   return Math.min(255, (darkened + (1 - darkened) * light * lighten) * 255)
 }
 
-/** 金属和塑料都是磨砂明暗再叠环境。玻璃边缘映出同一张环境，中心透出底下。 */
+/** 金属和塑料都是磨砂明暗再叠环境。玻璃先留方窗和轮廓光，折射补在还没照亮的地方。 */
 function materialBytes(
   batch: Batch,
   nx: number,
@@ -325,18 +417,51 @@ function materialBytes(
     const chan = (channel: number, envC: number) => byte(envOverMatte(channel, shade, envC, darken, lighten))
     return [chan(batch.r, envR), chan(batch.g, envG), chan(batch.b, envB), batch.a]
   }
-  const h = unit(KEY.x + v.x, KEY.y + v.y, KEY.z + v.z)
-  const ndoth = Math.max(n.x * h.x + n.y * h.y + n.z * h.z, 0)
-  const spec = blocked ? 0 : ndoth ** shininess(batch.roughness)
   const ndotv = clamp01(n.x * v.x + n.y * v.y + n.z * v.z)
-  const edge = (1 - ndotv) ** 2.2
-  const body = batch.a / 255
-  const alpha = body + (1 - body) * edge * 0.9
-  const whiten = edge * 0.8
-  const lit = (0.72 + 0.28 * Math.min(1, shade)) * (blocked ? 0.72 : 1)
-  const specAdd = spec * 255
-  const chan = (c: number, envC: number) => Math.min(255, c * lit * (1 - whiten) + envC * whiten + specAdd)
-  return [byte(chan(batch.r, envR)), byte(chan(batch.g, envG)), byte(chan(batch.b, envB)), byte(alpha * 255)]
+  const fresnel = 0.04 + 0.96 * (1 - ndotv) ** 5
+  const transmit = 1 - fresnel
+  const through = glassTransmit(v, n, x, y, z)
+  let bendR = 0
+  let bendG = 0
+  let bendB = 0
+  if (through) {
+    const hit = studioAt(through.x, through.y, through.z, batch.roughness)
+    bendR = hit.r
+    bendG = hit.g
+    bendB = hit.b
+  }
+  const windowDir = glassReflect(reflect)
+  const win = studioAt(windowDir.x, windowDir.y, windowDir.z, batch.roughness)
+  const winR = win.r
+  const winG = win.g
+  const winB = win.b
+  // 掠射边单独对上那条窄的边缘光，这圈是轮廓光，不跟正面的方窗混在一起。
+  const rimDir = aimToward(reflect, GLASS_RIM_AZ, GLASS_RIM_EL, 0.72)
+  const rim = studioAt(rimDir.x, rimDir.y, rimDir.z, batch.roughness)
+  const cover = batch.a / 255
+  const lum = (r: number, g: number, b: number) => (r + g + b) / (3 * 255)
+  const dim = blocked ? 0.72 : 1
+  const chan = (c: number, bendC: number, winC: number, reflC: number, rimC: number) => {
+    const tint = c / 255
+    const windowTint = 0.35 + 0.65 * tint
+    const base = tint * shade * 0.08 * dim
+    // 方窗留在形体里。轮廓光按掠射加上。折射补在这两处还没照亮的地方。
+    const windowLight = (winC / 255) * windowTint * transmit * dim
+    const contour = Math.max((reflC / 255) * fresnel, (rimC / 255) * fresnel * windowTint)
+    const reflection = Math.min(1, windowLight + contour)
+    const refraction = (bendC / 255) * windowTint * transmit * 0.85 * dim
+    return byte(Math.min(1, base + reflection + (1 - reflection) * refraction) * 255)
+  }
+  const reflectionLum = Math.min(1, lum(winR, winG, winB) * transmit + fresnel)
+  const refractionLum = lum(bendR, bendG, bendB) * transmit * 0.85
+  const bright = reflectionLum + (1 - reflectionLum) * refractionLum
+  const alpha = cover + (1 - cover) * bright
+  return [
+    chan(batch.r, bendR, winR, envR, rim.r),
+    chan(batch.g, bendG, winG, envG, rim.g),
+    chan(batch.b, bendB, winB, envB, rim.b),
+    byte(alpha * 255),
+  ]
 }
 
 function shadeOf(nx: number, ny: number, nz: number, back: boolean, blocked = false) {
@@ -2157,6 +2282,19 @@ function rasterize(
     const batch = batches[batchIndex]!
     const verts = authored[batchIndex]!
     const screen = projected[batchIndex]!
+    if (batch.material === 'glass' && verts.length > 0) {
+      let sx = 0
+      let sy = 0
+      let sz = 0
+      for (const vert of verts) {
+        sx += vert.x
+        sy += vert.y
+        sz += vert.z
+      }
+      glassCenter.x = sx / verts.length
+      glassCenter.y = sy / verts.length
+      glassCenter.z = sz / verts.length
+    }
     const indices = batch.indices
     for (let i = 0; i < indices.length; i += 3) {
       const i0 = indices[i]!

@@ -1,0 +1,49 @@
+<layer width="1520" height="1000" background="#101114" color="#f4efe6" font-family="ChillDuanSans" safe="0">
+  <layer x="64" y="24">
+    <p style="font-size:40px">假玻璃</p>
+  </layer>
+  <layer x="64" y="78">
+    <p style="font-size:28px; color:#c8c2b6">反射留着主灯，折射再叠这张环境 · 粗糙 0.08</p>
+  </layer>
+
+  <layer perspective="1600" width="1520" height="1000">
+    <sphere cx="200" cy="280" r="78" fill="#f7f4ee" material="glass 0.08" />
+    <box x="430" y="200" width="160" height="160" depth="150" rx="36" fill="#f7f4ee" material="glass 0.08" rotateY="-22" rotateX="18" />
+    <box x="790" y="200" width="160" height="160" depth="150" fill="#f7f4ee" material="glass 0.08" rotateY="-20" rotateX="16" />
+    <layer x="1120" y="155" width="210" height="230">
+      <model src="diamond.glb" material="glass 0.08" rotateY="-28" rotateX="36" />
+    </layer>
+
+    <sphere cx="200" cy="700" r="78" fill="#f7f4ee" material="glass 0.72" />
+    <box x="430" y="620" width="160" height="160" depth="150" rx="36" fill="#f7f4ee" material="glass 0.72" rotateY="-22" rotateX="18" />
+    <box x="790" y="620" width="160" height="160" depth="150" fill="#f7f4ee" material="glass 0.72" rotateY="-20" rotateX="16" />
+    <layer x="1120" y="575" width="210" height="230">
+      <model src="diamond.glb" material="glass 0.72" rotateY="-28" rotateX="36" />
+    </layer>
+  </layer>
+
+  <layer x="100" y="390" width="200">
+    <div style="display:flex; flex-direction:column; align-items:center">
+      <p style="font-size:32px">球</p>
+    </div>
+  </layer>
+  <layer x="410" y="390" width="200">
+    <div style="display:flex; flex-direction:column; align-items:center">
+      <p style="font-size:32px">圆角正方</p>
+    </div>
+  </layer>
+  <layer x="770" y="390" width="200">
+    <div style="display:flex; flex-direction:column; align-items:center">
+      <p style="font-size:32px">正方</p>
+    </div>
+  </layer>
+  <layer x="1120" y="420" width="200">
+    <div style="display:flex; flex-direction:column; align-items:center">
+      <p style="font-size:32px">钻石</p>
+    </div>
+  </layer>
+
+  <layer x="64" y="500">
+    <p style="font-size:28px; color:#c8c2b6">同一组形体 · 粗糙 0.72</p>
+  </layer>
+</layer>

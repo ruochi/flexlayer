@@ -474,7 +474,7 @@ describe('网格绘制', () => {
     }
   })
 
-  it('玻璃透出后面的颜色，边缘更白，前面的不透明球盖住它', async () => {
+  it('玻璃把主灯加进球里，没照到的地方透出后面，前面的不透明球盖住它', async () => {
     const { png } = await renderFvg(`
       <layer width="180" height="180" background="#000000" perspective="700">
         <rect x="10" y="10" width="160" height="160" fill="#ff0000" />
@@ -483,13 +483,23 @@ describe('网格绘制', () => {
     `)
     const glass = await imageOf(png)
     const outside = glass.at(40, 40)
-    const center = glass.at(90, 90)
     expect(outside[0]).toBeGreaterThan(240)
     expect(outside[1]).toBeLessThan(8)
-    expect(center[0]).toBeGreaterThan(240)
-    expect(center[1]).toBeGreaterThan(50)
-    expect(center[1]).toBeLessThan(160)
-    expect(brightest(glass).rgba[1]).toBeGreaterThan(center[1]! + 30)
+    let windowCount = 0
+    let bodyRed = 0
+    for (let y = 50; y < 130; y++) {
+      for (let x = 50; x < 130; x++) {
+        const dx = x - 90
+        const dy = y - 90
+        if (dx * dx + dy * dy > 46 * 46) continue
+        const pixel = glass.at(x, y)
+        const lum = 0.2126 * pixel[0]! + 0.7152 * pixel[1]! + 0.0722 * pixel[2]!
+        if (lum > 140 && pixel[1]! > 80) windowCount++
+        if (x > 104 && pixel[0]! > 130 && pixel[0]! > pixel[1]! + 80) bodyRed++
+      }
+    }
+    expect(windowCount).toBeGreaterThan(80)
+    expect(bodyRed).toBeGreaterThan(40)
 
     const covered = await renderFvg(`
       <layer width="180" height="180" background="#000000" perspective="700">
