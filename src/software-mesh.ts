@@ -415,7 +415,9 @@ function materialBytes(
   const envG = env.g
   const envB = env.b
   if (batch.material === 'metal' || batch.material === 'plastic') {
-    const darken = batch.material === 'metal' ? 0.92 : 0.4
+    // 高粗糙度已经在糊环境里失去高光。暗部再按 0.92 压，会把磨砂金属压成噪点。粗糙度的平方越大，压暗越轻。
+    const ease = 1 - 0.4 * batch.roughness * batch.roughness
+    const darken = (batch.material === 'metal' ? 0.92 : 0.4) * ease
     const lighten = batch.material === 'metal' ? 0.45 : 0.22
     const chan = (channel: number, envC: number) => byte(envOverMatte(channel, shade, envC, darken, lighten))
     return [chan(batch.r, envR), chan(batch.g, envG), chan(batch.b, envB), batch.a]
@@ -424,23 +426,32 @@ function materialBytes(
   const fresnel = 0.04 + 0.96 * (1 - ndotv) ** 5
   const transmit = 1 - fresnel
   const through = glassTransmit(v, n, x, y, z)
+  // 高粗糙度的玻璃采样的是糊开的暗室。往中间灰收一截，避免和金属一样发暗。默认玻璃粗糙度约 0.08，这一项接近 0。
+  const lift = batch.roughness * batch.roughness * 0.35
+  const soften = (c: number) => c + (128 - c) * lift
   let bendR = 0
   let bendG = 0
   let bendB = 0
   if (through) {
     const hit = studioAt(through.x, through.y, through.z, batch.roughness)
-    bendR = hit.r
-    bendG = hit.g
-    bendB = hit.b
+    bendR = soften(hit.r)
+    bendG = soften(hit.g)
+    bendB = soften(hit.b)
   }
   const windowDir = glassReflect(reflect)
   const win = studioAt(windowDir.x, windowDir.y, windowDir.z, batch.roughness)
-  const winR = win.r
-  const winG = win.g
-  const winB = win.b
+  const winR = soften(win.r)
+  const winG = soften(win.g)
+  const winB = soften(win.b)
   // 掠射边单独对上那条窄的边缘光，这圈是轮廓光，不跟正面的方窗混在一起。
   const rimDir = aimToward(reflect, GLASS_RIM_AZ, GLASS_RIM_EL, 0.72)
   const rim = studioAt(rimDir.x, rimDir.y, rimDir.z, batch.roughness)
+  const rimR = soften(rim.r)
+  const rimG = soften(rim.g)
+  const rimB = soften(rim.b)
+  const reflR = soften(envR)
+  const reflG = soften(envG)
+  const reflB = soften(envB)
   const cover = batch.a / 255
   const lum = (r: number, g: number, b: number) => (r + g + b) / (3 * 255)
   const dim = blocked ? 0.72 : 1
@@ -460,9 +471,9 @@ function materialBytes(
   const bright = reflectionLum + (1 - reflectionLum) * refractionLum
   const alpha = cover + (1 - cover) * bright
   return [
-    chan(batch.r, bendR, winR, envR, rim.r),
-    chan(batch.g, bendG, winG, envG, rim.g),
-    chan(batch.b, bendB, winB, envB, rim.b),
+    chan(batch.r, bendR, winR, reflR, rimR),
+    chan(batch.g, bendG, winG, reflG, rimG),
+    chan(batch.b, bendB, winB, reflB, rimB),
     byte(alpha * 255),
   ]
 }

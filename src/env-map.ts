@@ -3,7 +3,8 @@
  * 灯是圆角矩形。主灯是左上方一块大圆角正方形，从正左向中间偏 30°。暗面另有一条窄长的边缘光条。
  * 几块板的顶部停在不同高度，互不相接，也不收到天顶。
  * 方位和仰角躲开 0°、90°、180°、270°，板子也从竖直偏开一点。
- * 白、黑和灰过渡都有。粗糙度先把这张环境模糊，噪点也写进这张图，再拿它贴到反射上。越高越糊，噪点越密。
+ * 白、黑和灰过渡都有。粗糙度 0 到 1：0 用清晰环境，不加算点；1 用最糊的一层，噪点振幅最大。
+ * 噪点按粗糙度的平方加大，加在颜色上，不乘亮度，避免亮部被截断后整张变暗。
  */
 
 const WIDTH = 128
@@ -238,10 +239,13 @@ function settlePole(src: Uint8Array): Uint8Array {
   return out
 }
 
-/** 把噪点写进已经模糊好的环境。粗糙越高，振幅越大。 */
+/**
+ * 把噪点写进已经模糊好的环境。
+ * 振幅是 `roughness² × 10` 级。0.02 以下不加。加法、均值接近 0，不跟像素亮度相乘。
+ */
 function addGrain(src: Uint8Array, roughness: number): Uint8Array {
   if (roughness <= 0.02) return src
-  const amp = roughness * roughness * 0.55
+  const amp = roughness * roughness * 10
   const out = new Uint8Array(src.length)
   for (let y = 0; y < HEIGHT; y++) {
     const el = (0.5 - (y + 0.5) / HEIGHT) * Math.PI
@@ -250,11 +254,10 @@ function addGrain(src: Uint8Array, roughness: number): Uint8Array {
     for (let x = 0; x < WIDTH; x++) {
       const az = ((x + 0.5) / WIDTH) * Math.PI * 2
       const speck = grain(Math.sin(az) * cy, sy, Math.cos(az) * cy) * amp
-      const scale = 1 + speck
       const i = (y * WIDTH + x) * 3
-      out[i] = Math.max(0, Math.min(255, Math.round(src[i]! * scale)))
-      out[i + 1] = Math.max(0, Math.min(255, Math.round(src[i + 1]! * scale)))
-      out[i + 2] = Math.max(0, Math.min(255, Math.round(src[i + 2]! * scale)))
+      out[i] = Math.max(0, Math.min(255, Math.round(src[i]! + speck)))
+      out[i + 1] = Math.max(0, Math.min(255, Math.round(src[i + 1]! + speck)))
+      out[i + 2] = Math.max(0, Math.min(255, Math.round(src[i + 2]! + speck)))
     }
   }
   return out

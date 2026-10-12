@@ -45,8 +45,8 @@ describe('foregroundMask', () => {
       width: number
       height: number
     }
-    expect(record).toEqual({ mask: 'photo.foreground.png', x: result.x, y: result.y, width: result.width, height: result.height, front: 0.5 })
-    expect(result.front).toBe(0.5)
+    expect(record).toEqual({ mask: 'photo.foreground.png', x: result.x, y: result.y, width: result.width, height: result.height, points: [] })
+    expect(result.points).toEqual([])
     const image = await readRgba(result.mask)
     expect(image.width).toBe(48)
     expect(image.height).toBe(36)
@@ -69,16 +69,16 @@ describe('foregroundMask', () => {
     } finally {
       console.log = log
     }
-    const printed = JSON.parse(logs.join('\n')) as { mask: string; x: number; y: number; width: number; height: number; front: number }
+    const printed = JSON.parse(logs.join('\n')) as { mask: string; x: number; y: number; width: number; height: number; points: number[][] }
     expect(printed.mask).toBe('photo.foreground.png')
-    expect(printed.front).toBe(0.5)
+    expect(printed.points).toEqual([])
     expect(printed.x).toBeGreaterThanOrEqual(17)
     expect(printed.width).toBeGreaterThan(8)
     expect(printed.height).toBeGreaterThan(8)
   })
 
-  it('命令行把 front 写进返回值', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'flexlayer-mask-front-'))
+  it('命令行可以点多个点，并写进返回值', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flexlayer-mask-point-'))
     const src = join(dir, 'photo.png')
     const depth = paint(src)
     const logs: string[] = []
@@ -87,13 +87,24 @@ describe('foregroundMask', () => {
       logs.push(args.map(String).join(' '))
     }
     try {
-      await runSelect(['mask', src, '--front', '0.2'], { depth: () => depth })
+      await runSelect(['mask', src, '--point', '24,12', '--point', '24,20,28,16'], { depth: () => depth })
     } finally {
       console.log = log
     }
-    const printed = JSON.parse(logs.join('\n')) as { front: number; height: number }
-    expect(printed.front).toBe(0.2)
-    const record = JSON.parse(readFileSync(join(dir, 'photo.foreground.json'), 'utf8')) as { front: number }
-    expect(record.front).toBe(0.2)
+    const printed = JSON.parse(logs.join('\n')) as { points: number[][]; x: number; width: number }
+    expect(printed.points).toEqual([[24, 12], [24, 20], [28, 16]])
+    expect(printed.x).toBeGreaterThanOrEqual(17)
+    expect(printed.width).toBeGreaterThan(8)
+    const record = JSON.parse(readFileSync(join(dir, 'photo.foreground.json'), 'utf8')) as { points: number[][] }
+    expect(record.points).toEqual([[24, 12], [24, 20], [28, 16]])
+  })
+
+  it('点的写法不对时报错', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flexlayer-mask-point-bad-'))
+    const src = join(dir, 'photo.png')
+    paint(src)
+    await expect(runSelect(['mask', src, '--point', '钟楼'])).rejects.toThrow('点要写成 x,y')
+    await expect(runSelect(['mask', src, '--point', '24'])).rejects.toThrow('点要写成 x,y')
+    await expect(runSelect(['mask', src, '--point', '100,10'])).rejects.toThrow('点要落在图片里面')
   })
 })

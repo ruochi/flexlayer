@@ -63,6 +63,57 @@ describe('大平面只画取景窗里的一块', () => {
     expect(blue[0]).toBeLessThan(80)
   })
 
+  it('斜放的大块贴图接缝是一条直线', async () => {
+    const { png } = await renderFvg(`
+      <layer width="320" height="200" background="#101820" perspective="500">
+        <layer x="-2340" y="-1820" width="5000" height="4000" rotateX="82">
+          <rect x="0" y="0" width="2500" height="4000" fill="#ff2040" />
+          <rect x="2500" y="0" width="2500" height="4000" fill="#20c060" />
+        </layer>
+      </layer>
+    `)
+    const img = await loadImage(png)
+    const canvas = createCanvas(img.width, img.height)
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    const data = ctx.getImageData(0, 0, img.width, img.height).data
+    const at = (x: number, y: number) => {
+      const i = (y * img.width + x) * 4
+      return [data[i]!, data[i + 1]!, data[i + 2]!] as const
+    }
+    const red = (px: readonly number[]) => px[0] > 160 && px[1] < 90 && px[0] > px[1] + 80
+    const green = (px: readonly number[]) => px[1] > 120 && px[0] < 90 && px[1] > px[0] + 40
+    const hits: Array<{ x: number; y: number }> = []
+    for (let y = 0; y < img.height; y++) {
+      let left = -1
+      let right = -1
+      for (let x = 0; x < img.width; x++) {
+        const px = at(x, y)
+        if (red(px)) left = x
+        if (right < 0 && green(px) && left >= 0) right = x
+      }
+      if (left >= 0 && right > left) hits.push({ x: (left + right) / 2, y })
+    }
+    expect(hits.length).toBeGreaterThan(40)
+    let sumX = 0
+    let sumY = 0
+    let sumYY = 0
+    let sumXY = 0
+    for (const hit of hits) {
+      sumX += hit.x
+      sumY += hit.y
+      sumYY += hit.y * hit.y
+      sumXY += hit.x * hit.y
+    }
+    const n = hits.length
+    const denom = n * sumYY - sumY * sumY
+    const slope = denom === 0 ? 0 : (n * sumXY - sumX * sumY) / denom
+    const intercept = (sumX - slope * sumY) / n
+    let worst = 0
+    for (const hit of hits) worst = Math.max(worst, Math.abs(hit.x - (intercept + slope * hit.y)))
+    expect(worst).toBeLessThan(2.5)
+  })
+
   it('斜放的大地仍铺在画面下半', async () => {
     const { png } = await renderFvg(
       `<layer width="320" height="200" background="#101820" perspective="500"><rect x="-2340" y="-1820" width="5000" height="4000" fill="#3d8bfd" rotateX="82" /></layer>`,

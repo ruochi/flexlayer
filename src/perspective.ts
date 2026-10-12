@@ -409,6 +409,58 @@ function paintHomography(
     const back = applyHomography(h, mid.x, mid.y)
     if (!back || Math.hypot(back.x - logicalWidth / 2, back.y - logicalHeight / 2) > 1.5) return false
   }
+  writeHomography(off, bitmap, h, logicalWidth, logicalHeight, x0, y0, raster)
+  return true
+}
+
+/** 屏幕上的点是否在多边形里。水平边不计入，避免除零。 */
+function pointInPolygon(x: number, y: number, polygon: Array<{ x: number; y: number }>): boolean {
+  let inside = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const a = polygon[i]!
+    const b = polygon[j]!
+    if ((a.y > y) === (b.y > y)) continue
+    const cross = ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x
+    if (x < cross) inside = !inside
+  }
+  return inside
+}
+
+/** 四个点用原来的求解。更多点用最小二乘，裁出来的多边形仍落在同一张平面上。 */
+function fitHomographyPoints(from: Vec2[], to: Vec2[]): number[] | null {
+  if (from.length < 4 || from.length !== to.length) return null
+  if (from.length === 4) return fitHomography(from, to)
+  const cols = 8
+  const ata = Array.from({ length: cols }, () => new Array<number>(cols).fill(0))
+  const atb = new Array<number>(cols).fill(0)
+  const accumulate = (row: number[], rhs: number) => {
+    for (let i = 0; i < cols; i++) {
+      atb[i]! += row[i]! * rhs
+      for (let j = 0; j < cols; j++) ata[i]![j]! += row[i]! * row[j]!
+    }
+  }
+  for (let i = 0; i < from.length; i++) {
+    const x = from[i]!.x
+    const y = from[i]!.y
+    const u = to[i]!.x
+    const v = to[i]!.y
+    accumulate([x, y, 1, 0, 0, 0, -u * x, -u * y], u)
+    accumulate([0, 0, 0, x, y, 1, -v * x, -v * y], v)
+  }
+  return solveLinear(ata, atb)
+}
+
+function writeHomography(
+  off: Canvas,
+  bitmap: Canvas,
+  h: number[],
+  logicalWidth: number,
+  logicalHeight: number,
+  x0: number,
+  y0: number,
+  raster: number,
+  inside?: (x: number, y: number) => boolean,
+): void {
   const bw = bitmap.width
   const bh = bitmap.height
   const srcData = bitmap.getContext('2d').getImageData(0, 0, bw, bh).data
@@ -437,16 +489,13 @@ function paintHomography(
     const p01 = atPx(x0p, y1p)
     const p11 = atPx(x1p, y1p)
     const mix = (a: number, b: number, c: number, d: number) => a + (b - a) * tx + (c - a) * ty + (a - b - c + d) * tx * ty
-    const pr = mix(p00[0], p10[0], p01[0], p11[0])
-    const pg = mix(p00[1], p10[1], p01[1], p11[1])
-    const pb = mix(p00[2], p10[2], p01[2], p11[2])
-    const pa = mix(p00[3], p10[3], p01[3], p11[3])
-    return { r: pr, g: pg, b: pb, a: pa }
+    return { r: mix(p00[0], p10[0], p01[0], p11[0]), g: mix(p00[1], p10[1], p01[1], p11[1]), b: mix(p00[2], p10[2], p01[2], p11[2]), a: mix(p00[3], p10[3], p01[3], p11[3]) }
   }
   for (let py = 0; py < ph; py++) {
     const ly = y0 + (py + 0.5) / raster
     for (let px = 0; px < pw; px++) {
       const lx = x0 + (px + 0.5) / raster
+      if (inside && !inside(lx, ly)) continue
       const uv = applyHomography(h, lx, ly)
       if (!uv || uv.x < 0 || uv.y < 0 || uv.x > logicalWidth || uv.y > logicalHeight) continue
       const color = sample((uv.x / logicalWidth) * bw - 0.5, (uv.y / logicalHeight) * bh - 0.5)
@@ -459,6 +508,37 @@ function paintHomography(
     }
   }
   octx.putImageData(image, 0, 0)
+}
+
+/**
+ * 裁过的多边形仍是同一张平面。用单应贴图，不再切成仿射三角形，接缝处的贴图和圆角描边才不会折。
+ * 对不上单应时退回三角形。
+ */
+function paintPolygonHomography(
+  off: Canvas,
+  bitmap: Canvas,
+  logicalWidth: number,
+  logicalHeight: number,
+  polygon: ScreenPoint[],
+  x0: number,
+  y0: number,
+  raster: number,
+): boolean {
+  if (polygon.length < 4) return false
+  const h = fitHomographyPoints(
+    polygon.map((point) => ({ x: point.x, y: point.y })),
+    polygon.map((point) => ({ x: point.u, y: point.v })),
+  )
+  if (!h) return false
+  let worst = 0
+  for (const point of polygon) {
+    const back = applyHomography(h, point.x, point.y)
+    if (!back) return false
+    worst = Math.max(worst, Math.hypot(back.x - point.u, back.y - point.v))
+  }
+  const tolerance = Math.max(1.5, 0.002 * Math.hypot(logicalWidth, logicalHeight))
+  if (worst > tolerance) return false
+  writeHomography(off, bitmap, h, logicalWidth, logicalHeight, x0, y0, raster, (x, y) => pointInPolygon(x, y, polygon))
   return true
 }
 
@@ -619,26 +699,28 @@ export function drawTexturedPolygon(
   const base = deviceScale(ctx)
   const { samples, raster, pw, ph } = rasterScale(base, lw, lh)
   const off = createCanvas(pw, ph)
-  const octx = off.getContext('2d') as DrawCtx
-  octx.setTransform(raster, 0, 0, raster, -x0 * raster, -y0 * raster)
-  for (let i = 1; i < polygon.length - 1; i++) {
-    const a = polygon[0]!
-    const b = polygon[i]!
-    const c = polygon[i + 1]!
-    drawTriangle(
-      octx,
-      bitmap,
-      logicalWidth,
-      logicalHeight,
-      { x: a.u, y: a.v },
-      { x: b.u, y: b.v },
-      { x: c.u, y: c.v },
-      { x: a.x, y: a.y },
-      { x: b.x, y: b.y },
-      { x: c.x, y: c.y },
-    )
+  if (!paintPolygonHomography(off, bitmap, logicalWidth, logicalHeight, polygon, x0, y0, raster)) {
+    const octx = off.getContext('2d') as DrawCtx
+    octx.setTransform(raster, 0, 0, raster, -x0 * raster, -y0 * raster)
+    for (let i = 1; i < polygon.length - 1; i++) {
+      const a = polygon[0]!
+      const b = polygon[i]!
+      const c = polygon[i + 1]!
+      drawTriangle(
+        octx,
+        bitmap,
+        logicalWidth,
+        logicalHeight,
+        { x: a.u, y: a.v },
+        { x: b.u, y: b.v },
+        { x: c.u, y: c.v },
+        { x: a.x, y: a.y },
+        { x: b.x, y: b.y },
+        { x: c.x, y: c.y },
+      )
+    }
+    closeInteriorCracks(off)
   }
-  closeInteriorCracks(off)
   blitRaster(ctx, off, samples, base, x0, y0, lw, lh)
 }
 

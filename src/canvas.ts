@@ -1,4 +1,5 @@
 import { applyToBox, aroundPivot, originOffset } from './matrix.js'
+import { tmpdir } from 'node:os'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { registerComponent } from './components.js'
@@ -29,21 +30,41 @@ function fileFromStack(line: string): string | null {
   return file
 }
 
-/** `<font src>` 和图片的相对路径。打包执行时用源文件目录，直接调用时用调用方文件，否则用当前目录。 */
-export function layerBaseDir(): string {
-  const pinned = (globalThis as GlobalBase)[BASE_KEY]
-  const stack = new Error().stack ?? ''
-  const bundled = /flexlayer-[^/\\]*[/\\]entry\.mjs/.test(stack)
+/** 打包器写在系统临时目录里的 `flexlayer-随机/entry.mjs`。用户目录名叫 flexlayer- 时不能当成这一份。 */
+function isBundledEntry(file: string): boolean {
+  const root = tmpdir().replace(/[/\\]+$/, '')
+  if (file !== root && !file.startsWith(`${root}/`) && !file.startsWith(`${root}\\`)) return false
+  return /[/\\]flexlayer-[^/\\]+[/\\]entry\.mjs$/.test(file)
+}
+
+/**
+ * `<font src>` 和图片的相对路径。
+ * 打包执行时用源文件目录。直接调用时用调用方文件，否则用当前目录。
+ */
+export function resolveLayerBaseDir(stack: string, pinned?: string, cwd = process.cwd()): string {
+  let bundled = false
+  for (const line of stack.split('\n')) {
+    const file = fileFromStack(line)
+    if (file && isBundledEntry(file)) {
+      bundled = true
+      break
+    }
+  }
   if (bundled && pinned) return pinned
   for (const line of stack.split('\n')) {
     const file = fileFromStack(line)
     if (!file) continue
     if (/[/\\](src|dist)[/\\](canvas|analyze-image)\.[cm]?[jt]s/.test(file)) continue
     if (file.includes('/node_modules/') || file.includes('\\node_modules\\')) continue
-    if (file.includes('flexlayer-')) continue
+    if (isBundledEntry(file)) continue
     return dirname(file)
   }
-  return pinned || process.cwd()
+  return pinned || cwd
+}
+
+/** `<font src>` 和图片的相对路径。打包执行时用源文件目录，直接调用时用调用方文件，否则用当前目录。 */
+export function layerBaseDir(): string {
+  return resolveLayerBaseDir(new Error().stack ?? '', (globalThis as GlobalBase)[BASE_KEY])
 }
 
 const UNLIMITED = 1_000_000
