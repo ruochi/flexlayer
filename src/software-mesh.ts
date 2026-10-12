@@ -437,14 +437,14 @@ function materialBytes(
   const winB = win.b
   const cover = batch.a / 255
   const lum = (r: number, g: number, b: number) => (r + g + b) / (3 * 255)
-  const bright = Math.min(1, lum(bendR, bendG, bendB) * transmit + lum(winR, winG, winB) * transmit * 0.28 + fresnel)
+  const bright = Math.min(1, lum(bendR, bendG, bendB) * transmit + lum(winR, winG, winB) * transmit * 0.85 + fresnel)
   const alpha = cover + (1 - cover) * bright
   const dim = blocked ? 0.72 : 1
   const chan = (c: number, bendC: number, winC: number, reflC: number) => {
     const tint = c / 255
     const windowTint = 0.35 + 0.65 * tint
     const base = tint * shade * 0.08 * dim
-    const reflection = (winC / 255) * windowTint * 0.28 * transmit * dim + (reflC / 255) * fresnel
+    const reflection = (winC / 255) * windowTint * 0.85 * transmit * dim + (reflC / 255) * fresnel
     const refraction = (bendC / 255) * windowTint * transmit * dim
     return byte(Math.min(1, base + reflection + refraction) * 255)
   }
