@@ -437,17 +437,20 @@ function materialBytes(
   const winB = win.b
   const cover = batch.a / 255
   const lum = (r: number, g: number, b: number) => (r + g + b) / (3 * 255)
-  const bright = Math.min(1, lum(bendR, bendG, bendB) * transmit + lum(winR, winG, winB) * transmit * 0.85 + fresnel)
-  const alpha = cover + (1 - cover) * bright
   const dim = blocked ? 0.72 : 1
   const chan = (c: number, bendC: number, winC: number, reflC: number) => {
     const tint = c / 255
     const windowTint = 0.35 + 0.65 * tint
     const base = tint * shade * 0.08 * dim
-    const reflection = (winC / 255) * windowTint * 0.85 * transmit * dim + (reflC / 255) * fresnel
+    // 反射保持满强度，不因折射把系数改小。
+    const reflection = Math.min(1, base + (winC / 255) * windowTint * transmit * dim + (reflC / 255) * fresnel)
     const refraction = (bendC / 255) * windowTint * transmit * dim
-    return byte(Math.min(1, base + reflection + refraction) * 255)
+    return byte((reflection + (1 - reflection) * Math.min(1, refraction)) * 255)
   }
+  const reflectionLum = Math.min(1, (lum(winR, winG, winB) * transmit + fresnel))
+  const refractionLum = lum(bendR, bendG, bendB) * transmit
+  const bright = reflectionLum + (1 - reflectionLum) * Math.min(1, refractionLum)
+  const alpha = cover + (1 - cover) * bright
   return [chan(batch.r, bendR, winR, envR), chan(batch.g, bendG, winG, envG), chan(batch.b, bendB, winB, envB), byte(alpha * 255)]
 }
 
