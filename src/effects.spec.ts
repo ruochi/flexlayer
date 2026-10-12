@@ -885,4 +885,66 @@ describe('墨迹 spread 与 stroke', () => {
       expect(blue).toBeGreaterThan(40)
     }
   })
+
+  it('推镜里的模糊和调色与整张同一位置一致', async () => {
+    const card = `<rect x="0" y="0" width="480" height="320" fill="#2a4a78" /><rect x="150" y="90" width="100" height="80" fill="#e04030" /><circle cx="220" cy="140" r="18" fill="#f0e060" />`
+    const full = await renderFvg(
+      `<layer width="480" height="320" background="#101820" safe="0"><layer width="480" height="320" blur="4" grade="contrast 1.4, vignette 0.5">${card}</layer></layer>`,
+    )
+    const zoomed = await renderFvg(
+      `<layer width="80" height="60" background="#101820" safe="0"><layer width="80" height="60" view="160 100 80 60"><layer width="480" height="320" blur="4" grade="contrast 1.4, vignette 0.5">${card}</layer></layer></layer>`,
+    )
+    const source = await pixels(full.png)
+    const seen = await pixels(zoomed.png)
+    for (const [x, y] of [
+      [40, 30],
+      [24, 24],
+      [8, 8],
+    ] as const) {
+      const got = seen.at(x, y)
+      const want = source.at(x + 160, y + 100)
+      for (let channel = 0; channel < 4; channel++) {
+        expect(Math.abs(got[channel]! - want[channel]!)).toBeLessThanOrEqual(2)
+      }
+    }
+  })
+
+  it('推镜里的蒙版与整张同一位置一致', async () => {
+    const body = `<mask><circle cx="140" cy="100" r="36" /></mask><rect x="0" y="0" width="300" height="220" fill="#20c0a0" />`
+    const full = await renderFvg(
+      `<layer width="300" height="220" background="#010101" safe="0"><layer width="300" height="220">${body}</layer></layer>`,
+    )
+    const zoomed = await renderFvg(
+      `<layer width="80" height="80" background="#010101" safe="0"><layer width="80" height="80" view="100 60 80 80"><layer width="300" height="220">${body}</layer></layer></layer>`,
+    )
+    const source = await pixels(full.png)
+    const seen = await pixels(zoomed.png)
+    for (const [x, y] of [
+      [40, 40],
+      [8, 8],
+      [70, 20],
+    ] as const) {
+      const got = seen.at(x, y)
+      const want = source.at(x + 100, y + 60)
+      for (let channel = 0; channel < 4; channel++) {
+        expect(Math.abs(got[channel]! - want[channel]!)).toBeLessThanOrEqual(2)
+      }
+    }
+  })
+
+  it('放到 16 倍时仍画出看见的那一块', async () => {
+    const { png, report } = await renderFvg(
+      `<layer width="64" height="64" background="#000000" safe="0">
+        <layer width="64" height="64" view="100 100 4 4">
+          <layer width="2000" height="2000" blur="2" grade="contrast 1.1">
+            <rect x="0" y="0" width="2000" height="2000" fill="#2244aa" />
+            <rect x="98" y="98" width="20" height="20" fill="#ee3322" />
+          </layer>
+        </layer>
+      </layer>`,
+    )
+    expect(report.issues.filter((issue) => issue.level === 'error')).toEqual([])
+    const [r, , b] = (await pixels(png)).at(32, 32)
+    expect(r).toBeGreaterThan(b)
+  })
 })

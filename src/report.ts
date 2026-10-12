@@ -171,6 +171,20 @@ function clipInk(ink: Box, clip: Box | undefined): Box {
   return clip ? intersectBox(ink, clip) : ink
 }
 
+type InkEdgeCut = { left: boolean; right: boolean }
+
+/** 裁切把左右边往里推过 1e-3，才算这条边是窗口切出来的。 */
+function clippedHorizontal(before: Box, after: Box): InkEdgeCut {
+  return {
+    left: after.x > before.x + 1e-3,
+    right: after.x + after.width < before.x + before.width - 1e-3,
+  }
+}
+
+function unionCut(a: InkEdgeCut, b: InkEdgeCut): InkEdgeCut {
+  return { left: a.left || b.left, right: a.right || b.right }
+}
+
 function tighten(clip: Box | undefined, next: Box): Box {
   return clip ? intersectBox(clip, next) : next
 }
@@ -433,6 +447,7 @@ function walk(
   meshView: MeshView | undefined,
   inkSlack: number[],
   maskIssues: Issue[],
+  sideCuts: InkEdgeCut[],
   cameraCtx?: CameraCtx,
 ) {
   const absX = ox + node.x
@@ -446,13 +461,16 @@ function walk(
   let quad: Quad | undefined
   let planeEffect: Box | null = null
   const meshInk = node.kind === 'mesh' && meshView && toLayer ? projectMeshInk(node, meshView, toLayer) : undefined
+  let edgeCut: InkEdgeCut = { left: false, right: false }
   if (meshInk) {
     ink = meshInk
   } else if (plane) {
     const localInk = toPlaneBox(plane, node, node.ink, planeRoot)
     let visible = plane.localClip ? intersectBox(localInk, plane.localClip) : localInk
     if (planeRoot && ownMask) visible = intersectBox(visible, ownMask)
-    ink = finishCanvas(projectBox(plane.project, visible), plane.canvasClip)
+    const projected = projectBox(plane.project, visible)
+    ink = finishCanvas(projected, plane.canvasClip)
+    edgeCut = clippedHorizontal(projected, ink)
     quad = layoutQuad(node, plane, planeRoot)
     const pad = effectPadOf(node)
     if (pad > 0) {
@@ -466,10 +484,14 @@ function walk(
       planeEffect = finishCanvas(projectBox(plane.project, effectLocal, round), plane.canvasClip)
     }
   } else {
-    ink = clipInk(applyToBox(matrix, translateBox(node.ink, node.x, node.y)), clip)
+    const rawInk = applyToBox(matrix, translateBox(node.ink, node.x, node.y))
+    ink = clipInk(rawInk, clip)
+    edgeCut = clippedHorizontal(rawInk, ink)
     if (node.kind === 'layer' && node.overflow === 'hidden') {
       const selfClip = applyToBox(matrix, { x: node.x, y: node.y, width: node.width, height: node.height })
-      ink = intersectBox(ink, clip ? intersectBox(selfClip, clip) : selfClip)
+      const next = intersectBox(ink, clip ? intersectBox(selfClip, clip) : selfClip)
+      edgeCut = unionCut(edgeCut, clippedHorizontal(ink, next))
+      ink = next
     }
   }
 
@@ -540,6 +562,7 @@ function walk(
         ? Number.POSITIVE_INFINITY
         : 0
   inkSlack.push(slack)
+  sideCuts.push(edgeCut)
 
   const inset = node.kind === 'flex' ? node.padding.left + (node.border?.width ?? 0) : 0
   const insetY = node.kind === 'flex' ? node.padding.top + (node.border?.width ?? 0) : 0
@@ -575,12 +598,13 @@ function walk(
     for (const extra of inlineElementReports(node, matrix, opacity, clip, plane, planeRoot)) {
       elements.push(extra)
       inkSlack.push(0)
+      sideCuts.push({ left: false, right: false })
       effects.push(plane ? { plane: true, box: null } : { plane: false, clip: effectClip })
     }
     if (node.inlines) {
       const base = multiply(matrix, translated(node.x, node.y))
       for (const image of node.inlines) {
-        walk(image, base, opacity, absX, absY, clip, elements, effects, plane, false, meshView, inkSlack, maskIssues)
+        walk(image, base, opacity, absX, absY, clip, elements, effects, plane, false, meshView, inkSlack, maskIssues, sideCuts)
       }
     }
   }
@@ -588,7 +612,7 @@ function walk(
   if (node.kind === 'group') {
     const childMatrix = multiply(matrix, node.svg)
     for (const ch of node.children) {
-      walk(ch, childMatrix, opacity, ox, oy, clip, elements, effects, undefined, false, meshView, inkSlack, maskIssues)
+      walk(ch, childMatrix, opacity, ox, oy, clip, elements, effects, undefined, false, meshView, inkSlack, maskIssues, sideCuts)
     }
     return
   }
@@ -676,7 +700,7 @@ function walk(
           ? { layer: camera, toLocal: toLayer, mapLayerLocal: map, canvasClip: clipForChild }
           : undefined
         if (!posed) {
-          walk(ch, contentMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, childPlane, false, childView, inkSlack, maskIssues)
+          walk(ch, contentMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, childPlane, false, childView, inkSlack, maskIssues, sideCuts)
           continue
         }
         walk(
@@ -693,6 +717,7 @@ function walk(
           childView,
           inkSlack,
           maskIssues,
+          sideCuts,
           nextCtx,
         )
       }
@@ -717,11 +742,12 @@ function walk(
           childMesh,
           inkSlack,
           maskIssues,
+          sideCuts,
         )
       } else if (childPlane) {
-        walk(ch, contentMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, childPlane, false, childMesh, inkSlack, maskIssues)
+        walk(ch, contentMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, childPlane, false, childMesh, inkSlack, maskIssues, sideCuts)
       } else {
-        walk(ch, contentMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, undefined, false, childMesh, inkSlack, maskIssues)
+        walk(ch, contentMatrix, opacity, absX + inset, absY + insetY, childClip, elements, effects, undefined, false, childMesh, inkSlack, maskIssues, sideCuts)
       }
     }
     let union: Box | null = null
@@ -800,8 +826,9 @@ export function buildReport(doc: FvgDocument): FvgReport {
   const elements: ElementReport[] = []
   const effects: EffectRecord[] = []
   const inkSlack: number[] = []
+  const sideCuts: InkEdgeCut[] = []
   const maskIssues: Issue[] = []
-  walk(doc.root, IDENTITY, 1, 0, 0, undefined, elements, effects, undefined, false, undefined, inkSlack, maskIssues)
+  walk(doc.root, IDENTITY, 1, 0, 0, undefined, elements, effects, undefined, false, undefined, inkSlack, maskIssues, sideCuts)
   attachDefocus(doc.root, elements)
 
   const issues: Issue[] = [...doc.issues, ...maskIssues]
@@ -842,12 +869,16 @@ export function buildReport(doc: FvgDocument): FvgReport {
       })
     }
     if (!el.inline && el.lines != null && (el.tag === 'h1' || el.tag === 'h2' || el.tag === 'h3' || el.tag === 'p' || el.tag === 'div' || el.tag === 'span')) {
-      if (el.ink.left < doc.safe.left - 1e-3 || el.ink.right > doc.width - doc.safe.right + 1e-3) {
+      const cut = sideCuts[index]
+      const pastLeft = el.ink.left < doc.safe.left - 1e-3 && !cut?.left
+      const pastRight = el.ink.right > doc.width - doc.safe.right + 1e-3 && !cut?.right
+      if (pastLeft || pastRight) {
         issues.push({
           level: 'warn',
           code: 'outside-safe',
           path: el.path,
           message: '文字超出安全区',
+          hint: '被取景窗或 overflow="hidden" 裁掉的边不算。裁完仍露在安全区外的字要往里移',
         })
       }
       const minFs = (Math.min(doc.width, doc.height) / 1080) * 24

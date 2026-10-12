@@ -92,7 +92,7 @@
 
 结构化数据：`data={{ values: [1, 2] }}`，`.layer` 里 `data='{"values":[1,2]}'`。`draw` 读 `el.data`。别的属性不要传对象或数组。
 
-故意越界或叠字：`expect="overflow-canvas: 出血图; text-overlap"`。对得上的问题降为 info。没出现报 `unused-expect`。镜头用 `view`，被取景窗裁掉的不报 `overflow-canvas`。
+故意越界或叠字：`expect="overflow-canvas: 出血图; text-overlap"`。对得上的问题降为 info。没出现报 `unused-expect`。镜头用 `view`，被取景窗裁掉的不报 `overflow-canvas`，裁开的文字边也不报 `outside-safe`。
 
 ## 帧
 

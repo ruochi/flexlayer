@@ -190,7 +190,7 @@ flowchart TD
 
 | 现象 | 建议 |
 | --- | --- |
-| 元素跑出画布 | `overflow-canvas`（error）；看 `ink` 与画布尺寸。镜头写 `view`，取景窗外的不算。`view` 没被舞台盖住报 `view-outside`，`<g>` 按 transform 后的形状算，不用外接矩形。透视平面先看 `quad`，`box` 仍是没投影的布局盒 |
+| 元素跑出画布 | `overflow-canvas`（error）；看 `ink` 与画布尺寸。镜头写 `view`，取景窗外的不算，裁开的文字边也不报 `outside-safe`。裁完仍露在安全区外的字还是要报。`view` 没被舞台盖住报 `view-outside`，`<g>` 按 transform 后的形状算，不用外接矩形。透视平面先看 `quad`，`box` 仍是没投影的布局盒 |
 | 光晕被裁切 | `effect-clipped`；缩小 glow 或移动元素 |
 | 字距和 `gap` 不一致 | 看 debug 里的 ink 间距 |
 | flex 子项被挤爆 | 加宽 flex 容器或缩小子项 |
