@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.56
+
+实现提交：`dea1de7e92cbf4a8bd202adf3d9ff4f7cc87209b`
+
+默认字体从 `DEFAULT_FONT_FAMILY` 读，不再在测量和排版里写死 `ChillDuanSans`。带 `blur`、`grade` 或 `<mask>` 的层在取景放大后只光栅化落在画面里的一块，并留出模糊和羽化要采样的边。取景窗或 `overflow="hidden"` 裁开的文字边不再报 `outside-safe`；裁完仍露在安全区外的字还是要报。
+
 ## 0.2.55
 
 实现提交：`8c4fbc361ac37e5fd594e1f9230c7d64435f8812`
