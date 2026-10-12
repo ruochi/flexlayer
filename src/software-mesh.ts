@@ -1249,6 +1249,8 @@ function geometryOfFresh(node: MeshLayoutNode): MeshGeometry | null {
   else if (node.mesh.type === 'tube') geo = buildTube(node)
   else if (node.mesh.type === 'extrude') geo = buildExtrude(node)
   if (!geo || node.stroke !== 'none') return geo
+  const mesh = node.mesh
+  if ((mesh.type === 'box' || mesh.type === 'cylinder') && mesh.rx > 0) return geo
   return bevelFewFaces(geo.positions, geo.indices) ?? geo
 }
 

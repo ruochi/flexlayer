@@ -1,7 +1,7 @@
 /**
  * 渲染阶段给面数不多的网格加一条窄圆角。
  * 共面三角先并成面。不超过 200 个面时，折棱向里收，最多 8px。
- * 面太窄放不下的棱把圆角收小。圆角不改变布局盒子。
+ * 已经圆滑的边不加，旁边的折棱仍然收。面太窄时把这一条棱收小。圆角不改变布局盒子。
  */
 
 const MAX_FACES = 200
@@ -147,7 +147,7 @@ export function bevelFewFaces(srcPos: Float32Array, srcIdx: Uint32Array): BevelG
     const n0 = planes[e0.face]!.n
     const n1 = planes[e1.face]!.n
     const nd = Math.max(-1, Math.min(1, dot(n0, n1)))
-    if (nd >= CREASE_DOT) return null
+    if (nd >= CREASE_DOT) continue
     const theta = Math.acos(nd)
     if (theta > (150 * Math.PI) / 180) return null
     creases.push({
@@ -177,28 +177,20 @@ export function bevelFewFaces(srcPos: Float32Array, srcIdx: Uint32Array): BevelG
     if (!(tanHalf > 1e-4)) return null
     const key = edgeKey(edge.a, edge.b)
     thetaOf.set(key, edge.theta)
-    radiusOf.set(key, Math.min(RADIUS, (0.45 * edge.length) / tanHalf))
+    radiusOf.set(key, RADIUS)
   }
   if ([...radiusOf.values()].every((r) => r < MIN_RADIUS)) return null
 
-  for (let pass = 0; pass < 12; pass++) {
+  for (let pass = 0; pass < 16; pass++) {
     const built = buildBevel(radiusOf, points, planes, faceLoops, creases, incident, thetaOf)
     if (!built || !('shrink' in built)) return built
     const cut = new Set<string>()
     for (const f of built.shrink) {
-      let worstKey = ''
-      let worstT = -1
       const loop = faceLoops[f]!
       for (let i = 0; i < loop.length; i++) {
         const key = edgeKey(loop[i]!, loop[(i + 1) % loop.length]!)
-        const theta = thetaOf.get(key) ?? 0
-        const t = (radiusOf.get(key) ?? 0) * Math.tan(theta / 2)
-        if (t > worstT) {
-          worstT = t
-          worstKey = key
-        }
+        if ((radiusOf.get(key) ?? 0) > 0) cut.add(key)
       }
-      if (worstKey) cut.add(worstKey)
     }
     let changed = false
     for (const key of cut) {
@@ -255,14 +247,15 @@ function buildBevel(
   const uniformAt = (id: number) => {
     const faces = incident.get(id)
     if (!faces || faces.length !== 3) return null
-    let found: number | null = null
+    const found: number[] = []
     for (const edge of creases) {
       if (edge.a !== id && edge.b !== id) continue
-      const er = radiusOf.get(edgeKey(edge.a, edge.b)) ?? 0
-      if (found == null) found = er
-      else if (Math.abs(er - found) > 0.05) return null
+      found.push(radiusOf.get(edgeKey(edge.a, edge.b)) ?? 0)
     }
-    return found
+    if (found.length !== 3) return null
+    const radius = found[0]!
+    if (found.some((r) => Math.abs(r - radius) > 0.05)) return null
+    return radius
   }
 
   const insetAt = new Map<string, V3>()
@@ -303,13 +296,38 @@ function buildBevel(
   }
   if (failed.length > 0) return { shrink: failed }
 
+  const smoothAt = new Map<string, number[]>()
+  for (let f = 0; f < faceLoops.length; f++) {
+    const loop = faceLoops[f]!
+    for (let i = 0; i < loop.length; i++) {
+      const key = edgeKey(loop[i]!, loop[(i + 1) % loop.length]!)
+      if (thetaOf.has(key)) continue
+      const list = smoothAt.get(key) ?? []
+      list.push(f)
+      smoothAt.set(key, list)
+    }
+  }
+  const cornerNormal = (face: number, id: number) => {
+    const loop = faceLoops[face]!
+    const at = loop.indexOf(id)
+    if (at < 0) return planes[face]!.n
+    const neighbors = [loop[(at + loop.length - 1) % loop.length]!, loop[(at + 1) % loop.length]!]
+    let sum = planes[face]!.n
+    for (const other of neighbors) {
+      for (const nb of smoothAt.get(edgeKey(id, other)) ?? []) {
+        if (nb !== face) sum = add(sum, planes[nb]!.n)
+      }
+    }
+    return norm(sum) ?? planes[face]!.n
+  }
+
   for (let f = 0; f < facePoly.length; f++) {
     const plane = planes[f]!
     const poly = facePoly[f]!
-    const fans = earClip(poly, plane.n)
-    if (!fans) return null
-    for (let i = 0; i < fans.length; i += 3) {
-      addTri(poly[fans[i]!]!, plane.n, poly[fans[i + 1]!]!, plane.n, poly[fans[i + 2]!]!, plane.n, plane.n)
+    const loop = faceLoops[f]!
+    const vnorm = loop.map((id) => cornerNormal(f, id))
+    for (let i = 1; i < poly.length - 1; i++) {
+      addTri(poly[0]!, vnorm[0]!, poly[i]!, vnorm[i]!, poly[i + 1]!, vnorm[i + 1]!, plane.n)
     }
   }
 
@@ -323,20 +341,22 @@ function buildBevel(
       const pa = insetAt.get(`${edge.f0}|${vid}`)
       const pb = insetAt.get(`${edge.f1}|${vid}`)
       if (!pa || !pb) return null
+      const na = cornerNormal(edge.f0, vid)
+      const nb = cornerNormal(edge.f1, vid)
       const uniform = uniformAt(vid)
       const sphere = uniform != null && Math.abs(uniform - radius) < 0.05 ? sphereCenter(incident.get(vid) ?? [], planes, radius) : null
       const center = sphere ?? scale(add(sub(pa, scale(n0, radius)), sub(pb, scale(n1, radius))), 0.5)
       const pts: Array<{ p: V3; n: V3 }> = []
       for (let k = 0; k <= STEPS; k++) {
         if (k === 0) {
-          pts.push({ p: pa, n: n0 })
+          pts.push({ p: pa, n: na })
           continue
         }
         if (k === STEPS) {
-          pts.push({ p: pb, n: n1 })
+          pts.push({ p: pb, n: nb })
           continue
         }
-        const dir = lerpDir(n0, n1, k / STEPS)
+        const dir = lerpDir(na, nb, k / STEPS)
         if (!dir) return null
         pts.push({ p: add(center, scale(dir, radius)), n: dir })
       }
@@ -401,7 +421,15 @@ function buildBevel(
         arc = arcAt.get(`${id}|${f1}|${f0}`)
         reverse = true
       }
-      if (!arc) return null
+      if (!arc) {
+        const linked = creases.some(
+          (edge) =>
+            (edge.a === id || edge.b === id) &&
+            ((edge.f0 === f0 && edge.f1 === f1) || (edge.f0 === f1 && edge.f1 === f0)),
+        )
+        if (linked) return null
+        continue
+      }
       const seq = reverse ? arc.slice().reverse() : arc
       for (let k = 0; k < seq.length - 1; k++) {
         const a = seq[k]!
@@ -437,9 +465,9 @@ function insetLoop(
     if (!inward) return null
     const key = edgeKey(loop[i]!, loop[(i + 1) % loop.length]!)
     const theta = thetaOf.get(key)
-    if (theta == null) return null
-    const radius = radiusOf.get(key) ?? 0
-    lines.push({ p: add(a, scale(inward, radius * Math.tan(theta / 2))), dir })
+    const radius = theta == null ? 0 : (radiusOf.get(key) ?? 0)
+    const tanHalf = theta == null ? 0 : Math.tan(theta / 2)
+    lines.push({ p: add(a, scale(inward, radius * tanHalf)), dir })
   }
   const poly: V3[] = []
   for (let i = 0; i < lines.length; i++) {
@@ -553,46 +581,6 @@ function intersectPlanes(planes: Array<{ n: V3; d: number }>): V3 | null {
   return v((c00 * b0 + c01 * b1 + c02 * b2) / det, (c01 * b0 + c11 * b1 + c12 * b2) / det, (c02 * b0 + c12 * b1 + c22 * b2) / det)
 }
 
-function earClip(poly: V3[], normal: V3): number[] | null {
-  const idx = poly.map((_, i) => i)
-  const out: number[] = []
-  let guard = 0
-  while (idx.length > 3) {
-    if (guard++ > idx.length * idx.length) return null
-    let clipped = false
-    for (let i = 0; i < idx.length; i++) {
-      const i0 = idx[(i + idx.length - 1) % idx.length]!
-      const i1 = idx[i]!
-      const i2 = idx[(i + 1) % idx.length]!
-      if (!isConvex(poly[i0]!, poly[i1]!, poly[i2]!, normal)) continue
-      let inside = false
-      for (const other of idx) {
-        if (other === i0 || other === i1 || other === i2) continue
-        if (pointInTri(poly[other]!, poly[i0]!, poly[i1]!, poly[i2]!, normal)) {
-          inside = true
-          break
-        }
-      }
-      if (inside) continue
-      out.push(i0, i1, i2)
-      idx.splice(i, 1)
-      clipped = true
-      break
-    }
-    if (!clipped) return null
-  }
-  out.push(idx[0]!, idx[1]!, idx[2]!)
-  return out
-}
-
 function isConvex(a: V3, b: V3, c: V3, normal: V3) {
   return dot(cross(sub(b, a), sub(c, b)), normal) > 1e-6
-}
-
-function pointInTri(p: V3, a: V3, b: V3, c: V3, normal: V3) {
-  const c1 = dot(cross(sub(b, a), sub(p, a)), normal)
-  const c2 = dot(cross(sub(c, b), sub(p, b)), normal)
-  const c3 = dot(cross(sub(a, c), sub(p, c)), normal)
-  const eps = 1e-5
-  return c1 >= -eps && c2 >= -eps && c3 >= -eps
 }
