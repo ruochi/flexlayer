@@ -24,7 +24,7 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
  * 写了 stroke 时，在超采样缓冲上按屏幕像素描折棱和轮廓，再和填充一起平均缩回。
  * 两只都写了 stroke 的网格相互穿过时，交界线算折棱，颜色和宽度跟后写的那只。
  * hidden 只画被这只网格自己挡住的棱，虚线是 6 实 4 空。交界线被这两只中任意一只挡住时同样算隐藏线。
- * 不写 material 时是磨砂：主光乘 fill。plastic 和 metal 用同一套磨砂明暗，再叠竖向工作室环境，没有缩成一点的高光。glass 后画，边缘映环境。
+ * 不写 material 时是磨砂：主光乘 fill。plastic 和 metal 用同一套磨砂明暗，再叠竖向工作室环境，没有缩成一点的高光。glass 是假玻璃，后画：主灯折射进形体后加上，边缘加反射。
  * 同一条折线上的短段接成一条再取虚线相位，圆弧不会接成实线。
  */
 
@@ -258,10 +258,6 @@ function clamp01(n: number) {
   return n
 }
 
-function shininess(roughness: number) {
-  return 2 ** (8 * (1 - clamp01(roughness)))
-}
-
 function shadeNormal(nx: number, ny: number, nz: number, back: boolean) {
   let x = nx
   let y = -ny
@@ -283,6 +279,27 @@ function reflectView(v: { x: number; y: number; z: number }, n: { x: number; y: 
   return unit(2 * d * n.x - v.x, 2 * d * n.y - v.y, 2 * d * n.z - v.z)
 }
 
+/**
+ * 主灯在方位 -68°、仰角 24°。少转 20°、少抬 8°，折射的方窗停在形体里偏左上，不贴着掠射边。
+ * 真出射对着房间背面，球心只有灰。这里把反射方向平移到这盏灯上，当成加进去的假折射。
+ */
+const GLASS_AZ = ((-68 + 20) * Math.PI) / 180
+const GLASS_EL = ((24 - 8) * Math.PI) / 180
+
+function glassRefract(dir: { x: number; y: number; z: number }) {
+  const len = Math.hypot(dir.x, dir.y, dir.z) || 1
+  const dx = dir.x / len
+  const dy = dir.y / len
+  const dz = dir.z / len
+  const az = Math.atan2(dx, dz) + GLASS_AZ
+  let el = Math.asin(Math.max(-1, Math.min(1, dy))) + GLASS_EL
+  const limit = Math.PI / 2 - 1e-4
+  if (el > limit) el = limit
+  if (el < -limit) el = -limit
+  const cel = Math.cos(el)
+  return { x: Math.sin(az) * cel, y: Math.sin(el), z: Math.cos(az) * cel }
+}
+
 type ShadeCamera = { x: number; y: number; z: number; parallel?: boolean }
 
 /**
@@ -298,7 +315,7 @@ function envOverMatte(channel: number, shade: number, envC: number, darken: numb
   return Math.min(255, (darkened + (1 - darkened) * light * lighten) * 255)
 }
 
-/** 金属和塑料都是磨砂明暗再叠环境。玻璃边缘映出同一张环境，中心透出底下。 */
+/** 金属和塑料都是磨砂明暗再叠环境。玻璃把主灯折射进形体后加上，边缘再加反射。 */
 function materialBytes(
   batch: Batch,
   nx: number,
@@ -325,18 +342,26 @@ function materialBytes(
     const chan = (channel: number, envC: number) => byte(envOverMatte(channel, shade, envC, darken, lighten))
     return [chan(batch.r, envR), chan(batch.g, envG), chan(batch.b, envB), batch.a]
   }
-  const h = unit(KEY.x + v.x, KEY.y + v.y, KEY.z + v.z)
-  const ndoth = Math.max(n.x * h.x + n.y * h.y + n.z * h.z, 0)
-  const spec = blocked ? 0 : ndoth ** shininess(batch.roughness)
   const ndotv = clamp01(n.x * v.x + n.y * v.y + n.z * v.z)
-  const edge = (1 - ndotv) ** 2.2
-  const body = batch.a / 255
-  const alpha = body + (1 - body) * edge * 0.9
-  const whiten = edge * 0.8
-  const lit = (0.72 + 0.28 * Math.min(1, shade)) * (blocked ? 0.72 : 1)
-  const specAdd = spec * 255
-  const chan = (c: number, envC: number) => Math.min(255, c * lit * (1 - whiten) + envC * whiten + specAdd)
-  return [byte(chan(batch.r, envR)), byte(chan(batch.g, envG)), byte(chan(batch.b, envB)), byte(alpha * 255)]
+  const fresnel = 0.04 + 0.96 * (1 - ndotv) ** 5
+  const through = glassRefract(reflect)
+  const hit = studioAt(through.x, through.y, through.z, batch.roughness)
+  const refrR = hit.r
+  const refrG = hit.g
+  const refrB = hit.b
+  const transmit = 1 - fresnel
+  const cover = batch.a / 255
+  const refrLum = ((refrR + refrG + refrB) / (3 * 255)) * transmit
+  const alpha = cover + (1 - cover) * Math.min(1, fresnel + refrLum)
+  const dim = blocked ? 0.72 : 1
+  const chan = (c: number, refrC: number, reflC: number) => {
+    const tint = c / 255
+    const windowTint = 0.35 + 0.65 * tint
+    const base = tint * shade * 0.08 * dim
+    const added = (refrC / 255) * windowTint * transmit * dim + (reflC / 255) * fresnel
+    return byte(Math.min(1, base + added) * 255)
+  }
+  return [chan(batch.r, refrR, envR), chan(batch.g, refrG, envG), chan(batch.b, refrB, envB), byte(alpha * 255)]
 }
 
 function shadeOf(nx: number, ny: number, nz: number, back: boolean, blocked = false) {
