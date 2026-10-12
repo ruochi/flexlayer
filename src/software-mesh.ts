@@ -442,14 +442,12 @@ function materialBytes(
     const tint = c / 255
     const windowTint = 0.35 + 0.65 * tint
     const base = tint * shade * 0.08 * dim
-    // 反射保持满强度，不因折射把系数改小。
-    const reflection = Math.min(1, base + (winC / 255) * windowTint * transmit * dim + (reflC / 255) * fresnel)
+    // 反射和折射按亮度相加，两项都是满的，重叠处更亮。
+    const reflection = (winC / 255) * windowTint * transmit * dim + (reflC / 255) * fresnel
     const refraction = (bendC / 255) * windowTint * transmit * dim
-    return byte((reflection + (1 - reflection) * Math.min(1, refraction)) * 255)
+    return byte(Math.min(1, base + reflection + refraction) * 255)
   }
-  const reflectionLum = Math.min(1, (lum(winR, winG, winB) * transmit + fresnel))
-  const refractionLum = lum(bendR, bendG, bendB) * transmit
-  const bright = reflectionLum + (1 - reflectionLum) * Math.min(1, refractionLum)
+  const bright = Math.min(1, lum(winR, winG, winB) * transmit + fresnel + lum(bendR, bendG, bendB) * transmit)
   const alpha = cover + (1 - cover) * bright
   return [chan(batch.r, bendR, winR, envR), chan(batch.g, bendG, winG, envG), chan(batch.b, bendB, winB, envB), byte(alpha * 255)]
 }
