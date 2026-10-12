@@ -15,7 +15,7 @@ export type SplitInput = {
   matte?: Uint8ClampedArray
   /**
    * 要点中的主体，可以多个。不传就从伸进远处的尖往下长。
-   * 远近取这些点里最近和最远，连在一起、落在这段深度里的留下。
+   * 多个点取最近和最远。一个点落在远处的尖上时，近端放到地面以上，把楼身补上。
    */
   points?: KeepPoint[]
 }
@@ -169,6 +169,34 @@ function bandOf(samples: number[]): { floor: number; cap: number } {
   return { floor: Math.max(0, far - pad), cap: Math.min(255, near + pad) }
 }
 
+/** 画面最下面一截的深度，和天际线那条一样取样。 */
+function groundDepth(depth: Uint8ClampedArray, width: number, height: number): number {
+  const groundBand: number[] = []
+  const groundStart = Math.floor(height * 0.88)
+  const step = Math.max(1, Math.floor(width / 32))
+  for (let y = groundStart; y < height; y++) {
+    for (let x = 0; x < width; x += step) groundBand.push(depth[y * width + x]!)
+  }
+  return median(groundBand)
+}
+
+/**
+ * 多个点：远近取这些点里最近和最远。
+ * 一个点落在远处的尖上时，只留 ±12 会切出一圈等高线，楼身更近、落在圈外面。
+ * 近端放到地面以上（地面深度的 0.72），把连在一起的楼身补上。点已经靠近地面时不放宽。
+ */
+function bandFor(depth: Uint8ClampedArray, width: number, height: number, points: KeepPoint[]): { floor: number; cap: number } {
+  const samples = points.map((point) => depthAt(depth, width, height, point.x, point.y))
+  const band = bandOf(samples)
+  if (points.length !== 1) return band
+  const ground = groundDepth(depth, width, height)
+  const skyCut = Math.max(8, ground * 0.16)
+  const seed = samples[0]!
+  const nearCut = ground * 0.72
+  if (seed > skyCut && band.cap < nearCut) return { floor: band.floor, cap: Math.min(255, nearCut) }
+  return band
+}
+
 function growFromSkyline(depth: Uint8ClampedArray, width: number, height: number): Uint8Array | null {
   const n = width * height
   let lo = 255
@@ -251,11 +279,10 @@ function growFromSkyline(depth: Uint8ClampedArray, width: number, height: number
   return grown
 }
 
-/** 从点下去的地方长出遮罩。只走深度落在这些点之间的、和点连着的像素。 */
+/** 从点下去的地方长出遮罩。只走深度落在这段里的、和点连着的像素。 */
 function growFromPoints(depth: Uint8ClampedArray, width: number, height: number, points: KeepPoint[]): Uint8Array | null {
   const n = width * height
-  const samples = points.map((point) => depthAt(depth, width, height, point.x, point.y))
-  const { floor, cap } = bandOf(samples)
+  const { floor, cap } = bandFor(depth, width, height, points)
   const grown = new Uint8Array(n)
   const stack = new Int32Array(n)
   let head = 0
@@ -340,8 +367,7 @@ export function splitLayers(input: SplitInput): SplitResult {
 
   let alpha: Uint8ClampedArray
   if (input.matte && points.length > 0) {
-    const samples = points.map((point) => depthAt(depth, width, height, point.x, point.y))
-    const band = bandOf(samples)
+    const band = bandFor(depth, width, height, points)
     alpha = keepBand(input.matte, depth, band.floor, band.cap)
   } else if (input.matte) {
     alpha = keepNear(input.matte, depth)

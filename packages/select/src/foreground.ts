@@ -17,7 +17,7 @@ export type ForegroundOptions = {
   refine?: boolean
   /**
    * 要点中的主体，可以多个。不传就从伸进远处的尖往下长。
-   * 远近取这些点里最近和最远。
+   * 多个点取最近和最远。一个点落在远处的尖上时，近端放到地面以上。
    */
   points?: KeepPoint[]
   baseDir?: string

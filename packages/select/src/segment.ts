@@ -2,10 +2,10 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 /**
- * 512 输入的轻量 ONNX。完整的 512 fp16 大约 470MB，解码器里的可变形卷积会同时摊开大约 3GB 的中间结果，
- * 900×1200 的图再叠着深度模型，进程会被系统杀掉。这一份大约 100MB，同一次前向的驻留大约 2GB。
+ * BiRefNet 512 的 fp16，大约 470MB。lite 512 在夜里的钟楼上输出全是负的 logits，遮罩是空的，这里不用。
+ * 解码器中间结果大约 3GB。修边前先放掉深度会话，不要和这份模型叠在一起。
  */
-export const MODEL_ID = 'studioludens/birefnet-lite-512'
+export const MODEL_ID = 'onnx-community/BiRefNet_512x512-ONNX'
 
 type RawImageLike = {
   data: Uint8Array | Uint8ClampedArray

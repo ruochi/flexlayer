@@ -9,7 +9,7 @@ npx flexlayer-select mask photo.jpg
 npx flexlayer-select mask photo.jpg --point 820,640 --point 860,900 --refine
 ```
 
-默认只跑深度模型 Depth Anything V2 Small 的 q4f16（Apache-2.0，大约 19MB）。不写点，前景从伸进远处的尖往下长，地面留在外面。`--point` 可以写多次，点在要留下的地方；多个点按这些点里最近和最远连成一段，连在一起的留下。`--refine` 再跑下面的 BiRefNet，边用抠图模型，深度只去掉没点到的那一段。
+默认只跑深度模型 Depth Anything V2 Small 的 q4f16（Apache-2.0，大约 19MB）。不写点，前景从伸进远处的尖往下长，地面留在外面。`--point` 可以写多次，点在要留下的地方。多个点按这些点里最近和最远连成一段，连在一起的留下。一个点落在远处的尖上时，近端放到地面以上，把楼身补上。`--refine` 再跑下面的 BiRefNet，边用抠图模型，深度只去掉没点到的那一段。
 
 写出 `photo.foreground.png` 和 `photo.foreground.json`。遮罩里白的地方是前景。json 带这张遮罩的文件名，前景的 `x`、`y`、`width`、`height`，以及这次的 `points`。没有前景时位置和大小是 `null`。没写点时 `points` 是 `[]`。
 
@@ -19,11 +19,11 @@ npx flexlayer-select mask photo.jpg --point 820,640 --point 860,900 --refine
 
 抠主体：
 
-模型是 [BiRefNet lite](https://huggingface.co/studioludens/birefnet-lite-512) 的 512 输入 ONNX。这个包不在 npm 上，要从本仓库安装。第一次 `cutout` 或 `--refine` 下载 fp16 权重到 `~/.cache/flexlayer/models`，大约 100MB。完整的 512 fp16 大约 470MB，中间结果会到 3GB，这里不用。`@huggingface/transformers` 是可选依赖，`npm ci` 会装上。
+模型是 [BiRefNet 512](https://huggingface.co/onnx-community/BiRefNet_512x512-ONNX) 的 fp16 ONNX。这个包不在 npm 上，要从本仓库安装。第一次 `cutout` 或 `--refine` 下载 fp16 权重到 `~/.cache/flexlayer/models`，大约 470MB。解码器中间结果大约 3GB，修边前会先放掉深度会话。`@huggingface/transformers` 是可选依赖，`npm install` 会装上。锁文件和 `package.json` 对不上时，`npm ci` 会直接报错，这里用 `npm install`。
 
 ```bash
 cd packages/select
-npm ci
+npm install
 npm run build
 npx flexlayer-select cutout photo.jpg --preset portrait
 ```
