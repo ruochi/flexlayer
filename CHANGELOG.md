@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.56
+
+实现提交：`94f60a5042bc80d604d40702053008bd71751efb`
+
+`draw` 回调的 `ctx` 可以 `drawImage`。已经排好的一帧用 `renderLayer(node, { format: 'rgba' })` 拿走不预乘像素和画布宽高。
+
 ## 0.2.55
 
 实现提交：`8c4fbc361ac37e5fd594e1f9230c7d64435f8812`
