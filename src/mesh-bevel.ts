@@ -1,11 +1,11 @@
 /**
  * 渲染阶段给面数不多的网格加一条窄圆角。
- * 共面三角先并成面。不超过 200 个面时，折棱向里收，最多 8px。
+ * 共面三角先并成面。不超过 200 个面时，折棱向里收，最多 4px。
  * 已经圆滑的边不加，旁边的折棱仍然收。面太窄时把这一条棱收小。圆角不改变布局盒子。
  */
 
 const MAX_FACES = 200
-const RADIUS = 8
+const RADIUS = 4
 export const BEVEL_RADIUS = RADIUS
 const MIN_RADIUS = 0.75
 const STEPS = 4

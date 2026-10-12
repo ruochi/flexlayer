@@ -877,8 +877,8 @@ describe('网格绘制', () => {
       const radial = Math.hypot(x, z)
       expect(radial).toBeLessThanOrEqual(radius + 0.2)
       expect(Math.abs(y)).toBeLessThanOrEqual(half + 0.2)
-      if (Math.abs(y) > half - 1 && radial < radius - 3) capInset++
-      if (radial > radius - 1 && Math.abs(y) < half - 3) sideInset++
+      if (Math.abs(y) > half - 0.5 && radial < radius - BEVEL_RADIUS * 0.6) capInset++
+      if (radial > radius - 0.5 && Math.abs(y) < half - BEVEL_RADIUS * 0.6) sideInset++
     }
     expect(capInset).toBeGreaterThan(8)
     expect(sideInset).toBeGreaterThan(8)
