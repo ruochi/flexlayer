@@ -179,11 +179,11 @@ describe('buildReport', () => {
 
   it('倾斜平面的光晕还在画布里时不报 effect-clipped', async () => {
     const inside = await checkLayer(
-      `<layer width="480" height="320" background="#000"><layer perspective="700"><rect x="150" y="105" width="180" height="110" fill="#222" rotateY="36" shadow="0 8 16 #fff" /></layer></layer>`,
+      `<layer width="480" height="320" background="#000"><layer camera="700"><rect x="150" y="105" width="180" height="110" fill="#222" rotateY="36" shadow="0 8 16 #fff" /></layer></layer>`,
     )
     expect(inside.issues.some((issue) => issue.code === 'effect-clipped')).toBe(false)
     const clipped = await checkLayer(
-      `<layer width="480" height="240" background="#000" perspective="700"><rect x="150" y="150" width="180" height="80" fill="#222" rotateY="36" shadow="0 8 20 #fff" /></layer>`,
+      `<layer width="480" height="240" background="#000" camera="700"><rect x="150" y="150" width="180" height="80" fill="#222" rotateY="36" shadow="0 8 20 #fff" /></layer>`,
     )
     expect(clipped.issues.some((issue) => issue.code === 'effect-clipped')).toBe(true)
   })

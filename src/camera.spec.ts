@@ -63,15 +63,33 @@ async function quadOf(source: string, tag = 'layer') {
 }
 
 describe('camera', () => {
-  it('focal 与 perspective 逐像素一致，parallel 也一样', async () => {
+  it('不写 camera 时视距等于 height，focal 与数字视距一致', async () => {
     const scene = `<rect x="40" y="30" width="80" height="50" fill="#e8b04a" rotateY="24" z="30" />`
-    const a = await renderLayer(`<layer width="200" height="140" background="#102030" perspective="1484">${scene}</layer>`)
-    const b = await renderLayer(`<layer width="200" height="140" background="#102030" camera="focal 1484">${scene}</layer>`)
-    expect(Buffer.compare(a.png, b.png)).toBe(0)
-    const flat = `<rect x="20" y="20" width="40" height="40" fill="#fff" z="80" />`
-    const p = await renderLayer(`<layer width="120" height="80" background="#000" perspective="parallel">${flat}</layer>`)
-    const c = await renderLayer(`<layer width="120" height="80" background="#000" camera="parallel">${flat}</layer>`)
-    expect(Buffer.compare(p.png, c.png)).toBe(0)
+    const omitted = await renderLayer(`<layer width="200" height="140" background="#102030">${scene}</layer>`)
+    const height = await renderLayer(`<layer width="200" height="140" background="#102030" camera="140">${scene}</layer>`)
+    const focal = await renderLayer(`<layer width="200" height="140" background="#102030" camera="focal 1484">${scene}</layer>`)
+    const number = await renderLayer(`<layer width="200" height="140" background="#102030" camera="1484">${scene}</layer>`)
+    expect(Buffer.compare(omitted.png, height.png)).toBe(0)
+    expect(Buffer.compare(focal.png, number.png)).toBe(0)
+    expect(Buffer.compare(omitted.png, number.png)).not.toBe(0)
+  })
+
+  it('没写 camera 的嵌套层不另开镜头', async () => {
+    const scene = `<layer x="20" y="20" width="80" height="80"><sphere cx="40" cy="40" r="24" fill="#ff2244" /></layer>`
+    const omitted = await renderLayer(`<layer width="200" height="200" background="#000">${scene}</layer>`)
+    const outer = await renderLayer(`<layer width="200" height="200" background="#000" camera="200">${scene}</layer>`)
+    const inner = await renderLayer(`<layer width="200" height="200" background="#000"><layer x="20" y="20" width="80" height="80" camera="80"><sphere cx="40" cy="40" r="24" fill="#ff2244" /></layer></layer>`)
+    expect(Buffer.compare(omitted.png, outer.png)).toBe(0)
+    expect(Buffer.compare(omitted.png, inner.png)).not.toBe(0)
+  })
+
+  it('perspective 已经换成 camera', async () => {
+    const report = await checkLayer(
+      `<layer width="100" height="80" perspective="400"><sphere cx="40" cy="40" r="16" fill="#fff" /></layer>`,
+    )
+    const issue = report.issues.find((item) => item.code === 'invalid-attr' && item.message.includes('perspective'))
+    expect(issue?.hint).toContain('camera="900"')
+    expect(report.issues.some((item) => item.code === 'flatten-3d')).toBe(false)
   })
 
   it('字符串和对象的报告与像素一致，emit 保留作者的字段', async () => {
@@ -223,7 +241,7 @@ describe('camera', () => {
   })
 
   it('preserve-3d 穿过带 padding 的 flex，opacity 压平并报 info', async () => {
-    const source = `<layer width="400" height="320" perspective="700">
+    const source = `<layer width="400" height="320" camera="700">
       <layer x="40" y="30" width="320" height="220" rotateY="28" preserve-3d="true">
         <div style="display:flex; flex-direction:row; align-items:flex-start; padding:20px; gap:16px; width:320px; height:220px" preserve-3d="true">
           <layer width="80" height="80" z="50"><rect width="80" height="80" fill="#f00" /></layer>
@@ -247,7 +265,7 @@ describe('camera', () => {
   })
 
   it('同一张斜卡片上的两行字不报 text-overlap，叠在一起的两张仍报', async () => {
-    const apart = await checkLayer(`<layer width="400" height="300" perspective="600">
+    const apart = await checkLayer(`<layer width="400" height="300" camera="600">
       <layer x="40" y="30" width="220" height="180" rotateY="32">
         <div style="display:flex; flex-direction:column; align-items:flex-start; gap:28px">
           <p style="font-size:28px">甲乙丙</p>
@@ -256,7 +274,7 @@ describe('camera', () => {
       </layer>
     </layer>`)
     expect(apart.issues.some((issue) => issue.code === 'text-overlap')).toBe(false)
-    const over = await checkLayer(`<layer width="400" height="300" perspective="600">
+    const over = await checkLayer(`<layer width="400" height="300" camera="600">
       <layer x="80" y="70" width="160" height="70" rotateY="18"><p style="font-size:32px">甲乙丙丁</p></layer>
       <layer x="90" y="78" width="160" height="70" rotateY="-16" z="20"><p style="font-size:32px">戊己庚辛</p></layer>
     </layer>`)
@@ -287,10 +305,10 @@ describe('camera', () => {
       return maxX - minX
     }
     const flat = await radius('', '')
-    const posed = await radius('perspective="800"', 'z="0.001"')
+    const posed = await radius('camera="800"', 'z="0.001"')
     expect(Math.abs(posed - flat)).toBeLessThan(8)
     const mesh = await checkLayer(
-      `<layer width="160" height="160" perspective="400"><layer x="20" y="20" width="80" height="80" blur="8"><sphere cx="40" cy="40" r="30" fill="#f00" /></layer></layer>`,
+      `<layer width="160" height="160" camera="400"><layer x="20" y="20" width="80" height="80" blur="8"><sphere cx="40" cy="40" r="30" fill="#f00" /></layer></layer>`,
     )
     expect(mesh.issues.some((issue) => issue.code === 'invalid-attr' && issue.message.includes('blur'))).toBe(true)
   })

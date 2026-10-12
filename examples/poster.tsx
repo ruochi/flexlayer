@@ -10,7 +10,7 @@ const title = canvas.create(
 )
 
 const ball = canvas.create(
-  <layer x={title.left + 40} y={title.bottom + 32} perspective="700" glow="40 #e8b04a88">
+  <layer x={title.left + 40} y={title.bottom + 32} camera="700" glow="40 #e8b04a88">
     <sphere cx="90" cy="90" r="90" fill="#e8b04a" />
   </layer>,
 )

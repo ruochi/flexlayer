@@ -3,7 +3,7 @@
     <p style="font-size:40px">金银铜铁 · 塑料</p>
   </layer>
 
-  <layer perspective="1600" width="1520" height="1080">
+  <layer camera="1600" width="1520" height="1080">
     <sphere cx="230" cy="220" r="84" fill="#e4b33a" material="metal 0.08" />
     <sphere cx="570" cy="220" r="84" fill="#d5d8e0" material="metal 0.08" />
     <sphere cx="910" cy="220" r="84" fill="#c86a3e" material="metal 0.08" />

@@ -385,6 +385,18 @@ export function typoAttrIssues(node: LayerNode, path: string): Issue[] {
   const out: Issue[] = []
   for (const key of Object.keys(node.attrs)) {
     if (!present(node.attrs, key)) continue
+    if (key === 'perspective') {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-attr',
+          path,
+          'perspective 已经换成 camera',
+          '不写 camera 时视距等于这一层的 height。要改视距写 camera="900"，平行投影写 camera="parallel"',
+        ),
+      )
+      continue
+    }
     const suggestions = suggestAttrs(key, node)
     if (suggestions.length === 0) continue
     out.push(
@@ -547,7 +559,7 @@ export function checkChildAttrs(node: LayerNode, parent: 'layer' | 'flex', path:
         'non-canonical',
         path,
         '网格放在 flex 里不是规范写法',
-        '包一层有 perspective 的 layer，例如 <layer perspective="700"><sphere cx="80" cy="80" r="40" /></layer>',
+        '包一层 layer。不写 camera 时视距等于这一层的 height，例如 <layer width="200" height="200"><sphere cx="80" cy="80" r="40" /></layer>',
       ),
     )
   }

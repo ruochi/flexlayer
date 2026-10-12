@@ -18,7 +18,7 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
 /**
  * 网格的三角形光栅。
  * 投影用 `project` 的同一套公式（这里直接算），深度大的像素盖住深度小的。
- * `perspective="parallel"` 时不除视距，屏幕坐标就是层坐标。
+ * `camera="parallel"` 时不除视距，屏幕坐标就是层坐标。
  * 正对镜头的面是 fill，侧面按内置主光和补光变暗。
  * 主光沿固定方向打一张正交深度图：不透明三角形互相挡住这盏光时，主光不计。
  * glb 用文件里的底色乘这套明暗。

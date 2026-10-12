@@ -35,7 +35,7 @@ describe('分轴 scale', () => {
   })
 
   it('透视平面水平镜像后左右角对调，外接范围不变', async () => {
-    const attrs = 'width="300" height="220" safe="0" perspective="500"'
+    const attrs = 'width="300" height="220" safe="0" camera="500"'
     const plain = await checkLayer(page(`<rect x="80" y="70" width="100" height="60" fill="#fff" z="40" />`, attrs))
     const mirror = await checkLayer(page(`<rect x="80" y="70" width="100" height="60" fill="#fff" z="40" scale="-1 1" />`, attrs))
     const a = plain.elements.find((el) => el.tag === 'rect')!

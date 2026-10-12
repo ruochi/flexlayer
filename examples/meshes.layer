@@ -1,4 +1,4 @@
-<layer width="640" height="800" background="#0f1115" perspective="700" x="0" y="0">
+<layer width="640" height="800" background="#0f1115" camera="700" x="0" y="0">
   
   
   <sphere cx="220" cy="340" r="90" z="50" fill="#4CC3D9" />

@@ -336,7 +336,7 @@ describe('绘制', () => {
     expect(inside.issues.some((issue) => issue.code === 'effect-clipped')).toBe(false)
 
     const tilted = await renderLayer(`
-      <layer width="240" height="220" background="#ffffff" perspective="800">
+      <layer width="240" height="220" background="#ffffff" camera="800">
         <layer x="70" y="55" width="100" height="50" rotateY="18" shadow="0 36 0 #ff0000">
           <rect x="0" y="0" width="100" height="50" fill="#0000ff" />
         </layer>
@@ -353,7 +353,7 @@ describe('绘制', () => {
     expect(red).toBeGreaterThan(20)
 
     const mesh = await renderLayer(`
-      <layer width="180" height="150" background="#ffffff" perspective="500" shadow="0 48 0 #ff0000">
+      <layer width="180" height="150" background="#ffffff" camera="500" shadow="0 48 0 #ff0000">
         <box x="70" y="32" width="40" height="36" depth="16" fill="#0000ff" />
       </layer>
     `)
@@ -852,14 +852,14 @@ describe('墨迹 spread 与 stroke', () => {
   it('包着三维场景的层，描边和阴影跟着画面', async () => {
     const scene = `
       <layer width="320" height="220" background="#ffffff">
-        <layer x="30" y="24" width="260" height="170" perspective="640" stroke="8 #e00000" shadow="18 20 0 #2244aa">
+        <layer x="30" y="24" width="260" height="170" camera="640" stroke="8 #e00000" shadow="18 20 0 #2244aa">
           <box x="60" y="40" width="140" height="80" depth="50" fill="#f2efe6" rotateY="-28" rotateX="22" />
         </layer>
       </layer>`
     const wrapped = `
       <layer width="320" height="220" background="#ffffff">
         <layer x="24" y="18" width="272" height="184" stroke="8 #e00000" shadow="18 20 0 #2244aa">
-          <layer width="272" height="184" perspective="640">
+          <layer width="272" height="184" camera="640">
             <box x="60" y="36" width="140" height="80" depth="50" fill="#f2efe6" rotateY="-28" rotateX="22" />
           </layer>
         </layer>

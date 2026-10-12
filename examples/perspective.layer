@@ -1,4 +1,4 @@
-<layer width="640" height="800" background="#0f1115" perspective="700" x="0" y="0">
+<layer width="640" height="800" background="#0f1115" camera="700" x="0" y="0">
   
   
   <rect width="220" height="280" fill="#4CC3D9" rotateY="28" z="40" x="140" y="220" />

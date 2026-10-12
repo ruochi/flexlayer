@@ -25,7 +25,7 @@ async function pixelAt(png: Buffer, x: number, y: number) {
 describe('软件光栅', () => {
   it('球体中心有颜色，画布角仍是背景', async () => {
     const { png } = await render(
-      `<layer width="160" height="160" background="#123456" perspective="500"><sphere cx="80" cy="80" r="36" fill="#ff2244" /></layer>`,
+      `<layer width="160" height="160" background="#123456" camera="500"><sphere cx="80" cy="80" r="36" fill="#ff2244" /></layer>`,
     )
     const center = await pixelAt(png, 80, 80)
     const corner = await pixelAt(png, 4, 4)
@@ -39,7 +39,7 @@ describe('软件光栅', () => {
 
   it('更近的球体挡住长方体和平面', async () => {
     const { png } = await render(`
-      <layer width="200" height="200" background="#000000" perspective="600">
+      <layer width="200" height="200" background="#000000" camera="600">
         <box x="40" y="60" width="120" height="80" depth="40" fill="#2244ff" />
         <rect x="20" y="40" width="160" height="120" fill="#22cc44" z="-30" />
         <sphere cx="100" cy="100" r="26" z="50" fill="#ff2244" />
@@ -53,7 +53,7 @@ describe('软件光栅', () => {
 
   it('extrude 的剪影跟着路径走', async () => {
     const { png } = await render(
-      `<layer width="220" height="160" background="#101010" perspective="800"><extrude x="40" y="40" d="M0 0 H140 V36 H90 V80 H0 Z" depth="16" fill="#f4f1ea" /></layer>`,
+      `<layer width="220" height="160" background="#101010" camera="800"><extrude x="40" y="40" d="M0 0 H140 V36 H90 V80 H0 Z" depth="16" fill="#f4f1ea" /></layer>`,
     )
     const inside = await pixelAt(png, 60, 60)
     const notch = await pixelAt(png, 160, 100)
@@ -64,7 +64,7 @@ describe('软件光栅', () => {
 
   it('glb 按外包 layer 居中，并使用文件里的颜色', async () => {
     const { png } = await render(
-      `<layer width="180" height="180" background="#000000" perspective="700"><layer x="55" y="55" width="70" height="70"><model src="box.glb" /></layer></layer>`,
+      `<layer width="180" height="180" background="#000000" camera="700"><layer x="55" y="55" width="70" height="70"><model src="box.glb" /></layer></layer>`,
       { baseDir: dir },
     )
     const center = await pixelAt(png, 90, 90)
@@ -77,7 +77,7 @@ describe('软件光栅', () => {
 
   it('平面上的深色在有网格时不变浅，正对镜头的白方块达到 fill', async () => {
     const { png } = await render(`
-      <layer width="220" height="140" background="#ffffff" perspective="500">
+      <layer width="220" height="140" background="#ffffff" camera="500">
         <rect x="15" y="50" width="70" height="40" fill="#222222" />
         <box x="126" y="46" width="48" height="48" depth="48" fill="#ffffff" />
       </layer>
@@ -93,7 +93,7 @@ describe('软件光栅', () => {
 
   it('偏离光轴的浅色正面仍是写下的 fill', async () => {
     const { png } = await render(`
-      <layer width="220" height="80" background="#ffffff" perspective="500">
+      <layer width="220" height="80" background="#ffffff" camera="500">
         <box x="12" y="16" width="48" height="48" depth="12" fill="#d9ccff" />
         <box x="160" y="16" width="48" height="48" depth="12" fill="#a9dcff" />
       </layer>
@@ -106,7 +106,7 @@ describe('软件光栅', () => {
 
   it('球体沿主光在平面上投下影子，没挡住的地方仍是 fill', async () => {
     const { png } = await render(`
-      <layer width="240" height="240" background="#ffffff" perspective="800">
+      <layer width="240" height="240" background="#ffffff" camera="800">
         <rect x="10" y="100" width="220" height="120" fill="#ffffff" />
         <sphere cx="70" cy="70" r="24" z="70" fill="#ff2244" />
       </layer>
@@ -126,7 +126,7 @@ describe('软件光栅', () => {
 
   it('球体的影子落在长方体正面，没挡住的正面仍是 fill', async () => {
     const { png } = await render(`
-      <layer width="420" height="360" background="#d9d3c7" perspective="800">
+      <layer width="420" height="360" background="#d9d3c7" camera="800">
         <box x="150" y="115" width="160" height="150" depth="20" fill="#f4f1ea" />
         <sphere cx="130" cy="110" r="28" z="48" fill="#e23d3d" />
       </layer>
@@ -140,7 +140,7 @@ describe('软件光栅', () => {
 
   it('更靠近主光的长方体挡住后面的平面', async () => {
     const { png } = await render(`
-      <layer width="240" height="240" background="#ffffff" perspective="800">
+      <layer width="240" height="240" background="#ffffff" camera="800">
         <rect x="50" y="80" width="180" height="140" fill="#ffffff" />
         <box x="52" y="45" width="36" height="70" depth="36" z="48" fill="#3355aa" />
       </layer>
@@ -156,7 +156,7 @@ describe('软件光栅', () => {
 
   it('三维场景里的平面颜色保持原色阶', async () => {
     const { png } = await render(`
-      <layer width="180" height="80" background="#ffffff" perspective="500">
+      <layer width="180" height="80" background="#ffffff" camera="500">
         <rect x="20" y="20" width="60" height="40" fill="#2b6b5e" />
         <sphere cx="130" cy="40" r="18" fill="#888888" />
       </layer>
@@ -167,7 +167,7 @@ describe('软件光栅', () => {
 
   it('extrude 的并排形状都留下，洞仍然是洞', async () => {
     const { png } = await render(`
-      <layer width="220" height="120" background="#101010" perspective="800">
+      <layer width="220" height="120" background="#101010" camera="800">
         <extrude x="10" y="46" d="M0 0 H28 V28 H0 Z M52 0 H80 V28 H52 Z" depth="12" fill="#f2f2f2" />
         <extrude x="128" y="28" d="M0 0 H64 V64 H0 Z M18 18 H46 V46 H18 Z" depth="12" fill="#f2f2f2" />
       </layer>
@@ -186,7 +186,7 @@ describe('软件光栅', () => {
 
   it('搭在另一笔上的形状仍是实体，不会被挖成洞', async () => {
     const { png } = await render(`
-      <layer width="200" height="140" background="#101010" perspective="800">
+      <layer width="200" height="140" background="#101010" camera="800">
         <extrude d="M0 0 H60 V24 H0 Z M30 8 L50 8 L50 16 L80 36 L40 36 L30 16 Z" depth="12" x="60" y="52" fill="#f2f2f2" />
       </layer>
     `)
@@ -199,7 +199,7 @@ describe('软件光栅', () => {
   it('网格超出所在 layer 时仍画在父画布上', async () => {
     const spilled = await render(`
       <layer width="200" height="120" background="#000000">
-        <layer x="90" y="25" width="80" height="70" perspective="180">
+        <layer x="90" y="25" width="80" height="70" camera="180">
           <sphere cx="16" cy="35" r="14" z="50" fill="#ff2244" />
         </layer>
       </layer>
@@ -209,14 +209,14 @@ describe('软件光栅', () => {
     expect(outside[0]).toBeGreaterThan(80)
     expect(spilled.report.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
     const clipped = await checkLayer(
-      `<layer width="80" height="80" background="#000" perspective="160"><sphere cx="14" cy="40" r="12" z="70" fill="#ff2244" /></layer>`,
+      `<layer width="80" height="80" background="#000" camera="160"><sphere cx="14" cy="40" r="12" z="70" fill="#ff2244" /></layer>`,
     )
     expect(clipped.issues.some((issue) => issue.code === 'overflow-canvas' && issue.path.includes('sphere'))).toBe(true)
   })
 
   it('网格斜边有抗锯齿过渡', async () => {
     const { png } = await render(
-      `<layer width="200" height="200" background="#000000" perspective="800"><box x="20" y="93" width="160" height="14" depth="2" rotate="24" fill="#ffffff" /></layer>`,
+      `<layer width="200" height="200" background="#000000" camera="800"><box x="20" y="93" width="160" height="14" depth="2" rotate="24" fill="#ffffff" /></layer>`,
     )
     const img = await loadImage(png)
     const canvas = createCanvas(img.width, img.height)
@@ -252,7 +252,7 @@ describe('软件光栅', () => {
 
   it('旋转后的网格描边沿斜边有过渡', async () => {
     const { png } = await render(
-      `<layer width="240" height="200" background="#000000" perspective="800"><box x="30" y="90" width="180" height="16" depth="2" rotate="24" fill="#ffffff" stroke="#ff0000" stroke-width="3" /></layer>`,
+      `<layer width="240" height="200" background="#000000" camera="800"><box x="30" y="90" width="180" height="16" depth="2" rotate="24" fill="#ffffff" stroke="#ff0000" stroke-width="3" /></layer>`,
     )
     const img = await loadImage(png)
     const canvas = createCanvas(img.width, img.height)
@@ -277,7 +277,7 @@ describe('软件光栅', () => {
 
   it('盒子描可见棱，对角线不画，被自己挡住的棱是虚线', async () => {
     const { png } = await render(`
-      <layer width="200" height="200" background="#ffffff" perspective="500">
+      <layer width="200" height="200" background="#ffffff" camera="500">
         <box x="50" y="60" width="100" height="80" depth="70" fill="#c8c8c8" stroke="#000000" stroke-width="4" hidden="#ff00ff" />
       </layer>
     `)
@@ -310,7 +310,7 @@ describe('软件光栅', () => {
 
   it('fill=none 的盒子不填面，轮廓仍在', async () => {
     const { png } = await render(`
-      <layer width="200" height="200" background="#ffffff" perspective="500">
+      <layer width="200" height="200" background="#ffffff" camera="500">
         <box x="50" y="60" width="100" height="80" depth="70" fill="none" stroke="#000000" stroke-width="4" />
       </layer>
     `)
@@ -334,7 +334,7 @@ describe('软件光栅', () => {
 
   it('球的 stroke 只画轮廓圆', async () => {
     const { png } = await render(`
-      <layer width="200" height="200" background="#ffffff" perspective="600">
+      <layer width="200" height="200" background="#ffffff" camera="600">
         <sphere cx="100" cy="100" r="50" fill="none" stroke="#000000" stroke-width="4" hidden="#ff00ff" />
       </layer>
     `)
@@ -361,7 +361,7 @@ describe('软件光栅', () => {
 
   it('挤出体只描折棱，盖上的对角线不画', async () => {
     const { png } = await render(`
-      <layer width="220" height="160" background="#ffffff" perspective="800">
+      <layer width="220" height="160" background="#ffffff" camera="800">
         <extrude x="40" y="40" d="M0 0 H140 V36 H90 V80 H0 Z" depth="40" fill="#f4f1ea" stroke="#000000" stroke-width="3" hidden="#ff00ff" />
       </layer>
     `)
@@ -389,7 +389,7 @@ describe('软件光栅', () => {
 
   it('glb 的 stroke 描在文件颜色外面', async () => {
     const { png } = await render(
-      `<layer width="180" height="180" background="#000000" perspective="700"><layer x="55" y="55" width="70" height="70"><model src="box.glb" stroke="#ffffff" stroke-width="3" /></layer></layer>`,
+      `<layer width="180" height="180" background="#000000" camera="700"><layer x="55" y="55" width="70" height="70"><model src="box.glb" stroke="#ffffff" stroke-width="3" /></layer></layer>`,
       { baseDir: dir },
     )
     const center = await pixelAt(png, 90, 90)
@@ -408,7 +408,7 @@ describe('软件光栅', () => {
 
   it('圆柱背面的弧是虚线，不是实线', async () => {
     const { png } = await render(`
-      <layer width="280" height="220" background="#ffffff" perspective="800">
+      <layer width="280" height="220" background="#ffffff" camera="800">
         <extrude x="40" y="30" d="M40 80 A 40 40 0 1 1 120 80 A 40 40 0 1 1 40 80 Z" depth="56" fill="none" stroke="#000000" stroke-width="3" hidden="#ff00ff" rotateX="62" />
       </layer>
     `)
@@ -468,7 +468,7 @@ describe('软件光栅', () => {
 
   it('前面的球体盖住后面盒子的棱', async () => {
     const { png } = await render(`
-      <layer width="200" height="200" background="#ffffff" perspective="600">
+      <layer width="200" height="200" background="#ffffff" camera="600">
         <box x="30" y="40" width="140" height="120" depth="40" fill="#dddddd" stroke="#000000" stroke-width="4" hidden="#ff00ff" />
         <sphere cx="100" cy="100" r="28" z="40" fill="#ff2244" />
       </layer>
@@ -482,7 +482,7 @@ describe('软件光栅', () => {
   it('轮廓、折棱、隐藏线按 stroke-width 的三个数依次变细', async () => {
     const stats = async (width: string) => {
       const { png } = await render(`
-        <layer width="280" height="240" background="#ffffff" perspective="2400">
+        <layer width="280" height="240" background="#ffffff" camera="2400">
           <box x="70" y="50" width="120" height="90" depth="80" fill="#f2f2f2" stroke="#000000" stroke-width="${width}" hidden="#ff00ff" rotateY="-32" rotateX="22" />
         </layer>
       `)
@@ -538,7 +538,7 @@ describe('软件光栅', () => {
     const paint = (halo: string, scale = 1) =>
       render(
         `
-        <layer width="220" height="200" background="#ffffff" perspective="4000">
+        <layer width="220" height="200" background="#ffffff" camera="4000">
           <box x="50" y="24" width="90" height="150" depth="16" fill="#ffffff" stroke="#000000" stroke-width="2" hidden="#000000" halo="4" />
           <tube x="0" y="70" d="M20 30 H200" r="5" z="40" fill="#ff2244" stroke="#ff2244" stroke-width="2"${halo} />
         </layer>
@@ -635,7 +635,7 @@ describe('软件光栅', () => {
 
   it('halo 不会把线管端面和自己的轮廓切开', async () => {
     const { png } = await render(`
-      <layer width="320" height="180" background="#ffffff" perspective="1200">
+      <layer width="320" height="180" background="#ffffff" camera="1200">
         <tube x="30" y="40" d="M0 50 H240" r="24" fill="none" stroke="#111111" stroke-width="3" halo="8" />
       </layer>
     `)
@@ -673,7 +673,7 @@ describe('软件光栅', () => {
 
   it('halo 不配 stroke、写在平面上，或 stroke-width 超过三个数，会警告', async () => {
     const report = await checkLayer(`
-      <layer width="180" height="140" perspective="400">
+      <layer width="180" height="140" camera="400">
         <box x="20" y="30" width="40" height="30" depth="20" halo="3" />
         <rect x="10" y="10" width="20" height="20" fill="#fff" halo="3" />
         <box x="80" y="30" width="40" height="30" depth="20" fill="#fff" stroke="#000" stroke-width="1 2 3 4" />
@@ -692,7 +692,7 @@ describe('软件光栅', () => {
       : ''
     const sphere = options.sphere ? '<sphere cx="100" cy="148" r="18" z="180" fill="#2255ee" />' : ''
     return `
-      <layer width="240" height="240" background="#ffffff" perspective="900">
+      <layer width="240" height="240" background="#ffffff" camera="900">
         <layer x="20" y="10" width="200" height="220" rotateX="62">
           <box x="30" y="40" width="140" height="140" depth="80" fill="#f2f2f2" ${box} />
           <cylinder cx="100" cy="110" r="36" height="220" fill="#e7d3a8" ${cylinder} />
@@ -762,14 +762,14 @@ describe('软件光栅', () => {
 
   it('只有一只写了 stroke 时不画交界线', async () => {
     const alone = `
-      <layer width="240" height="240" background="#ffffff" perspective="900">
+      <layer width="240" height="240" background="#ffffff" camera="900">
         <layer x="20" y="10" width="200" height="220" rotateX="62">
           <box x="30" y="40" width="140" height="140" depth="80" fill="#f2f2f2" stroke="#d100ff" stroke-width="2" />
         </layer>
       </layer>
     `
     const covered = `
-      <layer width="240" height="240" background="#ffffff" perspective="900">
+      <layer width="240" height="240" background="#ffffff" camera="900">
         <layer x="20" y="10" width="200" height="220" rotateX="62">
           <box x="30" y="40" width="140" height="140" depth="80" fill="#f2f2f2" stroke="#d100ff" stroke-width="2" />
           <cylinder cx="100" cy="110" r="36" height="220" fill="#e7d3a8" />
@@ -834,10 +834,10 @@ describe('软件光栅', () => {
       <box x="70" y="40" width="100" height="80" depth="60" fill="#ff2244" />
     `
     const parallel = await render(`
-      <layer width="240" height="160" background="#000000" perspective="parallel">${face}</layer>
+      <layer width="240" height="160" background="#000000" camera="parallel">${face}</layer>
     `)
     const numeric = await render(`
-      <layer width="240" height="160" background="#000000" perspective="180">${face}</layer>
+      <layer width="240" height="160" background="#000000" camera="180">${face}</layer>
     `)
     const inside = await pixelAt(parallel.png, 80, 80)
     const outside = await pixelAt(parallel.png, 64, 80)
@@ -846,7 +846,7 @@ describe('软件光栅', () => {
     expect(outside[0]).toBeLessThan(20)
     expect(enlarged[0]).toBeGreaterThan(140)
     const covered = await render(`
-      <layer width="160" height="160" background="#000000" perspective="parallel">
+      <layer width="160" height="160" background="#000000" camera="parallel">
         <box x="20" y="40" width="120" height="80" depth="20" fill="#2244ff" />
         <sphere cx="80" cy="80" r="24" z="40" fill="#ff2244" />
       </layer>
@@ -856,7 +856,7 @@ describe('软件光栅', () => {
     expect(sphere[0]).toBeGreaterThan(sphere[2] + 20)
     expect(box[2]).toBeGreaterThan(box[0] + 20)
     const ring = await render(`
-      <layer width="200" height="200" background="#000000" perspective="parallel">
+      <layer width="200" height="200" background="#000000" camera="parallel">
         <sphere cx="100" cy="100" r="40" fill="none" stroke="#ff2244" stroke-width="4" />
       </layer>
     `)
@@ -870,7 +870,7 @@ describe('软件光栅', () => {
 
   it('父层 rotateX 里有平面时，盒子远侧的棱还在', async () => {
     const scene = (plane: boolean) => `
-      <layer width="360" height="280" background="#f7f4ee" perspective="700">
+      <layer width="360" height="280" background="#f7f4ee" camera="700">
         <layer x="30" y="20" width="300" height="240" rotateX="58">
           ${plane ? '<rect x="16" y="16" width="36" height="24" fill="#88aaff" />' : ''}
           <box x="80" y="70" width="150" height="110" depth="80" fill="none" stroke="#111111" stroke-width="3" hidden="#111111" />
@@ -913,13 +913,13 @@ describe('软件光栅', () => {
   it('scale 或 view 放大后，贴边的网格描边画到画布边', async () => {
     const scaled = await edgeStroke(`
       <layer width="240" height="160" background="#ffffff">
-        <layer width="240" height="160" perspective="420" scale="3" origin="center">
+        <layer width="240" height="160" camera="420" scale="3" origin="center">
           <box x="-80" y="70" width="400" height="12" depth="6" fill="none" stroke="#e00000" stroke-width="6" />
         </layer>
       </layer>`)
     const viewed = await edgeStroke(`
       <layer width="240" height="160" background="#ffffff" view="40 50 80 40">
-        <layer width="240" height="160" perspective="420">
+        <layer width="240" height="160" camera="420">
           <box x="-40" y="58" width="360" height="12" depth="6" fill="none" stroke="#e00000" stroke-width="6" />
         </layer>
       </layer>`)

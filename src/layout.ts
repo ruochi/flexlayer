@@ -23,8 +23,8 @@ import { isGradientPaint } from './gradientField.js'
 import { glbSpan, resolveModelFile } from './glb.js'
 import { readBoxFillet, readCylinderFillet } from './mesh-round.js'
 import { openSvgPath, translateSvgPath } from './path.js'
-import { cameraAuditIssues, readPreserve, readSharp, resolveCamera } from './camera.js'
-import { perspectiveIssues } from './perspective.js'
+import { cameraAuditIssues, defaultFocal, readPreserve, readSharp, resolveCamera } from './camera.js'
+import { has3dPose, perspectiveIssues } from './perspective.js'
 import {
   parseBlend,
   parseBlurRadius,
@@ -128,6 +128,8 @@ export type LayoutContext = {
   /** 正在排 mask 里面的内容。 */
   inMask?: boolean
   previews: PreviewSpec[]
+  /** 祖先已经打开镜头。这一层不写 camera 时不再另开默认镜头。 */
+  ancestorCamera?: boolean
 }
 
 function isClosedFlag(raw: string | undefined): boolean {
@@ -3029,6 +3031,39 @@ function readLayerView(node: LayerNode, layerW: number, layerH: number, ctx: Lay
   return fitted.view
 }
 
+function nonzeroAttr(raw: string | undefined): boolean {
+  if (raw == null || raw.trim() === '') return false
+  const n = Number(raw.trim().replace(/px$/, ''))
+  if (Number.isNaN(n)) return true
+  return n !== 0
+}
+
+function wroteCameraAttr(node: LayerNode): boolean {
+  const source = node.camera !== undefined ? node.camera : node.attrs.camera
+  return source != null && !(typeof source === 'string' && source.trim() === '')
+}
+
+/** 子孙里有网格或三维姿态，并且没有被写了 camera 的嵌套层截住。 */
+function rawNeedsCamera(node: LayerNode): boolean {
+  for (const child of node.children) {
+    if (typeof child === 'string') continue
+    const tag = child.tag.toLowerCase()
+    if (tag === 'mask' || tag === 'preview' || tag === 'symbol' || tag === 'draw' || tag === 'font') continue
+    if (isMeshTag(tag) || nonzeroAttr(child.attrs.rotateX) || nonzeroAttr(child.attrs.rotateY) || nonzeroAttr(child.attrs.z)) return true
+    if (tag === 'layer' && wroteCameraAttr(child)) continue
+    if (rawNeedsCamera(child)) return true
+  }
+  return false
+}
+
+/** 排完的子树里还有没被内层镜头接住的网格或姿态。 */
+function laidNeedsCamera(node: LayoutNode): boolean {
+  if (node.kind === 'mesh' || has3dPose(node)) return true
+  if (node.kind === 'layer' && node.perspective != null) return false
+  if (node.kind === 'layer' || node.kind === 'flex') return node.children.some(laidNeedsCamera)
+  return false
+}
+
 function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
   if (ctx.pathPrefix === 'layer') ctx.issues.push(...originValueIssues(node.attrs.origin, ctx.pathPrefix))
   const appearance = readAttrAppearance(node.attrs)
@@ -3036,7 +3071,8 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
   appearance.background = undefined
   const fixedW = parseNumber(node.attrs.width)
   const fixedH = parseNumber(node.attrs.height)
-  const layerCtx = withLayerText(ctx, node)
+  const hostsCamera = wroteCameraAttr(node) || (!ctx.ancestorCamera && rawNeedsCamera(node))
+  const layerCtx = withLayerText({ ...ctx, ancestorCamera: Boolean(hostsCamera || ctx.ancestorCamera) }, node)
 
   const childFvg = node.children.filter((c) => typeof c !== 'string') as LayerNode[]
   let chosenMask: LayerNode | undefined
@@ -3171,18 +3207,8 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
   let vanishY: number | undefined
   let cameraMoved = false
   let dof: LayerLayoutNode['dof']
-  const perspectiveRaw = node.attrs.perspective
   const cameraSource = node.camera !== undefined ? node.camera : node.attrs.camera
-  if (cameraSource != null && !(typeof cameraSource === 'string' && cameraSource.trim() === '')) {
-    if (perspectiveRaw != null && perspectiveRaw.trim() !== '') {
-      ctx.issues.push({
-        level: 'warn',
-        code: 'invalid-attr',
-        path: ctx.pathPrefix,
-        message: 'camera 和 perspective 不要写在同一层',
-        hint: 'perspective="900" 就是 camera="focal 900"。这一层用 camera',
-      })
-    }
+  if (wroteCameraAttr(node)) {
     const resolved = resolveCamera(cameraSource, layerW, layerH)
     for (const item of resolved.issues) {
       ctx.issues.push({
@@ -3201,23 +3227,9 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
       cameraMoved = resolved.camera.moved
       dof = resolved.camera.dof
     }
-  } else if (perspectiveRaw != null && perspectiveRaw.trim() !== '') {
-    if (perspectiveRaw.trim() === 'parallel') {
-      perspective = 'parallel'
-    } else {
-      const parsed = parseNumber(perspectiveRaw)
-      if (parsed == null || parsed <= 0) {
-        ctx.issues.push({
-          level: 'warn',
-          code: 'invalid-attr',
-          path: ctx.pathPrefix,
-          message: `无法解析 perspective: ${perspectiveRaw}`,
-          hint: '写成像素视距 perspective="900"，或平行投影 perspective="parallel"',
-        })
-      } else {
-        perspective = parsed
-      }
-    }
+  } else if (!ctx.ancestorCamera && (hostsCamera || children.some(laidNeedsCamera))) {
+    const focal = defaultFocal(layerH)
+    if (focal != null) perspective = focal
   }
   const preserve = readPreserve(node.attrs['preserve-3d'])
   if (preserve.invalid) {

@@ -71,7 +71,7 @@ describe('paint containers', () => {
     expect(inside[1]).toBeLessThan(20)
   })
 
-  it('perspective 里 rotateY 把方块压窄，中心仍在', async () => {
+  it('镜头里 rotateY 把方块压窄，中心仍在', async () => {
     const flat = h(
       'layer',
       { width: '200', height: '200', background: '#000000' },
@@ -79,7 +79,7 @@ describe('paint containers', () => {
     )
     const turned = h(
       'layer',
-      { width: '200', height: '200', background: '#000000', perspective: '300' },
+      { width: '200', height: '200', background: '#000000', camera: '300' },
       h('rect', { x: '60', y: '60',  width: '80', height: '80', fill: '#ffffff', rotateY: '70' }),
     )
     const flatPx = await pixelAt((await renderLayer(flat)).png, 62, 100)
@@ -104,7 +104,7 @@ describe('paint containers', () => {
   it('透视平面的斜边有抗锯齿过渡', async () => {
     const root = h(
       'layer',
-      { width: '200', height: '200', background: '#000000', perspective: '500' },
+      { width: '200', height: '200', background: '#000000', camera: '500' },
       h('rect', { x: '40', y: '60',  width: '120', height: '80', fill: '#ffffff', rotateY: '32' }),
     )
     const png = (await renderLayer(root)).png
@@ -128,7 +128,7 @@ describe('paint containers', () => {
   it('透视平面的发光和阴影画到平面外面', async () => {
     const glow = h(
       'layer',
-      { width: '180', height: '180', background: '#000000', perspective: '400' },
+      { width: '180', height: '180', background: '#000000', camera: '400' },
       h('rect', { x: '65', y: '65',  width: '50', height: '50', fill: '#ffffff', rotateX: '14', glow: '16 #00ff00' }),
     )
     const glowPng = (await renderLayer(glow)).png
@@ -143,7 +143,7 @@ describe('paint containers', () => {
 
     const grid = h(
       'layer',
-      { width: '640', height: '400', background: '#000000', perspective: '900' },
+      { width: '640', height: '400', background: '#000000', camera: '900' },
       h('rect', { x: '140', y: '100',  width: '360', height: '200', fill: '#000000', rotateY: '32', glow: '36 #ffffff' }),
     )
     const gridPng = (await renderLayer(grid)).png
@@ -163,7 +163,7 @@ describe('paint containers', () => {
 
     const shadow = h(
       'layer',
-      { width: '180', height: '180', background: '#000000', perspective: '400' },
+      { width: '180', height: '180', background: '#000000', camera: '400' },
       h('rect', { x: '65', y: '65',  width: '50', height: '50', fill: '#ffffff', rotateX: '14', shadow: '18 0 4 #ff0000' }),
     )
     const shadowPng = (await renderLayer(shadow)).png
@@ -180,7 +180,7 @@ describe('paint containers', () => {
   it('z 大的平面盖住后写但更远的平面', async () => {
     const root = h(
       'layer',
-      { width: '120', height: '120', background: '#000000', perspective: '400' },
+      { width: '120', height: '120', background: '#000000', camera: '400' },
       h('rect', { x: '35', y: '35',  width: '50', height: '50', fill: '#ff0000', z: '40' }),
       h('rect', { x: '35', y: '35',  width: '50', height: '50', fill: '#0000ff', z: '-30' }),
     )

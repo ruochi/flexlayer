@@ -771,8 +771,8 @@ export function perspectiveIssues(root: LayoutNode): Issue[] {
           level: 'warn',
           code: 'flatten-3d',
           path: node.path,
-          message: `${node.tag} 没有落在带 perspective 的 layer 里`,
-          hint: '在父 layer 上写 perspective，例如 <layer perspective="900">',
+          message: `${node.tag} 没有落在镜头里`,
+          hint: '给这一层正的 height。不写 camera 时视距等于 height，要改视距写 camera="900"',
         })
       } else if (!custom && behindCamera(node.z ?? 0, distance)) {
         issues.push({
@@ -780,7 +780,7 @@ export function perspectiveIssues(root: LayoutNode): Issue[] {
           code: 'behind-camera',
           path: node.path,
           message: '网格在观众身后，不绘制',
-          hint: `把 z 减小到小于 perspective（${distance}）`,
+          hint: `把 z 减小到小于视距（${distance}）`,
         })
       }
       return
@@ -790,8 +790,8 @@ export function perspectiveIssues(root: LayoutNode): Issue[] {
         level: 'warn',
         code: 'flatten-3d',
         path: node.path,
-        message: 'rotateX、rotateY、z 没有落在带 perspective 的 layer 里',
-        hint: '在父 layer 上写 perspective，例如 <layer perspective="900">',
+        message: 'rotateX、rotateY、z 没有落在镜头里',
+        hint: '给这一层正的 height。不写 camera 时视距等于 height，要改视距写 camera="900"',
       })
     }
     if (inCamera && !custom && distance != null && behindCamera(planeDepth(node), distance)) {
@@ -800,7 +800,7 @@ export function perspectiveIssues(root: LayoutNode): Issue[] {
         code: 'behind-camera',
         path: node.path,
         message: '平面在观众身后，不绘制',
-        hint: `把 z 减小到小于 perspective（${distance}）`,
+        hint: `把 z 减小到小于视距（${distance}）`,
       })
     }
     const children = node.kind === 'layer' || node.kind === 'flex' ? node.children : []

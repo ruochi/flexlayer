@@ -159,11 +159,9 @@ export namespace JSX {
         rotateY?: number | string
         /** 像素，正方向朝观众 */
         z?: number | string
-        /** 直接子元素的视距，像素。camera="focal …" 的简写 */
-        perspective?: number | string
         /**
-         * 镜头。字符串按逗号分段，或传对象。
-         * perspective="900" 等于 focal 900，perspective="parallel" 等于 parallel。
+         * 镜头。字符串按逗号分段，或传对象。不写时，需要投影的层用自己的 height 当视距。
+         * camera="900" 等于 focal 900，camera="parallel" 是平行投影。
          */
         camera?:
           | string
