@@ -3,6 +3,7 @@ import { readFileSync, statSync } from 'node:fs'
 import { studioAt } from './env-map.js'
 import { solidPaint } from './gradient.js'
 import { parseGlb } from './glb.js'
+import { bevelFewFaces } from './mesh-bevel.js'
 import { originOffset } from './matrix.js'
 import type { MeshClip } from './mesh-cache.js'
 import { applyDepthOfField } from './dof.js'
@@ -191,7 +192,8 @@ function originKey(node: MeshLayoutNode) {
 function geometryCacheKey(node: MeshLayoutNode): string | null {
   const mesh = node.mesh
   if (mesh.type === 'model') return null
-  const head = `${mesh.type}|${quantGeometry(node.width)}|${quantGeometry(node.height)}|${originKey(node)}`
+  const bevel = node.stroke === 'none' ? '|b' : ''
+  const head = `${mesh.type}|${quantGeometry(node.width)}|${quantGeometry(node.height)}|${originKey(node)}${bevel}`
   if (mesh.type === 'sphere') return `${head}|${quantGeometry(mesh.r)}`
   if (mesh.type === 'box') return `${head}|${quantGeometry(mesh.depth)}|${quantGeometry(mesh.rx)}|${mesh.edges.join(',')}`
   if (mesh.type === 'extrude') return `${head}|${quantGeometry(mesh.depth)}|${mesh.d}`
@@ -210,7 +212,8 @@ function modelCacheKey(node: MeshLayoutNode): string | null {
   } catch {
     stamp = 'missing'
   }
-  return `${node.mesh.file}|${stamp}|${quantGeometry(node.width)}|${quantGeometry(node.height)}|${quantGeometry(node.opacity)}|${originKey(node)}`
+  const bevel = node.stroke === 'none' ? '|b' : ''
+  return `${node.mesh.file}|${stamp}|${quantGeometry(node.width)}|${quantGeometry(node.height)}|${quantGeometry(node.opacity)}|${originKey(node)}${bevel}`
 }
 
 function touchCache<T>(map: Map<string, T>, key: string, value: T, cap: number) {
@@ -1219,11 +1222,12 @@ function buildModelFresh(node: MeshLayoutNode): ModelPrim[] {
     const indices = prim.indices ?? Uint32Array.from({ length: count - (count % 3) }, (_, i) => i)
     if (indices.length < 3) continue
     const normals = prim.normals && prim.normals.length === src.length ? prim.normals : smoothNormals(positions, indices)
+    const beveled = node.stroke === 'none' ? bevelFewFaces(positions, indices) : null
     const color = prim.color
     out.push({
-      positions,
-      normals,
-      indices,
+      positions: beveled?.positions ?? positions,
+      normals: beveled?.normals ?? normals,
+      indices: beveled?.indices ?? indices,
       color: [
         byte(color[0] * 255),
         byte(color[1] * 255),
@@ -1237,13 +1241,15 @@ function buildModelFresh(node: MeshLayoutNode): ModelPrim[] {
 }
 
 function geometryOfFresh(node: MeshLayoutNode): MeshGeometry | null {
-  if (node.mesh.type === 'sphere') return buildSphere(node)
-  if (node.mesh.type === 'box') return buildBox(node)
-  if (node.mesh.type === 'cylinder') return buildCylinder(node)
-  if (node.mesh.type === 'torus') return buildTorus(node)
-  if (node.mesh.type === 'tube') return buildTube(node)
-  if (node.mesh.type === 'extrude') return buildExtrude(node)
-  return null
+  let geo: MeshGeometry | null = null
+  if (node.mesh.type === 'sphere') geo = buildSphere(node)
+  else if (node.mesh.type === 'box') geo = buildBox(node)
+  else if (node.mesh.type === 'cylinder') geo = buildCylinder(node)
+  else if (node.mesh.type === 'torus') geo = buildTorus(node)
+  else if (node.mesh.type === 'tube') geo = buildTube(node)
+  else if (node.mesh.type === 'extrude') geo = buildExtrude(node)
+  if (!geo || node.stroke !== 'none') return geo
+  return bevelFewFaces(geo.positions, geo.indices) ?? geo
 }
 
 function geometryOf(node: MeshLayoutNode): MeshGeometry | null {
