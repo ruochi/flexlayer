@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.57
+
+实现提交：`ec49b328201f03385ff6b4d26323d05fb07f1309`
+
+`flexlayer-select mask` 取出前景遮罩，写到 `photo.foreground.png`，并返回这块前景的 `x`、`y`、`width`、`height`。`--front` 从 0 到 1，默认 0.5，调大遮罩变大，调小只留更靠近镜头的一段。`--refine` 用抠图模型修边。
+
 ## 0.2.56
 
 实现提交：`f902e0acd8496b583d98be6b2aed1273994d21df`
