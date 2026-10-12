@@ -12,6 +12,19 @@ export type RenderResult = {
   report: FvgReport
 }
 
+/** `format: 'rgba'`。像素不预乘，长度是 `width × height × 4`。 */
+export type RgbaRenderResult = {
+  rgba: Buffer
+  width: number
+  height: number
+  report: FvgReport
+}
+
+function canvasRgba(canvas: Canvas): Buffer {
+  const image = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height)
+  return Buffer.from(image.data)
+}
+
 export type CanvasRenderResult = {
   canvas: Canvas
   report: FvgReport
@@ -41,8 +54,13 @@ export async function renderToCanvas(source: string | FvgNode, options: RenderOp
   return { canvas, report: buildReport(doc) }
 }
 
-export async function renderFvg(source: string | FvgNode, options: RenderOptions = {}): Promise<RenderResult> {
+export async function renderFvg(source: string | FvgNode, options: RenderOptions & { format: 'rgba' }): Promise<RgbaRenderResult>
+export async function renderFvg(source: string | FvgNode, options?: RenderOptions): Promise<RenderResult>
+export async function renderFvg(source: string | FvgNode, options: RenderOptions = {}): Promise<RenderResult | RgbaRenderResult> {
   const { canvas, report } = await renderToCanvas(source, options)
+  if (options.format === 'rgba') {
+    return { rgba: canvasRgba(canvas), width: canvas.width, height: canvas.height, report }
+  }
   return { png: canvas.toBuffer('image/png'), report }
 }
 
@@ -69,5 +87,5 @@ export async function checkFvg(source: string | FvgNode, options: RenderOptions 
 }
 
 /** 与 renderFvg / checkFvg 相同，推荐新名字 */
-export const renderLayer = renderFvg
+export const renderLayer: typeof renderFvg = renderFvg
 export const checkLayer = checkFvg

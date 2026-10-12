@@ -2,25 +2,11 @@ import {
   createCanvas,
   type Canvas,
   type CanvasRenderingContext2D,
-  type ImageData,
+  type SKRSContext2D,
 } from '@napi-rs/canvas'
 
-type PaintCtx = CanvasRenderingContext2D & {
-  canvas: Canvas
-  filter: string
-  drawImage(...args: unknown[]): void
-  getImageData(sx: number, sy: number, sw: number, sh: number): ImageData
-  putImageData(imageData: ImageData, dx: number, dy: number): void
-  createImageData(sw: number, sh: number): ImageData
-  createLinearGradient(
-    x0: number,
-    y0: number,
-    x1: number,
-    y1: number,
-  ): { addColorStop(offset: number, color: string): void }
-  getTransform(): { a: number; b: number; c: number; d: number; e: number; f: number }
-  imageSmoothingEnabled: boolean
-}
+/** 运行时就是这份上下文。标准 2D 类型没有 `drawImage`。 */
+type PaintCtx = SKRSContext2D
 import { applyCanvasFont } from './fonts.js'
 import { backdropFilters, filtersPad, getFilter, orderedFilters } from './filter.js'
 import { fitImageRect } from './image.js'
@@ -162,7 +148,7 @@ function drawBoxChrome(ctx: CanvasRenderingContext2D, node: LayoutNode) {
   }
 }
 
-function drawImageNode(ctx: CanvasRenderingContext2D, node: ImageLayoutNode, recolor?: string) {
+function drawImageNode(ctx: PaintCtx, node: ImageLayoutNode, recolor?: string) {
   const bw = node.border?.width ?? 0
   const boxX = node.x + node.padding.left + bw
   const boxY = node.y + node.padding.top + bw
@@ -179,20 +165,19 @@ function drawImageNode(ctx: CanvasRenderingContext2D, node: ImageLayoutNode, rec
   ctx.beginPath()
   ctx.rect(boxX, boxY, boxW, boxH)
   ctx.clip()
-  const paint = ctx as PaintCtx
-  if (node.maskPick) paint.imageSmoothingEnabled = false
+  if (node.maskPick) ctx.imageSmoothingEnabled = false
   if (recolor) {
     const tw = Math.max(1, Math.ceil(boxW))
     const th = Math.max(1, Math.ceil(boxH))
     const off = createCanvas(tw, th)
-    const octx = off.getContext('2d') as PaintCtx
+    const octx = off.getContext('2d')
     octx.drawImage(bitmap, dest.x, dest.y, dest.width, dest.height)
     octx.globalCompositeOperation = 'source-in'
     octx.fillStyle = recolor
     octx.fillRect(0, 0, tw, th)
-    paint.drawImage(off, boxX, boxY, boxW, boxH)
+    ctx.drawImage(off, boxX, boxY, boxW, boxH)
   } else {
-    paint.drawImage(bitmap, boxX + dest.x, boxY + dest.y, dest.width, dest.height)
+    ctx.drawImage(bitmap, boxX + dest.x, boxY + dest.y, dest.width, dest.height)
   }
   ctx.restore()
 }
@@ -249,7 +234,7 @@ function runBox(
  * 字形先画成实色蒙版，渐变只铺在矩形上，再按设备像素 1:1 贴回当前画布。
  */
 function fillTextPaint(
-  ctx: CanvasRenderingContext2D,
+  ctx: PaintCtx,
   text: string,
   x: number,
   baseline: number,
@@ -272,8 +257,7 @@ function fillTextPaint(
   const gy = baseline - ascent - pad
   const gw = Math.max(1, left + right + pad * 2)
   const gh = Math.max(1, ascent + descent + pad * 2)
-  const paint = ctx as PaintCtx
-  const tr = paint.getTransform()
+  const tr = ctx.getTransform()
   const corners: Array<[number, number]> = [
     [gx, gy],
     [gx + gw, gy],
@@ -326,13 +310,13 @@ function fillTextPaint(
   try {
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.imageSmoothingEnabled = false
-    paint.drawImage(off, ox, oy)
+    ctx.drawImage(off, ox, oy)
   } finally {
     ctx.restore()
   }
 }
 
-function drawTextNode(ctx: CanvasRenderingContext2D, node: TextLayoutNode, inkColor?: string) {
+function drawTextNode(ctx: PaintCtx, node: TextLayoutNode, inkColor?: string) {
   const border = node.border?.width ?? 0
   const contentX = node.x + node.padding.left + border
   const contentY = node.y + node.padding.top + border
@@ -544,7 +528,7 @@ function buildDrawEl(node: LayoutNode, t: number, state: PaintState): DrawElSnap
   }
 }
 
-function runElementDraw(ctx: CanvasRenderingContext2D, node: LayoutNode, t: number, state: PaintState) {
+function runElementDraw(ctx: PaintCtx, node: LayoutNode, t: number, state: PaintState) {
   if (!node.draw) return
   ctx.save()
   ctx.translate(node.x, node.y)

@@ -1,4 +1,6 @@
-import type { Canvas, CanvasRenderingContext2D, Image } from '@napi-rs/canvas'
+import type { Canvas, Image, SKRSContext2D } from '@napi-rs/canvas'
+
+export type { SKRSContext2D }
 
 export type StyleMap = Record<string, string>
 
@@ -29,7 +31,10 @@ export type DrawElSnapshot = {
   fps: number
 }
 
-export type DrawFn = (ctx: CanvasRenderingContext2D, el: DrawElSnapshot) => void
+export type DrawFn = (ctx: SKRSContext2D, el: DrawElSnapshot) => void
+
+/** `draw` 的上下文要能贴图。缺了 `drawImage` 时这里过不了类型检查。 */
+type _DrawCtxHasDrawImage = Parameters<DrawFn>[0]['drawImage']
 
 export type Box = {
   x: number
@@ -607,4 +612,9 @@ export type RenderOptions = {
    * 缺省 256MB，也可用环境变量 FLEXLAYER_MESH_CACHE（字节数，或 0 / off）。
    */
   meshCache?: number | false
+  /**
+   * 缺省 `'png'`。`'rgba'` 时单帧渲染返回不预乘的原始像素，不编码 PNG。
+   * 节点已经在手边时直接交给 `renderLayer`。
+   */
+  format?: 'png' | 'rgba'
 }

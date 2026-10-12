@@ -120,7 +120,7 @@ const { png, report } = await renderLayer(source, { baseDir: process.cwd() })
 | `canvas.create` / `create` | 同步量一个 `<layer>`。`left` `top` `right` `bottom` 是没转之前的布局盒，`rotatedBox` 是转完之后的外接矩形。文字在 `text` 里，按行给出盒子和 `baseline`。每个元素的位置在 `elements` 里 |
 | `canvas.font` | 先注册自定义字体，再 `create`。也可以把 `<font family src>` 写进正在量的那一层 |
 | `canvas.component` / `registerComponent` | 按标签名注册组件。内置 `arrow` 也从这里来，`arrowComponent` 是它的函数 |
-| `renderLayer` / `checkLayer` | 渲染 PNG，或只排版并出报告 |
+| `renderLayer` / `checkLayer` | 渲染 PNG，或 `format: 'rgba'` 交出不预乘像素；`checkLayer` 只排版并出报告 |
 | `glyph` | 同步按码位取轮廓 |
 | `analyzeImage` | 读一张图，量面积、碎片、洞、软边，并描出轮廓 `d` |
 | `registerFilter` / `unregisterFilter` / `getFilter` / `listFilters` | 登记像素或画布滤镜。内置 `grade` 和 `filter` 也在这张表上 |
@@ -149,7 +149,7 @@ npx tsx src/cli.ts check examples/slide.tsx --frames 0-12 --step 3
 npx tsx src/cli.ts render scene.layer -o scene.png --report scene.json
 ```
 
-`--scale 0.5` 可缩小 PNG。动画用 `--frames out/` 边渲染边写 PNG，`--from`、`--to` 含端点。`--rgba -` 把原始像素写到标准输出，编码交给调用方。`renderFrames` 是对应的逐帧接口。
+`--scale 0.5` 可缩小 PNG。动画用 `--frames out/` 边渲染边写 PNG，`--from`、`--to` 含端点。`--rgba -` 把原始像素写到标准输出，编码交给调用方。`renderFrames` 是对应的逐帧接口。已经排好的一帧用 `renderLayer(node, { format: 'rgba' })`，返回不预乘的 `rgba` 和画布宽高。
 
 ### 4.3 `flexlayer render --debug`
 

@@ -96,7 +96,7 @@
 
 ## 帧
 
-`renderFrames(comp, { from, to, step, format: 'png' })` 逐帧产出，`to` 含端点。`format: 'rgba'` 是不预乘的原始像素。`renderComposition` 仍一次返回全部 PNG 和联系表。`draw` 里 `el.t` 是秒，`el.frame` 和 `el.fps` 在单帧时是 0。
+`renderFrames(comp, { from, to, step, format: 'png' })` 逐帧产出，`to` 含端点。`format: 'rgba'` 是不预乘的原始像素。已经排好的一帧用 `renderLayer(node, { format: 'rgba' })`，同样给出 `rgba` 和画布宽高。`renderComposition` 仍一次返回全部 PNG 和联系表。`draw` 的 `ctx` 可以 `drawImage`。`el.t` 是秒，`el.frame` 和 `el.fps` 在单帧时是 0。
 
 `random(seed)` 固定在 `[0, 1)`。`noise(seed, x, y, z)` 在 `[-1, 1]`。`interpolate` 可以写多点区间，`easing` 用 `Easing.quad`、`Easing.out(Easing.quad)`、`Easing.bezier(x1, y1, x2, y2)`。只写两个点时和以前一样。
 
