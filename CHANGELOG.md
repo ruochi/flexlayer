@@ -18,6 +18,8 @@
 
 `draw` 回调的 `ctx` 可以 `drawImage`。已经排好的一帧用 `renderLayer(node, { format: 'rgba' })` 拿走不预乘像素和画布宽高。
 
+去掉各平台的插件清单，只留 `skills/flexlayer/SKILL.md` 一份。`AGENTS.md` 收成入口，细则留在 SPEC。删掉已经落地的 `docs/PLAN.md`；效果和公式的实现备注并进 `docs/IMPLEMENTATION.md`。网格基准挪到 `scripts/bench-mesh.mjs`。勾股演示的视频和大图不再入库。
+
 ## 0.2.57
 
 实现提交：`ec49b328201f03385ff6b4d26323d05fb07f1309`

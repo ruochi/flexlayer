@@ -27,14 +27,14 @@
     "README.md",
     "LICENSE",
     "SPEC.md",
-    "docs",
-    "plugins"
+    "docs"
   ],
   "scripts": {
     "prepare": "npm run build",
     "build": "tsc",
     "test": "vitest run",
     "pythagoras": "tsx examples/render-pythagoras.ts",
+    "bench": "node scripts/bench-mesh.mjs",
     "flexlayer": "tsx src/cli.ts",
     "docs:attrs": "tsx scripts/gen-attr-docs.ts",
     "gallery": "tsx scripts/render-gallery.ts"

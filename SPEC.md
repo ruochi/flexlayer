@@ -12,7 +12,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 5. **没写的由渲染器决定，并写进报告**：比如自动换行。
 6. **写错了要说怎么改**：有歧义或会被忽略的写法报 `warn` 并给出 `hint`；含义明确但不规范的写法照常渲染，报 `info`。和已知属性编辑距离不超过 2 的名字报 `warn`，`hint` 写出正确属性，例如 `widht` 提示改成 `width`。其余不认识的名字仍留给 `draw`。
 
-给模型的硬性约定见 [AGENTS.md](AGENTS.md)。效果图见 [docs/GALLERY.md](docs/GALLERY.md)。
+给模型的入口见 [AGENTS.md](AGENTS.md)，规则正文在本文。效果图见 [docs/GALLERY.md](docs/GALLERY.md)。
 
 ## 1. 文件结构
 
@@ -563,7 +563,7 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 
 绘制顺序只此一份：`backdrop-blur` / `glass` 取样 → `shadow` → `glow` → `stroke` 的外侧（`outside` 与 `center` 的外半）→ 本体（`overflow="hidden"` 在这里裁子元素）→ `stroke` 的内侧（`inside` 与 `center` 的内半）→ `inner-shadow` → `inner-glow` → `overlay` → `noise`。若有 `blur`、`filter`、`grade`、其它已注册滤镜或 `<mask>`，先画进离屏，依次做像素滤镜（含 `grade`，`order` 小的在前）、`blur` / 画布滤镜（含 `filter`），有像素滤镜时再叠 `noise`，然后按 `<mask>` 的 alpha 裁掉。取景或祖先把这一层放大后，离屏只画落在当前画布里的那一块，并留出模糊、羽化和外扩效果要采样的边；整层都在画面里时仍画整张。蒙版层自己的外阴影、外发光和外侧描边不进这次裁切，裁完之后按留下的轮廓再画；子元素的阴影仍在离屏里，会被蒙版裁掉。最后贴回。画布底色不进 `<mask>`。写了像素滤镜时颗粒不被染色。同时写了 `blur` 与 `filter` 时，图层模糊以 `blur` 为准，并报 `info`。`glass` 与 `backdrop-blur` 同时出现时以 `glass` 为准，并报 `info`。
 
-每个效果都按同一套字段描述：归属、语法、是否复用 paint、作用范围、在上面这条顺序里的位置、报告与问题码、图格。实现取舍见 [docs/EFFECTS.md](docs/EFFECTS.md)。图在 [docs/GALLERY.md](docs/GALLERY.md)。
+每个效果都按同一套字段描述：归属、语法、是否复用 paint、作用范围、在上面这条顺序里的位置、报告与问题码、图格。实现取舍见 [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md)。图在 [docs/GALLERY.md](docs/GALLERY.md)。
 
 不要占用这些名字：`outer-glow`、`drop-shadow`、`backdrop-filter`、`texture`。`filter` 里不要写 `blur()` / `drop-shadow()`。
 
@@ -992,7 +992,7 @@ for await (const { frame, png, report } of renderFrames(scene, { from: 0, to: 30
 - 墨迹布局：按着墨范围计算间距、居中、包裹。
 - `Icon`。
 - `Scene3D` 这个名字仍保留，不要挪作他用。`sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 画在父 `layer` 的 `perspective` 里，见第 3 章。单独的视口、作者灯光和阴影还没有，讨论见 [docs/proposals/3D.md](docs/proposals/3D.md)。
-- 滤镜设计说明见 [docs/EFFECTS.md](docs/EFFECTS.md)。勿占用：`outer-glow`、`drop-shadow`、`backdrop-filter`、`texture`、`outline`。
+- 滤镜和公式的实现备注见 [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md)。勿占用：`outer-glow`、`drop-shadow`、`backdrop-filter`、`texture`、`outline`。
 
 ## 15. 用 tsx 写 layer
 

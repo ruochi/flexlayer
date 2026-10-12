@@ -10,15 +10,13 @@ Flex Layer 用标签描述一帧画面：图形用 SVG 的写法，文字用 HTM
 
 ## 给别的项目里的 agent
 
-Skill 正文在 [skills/flexlayer/SKILL.md](skills/flexlayer/SKILL.md)，插件包里有同一份。公开的 `main` 包含它之后可以安装：
+把仓库地址发给 agent，它读根目录的 [AGENTS.md](AGENTS.md)。别的项目安装 skill：
 
 ```bash
 npx skills add ruochi/flexlayer
 ```
 
-Claude Code 用 `/plugin marketplace add ruochi/flexlayer`，再 `/plugin install flexlayer@flexlayer`。Codex 用 `codex plugin marketplace add ruochi/flexlayer`。Cursor 在 Customize 里从 GitHub 仓库导入这个仓库。
-
-Qoder、通义灵码：`qodercn plugins marketplace add ruochi/flexlayer`。CodeBuddy：`/plugin marketplace add ruochi/flexlayer`。WorkBuddy 加 [`.workbuddy-plugin/marketplace.json`](.workbuddy-plugin/marketplace.json) 的原始地址。TRAE 读仓库根的 `.trae-plugin/plugin.json`。DeepSeek Harness 读 [`.dsh/skills/flexlayer/SKILL.md`](.dsh/skills/flexlayer/SKILL.md)。在本仓库里写画面仍看 [AGENTS.md](AGENTS.md)。安装命令见 [plugins/flexlayer/README.md](plugins/flexlayer/README.md)。
+写法在安装后的 `node_modules/flexlayer/SPEC.md`。Skill 正文是 [skills/flexlayer/SKILL.md](skills/flexlayer/SKILL.md)。
 
 ## 安装
 
