@@ -1,7 +1,11 @@
 import { CATALOG_FONTS, type CatalogFont } from './font-catalog.js'
+import { RECOMMENDED_FONTS, recommendedFont, type FontRecommendation, type RecommendedFont } from './recommended-fonts.js'
 import type { BlendMode, GradePresetName } from './types.js'
 
 export type FontResource = CatalogFont
+export type { FontRecommendation, RecommendedFont }
+
+export const recommendedFonts = RECOMMENDED_FONTS
 
 export type ImageResource = {
   name: string
@@ -54,9 +58,11 @@ export const blends = ['source-over', 'multiply', 'screen', 'overlay', 'soft-lig
 /**
  * 生成画面时可以用的字体、图片、配色和效果名。
  * 字体写 `font-family`，不必再写 `<font src>`。完整表见 docs/RESOURCES.md。
+ * `recommendedFonts` 按气质选型。除了已经在目录里的默认字体，这些名字要自己带字体文件。
  */
 export const resources = {
   fonts: CATALOG_FONTS,
+  recommendedFonts,
   palettes,
   images,
   grades,
@@ -65,6 +71,7 @@ export const resources = {
   font(name: string): CatalogFont | undefined {
     return fontsByKey.get(name.trim().toLowerCase())
   },
+  recommendedFont,
   image(name: string): ImageResource | undefined {
     return imagesByName.get(name.trim().toLowerCase())
   },

@@ -38,5 +38,5 @@ export type {
   SKRSContext2D,
 } from './types.js'
 export type { LayerNode, LayerChild } from './parse.js'
-export { resources, palettes, images, grades, glass, blends } from './resources.js'
-export type { FontResource, ImageResource } from './resources.js'
+export { resources, palettes, images, grades, glass, blends, recommendedFonts } from './resources.js'
+export type { FontResource, ImageResource, FontRecommendation, RecommendedFont } from './resources.js'

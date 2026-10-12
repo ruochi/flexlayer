@@ -1,6 +1,6 @@
 # 可用资源
 
-生成画面时用这里的名字和地址。字体、图片、配色、效果名都对得上当前实现。程序里 `import { resources } from 'flexlayer'`，`resources.font('楷体')`、`resources.image('lake')`、`resources.palettes.night`。
+生成画面时用这里的名字和地址。字体、图片、配色、效果名都对得上当前实现。程序里 `import { resources } from 'flexlayer'`，`resources.font('楷体')`、`resources.recommendedFont('得意黑')`、`resources.image('lake')`、`resources.palettes.night`。
 
 ## 字体
 
@@ -44,7 +44,29 @@
 </layer>
 ```
 
-自己的字体文件仍写在根下：`<font family="DeYiHei" src="fonts/deyihei.otf" />`。`src` 可以是相对路径或字体文件的网址。
+## 推荐字体
+
+按气质选字，粗黑体在前。程序里 `resources.recommendedFonts`，`resources.recommendedFont('得意黑')` 返回这一组和名字。
+
+寒蝉端黑体已在上面的目录里，没写 `font-family` 时用它。表里其余名字只供选型，字体文件写在根下。`src` 可以是相对路径或字体文件的网址。
+
+| 气质 | 名字 | 中文 | 适合 |
+| --- | --- | --- | --- |
+| 粗黑体 | `ChillDuanSans` | 寒蝉端黑体 | 主标题，默认字体 |
+| 瘦黑体 | `DeYiHei` | 得意黑 | 细长黑体 |
+| 瘦黑体 | `ZhuoTeQingYaTi` | 卓特清雅体 | 细长黑体 |
+| 圆体 | `JingNanBoBoHei` | 荆南波波黑体 | 圆角标题 |
+| 圆体 | `JingNanYuanTi` | 荆南圆体 | 圆角标题 |
+| 圆体 | `MaoKenZhuYuanTi` | 猫啃珠圆体 | 圆角标题 |
+| 圆体 | `TangYuanTi` | 猫啃糖圆体 | 圆角标题 |
+| 宋体 | `FengYaSong` | 猫啃风雅宋体 | 宋体标题与正文 |
+| 宋体 | `NaXiChuXiaSong` | 南西初夏宋体 | 宋体标题与正文 |
+| 手写体 | `YeZiGongChangXiaoShiTou` | 也字工厂小石头体 | 手写 |
+| 广告体 | `DouYuZhuiGuangTi` | 斗鱼追光体 | 广告标题 |
+
+```html
+<font family="DeYiHei" src="fonts/deyihei.otf" />
+```
 
 图标写 `class="material-symbols-outlined"`，里面是图标名。字重写 `font-weight`，没写就跟周围的字重。字号没写就跟周围的 `font-size`。颜色写 `style`。这是空心的一套。
 

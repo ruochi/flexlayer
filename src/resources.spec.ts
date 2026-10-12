@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { builtinFont, effectiveFontWeight } from './fonts.js'
-import { CATALOG_FONTS, REGISTERED_FONTS } from './font-catalog.js'
+import { CATALOG_FONTS, DEFAULT_FONT, REGISTERED_FONTS } from './font-catalog.js'
+import { RECOMMENDED_FONTS } from './recommended-fonts.js'
 import { GRADE_PRESETS } from './grade.js'
 import { layoutSource } from './layout.js'
 import { resources } from './resources.js'
@@ -49,6 +50,29 @@ describe('可用资源', () => {
       expect(parseGlass(name)?.variant).toBe(name)
     }
     expect(doc).not.toContain('fonts.googleapis.com/css')
+  })
+
+  it('推荐字体按气质列出，除默认字体外不进下载目录', () => {
+    const doc = readFileSync(new URL('../docs/RESOURCES.md', import.meta.url), 'utf8')
+    expect(RECOMMENDED_FONTS.map((group) => group.name)).toEqual(['粗黑体', '瘦黑体', '圆体', '宋体', '手写体', '广告体'])
+    expect(resources.recommendedFonts).toBe(RECOMMENDED_FONTS)
+    const families = RECOMMENDED_FONTS.flatMap((group) => group.fonts.map((font) => font.family))
+    expect(new Set(families).size).toBe(families.length)
+    const builtin = RECOMMENDED_FONTS.flatMap((group) => group.fonts).filter((font) => font.builtin)
+    expect(builtin.map((font) => font.family)).toEqual([DEFAULT_FONT.family])
+    expect(resources.recommendedFont('寒蝉端黑体')?.group).toBe('粗黑体')
+    expect(resources.recommendedFont('DeYiHei')).toEqual({
+      group: '瘦黑体',
+      font: { family: 'DeYiHei', title: '得意黑' },
+    })
+    for (const group of RECOMMENDED_FONTS) expect(doc).toContain(group.name)
+    for (const font of RECOMMENDED_FONTS.flatMap((group) => group.fonts)) {
+      expect(doc).toContain(`\`${font.family}\``)
+      expect(doc).toContain(font.title)
+      if (font.builtin) continue
+      expect(builtinFont(font.family)).toBeUndefined()
+      expect(CATALOG_FONTS.some((item) => item.family === font.family)).toBe(false)
+    }
   })
 
   it('Inter 写上名字就能排版', async () => {

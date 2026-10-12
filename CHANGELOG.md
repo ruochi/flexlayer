@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.3
+
+推荐字体按气质列在 `resources.recommendedFonts`，粗黑体在前。寒蝉端黑体仍是默认字体。其余名字只供选型，要自己带 `<font family src>`。
+
 ## 0.4.2
 
 `--refine` 改回 BiRefNet 512。lite 512 在夜里的钟楼上输出全是负的 logits，遮罩是空的，位置也是 `null`。深度会话仍在载入抠图模型之前放掉。
