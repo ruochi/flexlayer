@@ -281,16 +281,16 @@ function reflectView(v: { x: number; y: number; z: number }, n: { x: number; y: 
 
 /**
  * 反射：主灯在方位 -68°、仰角 24°。少转 20°、少抬 8°，方窗停在形体里偏左上。
- * 折射：进玻璃再从背面出来，把出射对准主灯，再按离开形体中心的位置扫过这张环境。
- * 球面上这个偏移几乎是 0，方和钻石的平面才能看见贴图。
+ * 轮廓光：边缘光条在方位 150°、仰角 -6°。掠射时把反射往这条窄光上靠，轮廓才亮。
+ * 折射：进玻璃再从背面出来，按离开形体中心的位置轻轻扫过环境，不把主灯铺满正面。
  */
 const GLASS_AZ = ((-68 + 20) * Math.PI) / 180
 const GLASS_EL = ((24 - 8) * Math.PI) / 180
-const GLASS_KEY_AZ = (-68 * Math.PI) / 180
-const GLASS_KEY_EL = (24 * Math.PI) / 180
+const GLASS_RIM_AZ = (150 * Math.PI) / 180
+const GLASS_RIM_EL = (-6 * Math.PI) / 180
 const GLASS_IOR = 1.5
-/** 平面上离开中心的距离。大约 50px 就扫出主灯那一块。 */
-const GLASS_FAN = 0.02
+/** 平面上离开中心的距离。扫过暗部和边缘光，不扫进整块主灯。 */
+const GLASS_FAN = 0.007
 const glassCenter = { x: 0, y: 0, z: 0 }
 
 function glassReflect(dir: { x: number; y: number; z: number }) {
@@ -337,18 +337,19 @@ function sphereExit(
   return refractView({ x: -inside.x, y: -inside.y, z: -inside.z }, { x: -n2.x, y: -n2.y, z: -n2.z }, GLASS_IOR)
 }
 
-function aimFromBack(dir: { x: number; y: number; z: number }, gain: number) {
+/** 把方向往目标方位、仰角拉近。pull 为 1 时贴在目标上。 */
+function aimToward(dir: { x: number; y: number; z: number }, azTarget: number, elTarget: number, pull: number) {
   const len = Math.hypot(dir.x, dir.y, dir.z) || 1
   const dx = dir.x / len
   const dy = dir.y / len
   const dz = dir.z / len
   let az = Math.atan2(dx, dz)
   let el = Math.asin(Math.max(-1, Math.min(1, dy)))
-  let dAz = az - Math.PI
+  let dAz = azTarget - az
   if (dAz > Math.PI) dAz -= Math.PI * 2
   if (dAz < -Math.PI) dAz += Math.PI * 2
-  az = GLASS_KEY_AZ + dAz * gain
-  el = GLASS_KEY_EL + el * gain
+  az += dAz * pull
+  el += (elTarget - el) * pull
   const limit = Math.PI / 2 - 1e-4
   if (el > limit) el = limit
   if (el < -limit) el = -limit
@@ -367,12 +368,11 @@ function glassTransmit(
   if (!inside) return null
   const exit = sphereExit(n, inside)
   if (!exit) return null
-  const aimed = aimFromBack(exit, 1.8)
   const ox = x - glassCenter.x
   const oy = glassCenter.y - y
   const oz = z - glassCenter.z
   const nd = ox * n.x + oy * n.y + oz * n.z
-  return unit(aimed.x + (ox - n.x * nd) * GLASS_FAN, aimed.y + (oy - n.y * nd) * GLASS_FAN, aimed.z + (oz - n.z * nd) * GLASS_FAN)
+  return unit(exit.x + (ox - n.x * nd) * GLASS_FAN, exit.y + (oy - n.y * nd) * GLASS_FAN, exit.z + (oz - n.z * nd) * GLASS_FAN)
 }
 
 type ShadeCamera = { x: number; y: number; z: number; parallel?: boolean }
@@ -390,7 +390,7 @@ function envOverMatte(channel: number, shade: number, envC: number, darken: numb
   return Math.min(255, (darkened + (1 - darkened) * light * lighten) * 255)
 }
 
-/** 金属和塑料都是磨砂明暗再叠环境。玻璃先留反射里的主灯，再把折射到的环境加上。 */
+/** 金属和塑料都是磨砂明暗再叠环境。玻璃先留方窗和轮廓光，折射补在还没照亮的地方。 */
 function materialBytes(
   batch: Batch,
   nx: number,
@@ -435,21 +435,33 @@ function materialBytes(
   const winR = win.r
   const winG = win.g
   const winB = win.b
+  // 掠射边单独对上那条窄的边缘光，这圈是轮廓光，不跟正面的方窗混在一起。
+  const rimDir = aimToward(reflect, GLASS_RIM_AZ, GLASS_RIM_EL, 0.72)
+  const rim = studioAt(rimDir.x, rimDir.y, rimDir.z, batch.roughness)
   const cover = batch.a / 255
   const lum = (r: number, g: number, b: number) => (r + g + b) / (3 * 255)
   const dim = blocked ? 0.72 : 1
-  const chan = (c: number, bendC: number, winC: number, reflC: number) => {
+  const chan = (c: number, bendC: number, winC: number, reflC: number, rimC: number) => {
     const tint = c / 255
     const windowTint = 0.35 + 0.65 * tint
     const base = tint * shade * 0.08 * dim
-    // 反射和折射按亮度相加，两项都是满的，重叠处更亮。
-    const reflection = (winC / 255) * windowTint * transmit * dim + (reflC / 255) * fresnel
-    const refraction = (bendC / 255) * windowTint * transmit * dim
-    return byte(Math.min(1, base + reflection + refraction) * 255)
+    // 方窗留在形体里。轮廓光按掠射加上。折射补在这两处还没照亮的地方。
+    const windowLight = (winC / 255) * windowTint * transmit * dim
+    const contour = Math.max((reflC / 255) * fresnel, (rimC / 255) * fresnel * windowTint)
+    const reflection = Math.min(1, windowLight + contour)
+    const refraction = (bendC / 255) * windowTint * transmit * 0.85 * dim
+    return byte(Math.min(1, base + reflection + (1 - reflection) * refraction) * 255)
   }
-  const bright = Math.min(1, lum(winR, winG, winB) * transmit + fresnel + lum(bendR, bendG, bendB) * transmit)
+  const reflectionLum = Math.min(1, lum(winR, winG, winB) * transmit + fresnel)
+  const refractionLum = lum(bendR, bendG, bendB) * transmit * 0.85
+  const bright = reflectionLum + (1 - reflectionLum) * refractionLum
   const alpha = cover + (1 - cover) * bright
-  return [chan(batch.r, bendR, winR, envR), chan(batch.g, bendG, winG, envG), chan(batch.b, bendB, winB, envB), byte(alpha * 255)]
+  return [
+    chan(batch.r, bendR, winR, envR, rim.r),
+    chan(batch.g, bendG, winG, envG, rim.g),
+    chan(batch.b, bendB, winB, envB, rim.b),
+    byte(alpha * 255),
+  ]
 }
 
 function shadeOf(nx: number, ny: number, nz: number, back: boolean, blocked = false) {
