@@ -754,6 +754,7 @@ export function layoutText(opts: LayoutTextOptions): TextLayoutResult {
     let lineW = 0
     let maxAsc = 0
     let maxDesc = 0
+    let sawInk = false
     const segOut: TextLayoutResult['lines'][0]['segments'] = []
     const measured: Array<{ unit: Unit; metrics: InkMetrics; x: number }> = []
     let x = 0
@@ -761,9 +762,16 @@ export function layoutText(opts: LayoutTextOptions): TextLayoutResult {
       const inkM = u.atom
         ? { width: u.width, left: 0, right: u.width, ascent: 0, descent: 0 }
         : measureInk(u.text, u.style)
-      if (!u.atom) {
-        maxAsc = Math.max(maxAsc, inkM.ascent)
-        maxDesc = Math.max(maxDesc, inkM.descent)
+      // 空格没有着墨。图标字体的墨迹整段在基线上方，descent 是负数；从 0 起算会把这段空档算进字身。
+      if (!u.atom && !u.isSpace && inkM.ascent + inkM.descent > 1e-3) {
+        if (!sawInk) {
+          maxAsc = inkM.ascent
+          maxDesc = inkM.descent
+          sawInk = true
+        } else {
+          maxAsc = Math.max(maxAsc, inkM.ascent)
+          maxDesc = Math.max(maxDesc, inkM.descent)
+        }
       }
       measured.push({ unit: u, metrics: inkM, x })
       segOut.push({ text: u.text, style: u.style, x, width: u.width, owner: u.owner })
@@ -776,7 +784,8 @@ export function layoutText(opts: LayoutTextOptions): TextLayoutResult {
       if (item.unit.atom) atomAbove = Math.max(atomAbove, item.unit.atom.height)
     }
     const above = Math.max(maxAsc, atomAbove)
-    const below = maxDesc
+    // 图片底边贴着基线，有图片时下沿至少到基线。
+    const below = atomAbove > 0 ? Math.max(maxDesc, 0) : maxDesc
     const textH = allLines.length === 1 ? Math.max(lh, above + below) : lh
     const lineH = Math.max(textH, above + below)
     const baselineY = y + above + (lineH - (above + below)) / 2
