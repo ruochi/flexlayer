@@ -4,21 +4,19 @@
 
 Flex Layer 用标签描述一帧画面：图形用 SVG 的写法，文字用 HTML 的写法，布局用 CSS flexbox。渲染器读入 `.layer`，输出 PNG 和一份布局报告。
 
-规范见 [SPEC.md](SPEC.md)。给模型的入口见 [AGENTS.md](AGENTS.md)，一页写法见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，字体、图片和配色见 [docs/RESOURCES.md](docs/RESOURCES.md)。当前版本是 0.2.56。
+规范见 [SPEC.md](SPEC.md)。给模型的入口见 [AGENTS.md](AGENTS.md)，一页写法见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，字体、图片和配色见 [docs/RESOURCES.md](docs/RESOURCES.md)。当前版本是 0.4.2。
 
-`layer` 上的 `perspective` 让直接子元素共用一个视距。`rotateX`、`rotateY`、`z` 写在要转动或推近的那一层上。`sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 和这些平面共用同一台视距。例子：`npx tsx src/cli.ts render examples/perspective.layer -o perspective.png`，`npx tsx src/cli.ts render examples/meshes.layer -o meshes.png`，`npx tsx src/cli.ts render examples/solids.layer -o solids.png`，`npx tsx src/cli.ts render examples/rounded.layer -o rounded.png`。
+`layer` 上的 `camera` 是这一层的镜头。不写时，有网格、`ground` 或 `rotateX`、`rotateY`、`z` 的最外层用自己的 `height` 当视距。`rotateX`、`rotateY`、`z` 写在要转动或推近的那一层上。`sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 和这些平面共用同一台视距。例子：`npx tsx src/cli.ts render examples/perspective.layer -o perspective.png`，`npx tsx src/cli.ts render examples/meshes.layer -o meshes.png`，`npx tsx src/cli.ts render examples/solids.layer -o solids.png`，`npx tsx src/cli.ts render examples/rounded.layer -o rounded.png`。
 
 ## 给别的项目里的 agent
 
-Skill 正文在 [skills/flexlayer/SKILL.md](skills/flexlayer/SKILL.md)，插件包里有同一份。公开的 `main` 包含它之后可以安装：
+把仓库地址发给 agent，它读根目录的 [AGENTS.md](AGENTS.md)。别的项目安装 skill：
 
 ```bash
 npx skills add ruochi/flexlayer
 ```
 
-Claude Code 用 `/plugin marketplace add ruochi/flexlayer`，再 `/plugin install flexlayer@flexlayer`。Codex 用 `codex plugin marketplace add ruochi/flexlayer`。Cursor 在 Customize 里从 GitHub 仓库导入这个仓库。
-
-Qoder、通义灵码：`qodercn plugins marketplace add ruochi/flexlayer`。CodeBuddy：`/plugin marketplace add ruochi/flexlayer`。WorkBuddy 加 [`.workbuddy-plugin/marketplace.json`](.workbuddy-plugin/marketplace.json) 的原始地址。TRAE 读仓库根的 `.trae-plugin/plugin.json`。DeepSeek Harness 读 [`.dsh/skills/flexlayer/SKILL.md`](.dsh/skills/flexlayer/SKILL.md)。在本仓库里写画面仍看 [AGENTS.md](AGENTS.md)。安装命令见 [plugins/flexlayer/README.md](plugins/flexlayer/README.md)。
+写法在安装后的 `node_modules/flexlayer/SPEC.md`。Skill 正文是 [skills/flexlayer/SKILL.md](skills/flexlayer/SKILL.md)。
 
 ## 安装
 
@@ -85,7 +83,7 @@ import { renderLayer } from 'flexlayer'
 const { png, report } = await renderLayer(source, { scale: 0.5 })
 ```
 
-`renderFvg` 与 `renderLayer` 是同一个函数。嵌套 `layer` 不填背景，色块写法见 [AGENTS.md](AGENTS.md)。新的像素滤镜用 `registerFilter` 登记，内置的 `grade` 和 `filter` 也在这个接口上，见 [SPEC.md](SPEC.md) 第 9.3 节。`.layer` 里可以用 `<draw>`，程序侧用 `draw={fn}`：
+嵌套 `layer` 不填背景，色块写法见 [AGENTS.md](AGENTS.md)。新的像素滤镜用 `registerFilter` 登记，内置的 `grade` 和 `filter` 也在这个接口上，见 [SPEC.md](SPEC.md) 第 9.3 节。`.layer` 里可以用 `<draw>`，程序侧用 `draw={fn}`：
 
 ```html
 <layer width="400" height="300" background="#0f1115">
@@ -148,7 +146,7 @@ await renderLayer(root)
 ```ts
 import { analyzeImage, h, renderLayer } from 'flexlayer'
 
-const cut = await analyzeImage('photo.subject.png')
+const cut = analyzeImage('photo.subject.png')
 if (cut.pieces > 1) console.warn(`主体碎成了 ${cut.pieces} 块`, cut.parts)
 const root = h(
   'layer',
@@ -159,7 +157,7 @@ const root = h(
 await renderLayer(root)
 ```
 
-抠主体和前景遮罩都在仓库里的 `packages/select`，不在 npm 上，渲染器只读它写出的文件。进入这个目录执行 `npm ci && npm run build`。`npx flexlayer-select mask photo.jpg` 先跑大约 19MB 的深度模型，写出 `photo.foreground.png`，并返回这块前景的 `x`、`y`、`width`、`height`。`--front` 从 0 到 1，默认 0.5，调大遮罩变大。边要跟抠图模型走时加 `--refine`，那一次才下载大约 470MB 的 fp16。只抠主体时仍用 `npx flexlayer-select cutout photo.jpg --preset portrait`。
+抠主体和前景遮罩都在仓库里的 `packages/select`，不在 npm 上，渲染器只读它写出的文件。进入这个目录执行 `npm install && npm run build`。`npx flexlayer-select mask photo.jpg` 先跑大约 19MB 的深度模型，写出 `photo.foreground.png`，并返回这块前景的 `x`、`y`、`width`、`height`。不写点，从伸进远处的尖往下长。要留下的地方写 `--point x,y`，不要的地方写 `--omit x,y`，都可以写多次，看完遮罩可以再补点重跑。边要跟抠图模型走时加 `--refine`，那一次才下载大约 470MB 的 BiRefNet 512 fp16。深度模型会先放掉，再载入抠图模型。只抠主体时仍用 `npx flexlayer-select cutout photo.jpg --preset portrait`。
 
 按帧生成一组 PNG 和一张联系表：
 

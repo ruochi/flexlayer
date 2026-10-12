@@ -11,14 +11,14 @@ import { applyPoseMatrix, behindCamera, type Perspective } from './perspective.j
 import { meshIntersections } from './mesh-intersect.js'
 import { roundedBoxGeometry, roundedCylinderGeometry } from './mesh-round.js'
 import { tessellateSvgPath } from './path.js'
-import type { LayerLayoutNode, LayoutNode, MeshLayoutNode } from './types.js'
+import type { GroundLayoutNode, LayerLayoutNode, LayoutNode, MeshLayoutNode } from './types.js'
 
 type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: number }
 
 /**
  * 网格的三角形光栅。
  * 投影用 `project` 的同一套公式（这里直接算），深度大的像素盖住深度小的。
- * `perspective="parallel"` 时不除视距，屏幕坐标就是层坐标。
+ * `camera="parallel"` 时不除视距，屏幕坐标就是层坐标。
  * 正对镜头的面是 fill，侧面按内置主光和补光变暗。
  * 主光沿固定方向打一张正交深度图：不透明三角形互相挡住这盏光时，主光不计。
  * glb 用文件里的底色乘这套明暗。
@@ -44,10 +44,13 @@ type RasterBitmap = {
   polygon?: Array<{ u: number; v: number }>
 }
 
+export type GroundDraw = { node: GroundLayoutNode; toLayer: Mat4; opacity?: number }
+
 export type SoftwareMeshInput = {
   layer: LayerLayoutNode
   perspective: Perspective
   meshes: Array<{ node: MeshLayoutNode; toLayer: Mat4; opacity?: number }>
+  grounds?: GroundDraw[]
   planes: Array<{ node: LayoutNode; peeled: LayoutNode; toLayer: Mat4 }>
   scale: number
   raster: (node: LayoutNode, toLayer?: number[]) => RasterBitmap
@@ -57,7 +60,7 @@ export type SoftwareMeshInput = {
   clip?: MeshClip
 }
 
-type MeshEdge = {
+export type MeshEdge = {
   a: number
   b: number
   n0: [number, number, number]
@@ -415,7 +418,9 @@ function materialBytes(
   const envG = env.g
   const envB = env.b
   if (batch.material === 'metal' || batch.material === 'plastic') {
-    const darken = batch.material === 'metal' ? 0.92 : 0.4
+    // 高粗糙度已经在糊环境里失去高光。暗部再按 0.92 压，会把磨砂金属压成噪点。粗糙度的平方越大，压暗越轻。
+    const ease = 1 - 0.4 * batch.roughness * batch.roughness
+    const darken = (batch.material === 'metal' ? 0.92 : 0.4) * ease
     const lighten = batch.material === 'metal' ? 0.45 : 0.22
     const chan = (channel: number, envC: number) => byte(envOverMatte(channel, shade, envC, darken, lighten))
     return [chan(batch.r, envR), chan(batch.g, envG), chan(batch.b, envB), batch.a]
@@ -424,23 +429,32 @@ function materialBytes(
   const fresnel = 0.04 + 0.96 * (1 - ndotv) ** 5
   const transmit = 1 - fresnel
   const through = glassTransmit(v, n, x, y, z)
+  // 高粗糙度的玻璃采样的是糊开的暗室。往中间灰收一截，避免和金属一样发暗。默认玻璃粗糙度约 0.08，这一项接近 0。
+  const lift = batch.roughness * batch.roughness * 0.35
+  const soften = (c: number) => c + (128 - c) * lift
   let bendR = 0
   let bendG = 0
   let bendB = 0
   if (through) {
     const hit = studioAt(through.x, through.y, through.z, batch.roughness)
-    bendR = hit.r
-    bendG = hit.g
-    bendB = hit.b
+    bendR = soften(hit.r)
+    bendG = soften(hit.g)
+    bendB = soften(hit.b)
   }
   const windowDir = glassReflect(reflect)
   const win = studioAt(windowDir.x, windowDir.y, windowDir.z, batch.roughness)
-  const winR = win.r
-  const winG = win.g
-  const winB = win.b
+  const winR = soften(win.r)
+  const winG = soften(win.g)
+  const winB = soften(win.b)
   // 掠射边单独对上那条窄的边缘光，这圈是轮廓光，不跟正面的方窗混在一起。
   const rimDir = aimToward(reflect, GLASS_RIM_AZ, GLASS_RIM_EL, 0.72)
   const rim = studioAt(rimDir.x, rimDir.y, rimDir.z, batch.roughness)
+  const rimR = soften(rim.r)
+  const rimG = soften(rim.g)
+  const rimB = soften(rim.b)
+  const reflR = soften(envR)
+  const reflG = soften(envG)
+  const reflB = soften(envB)
   const cover = batch.a / 255
   const lum = (r: number, g: number, b: number) => (r + g + b) / (3 * 255)
   const dim = blocked ? 0.72 : 1
@@ -460,9 +474,9 @@ function materialBytes(
   const bright = reflectionLum + (1 - reflectionLum) * refractionLum
   const alpha = cover + (1 - cover) * bright
   return [
-    chan(batch.r, bendR, winR, envR, rim.r),
-    chan(batch.g, bendG, winG, envG, rim.g),
-    chan(batch.b, bendB, winB, envB, rim.b),
+    chan(batch.r, bendR, winR, reflR, rimR),
+    chan(batch.g, bendG, winG, reflG, rimG),
+    chan(batch.b, bendB, winB, reflB, rimB),
     byte(alpha * 255),
   ]
 }
@@ -546,11 +560,11 @@ function fillBytes(fill: string, opacity: number): [number, number, number, numb
   return [r, g, b, byte(alpha * opacity * 255)]
 }
 
-function transformPoint(toLayer: Mat4, ox: number, oy: number, gx: number, gy: number, gz: number) {
+export function transformPoint(toLayer: Mat4, ox: number, oy: number, gx: number, gy: number, gz: number) {
   return applyPoseMatrix(toLayer, gx + ox, oy - gy, gz)
 }
 
-function transformNormal(toLayer: Mat4, nx: number, ny: number, nz: number) {
+export function transformNormal(toLayer: Mat4, nx: number, ny: number, nz: number) {
   const x = nx
   const y = -ny
   const z = nz
@@ -1222,12 +1236,11 @@ function buildModelFresh(node: MeshLayoutNode): ModelPrim[] {
     const indices = prim.indices ?? Uint32Array.from({ length: count - (count % 3) }, (_, i) => i)
     if (indices.length < 3) continue
     const normals = prim.normals && prim.normals.length === src.length ? prim.normals : smoothNormals(positions, indices)
-    const beveled = node.stroke === 'none' ? bevelFewFaces(positions, indices) : null
     const color = prim.color
     out.push({
-      positions: beveled?.positions ?? positions,
-      normals: beveled?.normals ?? normals,
-      indices: beveled?.indices ?? indices,
+      positions,
+      normals,
+      indices,
       color: [
         byte(color[0] * 255),
         byte(color[1] * 255),
@@ -1248,10 +1261,15 @@ function geometryOfFresh(node: MeshLayoutNode): MeshGeometry | null {
   else if (node.mesh.type === 'torus') geo = buildTorus(node)
   else if (node.mesh.type === 'tube') geo = buildTube(node)
   else if (node.mesh.type === 'extrude') geo = buildExtrude(node)
-  if (!geo || node.stroke !== 'none') return geo
+  return geo
+}
+
+/** 窄圆角只进光栅。投影仍用原来的折点，避免圆角把正面的角标成挡住。 */
+function paintGeometry(node: MeshLayoutNode, positions: Float32Array, normals: Float32Array, indices: Uint32Array) {
+  if (node.stroke !== 'none') return { positions, normals, indices }
   const mesh = node.mesh
-  if ((mesh.type === 'box' || mesh.type === 'cylinder') && mesh.rx > 0) return geo
-  return bevelFewFaces(geo.positions, geo.indices) ?? geo
+  if ((mesh.type === 'box' || mesh.type === 'cylinder') && mesh.rx > 0) return { positions, normals, indices }
+  return bevelFewFaces(positions, indices) ?? { positions, normals, indices }
 }
 
 function geometryOf(node: MeshLayoutNode): MeshGeometry | null {
@@ -1276,6 +1294,49 @@ function buildModel(node: MeshLayoutNode): ModelPrim[] {
   const built = buildModelFresh(node)
   if (key) touchCache(modelCache, key, built, GEOMETRY_CAP)
   return built
+}
+
+export type MeshPrim = {
+  positions: Float32Array
+  normals: Float32Array
+  indices: Uint32Array
+  /** 0–255。几何体是不透明，模型图元用文件里的透明度。 */
+  alpha: number
+  doubleSided: boolean
+}
+
+/** 一只网格的图元。模型和几何体都从这里拿。投影用这些折点；窄圆角在绘制时另加。 */
+export function meshPrims(node: MeshLayoutNode): MeshPrim[] {
+  if (node.mesh.type === 'model') {
+    return buildModel(node).map((prim) => ({
+      positions: prim.positions,
+      normals: prim.normals,
+      indices: prim.indices,
+      alpha: prim.color[3],
+      doubleSided: prim.doubleSided,
+    }))
+  }
+  const geometry = geometryOf(node)
+  if (!geometry) return []
+  return [
+    {
+      positions: geometry.positions,
+      normals: geometry.normals,
+      indices: geometry.indices,
+      alpha: 255,
+      doubleSided: node.mesh.type === 'extrude',
+    },
+  ]
+}
+
+/** 和绘制同一套：不写深度的表面不挡住后面的棱。 */
+export function meshWritesDepth(node: MeshLayoutNode, opacity: number, primAlpha = 255): boolean {
+  const glass = node.material?.kind === 'glass'
+  if (node.mesh.type === 'model') return glass && primAlpha < 255 ? false : primAlpha >= 255
+  const clear = node.fill === 'none' || node.fill === 'transparent'
+  const fillNone = clear && !glass
+  const a = fillNone || clear ? 0 : fillBytes(node.fill, opacity)[3]
+  return glass && a < 255 ? false : fillNone || a >= 255
 }
 
 type Texel = { r: number; g: number; b: number; a: number }
@@ -2200,6 +2261,160 @@ function resolveColor(color: Uint8ClampedArray, sw: number, sh: number, dw: numb
   return out
 }
 
+function groundBasis(toLayer: Mat4): { p: { x: number; y: number; z: number }; n: { x: number; y: number; z: number } } | null {
+  const p = applyPoseMatrix(toLayer, 0, 0, 0)
+  const ax = applyPoseMatrix(toLayer, 1, 0, 0)
+  const ay = applyPoseMatrix(toLayer, 0, 1, 0)
+  const n = cross(
+    { x: ax.x - p.x, y: ax.y - p.y, z: ax.z - p.z },
+    { x: ay.x - p.x, y: ay.y - p.y, z: ay.z - p.z },
+  )
+  const len = Math.hypot(n.x, n.y, n.z)
+  if (len < 1e-8) return null
+  return { p, n: { x: n.x / len, y: n.y / len, z: n.z / len } }
+}
+
+function hitParallelPlane(sx: number, sy: number, basis: { p: { x: number; y: number; z: number }; n: { x: number; y: number; z: number } }) {
+  if (Math.abs(basis.n.z) < 1e-6) return null
+  const { p, n } = basis
+  const z = p.z - ((sx - p.x) * n.x + (sy - p.y) * n.y) / n.z
+  return { x: sx, y: sy, z }
+}
+
+function hitPerspectivePlane(
+  sx: number,
+  sy: number,
+  camX: number,
+  camY: number,
+  camZ: number,
+  focal: number,
+  n: { x: number; y: number; z: number },
+  numer: number,
+) {
+  const dx = sx - camX
+  const dy = sy - camY
+  const dz = -focal
+  const denom = dx * n.x + dy * n.y + dz * n.z
+  if (Math.abs(denom) < 1e-8) return null
+  const t = numer / denom
+  if (!(t > 1e-3)) return null
+  return { x: camX + t * dx, y: camY + t * dy, z: camZ + t * dz }
+}
+
+function blurMask(src: Float32Array, w: number, h: number, radius: number): Float32Array {
+  const r = Math.min(48, Math.round(radius / 3))
+  if (r < 1) return src
+  let cur = src
+  const win = r * 2 + 1
+  for (let pass = 0; pass < 3; pass++) {
+    const tmp = new Float32Array(w * h)
+    const out = new Float32Array(w * h)
+    for (let y = 0; y < h; y++) {
+      const row = y * w
+      let sum = 0
+      for (let x = -r; x <= r; x++) sum += cur[row + Math.min(w - 1, Math.max(0, x))]!
+      for (let x = 0; x < w; x++) {
+        tmp[row + x] = sum / win
+        sum -= cur[row + Math.min(w - 1, Math.max(0, x - r))]!
+        sum += cur[row + Math.min(w - 1, Math.max(0, x + r + 1))]!
+      }
+    }
+    for (let x = 0; x < w; x++) {
+      let sum = 0
+      for (let y = -r; y <= r; y++) sum += tmp[Math.min(h - 1, Math.max(0, y)) * w + x]!
+      for (let y = 0; y < h; y++) {
+        out[y * w + x] = sum / win
+        sum -= tmp[Math.min(h - 1, Math.max(0, y - r)) * w + x]!
+        sum += tmp[Math.min(h - 1, Math.max(0, y + r + 1)) * w + x]!
+      }
+    }
+    cur = out
+  }
+  return cur
+}
+
+function blendOver(color: Uint8ClampedArray, di: number, sr: number, sg: number, sb: number, sa: number) {
+  if (sa <= 0) return
+  const pi = di * 4
+  if (sa >= 255 || color[pi + 3] === 0) {
+    color[pi] = sr
+    color[pi + 1] = sg
+    color[pi + 2] = sb
+    color[pi + 3] = sa
+    return
+  }
+  const inv = 255 - sa
+  const dA = color[pi + 3]!
+  const outA = sa + (dA * inv) / 255
+  color[pi] = byte((sr * sa + (color[pi]! * dA * inv) / 255) / outA)
+  color[pi + 1] = byte((sg * sa + (color[pi + 1]! * dA * inv) / 255) / outA)
+  color[pi + 2] = byte((sb * sa + (color[pi + 2]! * dA * inv) / 255) / outA)
+  color[pi + 3] = byte(outA)
+}
+
+/**
+ * 地面是无限平面，旋转和盒子同一套姿态。
+ * 不写 fill 时不画表面，只在主光被挡住的地方叠影子。
+ * 平面延伸到灭点：射线和镜头平面平行的那一侧不画。
+ */
+function paintGrounds(
+  grounds: GroundDraw[],
+  color: Uint8ClampedArray,
+  depth: Float32Array,
+  shadow: ShadowMap | null,
+  pw: number,
+  ph: number,
+  originX: number,
+  originY: number,
+  pixelScale: number,
+  perspective: Perspective,
+  px: number,
+  py: number,
+) {
+  if (grounds.length === 0 || pw < 1 || ph < 1) return
+  const focal = perspective === 'parallel' ? null : perspective
+  for (const ground of grounds) {
+    const basis = groundBasis(ground.toLayer)
+    if (!basis) continue
+    const opacity = (ground.opacity ?? 1) * ground.node.opacity
+    if (!(opacity > 0)) continue
+    const n = basis.n
+    const numer =
+      focal == null ? 0 : (basis.p.x - px) * n.x + (basis.p.y - py) * n.y + (basis.p.z - focal) * n.z
+    const count = pw * ph
+    const cover = new Uint8Array(count)
+    const shade = new Float32Array(count)
+    const fill = ground.node.fill ? fillBytes(ground.node.fill, opacity) : null
+    const ink = fillBytes(ground.node.shadowColor, opacity * ground.node.shadowOpacity)
+    const wantShadow = shadow != null && ink[3] > 0
+    for (let iy = 0; iy < ph; iy++) {
+      const sy = originY + (iy + 0.5) / pixelScale
+      const row = iy * pw
+      for (let ix = 0; ix < pw; ix++) {
+        const sx = originX + (ix + 0.5) / pixelScale
+        const hit =
+          focal == null
+            ? hitParallelPlane(sx, sy, basis)
+            : hitPerspectivePlane(sx, sy, px, py, focal, focal, n, numer)
+        if (!hit) continue
+        const di = row + ix
+        const stored = depth[di]!
+        if (stored > -1e20 && !(hit.z > stored + 0.05)) continue
+        cover[di] = 1
+        if (wantShadow && occluded(shadow, hit.x, hit.y, hit.z, n.x, n.y, n.z)) shade[di] = 1
+        if ((fill && fill[3] > 0) || shade[di]! > 0) depth[di] = hit.z
+      }
+    }
+    const blurred = blurMask(shade, pw, ph, ground.node.shadowBlur * pixelScale)
+    for (let di = 0; di < count; di++) {
+      if (!cover[di]) continue
+      if (fill && fill[3] > 0) blendOver(color, di, fill[0], fill[1], fill[2], fill[3])
+      const a = blurred[di]!
+      if (a > 0 && ink[3] > 0) blendOver(color, di, ink[0], ink[1], ink[2], byte(ink[3] * a))
+    }
+  }
+}
+
 function rasterize(
   batches: Batch[],
   layer: LayerLayoutNode,
@@ -2207,6 +2422,7 @@ function rasterize(
   scale: number,
   samplesRequested: number,
   clip: RasterRect,
+  grounds: GroundDraw[] = [],
 ): MeshFrame {
   const vx = layer.width / 2
   const vy = layer.height / 2
@@ -2246,6 +2462,12 @@ function rasterize(
     }
     authored.push(verts)
     projected.push(proj)
+  }
+  if (grounds.length > 0) {
+    if (clip.x < minX) minX = clip.x
+    if (clip.y < minY) minY = clip.y
+    if (clip.x + clip.width > maxX) maxX = clip.x + clip.width
+    if (clip.y + clip.height > maxY) maxY = clip.y + clip.height
   }
   if (!Number.isFinite(minX) || !Number.isFinite(minY)) return emptyMeshFrame()
   const covered = {
@@ -2378,6 +2600,7 @@ function rasterize(
   })
   for (const index of solid) paintBatch(index)
   for (const index of glass) paintBatch(index)
+  paintGrounds(grounds, color, depth, shadow, pw, ph, originX, originY, pixelScale, perspective, px, py)
   const outW = Math.max(1, Math.round(viewW * base))
   const outH = Math.max(1, Math.round(viewH * base))
   const frameOf = (canvas: Canvas): MeshFrame => ({
@@ -2593,6 +2816,29 @@ function extractEdges(positions: Float32Array, indices: Uint32Array): MeshEdge[]
   return edges
 }
 
+const edgeCache = new Map<string, MeshEdge[]>()
+
+/** 同一只网格的局部几何不变时，折棱表可以接着用。姿态变了也不用重算。 */
+function geomKey(positions: Float32Array, indices: Uint32Array): string {
+  let hash = 2166136261
+  const pos = new Uint8Array(positions.buffer, positions.byteOffset, positions.byteLength)
+  const idx = new Uint8Array(indices.buffer, indices.byteOffset, indices.byteLength)
+  for (let i = 0; i < pos.length; i++) hash = Math.imul(hash ^ pos[i]!, 16777619)
+  for (let i = 0; i < idx.length; i++) hash = Math.imul(hash ^ idx[i]!, 16777619)
+  return `${positions.length}:${indices.length}:${hash >>> 0}`
+}
+
+export function meshEdges(positions: Float32Array, indices: Uint32Array): MeshEdge[] {
+  if (indices.length < 3) return NO_EDGES
+  const key = geomKey(positions, indices)
+  const hit = edgeCache.get(key)
+  if (hit) return hit
+  const edges = extractEdges(positions, indices)
+  if (edgeCache.size > 128) edgeCache.clear()
+  edgeCache.set(key, edges)
+  return edges
+}
+
 function meshLineFields(
   node: MeshLayoutNode,
   opacity: number,
@@ -2604,7 +2850,7 @@ function meshLineFields(
   const outline = sphereOutlineOf(node)
   if (!lines) return { edges: NO_EDGES, lines: null, outline, owner }
   return {
-    edges: extractEdges(positions, indices),
+    edges: meshEdges(positions, indices),
     lines,
     outline,
     owner,
@@ -2848,7 +3094,7 @@ function chainHidden(runs: PointRun[]): ChainPoint[][] {
   return out
 }
 
-function sphereRing(center: { x: number; y: number; z: number }, radius: number, vx: number, vy: number, perspective: Perspective): Vert[] | null {
+export function sphereRing(center: { x: number; y: number; z: number }, radius: number, vx: number, vy: number, perspective: Perspective): Vert[] | null {
   if (perspective === 'parallel') {
     const count = 72
     const ring: Vert[] = []
@@ -2960,10 +3206,38 @@ function sphereSurface(
 function roundSphere(batch: Batch): { x: number; y: number; z: number; radius: number } | null {
   const outline = batch.outline
   if (!outline) return null
-  const c = transformPoint(batch.toLayer, batch.originX, batch.originY, outline.x, outline.y, outline.z)
-  const px = transformPoint(batch.toLayer, batch.originX, batch.originY, outline.x + outline.r, outline.y, outline.z)
-  const py = transformPoint(batch.toLayer, batch.originX, batch.originY, outline.x, outline.y + outline.r, outline.z)
-  const pz = transformPoint(batch.toLayer, batch.originX, batch.originY, outline.x, outline.y, outline.z + outline.r)
+  return uniformSphere(
+    batch.toLayer,
+    batch.originX,
+    batch.originY,
+    outline.x,
+    outline.y,
+    outline.z,
+    outline.r,
+  )
+}
+
+/** 三轴半径差不多时，轮廓用这个球，不再把细分三角的边当成折点。 */
+export function layerSphere(node: MeshLayoutNode, toLayer: Mat4): { x: number; y: number; z: number; radius: number } | null {
+  const outline = sphereOutlineOf(node)
+  if (!outline) return null
+  const origin = originOffset(node.origin, node.width, node.height)
+  return uniformSphere(toLayer, origin.x, origin.y, outline.x, outline.y, outline.z, outline.r)
+}
+
+function uniformSphere(
+  toLayer: Mat4,
+  originX: number,
+  originY: number,
+  x: number,
+  y: number,
+  z: number,
+  radius: number,
+): { x: number; y: number; z: number; radius: number } | null {
+  const c = transformPoint(toLayer, originX, originY, x, y, z)
+  const px = transformPoint(toLayer, originX, originY, x + radius, y, z)
+  const py = transformPoint(toLayer, originX, originY, x, y + radius, z)
+  const pz = transformPoint(toLayer, originX, originY, x, y, z + radius)
   const rx = Math.hypot(px.x - c.x, px.y - c.y, px.z - c.z)
   const ry = Math.hypot(py.x - c.x, py.y - c.y, py.z - c.z)
   const rz = Math.hypot(pz.x - c.x, pz.y - c.y, pz.z - c.z)
@@ -3403,6 +3677,7 @@ function compositeSprites(sprites: MeshFrame[]): MeshFrame {
 
 export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
   const { layer, perspective, meshes, planes, scale, raster } = input
+  const grounds = input.grounds ?? []
   const samples = input.samples === 1 || input.samples === 2 || input.samples === 4 ? input.samples : 4
   const clip = input.clip ?? { x: 0, y: 0, width: layer.width, height: layer.height }
   const batches: Batch[] = []
@@ -3417,11 +3692,12 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
     const opacity = (instance.opacity ?? 1) * node.opacity
     if (node.mesh.type === 'model') {
       for (const prim of buildModel(node)) {
+        const painted = paintGeometry(node, prim.positions, prim.normals, prim.indices)
         batches.push({
-          positions: prim.positions,
-          normals: prim.normals,
+          positions: painted.positions,
+          normals: painted.normals,
           uvs: null,
-          indices: prim.indices,
+          indices: painted.indices,
           r: prim.color[0],
           g: prim.color[1],
           b: prim.color[2],
@@ -3437,22 +3713,23 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
           toLayer: instance.toLayer,
           originX: o.x,
           originY: o.y,
-          ...meshLineFields(node, opacity, prim.positions, prim.indices, owner),
+          ...meshLineFields(node, opacity, painted.positions, painted.indices, owner),
         })
       }
       continue
     }
     const geometry = geometryOf(node)
     if (!geometry) continue
+    const painted = paintGeometry(node, geometry.positions, geometry.normals, geometry.indices)
     const glass = node.material?.kind === 'glass'
     const clear = node.fill === 'none' || node.fill === 'transparent'
     const fillNone = clear && !glass
     const [r, g, b, a] = fillNone ? [0, 0, 0, 0] : clear ? [255, 255, 255, 0] : fillBytes(node.fill, opacity)
     batches.push({
-      positions: geometry.positions,
-      normals: geometry.normals,
+      positions: painted.positions,
+      normals: painted.normals,
       uvs: null,
-      indices: geometry.indices,
+      indices: painted.indices,
       r,
       g,
       b,
@@ -3468,7 +3745,7 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
       toLayer: instance.toLayer,
       originX: o.x,
       originY: o.y,
-      ...meshLineFields(node, opacity, geometry.positions, geometry.indices, owner),
+      ...meshLineFields(node, opacity, painted.positions, painted.indices, owner),
     })
   }
   for (const plane of planes) {
@@ -3478,6 +3755,8 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
     batch.owner = plane.node.sharp ? -(ownerId + 1) : ownerId
     batches.push(batch)
   }
-  if (layer.dof && perspective !== 'parallel') return rasterizeDofObjects(batches, layer, perspective, scale, samples, clip)
-  return rasterize(batches, layer, perspective, scale, samples, clip)
+  if (layer.dof && perspective !== 'parallel' && grounds.length === 0) {
+    return rasterizeDofObjects(batches, layer, perspective, scale, samples, clip)
+  }
+  return rasterize(batches, layer, perspective, scale, samples, clip, grounds)
 }

@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { h } from './h.js'
 import { initFontsForMeasure } from './fonts.js'
 import { posePoint, project } from './perspective.js'
-import { renderFvg } from './render.js'
+import { renderLayer } from './render.js'
 import type { LayoutNode } from './types.js'
 
 beforeAll(async () => {
@@ -24,7 +24,7 @@ async function pixelAt(png: Buffer, x: number, y: number) {
 
 describe('paint containers', () => {
   it('没写 background 时 PNG 背景透明，写了颜色才铺底', async () => {
-    const bare = await renderFvg(`<layer width="16" height="16"><rect x="4" y="4" width="8" height="8" fill="#ff0000" /></layer>`)
+    const bare = await renderLayer(`<layer width="16" height="16"><rect x="4" y="4" width="8" height="8" fill="#ff0000" /></layer>`)
     const corner = await pixelAt(bare.png, 1, 1)
     const center = await pixelAt(bare.png, 8, 8)
     expect(bare.png[25]).toBe(6)
@@ -32,10 +32,10 @@ describe('paint containers', () => {
     expect(center[0]).toBeGreaterThan(200)
     expect(center[3]).toBe(255)
 
-    const clear = await renderFvg(`<layer width="16" height="16" background="transparent"></layer>`)
+    const clear = await renderLayer(`<layer width="16" height="16" background="transparent"></layer>`)
     expect((await pixelAt(clear.png, 1, 1))[3]).toBe(0)
 
-    const white = await pixelAt((await renderFvg(`<layer width="16" height="16" background="#ffffff"></layer>`)).png, 1, 1)
+    const white = await pixelAt((await renderLayer(`<layer width="16" height="16" background="#ffffff"></layer>`)).png, 1, 1)
     expect([white[0], white[1], white[2], white[3]]).toEqual([255, 255, 255, 255])
   })
 
@@ -49,7 +49,7 @@ describe('paint containers', () => {
         h('div', { style: 'display:flex; flex-direction:column; width:80px' }, h('div', { style: 'width:80px; height:40px; background:#ffffff' }, 'A')),
       ),
     )
-    const { png } = await renderFvg(root)
+    const { png } = await renderLayer(root)
     const mid = await pixelAt(png, 100, 100)
     const origin = await pixelAt(png, 10, 10)
     expect(mid[0]).toBeGreaterThan(200)
@@ -62,7 +62,7 @@ describe('paint containers', () => {
       { width: '100', height: '100', background: '#ffffff' },
       h('polygon', { points: '20,20 80,20 80,80 20,80', fill: '#ff0000', stroke: 'none', 'stroke-width': '12' }),
     )
-    const { png } = await renderFvg(root)
+    const { png } = await renderLayer(root)
     const outside = await pixelAt(png, 16, 50)
     const inside = await pixelAt(png, 50, 50)
     expect(outside[0]).toBeGreaterThan(240)
@@ -71,20 +71,20 @@ describe('paint containers', () => {
     expect(inside[1]).toBeLessThan(20)
   })
 
-  it('perspective 里 rotateY 把方块压窄，中心仍在', async () => {
+  it('镜头里 rotateY 把方块压窄，中心仍在', async () => {
     const flat = h(
-      'Layer',
+      'layer',
       { width: '200', height: '200', background: '#000000' },
-      h('Rect', { x: '60', y: '60',  width: '80', height: '80', fill: '#ffffff' }),
+      h('rect', { x: '60', y: '60',  width: '80', height: '80', fill: '#ffffff' }),
     )
     const turned = h(
-      'Layer',
-      { width: '200', height: '200', background: '#000000', perspective: '300' },
-      h('Rect', { x: '60', y: '60',  width: '80', height: '80', fill: '#ffffff', rotateY: '70' }),
+      'layer',
+      { width: '200', height: '200', background: '#000000', camera: '300' },
+      h('rect', { x: '60', y: '60',  width: '80', height: '80', fill: '#ffffff', rotateY: '70' }),
     )
-    const flatPx = await pixelAt((await renderFvg(flat)).png, 62, 100)
-    const center = await pixelAt((await renderFvg(turned)).png, 100, 108)
-    const edge = await pixelAt((await renderFvg(turned)).png, 62, 100)
+    const flatPx = await pixelAt((await renderLayer(flat)).png, 62, 100)
+    const center = await pixelAt((await renderLayer(turned)).png, 100, 108)
+    const edge = await pixelAt((await renderLayer(turned)).png, 62, 100)
     expect(flatPx[0]).toBeGreaterThan(200)
     expect(center[0]).toBeGreaterThan(200)
     expect(edge[0]).toBeLessThan(30)
@@ -92,22 +92,22 @@ describe('paint containers', () => {
 
   it('二维方块保持硬边', async () => {
     const root = h(
-      'Layer',
+      'layer',
       { width: '80', height: '80', background: '#000000' },
-      h('Rect', { x: '20', y: '20',  width: '40', height: '40', fill: '#ffffff' }),
+      h('rect', { x: '20', y: '20',  width: '40', height: '40', fill: '#ffffff' }),
     )
-    const png = (await renderFvg(root)).png
+    const png = (await renderLayer(root)).png
     expect((await pixelAt(png, 22, 40))[0]).toBe(255)
     expect((await pixelAt(png, 18, 40))[0]).toBe(0)
   })
 
   it('透视平面的斜边有抗锯齿过渡', async () => {
     const root = h(
-      'Layer',
-      { width: '200', height: '200', background: '#000000', perspective: '500' },
-      h('Rect', { x: '40', y: '60',  width: '120', height: '80', fill: '#ffffff', rotateY: '32' }),
+      'layer',
+      { width: '200', height: '200', background: '#000000', camera: '500' },
+      h('rect', { x: '40', y: '60',  width: '120', height: '80', fill: '#ffffff', rotateY: '32' }),
     )
-    const png = (await renderFvg(root)).png
+    const png = (await renderLayer(root)).png
     const box = { x: 40, y: 60, width: 120, height: 80, rotateY: 32, scaleX: 1, scaleY: 1, rotate: 0 } as LayoutNode
     const tl = project(100, 100, 500, posePoint(box, 0, 0))!
     const tr = project(100, 100, 500, posePoint(box, 120, 0))!
@@ -128,10 +128,10 @@ describe('paint containers', () => {
   it('透视平面的发光和阴影画到平面外面', async () => {
     const glow = h(
       'layer',
-      { width: '180', height: '180', background: '#000000', perspective: '400' },
+      { width: '180', height: '180', background: '#000000', camera: '400' },
       h('rect', { x: '65', y: '65',  width: '50', height: '50', fill: '#ffffff', rotateX: '14', glow: '16 #00ff00' }),
     )
-    const glowPng = (await renderFvg(glow)).png
+    const glowPng = (await renderLayer(glow)).png
     const plane = { x: 65, y: 65, width: 50, height: 50, rotateX: 14, scaleX: 1, scaleY: 1, rotate: 0 } as LayoutNode
     const glowAt = project(90, 90, 400, posePoint(plane, -8, 25))!
     const bodyAt = project(90, 90, 400, posePoint(plane, 25, 25))!
@@ -143,10 +143,10 @@ describe('paint containers', () => {
 
     const grid = h(
       'layer',
-      { width: '640', height: '400', background: '#000000', perspective: '900' },
+      { width: '640', height: '400', background: '#000000', camera: '900' },
       h('rect', { x: '140', y: '100',  width: '360', height: '200', fill: '#000000', rotateY: '32', glow: '36 #ffffff' }),
     )
-    const gridPng = (await renderFvg(grid)).png
+    const gridPng = (await renderLayer(grid)).png
     const gridImg = await loadImage(gridPng)
     const gridCanvas = createCanvas(gridImg.width, gridImg.height)
     const gridCtx = gridCanvas.getContext('2d')
@@ -163,10 +163,10 @@ describe('paint containers', () => {
 
     const shadow = h(
       'layer',
-      { width: '180', height: '180', background: '#000000', perspective: '400' },
+      { width: '180', height: '180', background: '#000000', camera: '400' },
       h('rect', { x: '65', y: '65',  width: '50', height: '50', fill: '#ffffff', rotateX: '14', shadow: '18 0 4 #ff0000' }),
     )
-    const shadowPng = (await renderFvg(shadow)).png
+    const shadowPng = (await renderLayer(shadow)).png
     const shadowAt = project(90, 90, 400, posePoint(plane, 62, 25))!
     const cornerAt = project(90, 90, 400, posePoint(plane, 4, 4))!
     const shadowPx = await pixelAt(shadowPng, Math.round(shadowAt.x), Math.round(shadowAt.y))
@@ -179,12 +179,12 @@ describe('paint containers', () => {
 
   it('z 大的平面盖住后写但更远的平面', async () => {
     const root = h(
-      'Layer',
-      { width: '120', height: '120', background: '#000000', perspective: '400' },
-      h('Rect', { x: '35', y: '35',  width: '50', height: '50', fill: '#ff0000', z: '40' }),
-      h('Rect', { x: '35', y: '35',  width: '50', height: '50', fill: '#0000ff', z: '-30' }),
+      'layer',
+      { width: '120', height: '120', background: '#000000', camera: '400' },
+      h('rect', { x: '35', y: '35',  width: '50', height: '50', fill: '#ff0000', z: '40' }),
+      h('rect', { x: '35', y: '35',  width: '50', height: '50', fill: '#0000ff', z: '-30' }),
     )
-    const px = await pixelAt((await renderFvg(root)).png, 60, 68)
+    const px = await pixelAt((await renderLayer(root)).png, 60, 68)
     expect(px[0]).toBeGreaterThan(200)
     expect(px[2]).toBeLessThan(40)
   })
@@ -199,7 +199,7 @@ describe('paint containers', () => {
         h('rect', { x: '0', y: '10', width: '100', height: '20', fill: '#ffffff' }),
       ),
     )
-    const { png } = await renderFvg(root)
+    const { png } = await renderLayer(root)
     // 层中心 (100,100)，顶边横条顺时针 90° 后落到 x=120..140
     const moved = await pixelAt(png, 130, 100)
     const vacated = await pixelAt(png, 100, 70)
@@ -217,7 +217,7 @@ describe('paint containers', () => {
         h('rect', { x: '40', y: '40',  width: '20', height: '20', fill: '#ffffff' }),
       ),
     )
-    const { png } = await renderFvg(root)
+    const { png } = await renderLayer(root)
     // 20px 方块绕 (100,100) 放大 2 倍，覆盖到 x=80
     const grown = await pixelAt(png, 85, 100)
     const stillOut = await pixelAt(png, 70, 100)
@@ -235,7 +235,7 @@ describe('paint containers', () => {
         h('rect', { x: '0', y: '40', width: '10', height: '40', fill: '#ffffff' }),
       ),
     )
-    const { png } = await renderFvg(root)
+    const { png } = await renderLayer(root)
     // 绕层的左上角 (100,20) 顺时针 90° 后，竖条变成 y=20 处的横条
     const moved = await pixelAt(png, 40, 25)
     const vacated = await pixelAt(png, 105, 80)
@@ -253,7 +253,7 @@ describe('paint containers', () => {
         h('rect', { x: '70', y: '30',  width: '40', height: '40', fill: '#ffffff' }),
       ),
     )
-    const { png } = await renderFvg(root)
+    const { png } = await renderLayer(root)
     const inside = await pixelAt(png, 95, 50)
     const clipped = await pixelAt(png, 105, 50)
     expect(inside[0]).toBeGreaterThan(200)
@@ -266,7 +266,7 @@ describe('paint containers', () => {
       { width: '200', height: '200', background: '#000000' },
       h('layer', { x: '40', y: '90' }, h('div', { style: 'width:120px; height:20px; background:#ffffff; rotate:90' }, 'A')),
     )
-    const textPng = await renderFvg(text)
+    const textPng = await renderLayer(text)
     expect((await pixelAt(textPng.png, 100, 50))[0]).toBeGreaterThan(200)
     expect((await pixelAt(textPng.png, 50, 100))[0]).toBeLessThan(20)
 
@@ -275,7 +275,7 @@ describe('paint containers', () => {
       { width: '200', height: '200', background: '#000000' },
       h('line', { x1: '70', y1: '100', x2: '130', y2: '100', stroke: '#ffffff', 'stroke-width': '2', scale: '5' }),
     )
-    const linePng = await renderFvg(line)
+    const linePng = await renderLayer(line)
     expect((await pixelAt(linePng.png, 100, 96))[0]).toBeGreaterThan(200)
   })
 
@@ -285,7 +285,7 @@ describe('paint containers', () => {
       { width: '120', height: '80', background: '#000000' },
       h('layer', { x: '10', y: '10',  }, h('div', { style: 'display:flex; gap:8px' }, h('div', { style: 'width:28px; height:28px; background:#ffffff' }))),
     )
-    const { png, report } = await renderFvg(root)
+    const { png, report } = await renderLayer(root)
     expect(report.issues.some((issue) => issue.code === 'text-overflow')).toBe(false)
     expect((await pixelAt(png, 20, 24))[0]).toBeGreaterThan(200)
   })
@@ -306,7 +306,7 @@ describe('paint containers', () => {
         ),
       ),
     )
-    const { png, report } = await renderFvg(root)
+    const { png, report } = await renderLayer(root)
     expect(report.issues.filter((issue) => issue.level === 'error')).toEqual([])
     expect((await pixelAt(png, 150, 48))[0]).toBeGreaterThan(200)
   })
@@ -315,8 +315,8 @@ describe('paint containers', () => {
     const row = () => h('div', { style: 'display:flex; gap:12px; align-items:center' }, h('p', { style: 'font-size:32px; color:#ffffff' }, '甲乙'))
     const wrapped = h('layer', { width: '400', height: '120', background: '#000000' }, h('layer', { x: '20', y: '30',  }, row()))
     const bare = h('layer', { width: '400', height: '120', background: '#000000' }, row())
-    const placed = await renderFvg(wrapped)
-    const centered = await renderFvg(bare)
+    const placed = await renderLayer(wrapped)
+    const centered = await renderLayer(bare)
     const placedBox = placed.report.elements.find((element) => element.tag === 'div')!.box
     const centeredBox = centered.report.elements.find((element) => element.tag === 'div')!.box
     expect(placedBox.left).toBeCloseTo(20, 0)
@@ -328,13 +328,13 @@ describe('paint containers', () => {
 
 describe('圆角', () => {
   it('过大的单一半径画成胶囊，分开的 rx、ry 仍是椭圆', async () => {
-    const pill = await renderFvg(
+    const pill = await renderLayer(
       `<layer width="80" height="20" background="#000000"><rect x="0" y="0" width="80" height="20" rx="999" fill="#ffffff" /></layer>`,
     )
-    const html = await renderFvg(
+    const html = await renderLayer(
       `<layer width="80" height="20" background="#000000"><div style="width:80px; height:20px; background:#ffffff; border-radius:999px"></div></layer>`,
     )
-    const ellipse = await renderFvg(
+    const ellipse = await renderLayer(
       `<layer width="80" height="20" background="#000000"><rect x="0" y="0" width="80" height="20" rx="40" ry="10" fill="#ffffff" /></layer>`,
     )
     expect((await pixelAt(pill.png, 12, 1))[0]).toBeGreaterThan(200)
@@ -393,7 +393,7 @@ describe('文字样式', () => {
 
   it('渐变文字在 1、2、0.5 倍下大小和位置一致，左红右蓝', async () => {
     const at = async (scale: number) => {
-      const { png, report } = await renderFvg(gradient, { scale })
+      const { png, report } = await renderLayer(gradient, { scale })
       expect(report.issues.filter((issue) => issue.level === 'error')).toEqual([])
       return inkBounds(png, scale, (r, g, b, a) => a > 20 && (r < 245 || g < 245 || b < 245))
     }
@@ -416,7 +416,7 @@ describe('文字样式', () => {
   it('行内 background 高亮这个词，倍率变化后仍停在词的位置', async () => {
     const source = `<layer width="420" height="90" background="#eeeeee" safe="0"><p style="font-size:40px; white-space:nowrap; color:#111111">AA<span style="background:#ff0000; color:#ffffff">BB</span>CC</p></layer>`
     const at = async (scale: number) => {
-      const { png, report } = await renderFvg(source, { scale })
+      const { png, report } = await renderLayer(source, { scale })
       expect(report.issues.filter((issue) => issue.level === 'error')).toEqual([])
       const red = await inkBounds(png, scale, (r, g, b, a) => a > 200 && r > 180 && g < 80 && b < 80)
       const dark = await inkBounds(png, scale, (r, g, b, a) => a > 200 && r < 40 && g < 40 && b < 40)
@@ -433,7 +433,7 @@ describe('文字样式', () => {
 
   it('行内 span 和继承来的渐变按整段取样，不在每个字上重新开始', async () => {
     const monotonic = async (source: string) => {
-      const { png, report } = await renderFvg(source)
+      const { png, report } = await renderLayer(source)
       expect(report.issues.filter((issue) => issue.level === 'error')).toEqual([])
       const img = await loadImage(png)
       const canvas = createCanvas(img.width, img.height)
@@ -482,7 +482,7 @@ describe('文字样式', () => {
   })
 
   it('行内渐变背景左红右蓝', async () => {
-    const { png, report } = await renderFvg(
+    const { png, report } = await renderLayer(
       `<layer width="360" height="90" background="#ffffff" safe="0"><p style="font-size:40px; white-space:nowrap">AA<span style="background:linear-gradient(to right, #ff0000, #0000ff)">WORD</span></p></layer>`,
     )
     expect(report.issues.filter((issue) => issue.level === 'error')).toEqual([])

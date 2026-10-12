@@ -404,9 +404,14 @@ export function resolveCamera(source: unknown, width: number, height: number): {
     pushIssue(issues, '无法解析 camera', '写成 camera="focal 900" 或对象 { focal: 900 }')
     return { issues }
   }
-  if (!parsed || !parsed.lens) {
-    if (parsed && !parsed.lens) pushIssue(issues, 'camera 没有镜头', '写 focal、fov、lens、parallel 里的一个，或一个正数视距')
-    return { issues }
+  if (!parsed) return { issues }
+  if (!parsed.lens) {
+    const focal = defaultFocal(height)
+    if (focal == null) {
+      pushIssue(issues, 'camera 没有镜头', '写 focal、fov、lens、parallel 里的一个，或一个正数视距。不写镜头时视距等于这一层的 height')
+      return { issues }
+    }
+    parsed.lens = { kind: 'focal', focal }
   }
   if (parsed.from && (parsed.orbit || parsed.distance != null)) {
     pushIssue(issues, 'from 不要和 orbit、distance 一起写', 'from 已经决定机位和距离')
@@ -513,6 +518,12 @@ export function resolveCamera(source: unknown, width: number, height: number): {
     camera: { perspective, ...(view ? { view } : {}), vanishX, vanishY, moved, ...(dof ? { dof } : {}) },
     issues,
   }
+}
+
+/** 不写镜头时的视距，等于这一层的 height。height 不是正数时没有默认镜头。 */
+export function defaultFocal(height: number): number | null {
+  if (!(height > 0)) return null
+  return height
 }
 
 function formatNum(value: number): string {
@@ -624,7 +635,7 @@ function hasChrome(node: LayoutNode): boolean {
 }
 
 function leavesTexture(node: LayoutNode): boolean {
-  if (node.kind === 'mesh') return false
+  if (node.kind === 'mesh' || node.kind === 'ground') return false
   if (node.kind === 'layer' || node.kind === 'flex') {
     if (node.kind === 'layer' && hasPerspective(node.perspective)) return true
     if (hasChrome(node) || node.draw != null) return true
@@ -634,7 +645,7 @@ function leavesTexture(node: LayoutNode): boolean {
 }
 
 export type CameraItem = {
-  kind: 'plane' | 'mesh' | 'chrome'
+  kind: 'plane' | 'mesh' | 'chrome' | 'ground'
   node: LayoutNode
   /** 节点局部到这一层镜头空间（已经乘过视图矩阵）。 */
   toLayer: number[]
@@ -674,6 +685,10 @@ export function cameraItems(layer: LayerLayoutNode): CameraItem[] {
       push({ kind: 'mesh', node, toLayer, posed: true, opacity, depth: meshPivotDepth(node, toLayer) })
       return
     }
+    if (node.kind === 'ground') {
+      push({ kind: 'ground', node, toLayer, posed: true, opacity, depth: 0 })
+      return
+    }
     if (node.kind === 'layer' && hasPerspective(node.perspective)) return
     if (node.kind === 'layer' || node.kind === 'flex') {
       const insetX = node.kind === 'flex' ? node.padding.left + (node.border?.width ?? 0) : 0
@@ -688,6 +703,10 @@ export function cameraItems(layer: LayerLayoutNode): CameraItem[] {
     const toLayer = view ? mulMat4(view, toLocal) : toLocal
     if (node.kind === 'mesh') {
       push({ kind: 'mesh', node, toLayer, posed: true, opacity, depth: meshPivotDepth(node, toLayer) })
+      return
+    }
+    if (node.kind === 'ground') {
+      push({ kind: 'ground', node, toLayer, posed: true, opacity, depth: 0 })
       return
     }
     const nested = node.kind === 'layer' && hasPerspective(node.perspective)
@@ -797,7 +816,7 @@ function auditLayer(layer: LayerLayoutNode, issues: Issue[]) {
         'behind-camera',
         item.node.path,
         `${kind}在观众身后，不绘制`,
-        `采样点的投影 w 小于等于 0。把 z 减小到小于 perspective（${perspective}），或改相机的 distance / from`,
+        `采样点的投影 w 小于等于 0。把 z 减小到小于视距（${perspective}），或改 camera 的 distance / from`,
       ),
     )
   }

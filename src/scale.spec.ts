@@ -3,7 +3,7 @@ import { canvas } from './canvas.js'
 import { h } from './h.js'
 import { poseOffset } from './perspective.js'
 import { parseOrigin } from './style.js'
-import { checkFvg } from './render.js'
+import { checkLayer } from './render.js'
 import type { LayoutNode } from './types.js'
 
 const page = (body: string, attrs = 'width="320" height="240" safe="0"') =>
@@ -11,9 +11,9 @@ const page = (body: string, attrs = 'width="320" height="240" safe="0"') =>
 
 describe('分轴 scale', () => {
   it('镜像不改变外接矩形，压扁会变窄', async () => {
-    const plain = await checkFvg(page(`<rect x="40" y="40" width="80" height="50" fill="#fff" />`))
-    const mirror = await checkFvg(page(`<rect x="40" y="40" width="80" height="50" fill="#fff" scale="-1 1" />`))
-    const flat = await checkFvg(page(`<rect x="40" y="40" width="80" height="50" fill="#fff" scale="0.5 1" />`))
+    const plain = await checkLayer(page(`<rect x="40" y="40" width="80" height="50" fill="#fff" />`))
+    const mirror = await checkLayer(page(`<rect x="40" y="40" width="80" height="50" fill="#fff" scale="-1 1" />`))
+    const flat = await checkLayer(page(`<rect x="40" y="40" width="80" height="50" fill="#fff" scale="0.5 1" />`))
     const a = plain.elements.find((el) => el.tag === 'rect')!
     const b = mirror.elements.find((el) => el.tag === 'rect')!
     const c = flat.elements.find((el) => el.tag === 'rect')!
@@ -26,8 +26,8 @@ describe('分轴 scale', () => {
   })
 
   it('文字 style 里的分轴缩放同样压扁', async () => {
-    const plain = await checkFvg(page(`<p style="font-size:40px; white-space:nowrap">横排</p>`))
-    const squashed = await checkFvg(page(`<p style="font-size:40px; white-space:nowrap; scale:0.5 1">横排</p>`))
+    const plain = await checkLayer(page(`<p style="font-size:40px; white-space:nowrap">横排</p>`))
+    const squashed = await checkLayer(page(`<p style="font-size:40px; white-space:nowrap; scale:0.5 1">横排</p>`))
     const a = plain.elements.find((el) => el.tag === 'p')!
     const b = squashed.elements.find((el) => el.tag === 'p')!
     expect(b.ink.width).toBeCloseTo(a.ink.width / 2, 0)
@@ -35,9 +35,9 @@ describe('分轴 scale', () => {
   })
 
   it('透视平面水平镜像后左右角对调，外接范围不变', async () => {
-    const attrs = 'width="300" height="220" safe="0" perspective="500"'
-    const plain = await checkFvg(page(`<rect x="80" y="70" width="100" height="60" fill="#fff" z="40" />`, attrs))
-    const mirror = await checkFvg(page(`<rect x="80" y="70" width="100" height="60" fill="#fff" z="40" scale="-1 1" />`, attrs))
+    const attrs = 'width="300" height="220" safe="0" camera="500"'
+    const plain = await checkLayer(page(`<rect x="80" y="70" width="100" height="60" fill="#fff" z="40" />`, attrs))
+    const mirror = await checkLayer(page(`<rect x="80" y="70" width="100" height="60" fill="#fff" z="40" scale="-1 1" />`, attrs))
     const a = plain.elements.find((el) => el.tag === 'rect')!
     const b = mirror.elements.find((el) => el.tag === 'rect')!
     expect(b.quad).toHaveLength(4)

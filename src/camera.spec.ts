@@ -2,7 +2,7 @@ import { loadImage, createCanvas } from '@napi-rs/canvas'
 import { describe, expect, it } from 'vitest'
 import { emitLayer } from './emit.js'
 import { h } from './h.js'
-import { checkFvg, renderLayer } from './render.js'
+import { checkLayer, renderLayer } from './render.js'
 
 const W = 1280
 const H = 720
@@ -57,21 +57,39 @@ function toScreen(
 }
 
 async function quadOf(source: string, tag = 'layer') {
-  const report = await checkFvg(source)
+  const report = await checkLayer(source)
   const el = report.elements.find((item) => item.tag === tag && item.quad)
   return { report, quad: el?.quad }
 }
 
 describe('camera', () => {
-  it('focal 与 perspective 逐像素一致，parallel 也一样', async () => {
+  it('不写 camera 时视距等于 height，focal 与数字视距一致', async () => {
     const scene = `<rect x="40" y="30" width="80" height="50" fill="#e8b04a" rotateY="24" z="30" />`
-    const a = await renderLayer(`<layer width="200" height="140" background="#102030" perspective="1484">${scene}</layer>`)
-    const b = await renderLayer(`<layer width="200" height="140" background="#102030" camera="focal 1484">${scene}</layer>`)
-    expect(Buffer.compare(a.png, b.png)).toBe(0)
-    const flat = `<rect x="20" y="20" width="40" height="40" fill="#fff" z="80" />`
-    const p = await renderLayer(`<layer width="120" height="80" background="#000" perspective="parallel">${flat}</layer>`)
-    const c = await renderLayer(`<layer width="120" height="80" background="#000" camera="parallel">${flat}</layer>`)
-    expect(Buffer.compare(p.png, c.png)).toBe(0)
+    const omitted = await renderLayer(`<layer width="200" height="140" background="#102030">${scene}</layer>`)
+    const height = await renderLayer(`<layer width="200" height="140" background="#102030" camera="140">${scene}</layer>`)
+    const focal = await renderLayer(`<layer width="200" height="140" background="#102030" camera="focal 1484">${scene}</layer>`)
+    const number = await renderLayer(`<layer width="200" height="140" background="#102030" camera="1484">${scene}</layer>`)
+    expect(Buffer.compare(omitted.png, height.png)).toBe(0)
+    expect(Buffer.compare(focal.png, number.png)).toBe(0)
+    expect(Buffer.compare(omitted.png, number.png)).not.toBe(0)
+  })
+
+  it('没写 camera 的嵌套层不另开镜头', async () => {
+    const scene = `<layer x="20" y="20" width="80" height="80"><sphere cx="40" cy="40" r="24" fill="#ff2244" /></layer>`
+    const omitted = await renderLayer(`<layer width="200" height="200" background="#000">${scene}</layer>`)
+    const outer = await renderLayer(`<layer width="200" height="200" background="#000" camera="200">${scene}</layer>`)
+    const inner = await renderLayer(`<layer width="200" height="200" background="#000"><layer x="20" y="20" width="80" height="80" camera="80"><sphere cx="40" cy="40" r="24" fill="#ff2244" /></layer></layer>`)
+    expect(Buffer.compare(omitted.png, outer.png)).toBe(0)
+    expect(Buffer.compare(omitted.png, inner.png)).not.toBe(0)
+  })
+
+  it('perspective 已经换成 camera', async () => {
+    const report = await checkLayer(
+      `<layer width="100" height="80" perspective="400"><sphere cx="40" cy="40" r="16" fill="#fff" /></layer>`,
+    )
+    const issue = report.issues.find((item) => item.code === 'invalid-attr' && item.message.includes('perspective'))
+    expect(issue?.hint).toContain('camera="900"')
+    expect(report.issues.some((item) => item.code === 'flatten-3d')).toBe(false)
   })
 
   it('字符串和对象的报告与像素一致，emit 保留作者的字段', async () => {
@@ -101,7 +119,7 @@ describe('camera', () => {
     )
     expect(emitted.source).toContain('camera="fov 40, at 10 20 0, roll 4, from 1 2 3, vanish 0 -12"')
     const round = await renderLayer(emitted.source)
-    const parsed = (await import('./parse.js')).parseFvg(emitted.source)[0]
+    const parsed = (await import('./parse.js')).parseLayer(emitted.source)[0]
     const again = await renderLayer(emitLayer(parsed!).source)
     expect(Buffer.compare(round.png, again.png)).toBe(0)
   })
@@ -137,7 +155,7 @@ describe('camera', () => {
   })
 
   it('vanish 不挪动 z=0，深处的点朝新灭点靠', async () => {
-    const still = await checkFvg(
+    const still = await checkLayer(
       `<layer width="200" height="200" camera="focal 200, vanish 0 -120"><rect x="40" y="50" width="30" height="20" fill="#fff" /></layer>`,
     )
     const rect = still.elements.find((el) => el.tag === 'rect')
@@ -145,7 +163,7 @@ describe('camera', () => {
     expect(rect!.quad![0]!.y).toBeCloseTo(50, 1)
     expect(rect!.quad![2]!.x).toBeCloseTo(70, 1)
     expect(rect!.quad![2]!.y).toBeCloseTo(70, 1)
-    const far = await checkFvg(
+    const far = await checkLayer(
       `<layer width="200" height="200" camera="focal 200, vanish 0 -120"><rect x="40" y="50" width="30" height="20" fill="#fff" z="-80" /></layer>`,
     )
     const moved = far.elements.find((el) => el.tag === 'rect')!.quad!
@@ -155,11 +173,11 @@ describe('camera', () => {
   })
 
   it('from 与 at 重合是 invalid-attr，转过身的卡片在镜头后不画', async () => {
-    const bad = await checkFvg(
+    const bad = await checkLayer(
       `<layer width="100" height="100" camera="focal 80, at 50 50 0, from 50 50 0"><rect width="20" height="20" fill="#fff" /></layer>`,
     )
     expect(bad.issues.some((issue) => issue.code === 'invalid-attr' && issue.message.includes('重合'))).toBe(true)
-    const behind = await checkFvg(
+    const behind = await checkLayer(
       `<layer width="200" height="200" camera="focal 120, orbit 180 0"><rect x="70" y="70" width="60" height="60" fill="#fff" z="-200" /></layer>`,
     )
     expect(behind.issues.some((issue) => issue.code === 'behind-camera')).toBe(true)
@@ -168,11 +186,11 @@ describe('camera', () => {
   })
 
   it('低机位看 rotateX=90 的地板不报 behind-camera，没有姿态的卡片跟着轨道走', async () => {
-    const floor = await checkFvg(
+    const floor = await checkLayer(
       `<layer width="400" height="300" camera="focal 500, orbit 0 4"><rect x="20" y="40" width="360" height="220" fill="#ccc" rotateX="90" /></layer>`,
     )
     expect(floor.issues.some((issue) => issue.code === 'behind-camera')).toBe(false)
-    const orbit = await checkFvg(
+    const orbit = await checkLayer(
       `<layer width="200" height="200" camera="focal 200, orbit 25 0"><rect x="70" y="80" width="60" height="40" fill="#fff" /></layer>`,
     )
     const rect = orbit.elements.find((el) => el.tag === 'rect')
@@ -223,7 +241,7 @@ describe('camera', () => {
   })
 
   it('preserve-3d 穿过带 padding 的 flex，opacity 压平并报 info', async () => {
-    const source = `<layer width="400" height="320" perspective="700">
+    const source = `<layer width="400" height="320" camera="700">
       <layer x="40" y="30" width="320" height="220" rotateY="28" preserve-3d="true">
         <div style="display:flex; flex-direction:row; align-items:flex-start; padding:20px; gap:16px; width:320px; height:220px" preserve-3d="true">
           <layer width="80" height="80" z="50"><rect width="80" height="80" fill="#f00" /></layer>
@@ -231,14 +249,14 @@ describe('camera', () => {
         </div>
       </layer>
     </layer>`
-    const report = await checkFvg(source)
+    const report = await checkLayer(source)
     const rects = report.elements.filter((el) => el.tag === 'rect' && el.quad)
     expect(rects).toHaveLength(2)
     const near = rects[0]!.quad!
     const far = rects[1]!.quad!
     const widthOf = (quad: typeof near) => Math.hypot(quad[1]!.x - quad[0]!.x, quad[1]!.y - quad[0]!.y)
     expect(widthOf(near)).toBeGreaterThan(widthOf(far) + 4)
-    const flat = await checkFvg(source.replace('rotateY="28" preserve-3d="true"', 'rotateY="28" preserve-3d="true" opacity="0.5"'))
+    const flat = await checkLayer(source.replace('rotateY="28" preserve-3d="true"', 'rotateY="28" preserve-3d="true" opacity="0.5"'))
     expect(flat.issues.some((issue) => issue.code === 'flattened-3d' && issue.level === 'info')).toBe(true)
     const baked = flat.elements.filter((el) => el.tag === 'rect' && el.quad)
     expect(baked).toHaveLength(2)
@@ -247,7 +265,7 @@ describe('camera', () => {
   })
 
   it('同一张斜卡片上的两行字不报 text-overlap，叠在一起的两张仍报', async () => {
-    const apart = await checkFvg(`<layer width="400" height="300" perspective="600">
+    const apart = await checkLayer(`<layer width="400" height="300" camera="600">
       <layer x="40" y="30" width="220" height="180" rotateY="32">
         <div style="display:flex; flex-direction:column; align-items:flex-start; gap:28px">
           <p style="font-size:28px">甲乙丙</p>
@@ -256,7 +274,7 @@ describe('camera', () => {
       </layer>
     </layer>`)
     expect(apart.issues.some((issue) => issue.code === 'text-overlap')).toBe(false)
-    const over = await checkFvg(`<layer width="400" height="300" perspective="600">
+    const over = await checkLayer(`<layer width="400" height="300" camera="600">
       <layer x="80" y="70" width="160" height="70" rotateY="18"><p style="font-size:32px">甲乙丙丁</p></layer>
       <layer x="90" y="78" width="160" height="70" rotateY="-16" z="20"><p style="font-size:32px">戊己庚辛</p></layer>
     </layer>`)
@@ -287,10 +305,10 @@ describe('camera', () => {
       return maxX - minX
     }
     const flat = await radius('', '')
-    const posed = await radius('perspective="800"', 'z="0.001"')
+    const posed = await radius('camera="800"', 'z="0.001"')
     expect(Math.abs(posed - flat)).toBeLessThan(8)
-    const mesh = await checkFvg(
-      `<layer width="160" height="160" perspective="400"><layer x="20" y="20" width="80" height="80" blur="8"><sphere cx="40" cy="40" r="30" fill="#f00" /></layer></layer>`,
+    const mesh = await checkLayer(
+      `<layer width="160" height="160" camera="400"><layer x="20" y="20" width="80" height="80" blur="8"><sphere cx="40" cy="40" r="30" fill="#f00" /></layer></layer>`,
     )
     expect(mesh.issues.some((issue) => issue.code === 'invalid-attr' && issue.message.includes('blur'))).toBe(true)
   })

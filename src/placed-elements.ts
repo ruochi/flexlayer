@@ -1,7 +1,11 @@
-import { applyToBox, aroundPivot, IDENTITY, multiply, originOffset, translated, type Matrix } from './matrix.js'
+import { apply, applyToBox, aroundPivot, IDENTITY, multiply, originOffset, translated, type Matrix } from './matrix.js'
 import type { LayerBox } from './canvas.js'
 import { maskStats, type MaskStats } from './mask-stats.js'
+import { ownsMeshScene } from './mesh.js'
+import { placeMeshFrame, projectMeshFrames, type MeshEdgeKind, type MeshPoint, type MeshProjectedEdge } from './mesh-frame.js'
 import type { Box, LayoutNode } from './types.js'
+
+export type { MeshEdgeKind, MeshPoint, MeshProjectedEdge }
 
 /**
  * 带 `<mask>` 的 layer 才有。`area`、`pieces`、`softEdge` 按这一层自己的像素量。
@@ -31,6 +35,15 @@ export type PlacedElement = {
   ink: LayerBox
   /** 这一层写了 `<mask>` 时，蒙版画成位图之后的面积、外接矩形、碎片数和软边宽度。 */
   mask?: PlacedMask
+  /**
+   * 落在 `perspective` 里的网格才有。投影后的顶点，和 `box` 同一套坐标。
+   * 看得见的带 `visible`，被自己或别的网格挡住的带 `hidden`。球没有折点，不写这个字段。
+   */
+  points?: MeshPoint[]
+  /** 顶点之间的棱。`a`、`b` 是 `points` 的下标。 */
+  edges?: MeshProjectedEdge[]
+  /** 看得见的轮廓，SVG 路径。球是解析出来的圆。 */
+  d?: string
 }
 
 /** 只计入缩放。旋转留在节点上，和文字坐标同一套，避免把水平基线折成斜线。 */
@@ -77,7 +90,12 @@ function mapLocal(node: LayoutNode, space: Matrix, local: Box, rotate: boolean):
   return layerBox(visual)
 }
 
-function pushElement(node: LayoutNode, space: Matrix, found: PlacedElement[]) {
+function pushElement(
+  node: LayoutNode,
+  space: Matrix,
+  found: PlacedElement[],
+  frames: Map<string, ReturnType<typeof placeMeshFrame>>,
+) {
   const entry: PlacedElement = {
     path: node.path.replace(/^layer\//, ''),
     tag: node.tag,
@@ -87,6 +105,10 @@ function pushElement(node: LayoutNode, space: Matrix, found: PlacedElement[]) {
   if (node.id) entry.id = node.id
   const mask = placedMaskOf(node, (ink) => mapLocal(node, space, ink, false))
   if (mask) entry.mask = mask
+  const frame = frames.get(node.path)
+  if (frame?.points) entry.points = frame.points
+  if (frame?.edges) entry.edges = frame.edges
+  if (frame?.d) entry.d = frame.d
   found.push(entry)
 }
 
@@ -105,16 +127,33 @@ export function placedRootMask(root: LayoutNode): PlacedMask | undefined {
   return placedMaskOf(root, (ink) => layerBox(applyToBox(nodePose(root, 0, 0), ink)))
 }
 
-function visit(node: LayoutNode, space: Matrix, isRoot: boolean, found: PlacedElement[]) {
-  if (!isRoot) pushElement(node, space, found)
+function visit(
+  node: LayoutNode,
+  space: Matrix,
+  isRoot: boolean,
+  found: PlacedElement[],
+  frames: Map<string, ReturnType<typeof placeMeshFrame>>,
+) {
+  if (!isRoot) pushElement(node, space, found, frames)
   if (node.kind === 'layer' || node.kind === 'flex') {
     const next = childSpace(node, space, isRoot)
-    for (const child of node.children) visit(child, next, false, found)
+    if (node.kind === 'layer' && ownsMeshScene(node)) {
+      for (const [path, frame] of projectMeshFrames(node)) {
+        frames.set(
+          path,
+          placeMeshFrame(frame, (x, y) => {
+            const [px, py] = apply(next, x, y)
+            return { x: px, y: py }
+          }),
+        )
+      }
+    }
+    for (const child of node.children) visit(child, next, false, found, frames)
     return
   }
   if (node.kind === 'group') {
     const next = multiply(multiply(space, nodePose(node, node.x, node.y)), node.svg)
-    for (const child of node.children) visit(child, next, false, found)
+    for (const child of node.children) visit(child, next, false, found, frames)
   }
 }
 
@@ -124,6 +163,6 @@ function visit(node: LayoutNode, space: Matrix, isRoot: boolean, found: PlacedEl
  */
 export function placedElements(root: LayoutNode): PlacedElement[] {
   const found: PlacedElement[] = []
-  visit(root, nodePose(root, 0, 0), true, found)
+  visit(root, nodePose(root, 0, 0), true, found, new Map())
   return found
 }

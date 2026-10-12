@@ -1,5 +1,8 @@
 export type Box = { x: number; y: number; width: number; height: number }
 
+/** 图片像素。点在要留下的那一块上。 */
+export type KeepPoint = { x: number; y: number }
+
 export type SplitInput = {
   /** 0 最远，255 最近，和图片一样大。 */
   depth: Uint8ClampedArray
@@ -11,10 +14,15 @@ export type SplitInput = {
    */
   matte?: Uint8ClampedArray
   /**
-   * 前景收到多远，0 到 1，默认 0.5。
-   * 调大遮罩变大，调小只留更靠近镜头的一段。
+   * 要留下的地方，可以多个。不传就从伸进远处的尖往下长。
+   * 沿着深度连着的一块长出去，近端停在地面以上。不再按这些点的远近收成一段。
    */
-  front?: number
+  points?: KeepPoint[]
+  /**
+   * 不要的地方，可以多个。落在要留的这块里面时，和正向点一起往外长，离它更近的去掉。
+   * 没有正向点时，从自动遮罩里挖掉点到的那一块。
+   */
+  omit?: KeepPoint[]
 }
 
 export type SplitResult = {
@@ -96,23 +104,15 @@ function otsu(values: number[]): number {
 }
 
 /** 抠图选区里，按深度留下近的一块。远处粘上来的楼会掉下去，边还是抠图的边。 */
-function keepNear(matte: Uint8ClampedArray, depth: Uint8ClampedArray, front: number): Uint8ClampedArray {
+function keepNear(matte: Uint8ClampedArray, depth: Uint8ClampedArray): Uint8ClampedArray {
   const inside: number[] = []
-  let lo = 255
-  let hi = 0
   for (let i = 0; i < matte.length; i++) {
     if (matte[i]! < 128) continue
-    const value = depth[i]!
-    inside.push(value)
-    if (value < lo) lo = value
-    if (value > hi) hi = value
+    inside.push(depth[i]!)
   }
   const alpha = new Uint8ClampedArray(matte.length)
   if (inside.length === 0) return alpha
-  const cut = otsu(inside)
-  const threshold = front >= 0.5
-    ? cut + (lo - cut) * ((front - 0.5) / 0.5)
-    : hi + (cut - hi) * (front / 0.5)
+  const threshold = otsu(inside)
   const soft = 6
   for (let i = 0; i < matte.length; i++) {
     const t = Math.min(1, Math.max(0, (depth[i]! - (threshold - soft)) / (soft * 2)))
@@ -121,7 +121,36 @@ function keepNear(matte: Uint8ClampedArray, depth: Uint8ClampedArray, front: num
   return alpha
 }
 
-function growFromSkyline(depth: Uint8ClampedArray, width: number, height: number, front: number): Uint8Array | null {
+function pixelOf(x: number, y: number, width: number, height: number): { x: number; y: number } {
+  return {
+    x: Math.min(width - 1, Math.max(0, Math.floor(x))),
+    y: Math.min(height - 1, Math.max(0, Math.floor(y))),
+  }
+}
+
+/**
+ * 点击处的深度。周围 5×5 里，和中心差过 24 的细边不算进来。
+ * 中心自己落在缝上、和周围差太多时，用周围的中位数，免得点到一条天空。
+ */
+function depthAt(depth: Uint8ClampedArray, width: number, height: number, x: number, y: number): number {
+  const centerPx = pixelOf(x, y, width, height)
+  const center = depth[centerPx.y * width + centerPx.x]!
+  const window: number[] = []
+  for (let dy = -2; dy <= 2; dy++) {
+    for (let dx = -2; dx <= 2; dx++) {
+      const nx = centerPx.x + dx
+      const ny = centerPx.y + dy
+      if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue
+      window.push(depth[ny * width + nx]!)
+    }
+  }
+  const mid = median(window)
+  if (Math.abs(center - mid) > 24) return mid
+  const close = window.filter((value) => Math.abs(value - center) <= 24)
+  return median(close)
+}
+
+function growFromSkyline(depth: Uint8ClampedArray, width: number, height: number): Uint8Array | null {
   const n = width * height
   let lo = 255
   let hi = 0
@@ -170,13 +199,9 @@ function growFromSkyline(depth: Uint8ClampedArray, width: number, height: number
     rowFar[y] = median(band)
   }
 
-  const capMid = ground * 0.72
-  const floorMid = Math.max(skyCut, capMid * 0.45)
-  const marginMid = Math.max(8, ground * 0.1)
-  const widen = Math.max(0, (front - 0.5) / 0.5)
-  const cap = capMid + (hi - capMid) * widen
-  const floor = floorMid + (skyCut - floorMid) * widen
-  const margin = marginMid * (1 - widen)
+  const cap = ground * 0.72
+  const floor = Math.max(skyCut, cap * 0.45)
+  const margin = Math.max(8, ground * 0.1)
   const grown = new Uint8Array(n)
   const stack = new Int32Array(n)
   let head = 0
@@ -201,26 +226,242 @@ function growFromSkyline(depth: Uint8ClampedArray, width: number, height: number
       }
     }
   }
-  if (front < 0.5) {
-    let near = 0
-    let far = 255
-    let seen = 0
-    for (let i = 0; i < n; i++) {
-      if (!grown[i]) continue
-      const value = depth[i]!
-      if (value > near) near = value
-      if (value < far) far = value
-      seen += 1
-    }
-    if (seen > 0) {
-      const cut = near - (front / 0.5) * (near - far)
-      for (let i = 0; i < n; i++) if (grown[i] && depth[i]! < cut) grown[i] = 0
-    }
-  }
   let count = 0
   for (let i = 0; i < n; i++) count += grown[i]!
   if (count < Math.max(8, n * 0.002)) return null
   return grown
+}
+
+/** 相邻深度差过这么多，就是另一块表面，长不过去。 */
+const SURFACE_BREAK = 40
+
+function groundDepth(depth: Uint8ClampedArray, width: number, height: number): number {
+  const groundBand: number[] = []
+  const groundStart = Math.floor(height * 0.88)
+  const step = Math.max(1, Math.floor(width / 32))
+  for (let y = groundStart; y < height; y++) {
+    for (let x = 0; x < width; x += step) groundBand.push(depth[y * width + x]!)
+  }
+  return median(groundBand)
+}
+
+/**
+ * 正向点不再按彼此的远近收成一段。
+ * 没写反向点时，近端停在地面以上，和自动分层同一条线；点已经比这条线更近时，只留点到的那一层。
+ * 反向点落在这条线里面时，和正向点一起往外长，离它更近的那一块去掉。
+ */
+function pointLimits(
+  depth: Uint8ClampedArray,
+  width: number,
+  height: number,
+  points: KeepPoint[],
+  omit: KeepPoint[],
+): { floor: number; cap: number; side: KeepPoint[] } {
+  let near = 0
+  let far = 255
+  for (const point of points) {
+    const value = depthAt(depth, width, height, point.x, point.y)
+    if (value > near) near = value
+    if (value < far) far = value
+  }
+  const ground = groundDepth(depth, width, height)
+  const skyCut = Math.max(8, ground * 0.16)
+  const groundLine = ground * 0.72
+  let floor = skyCut
+  let cap = groundLine
+  if (near > groundLine) {
+    floor = Math.max(0, far - 12)
+    cap = Math.min(255, near + 12)
+  }
+  const side = omit.filter((point) => {
+    const value = depthAt(depth, width, height, point.x, point.y)
+    return value >= floor && value <= cap
+  })
+  return { floor, cap, side }
+}
+
+function plantSeeds(
+  depth: Uint8ClampedArray,
+  width: number,
+  height: number,
+  point: KeepPoint,
+  floor: number,
+  cap: number,
+  fn: (index: number) => void,
+) {
+  const sample = depthAt(depth, width, height, point.x, point.y)
+  const pixel = pixelOf(point.x, point.y, width, height)
+  for (let dy = -2; dy <= 2; dy++) {
+    for (let dx = -2; dx <= 2; dx++) {
+      const x = pixel.x + dx
+      const y = pixel.y + dy
+      if (x < 0 || y < 0 || x >= width || y >= height) continue
+      const index = y * width + x
+      const value = depth[index]!
+      if (value < floor || value > cap) continue
+      if (Math.abs(value - sample) > 24) continue
+      fn(index)
+    }
+  }
+}
+
+/**
+ * 从正向点沿着连着的表面往外长，近端停在地面以上。
+ * 反向点落在这块里面时一起往外长，每个像素归路径更短的那个点，归反向点的去掉。
+ */
+function growFromSeeds(
+  depth: Uint8ClampedArray,
+  width: number,
+  height: number,
+  points: KeepPoint[],
+  omit: KeepPoint[],
+): Uint8Array | null {
+  const n = width * height
+  const { floor, cap, side } = pointLimits(depth, width, height, points, omit)
+  const owner = new Int8Array(n)
+  const dist = new Int32Array(n)
+  dist.fill(0x7fffffff)
+  const heapI: number[] = []
+  const heapD: number[] = []
+
+  const siftUp = (k: number) => {
+    while (k > 0) {
+      const parent = (k - 1) >> 1
+      if (heapD[parent]! <= heapD[k]!) break
+      const index = heapI[parent]!
+      const key = heapD[parent]!
+      heapI[parent] = heapI[k]!
+      heapD[parent] = heapD[k]!
+      heapI[k] = index
+      heapD[k] = key
+      k = parent
+    }
+  }
+  const siftDown = (k: number) => {
+    for (;;) {
+      let next = k
+      const left = k * 2 + 1
+      const right = left + 1
+      if (left < heapI.length && heapD[left]! < heapD[next]!) next = left
+      if (right < heapI.length && heapD[right]! < heapD[next]!) next = right
+      if (next === k) break
+      const index = heapI[next]!
+      const key = heapD[next]!
+      heapI[next] = heapI[k]!
+      heapD[next] = heapD[k]!
+      heapI[k] = index
+      heapD[k] = key
+      k = next
+    }
+  }
+  const push = (index: number, key: number, who: 1 | -1) => {
+    if (key > dist[index]!) return
+    if (key === dist[index]! && owner[index] !== 0) return
+    const value = depth[index]!
+    if (value < floor || value > cap) return
+    dist[index] = key
+    owner[index] = who
+    heapI.push(index)
+    heapD.push(key)
+    siftUp(heapI.length - 1)
+  }
+
+  for (const point of points) plantSeeds(depth, width, height, point, floor, cap, (index) => push(index, 0, 1))
+  for (const point of side) plantSeeds(depth, width, height, point, floor, cap, (index) => push(index, 0, -1))
+
+  while (heapI.length > 0) {
+    const index = heapI[0]!
+    const key = heapD[0]!
+    heapI[0] = heapI[heapI.length - 1]!
+    heapD[0] = heapD[heapD.length - 1]!
+    heapI.pop()
+    heapD.pop()
+    if (heapI.length > 0) siftDown(0)
+    if (key !== dist[index]) continue
+    const x = index % width
+    const y = (index / width) | 0
+    const base = depth[index]!
+    const who = owner[index] as 1 | -1
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue
+        const nx = x + dx
+        const ny = y + dy
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue
+        const next = ny * width + nx
+        const jump = Math.abs(depth[next]! - base)
+        if (jump > SURFACE_BREAK) continue
+        push(next, key + Math.max(1, jump), who)
+      }
+    }
+  }
+
+  const grown = new Uint8Array(n)
+  let count = 0
+  for (let i = 0; i < n; i++) {
+    if (owner[i] !== 1) continue
+    grown[i] = 1
+    count += 1
+  }
+  if (count < Math.max(8, n * 0.002)) return null
+  return grown
+}
+
+/** 从自动遮罩里挖掉反向点所在的那一块。点不在遮罩上就不动。 */
+function erasePieces(mask: Uint8Array, width: number, height: number, omit: KeepPoint[]): Uint8Array {
+  const n = width * height
+  const seen = new Uint8Array(n)
+  const stack = new Int32Array(n)
+  for (const point of omit) {
+    const pixel = pixelOf(point.x, point.y, width, height)
+    let start = -1
+    for (let dy = -2; dy <= 2 && start < 0; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const x = pixel.x + dx
+        const y = pixel.y + dy
+        if (x < 0 || y < 0 || x >= width || y >= height) continue
+        const index = y * width + x
+        if (mask[index]) {
+          start = index
+          break
+        }
+      }
+    }
+    if (start < 0 || seen[start]) continue
+    let head = 0
+    stack[head++] = start
+    seen[start] = 1
+    while (head > 0) {
+      const index = stack[--head]!
+      mask[index] = 0
+      const x = index % width
+      const y = (index / width) | 0
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue
+          const nx = x + dx
+          const ny = y + dy
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue
+          const next = ny * width + nx
+          if (!mask[next] || seen[next]) continue
+          seen[next] = 1
+          stack[head++] = next
+        }
+      }
+    }
+  }
+  return mask
+}
+
+function paintMask(grown: Uint8Array | null, width: number, height: number): Uint8ClampedArray {
+  const n = width * height
+  const alpha = new Uint8ClampedArray(n)
+  if (!grown) return alpha
+  const hard = new Float32Array(n)
+  for (let i = 0; i < n; i++) hard[i] = grown[i] ? 255 : 0
+  const soft = blurGray(hard, width, height, 1)
+  for (let i = 0; i < n; i++) alpha[i] = clampByte(soft[i]!)
+  return alpha
 }
 
 function bounds(alpha: Uint8ClampedArray, width: number, height: number): Box | null {
@@ -243,6 +484,27 @@ function bounds(alpha: Uint8ClampedArray, width: number, height: number): Box | 
   return { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 }
 }
 
+function applyMatte(grown: Uint8Array | null, matte: Uint8ClampedArray): Uint8ClampedArray {
+  const alpha = new Uint8ClampedArray(matte.length)
+  if (!grown) return alpha
+  for (let i = 0; i < alpha.length; i++) if (grown[i]) alpha[i] = matte[i]!
+  return alpha
+}
+
+function eraseSoft(alpha: Uint8ClampedArray, width: number, height: number, omit: KeepPoint[]): Uint8ClampedArray {
+  const mark = new Uint8Array(alpha.length)
+  for (let i = 0; i < alpha.length; i++) if (alpha[i]! > 0) mark[i] = 1
+  erasePieces(mark, width, height, omit)
+  for (let i = 0; i < alpha.length; i++) if (!mark[i]) alpha[i] = 0
+  return alpha
+}
+
+function assertInside(point: KeepPoint, width: number, height: number) {
+  if (!(Number.isFinite(point.x) && Number.isFinite(point.y) && point.x >= 0 && point.y >= 0 && point.x < width && point.y < height)) {
+    throw new Error('点要落在图片里面')
+  }
+}
+
 /**
  * 从远近图里取出前景遮罩。
  * 深度没有一块伸进远处时 `flat` 为真，遮罩是空的。
@@ -250,23 +512,25 @@ function bounds(alpha: Uint8ClampedArray, width: number, height: number): Box | 
 export function splitLayers(input: SplitInput): SplitResult {
   const { depth, width, height } = input
   const n = width * height
-  const front = input.front ?? 0.5
-  if (!(front >= 0 && front <= 1)) throw new Error('front 要在 0 到 1 之间')
+  const points = input.points ?? []
+  const omit = input.omit ?? []
   if (depth.length !== n) throw new Error('深度图和图片不一样大')
   if (input.matte && input.matte.length !== n) throw new Error('选区和图片不一样大')
+  for (const point of points) assertInside(point, width, height)
+  for (const point of omit) assertInside(point, width, height)
 
   let alpha: Uint8ClampedArray
-  if (input.matte) {
-    alpha = keepNear(input.matte, depth, front)
+  if (points.length > 0) {
+    const grown = growFromSeeds(depth, width, height, points, omit)
+    alpha = input.matte ? applyMatte(grown, input.matte) : paintMask(grown, width, height)
+  } else if (input.matte) {
+    alpha = keepNear(input.matte, depth)
+    if (omit.length > 0) alpha = eraseSoft(alpha, width, height, omit)
+  } else if (omit.length > 0) {
+    const grown = growFromSkyline(depth, width, height)
+    alpha = paintMask(grown ? erasePieces(grown, width, height, omit) : null, width, height)
   } else {
-    const grown = growFromSkyline(depth, width, height, front)
-    alpha = new Uint8ClampedArray(n)
-    if (grown) {
-      const hard = new Float32Array(n)
-      for (let i = 0; i < n; i++) hard[i] = grown[i] ? 255 : 0
-      const soft = blurGray(hard, width, height, 1)
-      for (let i = 0; i < n; i++) alpha[i] = clampByte(soft[i]!)
-    }
+    alpha = paintMask(growFromSkyline(depth, width, height), width, height)
   }
 
   const box = bounds(alpha, width, height)

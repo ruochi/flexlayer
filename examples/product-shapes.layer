@@ -3,7 +3,7 @@
     <p style="font-size:40px">圆角矩形 · 圆柱 · 圆管</p>
   </layer>
 
-  <layer perspective="1500" width="1600" height="1080">
+  <layer camera="1500" width="1600" height="1080">
     <box x="70" y="130" width="68" height="340" depth="108" rx="26" fill="#23262c" material="metal 0.1" rotateY="32" />
     <box x="280" y="160" width="210" height="240" depth="84" rx="24" fill="#e4e7ee" material="metal 0.08" rotateY="46" rotateX="12" />
     <box x="640" y="150" width="76" height="300" depth="96" rx="26" fill="#c9a24a" material="metal 0.12" rotateY="38" />

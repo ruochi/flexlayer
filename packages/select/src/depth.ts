@@ -54,6 +54,20 @@ async function loadPipeline(mod: TransformersModule) {
   return loaded
 }
 
+/** 放掉深度模型。修边要再载入抠图模型，两份会话叠在一起会把 900×1200 的进程撑爆。 */
+export async function releaseDepth(): Promise<void> {
+  const pending = loaded
+  loaded = null
+  if (!pending) return
+  try {
+    const pipe = await pending
+    const dispose = (pipe as { dispose?: () => Promise<void> }).dispose
+    if (dispose) await dispose.call(pipe)
+  } catch {
+    // 加载失败时没有会话要放。
+  }
+}
+
 /** 远近图，和原图一样大。0 是最远，255 是最近。模型第一次用时下载到 ~/.cache/flexlayer/models。 */
 export async function estimateDepth(rgba: Uint8ClampedArray, width: number, height: number): Promise<Uint8ClampedArray> {
   const mod = await loadTransformers()

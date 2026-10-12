@@ -47,7 +47,7 @@ async function keyOf(source: string, scale = 1, samples = 4, baseDir = process.c
 }
 
 const box = (rotateY = 0, depth = 24, fill = '#e23b2f', opacity = 1) => `
-  <layer width="160" height="120" background="#111111" perspective="500">
+  <layer width="160" height="120" background="#111111" camera="500">
     <rect x="8" y="70" width="36" height="20" fill="#2244aa" />
     <layer x="48" y="24" width="64" height="64" rotateY="${rotateY}">
       <box width="64" height="64" depth="${depth}" fill="${fill}" opacity="${opacity}" />
@@ -68,14 +68,14 @@ describe('网格场景缓存键', () => {
     expect(a).toBe(b)
   })
 
-  it('旋转、depth、fill、opacity、scale、perspective、平面内容都会改键', async () => {
+  it('旋转、depth、fill、opacity、scale、camera、平面内容都会改键', async () => {
     const base = await keyOf(box())
     expect(await keyOf(box(25))).not.toBe(base)
     expect(await keyOf(box(0, 48))).not.toBe(base)
     expect(await keyOf(box(0, 24, '#00ff88'))).not.toBe(base)
     expect(await keyOf(box(0, 24, '#e23b2f', 0.4))).not.toBe(base)
     expect(await keyOf(box(), 2)).not.toBe(base)
-    expect(await keyOf(box().replace('perspective="500"', 'perspective="900"'))).not.toBe(base)
+    expect(await keyOf(box().replace('camera="500"', 'camera="900"'))).not.toBe(base)
     expect(await keyOf(box().replace('fill="#2244aa"', 'fill="#ccaa22"'))).not.toBe(base)
     expect(await keyOf(box(), 1, 2)).not.toBe(base)
   })
@@ -84,7 +84,7 @@ describe('网格场景缓存键', () => {
     const dir = mkdtempSync(join(tmpdir(), 'flexlayer-mesh-key-'))
     const file = join(dir, 'box.glb')
     writeFileSync(file, solidBoxGlb([0.2, 0.7, 0.3, 1]))
-    const source = `<layer width="120" height="120" background="#000" perspective="600"><layer x="30" y="30" width="60" height="60"><model src="box.glb" /></layer></layer>`
+    const source = `<layer width="120" height="120" background="#000" camera="600"><layer x="30" y="30" width="60" height="60"><model src="box.glb" /></layer></layer>`
     const doc = await laid(source, dir)
     const layer = firstMeshLayer(doc.root)
     if (!layer) throw new Error('没有网格层')
@@ -101,7 +101,7 @@ describe('网格场景缓存键', () => {
 
   it('平面里有 draw 时不缓存', async () => {
     const source = `
-      <layer width="80" height="80" background="#000" perspective="300">
+      <layer width="80" height="80" background="#000" camera="300">
         <sphere cx="40" cy="40" r="16" fill="#fff" />
         <layer x="4" y="4" width="20" height="20"><draw>ctx.fillRect(0,0,el.w,el.h)</draw></layer>
       </layer>
@@ -112,7 +112,7 @@ describe('网格场景缓存键', () => {
 
 describe('网格场景缓存像素', () => {
   it('命中、未命中和关闭缓存的 RGBA 逐字节相同', async () => {
-    const source = `<layer width="72" height="72" background="#123456" perspective="320"><sphere cx="36" cy="36" r="16" fill="#ff2244" /></layer>`
+    const source = `<layer width="72" height="72" background="#123456" camera="320"><sphere cx="36" cy="36" r="16" fill="#ff2244" /></layer>`
     clearMeshCache()
     const off = await renderToCanvas(source, { meshCache: false })
     const miss = await renderToCanvas(source, { meshCache: 32 * 1024 * 1024 })

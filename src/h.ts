@@ -1,11 +1,10 @@
 import type { DrawFn } from './types.js'
-import type { FvgChild, FvgNode } from './parse.js'
-import { canonicalTag } from './tags.js'
+import type { LayerChild, LayerNode } from './parse.js'
 
-export type FvgProps = Record<string, unknown> & {
+export type LayerProps = Record<string, unknown> & {
   draw?: DrawFn
   style?: string
-  children?: FvgChild | FvgChild[]
+  children?: LayerChild | LayerChild[]
 }
 
 function styleToString(style: Record<string, unknown>): string {
@@ -18,12 +17,12 @@ function styleToString(style: Record<string, unknown>): string {
   return parts.join('; ')
 }
 
-function flattenChildren(parts: unknown[]): FvgChild[] {
-  const out: FvgChild[] = []
+function flattenChildren(parts: unknown[]): LayerChild[] {
+  const out: LayerChild[] = []
   for (const part of parts) {
     if (Array.isArray(part)) out.push(...flattenChildren(part))
     else if (typeof part === 'string') out.push(part)
-    else if (part != null && typeof part === 'object' && 'tag' in part) out.push(part as FvgNode)
+    else if (part != null && typeof part === 'object' && 'tag' in part) out.push(part as LayerNode)
   }
   return out
 }
@@ -33,7 +32,7 @@ function isPlainData(value: unknown): boolean {
 }
 
 /** 构建 Flex Layer 节点；`draw` 和 `data` 挂在节点上，不进 `attrs`。 */
-export function h(tag: string, props: FvgProps | null, ...children: unknown[]): FvgNode {
+export function h(tag: string, props: LayerProps | null, ...children: unknown[]): LayerNode {
   const attrs: Record<string, string> = {}
   let draw: DrawFn | undefined
   let data: unknown
@@ -80,11 +79,9 @@ export function h(tag: string, props: FvgProps | null, ...children: unknown[]): 
       ? flattenChildren(children)
       : flattenChildren(Array.isArray(fromProps) ? fromProps : [fromProps])
 
-  const name = canonicalTag(tag)
-  const node: FvgNode = { tag: name, attrs, children: merged, draw }
+  const node: LayerNode = { tag, attrs, children: merged, draw }
   if (hasData) node.data = data
   if (hasCamera) node.camera = camera
   if (badAttrs.length > 0) node.badAttrs = badAttrs
-  if (tag !== name) node.writtenTag = tag
   return node
 }

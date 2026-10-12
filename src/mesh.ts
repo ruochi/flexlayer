@@ -10,7 +10,7 @@ import {
 import { cameraItems } from './camera.js'
 import { behindCamera, cameraSceneCustom, hasPerspective, planeDepth, poseMatrix, type Perspective } from './perspective.js'
 import { renderMeshSoftware } from './software-mesh.js'
-import type { LayerLayoutNode, LayoutNode, MeshLayoutNode } from './types.js'
+import type { GroundLayoutNode, LayerLayoutNode, LayoutNode, MeshLayoutNode } from './types.js'
 
 type Mat4 = number[]
 
@@ -36,7 +36,7 @@ export function ownsMeshScene(layer: LayerLayoutNode): boolean {
   if (!hasPerspective(layer.perspective)) return false
   const visit = (node: LayoutNode, blocked: boolean): boolean => {
     if (blocked) return false
-    if (node.kind === 'mesh') return true
+    if (node.kind === 'mesh' || node.kind === 'ground') return true
     if (node.kind !== 'layer' && node.kind !== 'flex') return false
     const nested = node !== layer && node.kind === 'layer' && hasPerspective(node.perspective)
     return node.children.some((child) => visit(child, nested))
@@ -45,7 +45,7 @@ export function ownsMeshScene(layer: LayerLayoutNode): boolean {
 }
 
 function paintable(node: LayoutNode): boolean {
-  if (node.kind === 'mesh') return false
+  if (node.kind === 'mesh' || node.kind === 'ground') return false
   if (node.kind === 'layer' || node.kind === 'flex') {
     const chrome = (node.background != null && node.background !== 'transparent') || (node.border != null && node.border.width > 0)
     return chrome || node.draw != null || node.children.some(paintable)
@@ -55,7 +55,7 @@ function paintable(node: LayoutNode): boolean {
 
 /** 嵌套的网格场景保持原对象，好按引用取已经画好的图。其余网格从位图里拿掉。 */
 function stripMeshes(node: LayoutNode): LayoutNode | null {
-  if (node.kind === 'mesh') return null
+  if (node.kind === 'mesh' || node.kind === 'ground') return null
   if (node.kind === 'layer' && ownsMeshScene(node)) return node
   if (node.kind === 'layer' || node.kind === 'flex') {
     const children = node.children.map(stripMeshes).filter((child): child is LayoutNode => child != null)
@@ -65,14 +65,19 @@ function stripMeshes(node: LayoutNode): LayoutNode | null {
   return paintable(node) ? node : null
 }
 
-type MeshInstance = { node: MeshLayoutNode; toLayer: Mat4; opacity: number }
+export type MeshInstance = { node: MeshLayoutNode; toLayer: Mat4; opacity: number }
+export type GroundInstance = { node: GroundLayoutNode; toLayer: Mat4; opacity: number }
 type PlaneInstance = { node: LayoutNode; peeled: LayoutNode; toLayer: Mat4 }
 
-function collectMeshes(node: LayoutNode, toParent: Mat4, ancestorOpacity: number, out: MeshInstance[]) {
+function collectMeshes(node: LayoutNode, toParent: Mat4, ancestorOpacity: number, out: MeshInstance[], grounds: GroundInstance[] = []) {
   if (node.kind === 'layer' && ownsMeshScene(node)) return
   const toLayer = mul(toParent, poseMatrix(node))
   if (node.kind === 'mesh') {
     out.push({ node, toLayer, opacity: ancestorOpacity })
+    return
+  }
+  if (node.kind === 'ground') {
+    grounds.push({ node, toLayer, opacity: ancestorOpacity })
     return
   }
   if (node.kind === 'layer' || node.kind === 'flex') {
@@ -80,7 +85,7 @@ function collectMeshes(node: LayoutNode, toParent: Mat4, ancestorOpacity: number
     const insetY = node.kind === 'flex' ? node.padding.top + (node.border?.width ?? 0) : 0
     const content = mul(toLayer, translation(insetX, insetY))
     const next = ancestorOpacity * (node.opacity ?? 1)
-    for (const child of node.children) collectMeshes(child, content, next, out)
+    for (const child of node.children) collectMeshes(child, content, next, out, grounds)
   }
 }
 
@@ -95,6 +100,18 @@ export type MeshRaster = {
   localY: number
   /** 内容坐标里的可见多边形。缺省时用位图四角。 */
   polygon?: Array<{ u: number; v: number }>
+}
+
+/** 这一层相机里的网格，和绘制走同一条收集：嵌套的另一台相机会停在自己那一层。 */
+export function collectMeshInstances(layer: LayerLayoutNode): MeshInstance[] {
+  const perspective = layer.perspective
+  const meshes: MeshInstance[] = []
+  if (typeof perspective !== 'number' || !(perspective > 0)) return meshes
+  for (const child of layer.children) {
+    if (planeDepth(child) >= perspective) continue
+    collectMeshes(child, IDENTITY, 1, meshes)
+  }
+  return meshes
 }
 
 /** 画进父层的网格画面。x、y 可以是负的，这样物体能溢出所在 layer。 */
@@ -112,11 +129,13 @@ export type MeshLayerOptions = {
 function gatherCustom(layer: LayerLayoutNode): {
   perspective: Perspective
   meshes: MeshInstance[]
+  grounds: GroundInstance[]
   planes: PlaneInstance[]
 } | null {
   const perspective = layer.perspective
   if (!hasPerspective(perspective) || layer.width <= 0 || layer.height <= 0) return null
   const meshes: MeshInstance[] = []
+  const grounds: GroundInstance[] = []
   const planes: PlaneInstance[] = []
   for (const item of cameraItems(layer)) {
     if (item.behind) continue
@@ -124,39 +143,45 @@ function gatherCustom(layer: LayerLayoutNode): {
       meshes.push({ node: item.node as MeshLayoutNode, toLayer: item.toLayer, opacity: item.opacity })
       continue
     }
+    if (item.kind === 'ground') {
+      grounds.push({ node: item.node as GroundLayoutNode, toLayer: item.toLayer, opacity: item.opacity })
+      continue
+    }
     if (item.kind === 'chrome') {
       const shell = { ...item.node, children: [] } as LayoutNode
       if (paintable(shell)) planes.push({ node: item.node, peeled: shell, toLayer: item.toLayer })
       continue
     }
-    if (item.node.kind === 'mesh') continue
+    if (item.node.kind === 'mesh' || item.node.kind === 'ground') continue
     const peeled = stripMeshes(item.node)
     if (peeled && paintable(peeled)) planes.push({ node: item.node, peeled, toLayer: item.toLayer })
   }
-  if (meshes.length === 0 && layer.dof == null) return null
-  if (meshes.length === 0 && planes.length === 0) return null
-  return { perspective, meshes, planes }
+  if (meshes.length === 0 && grounds.length === 0 && layer.dof == null) return null
+  if (meshes.length === 0 && grounds.length === 0 && planes.length === 0) return null
+  return { perspective, meshes, grounds, planes }
 }
 
 function gather(layer: LayerLayoutNode): {
   perspective: Perspective
   meshes: MeshInstance[]
+  grounds: GroundInstance[]
   planes: PlaneInstance[]
 } | null {
   if (cameraSceneCustom(layer)) return gatherCustom(layer)
   const perspective = layer.perspective
   if (!hasPerspective(perspective) || layer.width <= 0 || layer.height <= 0) return null
   const meshes: MeshInstance[] = []
+  const grounds: GroundInstance[] = []
   const planes: PlaneInstance[] = []
   for (const child of layer.children) {
-    if (behindCamera(planeDepth(child), perspective)) continue
-    collectMeshes(child, IDENTITY, 1, meshes)
-    if (child.kind === 'mesh') continue
+    if (child.kind !== 'ground' && behindCamera(planeDepth(child), perspective)) continue
+    collectMeshes(child, IDENTITY, 1, meshes, grounds)
+    if (child.kind === 'mesh' || child.kind === 'ground') continue
     const peeled = stripMeshes(child)
     if (peeled && paintable(peeled)) planes.push({ node: child, peeled, toLayer: poseMatrix(child) })
   }
-  if (meshes.length === 0 && planes.length === 0) return null
-  return { perspective, meshes, planes }
+  if (meshes.length === 0 && grounds.length === 0 && planes.length === 0) return null
+  return { perspective, meshes, grounds, planes }
 }
 
 /** 和 renderMeshLayer 用同一套输入。无法哈希时返回 null。 */
@@ -192,6 +217,7 @@ export function renderMeshLayer(
     perspective: scene.perspective,
     meshes: scene.meshes,
     planes: scene.planes,
+    grounds: scene.grounds,
     scale,
     raster,
     samples,

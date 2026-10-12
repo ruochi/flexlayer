@@ -1,5 +1,60 @@
 # Changelog
 
+## 0.4.2
+
+`--refine` 改回 BiRefNet 512。lite 512 在夜里的钟楼上输出全是负的 logits，遮罩是空的，位置也是 `null`。深度会话仍在载入抠图模型之前放掉。
+
+分层只留正向点和反向点，不再按两个点之间的远近收成一段。`--point` 点在要留下的地方，`--omit` 点在不要的地方，都可以写多次，看完遮罩可以再补点重跑。正向点沿着深度连着的一块长出去；没写反向点时，近端停在地面以上，和没点时同一条线。反向点落在这块里面时，和正向点各自往外长，离反向点更近的那一块去掉。没写点时仍从伸进远处的尖往下长。只写 `--omit` 时，从这张遮罩里挖掉点到的那一块。
+
+`packages/select` 的安装说明改成 `npm install`。`package-lock.json` 和 `package.json` 对不上时，`npm ci` 会报错。
+
+## 0.4.1
+
+`ground` 是没有宽高的无限平面，用来接主光的影子。`rotate`、`rotateX`、`rotateY` 和 `box` 一样。不写 `fill` 时地面透明。
+
+## 0.4.0
+
+删掉 `perspective`。镜头只写 `camera`。需要投影又没写 `camera` 时，有网格、`ground` 或 `rotateX`、`rotateY`、`z` 的最外层用自己的 `height` 当视距。里面没写 `camera` 的层不另开镜头。
+
+## 0.3.0
+
+删掉还能用的旧写法。下面这些现在会报错，或不再导出：
+
+- 标签必须是规范里的小写。`<Layer>`、`<Circle>` 不再归一后照常画。根上写了大写，直接拒绝；子元素报 `unknown-tag`（error），hint 给出小写写法。旧根标签 `fvg` 同样不接受。
+- 不再导出 `renderFvg`、`checkFvg`。`parseFvg` 改名为 `parseLayer`。`FvgNode`、`FvgReport` 等类型改成 `LayerNode`、`LayerReport`。
+- 不再把旧包名重定向到 `flexlayer`。
+- `glass` 只接受预设名，或 `clear, blur 8, tint #fff2` 这种逗号写法。`regular 8 #ffffff22`、单独的像素数不再接受。
+
+`layer` 上的 `cx` / `cy`、`ink-stroke` 仍会指出正确写法。
+
+## 0.2.58
+
+实现提交：`bbbad19239c9ec2956bb48ff758ca58a729af60c`
+
+前景遮罩用 `--point x,y` 指出要留的地方，可以写多个点。远近取这些点里最近和最远，连在一起、落在这段深度里的留下。不写点时仍从伸进远处的尖往下长。`--front` 去掉了。
+
+`--refine` 改用大约 100MB 的 BiRefNet lite。深度会话在载入抠图模型之前放掉，避免和完整模型大约 3GB 的中间结果叠在一起。
+
+比画布大很多的平面，裁完的多边形用一次单应贴图，接缝处的贴图和圆角描边不再折开。
+
+粗糙度 0 是清晰环境、不加噪点，1 是最糊的一层、噪点振幅最大。噪点改成加法，振幅是粗糙度平方的 10 级。金属的压暗随粗糙度减轻，玻璃往中间灰收一截。
+
+图片和字体的相对路径只跳过系统临时目录里打包器写的入口。脚本目录名叫 flexlayer- 时，按这个目录解析。
+
+默认字体从 `DEFAULT_FONT_FAMILY` 读。带 `blur`、`grade` 或 `<mask>` 的层在取景放大后只光栅化落在画面里的一块，并留出模糊和羽化要采样的边。取景窗或 `overflow="hidden"` 裁开的文字边不再报 `outside-safe`；裁完仍露在安全区外的字还是要报。
+
+`analyzeImage` 改成同步返回，和 `glyph` 一样。
+
+`canvas.create` 在数值透视里带回网格投影后的 `points`、`edges` 和轮廓 `d`。球只给圆。渲染时加的窄圆角不进这三项。
+
+面数不超过 200 的网格，渲染时在折棱上向里收一条最多 8px 的窄圆角。写了 `rx`、描了边，或本来就圆的，保持原来的棱。
+
+Material Symbols 的字形停在基线上方。图标着墨放进行盒正中，不再每种图标偏得不一样。
+
+`draw` 回调的 `ctx` 可以 `drawImage`。已经排好的一帧用 `renderLayer(node, { format: 'rgba' })` 拿走不预乘像素和画布宽高。
+
+去掉各平台的插件清单，只留 `skills/flexlayer/SKILL.md` 一份。`AGENTS.md` 收成入口，细则留在 SPEC。删掉已经落地的 `docs/PLAN.md`；效果和公式的实现备注并进 `docs/IMPLEMENTATION.md`。网格基准挪到 `scripts/bench-mesh.mjs`。勾股演示的视频和大图不再入库。
+
 ## 0.2.57
 
 实现提交：`ec49b328201f03385ff6b4d26323d05fb07f1309`
@@ -73,6 +128,6 @@
 - 进程级场景缓存按内容哈希，不按对象引用。浮点数量化到 `1e-4`。`draw`、玻璃、`grade`、读背景的滤镜等无法稳定哈希的内容不缓存。命中时像素逐字节相同。上限默认 256MB，渲染选项 `meshCache` 或环境变量 `FLEXLAYER_MESH_CACHE`（字节数，或 `0` / `off` / `false`）可改、可关。
 - 挤出、圆角和 `model` 的几何按参数另做缓存，物体在转、形状不变时不必重建。
 - 颜色、深度、所有者和阴影深度缓冲按进程复用，只填本帧的矩形。
-- `meshSamples` 接到 `renderFvg`、`renderFrames`、`renderToCanvas` 和命令行 `--mesh-samples`。
+- `meshSamples` 接到 `renderLayer`、`renderFrames`、`renderToCanvas` 和命令行 `--mesh-samples`。
 
 基准（`node bench-mesh.mjs`，1920×1080，单进程，默认 4× 采样）：地面加挤出字静止约 19 ms/帧，只有字静止约 23 ms/帧，字在转约 280 ms/帧。

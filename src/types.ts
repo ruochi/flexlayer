@@ -1,4 +1,6 @@
-import type { Canvas, CanvasRenderingContext2D, Image } from '@napi-rs/canvas'
+import type { Canvas, Image, SKRSContext2D } from '@napi-rs/canvas'
+
+export type { SKRSContext2D }
 
 export type StyleMap = Record<string, string>
 
@@ -29,7 +31,10 @@ export type DrawElSnapshot = {
   fps: number
 }
 
-export type DrawFn = (ctx: CanvasRenderingContext2D, el: DrawElSnapshot) => void
+export type DrawFn = (ctx: SKRSContext2D, el: DrawElSnapshot) => void
+
+/** `draw` 的上下文要能贴图。缺了 `drawImage` 时这里过不了类型检查。 */
+type _DrawCtxHasDrawImage = Parameters<DrawFn>[0]['drawImage']
 
 export type Box = {
   x: number
@@ -285,7 +290,7 @@ export type ElementReport = {
   filters?: FilterReport[]
 }
 
-export type FvgReport = {
+export type LayerReport = {
   /** 格式版本 */
   flexlayer: string
   width: number
@@ -545,6 +550,16 @@ export type MeshMaterial = {
   roughness: number
 }
 
+/** 无限平面。不写 fill 时透明，只接网格沿主光投下的影子。旋转和 box 同一套。 */
+export type GroundLayoutNode = LayoutNodeBase & {
+  kind: 'ground'
+  /** 不写、`none`、`transparent` 时没有地面颜色。 */
+  fill: string | null
+  shadowBlur: number
+  shadowOpacity: number
+  shadowColor: string
+}
+
 export type MeshLayoutNode = LayoutNodeBase & {
   kind: 'mesh'
   mesh: MeshSpec
@@ -570,11 +585,12 @@ export type LayoutNode =
   | LineLayoutNode
   | CustomLayoutNode
   | MeshLayoutNode
+  | GroundLayoutNode
 
 /** `view="x y w h"`。x y 是舞台坐标，w h 是被取的宽高。 */
 export type ViewRect = { x: number; y: number; width: number; height: number }
 
-export type FvgDocument = {
+export type LayerDocument = {
   width: number
   height: number
   background: string
@@ -607,4 +623,9 @@ export type RenderOptions = {
    * 缺省 256MB，也可用环境变量 FLEXLAYER_MESH_CACHE（字节数，或 0 / off）。
    */
   meshCache?: number | false
+  /**
+   * 缺省 `'png'`。`'rgba'` 时单帧渲染返回不预乘的原始像素，不编码 PNG。
+   * 节点已经在手边时直接交给 `renderLayer`。
+   */
+  format?: 'png' | 'rgba'
 }

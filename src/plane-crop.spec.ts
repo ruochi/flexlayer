@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { loadImage, createCanvas } from '@napi-rs/canvas'
-import { renderFvg } from './render.js'
+import { renderLayer } from './render.js'
 import { visiblePlaneWindow } from './plane-crop.js'
 
 async function pixelAt(png: Buffer, x: number, y: number) {
@@ -40,8 +40,8 @@ describe('大平面只画取景窗里的一块', () => {
   })
 
   it('正对镜头的超大纯色平面，画面中间就是这个颜色', async () => {
-    const { png } = await renderFvg(
-      `<layer width="320" height="200" background="#101820" perspective="600"><rect x="-2000" y="-800" width="5000" height="5000" fill="#3d8bfd" z="1" /></layer>`,
+    const { png } = await renderLayer(
+      `<layer width="320" height="200" background="#101820" camera="600"><rect x="-2000" y="-800" width="5000" height="5000" fill="#3d8bfd" z="1" /></layer>`,
     )
     const px = await pixelAt(png, 160, 100)
     expect(px[0]).toBeGreaterThan(50)
@@ -52,8 +52,8 @@ describe('大平面只画取景窗里的一块', () => {
   })
 
   it('大层上的色块仍落在它投影到的位置', async () => {
-    const { png } = await renderFvg(
-      `<layer width="320" height="200" background="#101820" perspective="600"><layer x="-1000" y="-400" width="2400" height="1600" z="1"><rect width="2400" height="1600" fill="#224466" /><rect x="1160" y="500" width="80" height="40" fill="#ff00aa" /></layer></layer>`,
+    const { png } = await renderLayer(
+      `<layer width="320" height="200" background="#101820" camera="600"><layer x="-1000" y="-400" width="2400" height="1600" z="1"><rect width="2400" height="1600" fill="#224466" /><rect x="1160" y="500" width="80" height="40" fill="#ff00aa" /></layer></layer>`,
     )
     const pink = await pixelAt(png, 180, 110)
     const blue = await pixelAt(png, 40, 40)
@@ -63,9 +63,60 @@ describe('大平面只画取景窗里的一块', () => {
     expect(blue[0]).toBeLessThan(80)
   })
 
+  it('斜放的大块贴图接缝是一条直线', async () => {
+    const { png } = await renderLayer(`
+      <layer width="320" height="200" background="#101820" camera="500">
+        <layer x="-2340" y="-1820" width="5000" height="4000" rotateX="82">
+          <rect x="0" y="0" width="2500" height="4000" fill="#ff2040" />
+          <rect x="2500" y="0" width="2500" height="4000" fill="#20c060" />
+        </layer>
+      </layer>
+    `)
+    const img = await loadImage(png)
+    const canvas = createCanvas(img.width, img.height)
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    const data = ctx.getImageData(0, 0, img.width, img.height).data
+    const at = (x: number, y: number) => {
+      const i = (y * img.width + x) * 4
+      return [data[i]!, data[i + 1]!, data[i + 2]!] as const
+    }
+    const red = (px: readonly number[]) => px[0] > 160 && px[1] < 90 && px[0] > px[1] + 80
+    const green = (px: readonly number[]) => px[1] > 120 && px[0] < 90 && px[1] > px[0] + 40
+    const hits: Array<{ x: number; y: number }> = []
+    for (let y = 0; y < img.height; y++) {
+      let left = -1
+      let right = -1
+      for (let x = 0; x < img.width; x++) {
+        const px = at(x, y)
+        if (red(px)) left = x
+        if (right < 0 && green(px) && left >= 0) right = x
+      }
+      if (left >= 0 && right > left) hits.push({ x: (left + right) / 2, y })
+    }
+    expect(hits.length).toBeGreaterThan(40)
+    let sumX = 0
+    let sumY = 0
+    let sumYY = 0
+    let sumXY = 0
+    for (const hit of hits) {
+      sumX += hit.x
+      sumY += hit.y
+      sumYY += hit.y * hit.y
+      sumXY += hit.x * hit.y
+    }
+    const n = hits.length
+    const denom = n * sumYY - sumY * sumY
+    const slope = denom === 0 ? 0 : (n * sumXY - sumX * sumY) / denom
+    const intercept = (sumX - slope * sumY) / n
+    let worst = 0
+    for (const hit of hits) worst = Math.max(worst, Math.abs(hit.x - (intercept + slope * hit.y)))
+    expect(worst).toBeLessThan(2.5)
+  })
+
   it('斜放的大地仍铺在画面下半', async () => {
-    const { png } = await renderFvg(
-      `<layer width="320" height="200" background="#101820" perspective="500"><rect x="-2340" y="-1820" width="5000" height="4000" fill="#3d8bfd" rotateX="82" /></layer>`,
+    const { png } = await renderLayer(
+      `<layer width="320" height="200" background="#101820" camera="500"><rect x="-2340" y="-1820" width="5000" height="4000" fill="#3d8bfd" rotateX="82" /></layer>`,
     )
     const sky = await pixelAt(png, 160, 24)
     const floor = await pixelAt(png, 160, 170)
@@ -75,8 +126,8 @@ describe('大平面只画取景窗里的一块', () => {
   })
 
   it('和球体同一台镜头里的大地，颜色留在球的外面', async () => {
-    const { png } = await renderFvg(
-      `<layer width="320" height="200" background="#101820" perspective="600"><rect x="-2000" y="-800" width="5000" height="5000" fill="#3d8bfd" z="1" /><sphere cx="160" cy="70" r="24" fill="#ffcc00" /></layer>`,
+    const { png } = await renderLayer(
+      `<layer width="320" height="200" background="#101820" camera="600"><rect x="-2000" y="-800" width="5000" height="5000" fill="#3d8bfd" z="1" /><sphere cx="160" cy="70" r="24" fill="#ffcc00" /></layer>`,
     )
     const ground = await pixelAt(png, 30, 170)
     const ball = await pixelAt(png, 160, 70)

@@ -6,7 +6,7 @@
     <p style="font-size:28px; color:#c8c2b6">反射留着主灯，折射再叠这张环境 · 粗糙 0.08</p>
   </layer>
 
-  <layer perspective="1600" width="1520" height="1000">
+  <layer camera="1600" width="1520" height="1000">
     <sphere cx="200" cy="280" r="78" fill="#f7f4ee" material="glass 0.08" />
     <box x="430" y="200" width="160" height="160" depth="150" rx="36" fill="#f7f4ee" material="glass 0.08" rotateY="-22" rotateX="18" />
     <box x="790" y="200" width="160" height="160" depth="150" fill="#f7f4ee" material="glass 0.08" rotateY="-20" rotateX="16" />

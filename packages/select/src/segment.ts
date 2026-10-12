@@ -2,8 +2,8 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 /**
- * 512 输入的 ONNX，MIT。
- * fp32 权重大约 940MB。这里用 fp16，大约 470MB。
+ * BiRefNet 512 的 fp16，大约 470MB。lite 512 在夜里的钟楼上输出全是负的 logits，遮罩是空的，这里不用。
+ * 解码器中间结果大约 3GB。修边前先放掉深度会话，不要和这份模型叠在一起。
  */
 export const MODEL_ID = 'onnx-community/BiRefNet_512x512-ONNX'
 
@@ -17,7 +17,12 @@ type RawImageLike = {
 
 type TransformersModule = {
   env: { cacheDir?: string }
-  AutoModel: { from_pretrained: (id: string, opts: { dtype: string }) => Promise<{ (input: { input_image: unknown }): Promise<{ output_image: Array<{ sigmoid: () => { mul: (n: number) => { to: (dtype: string) => unknown } } }> }> }> }
+  AutoModel: {
+    from_pretrained: (
+      id: string,
+      opts: { dtype: string; device?: string; session_options?: Record<string, unknown> },
+    ) => Promise<{ (input: { input_image: unknown }): Promise<{ output_image: Array<{ sigmoid: () => { mul: (n: number) => { to: (dtype: string) => unknown } } }> }> }>
+  }
   AutoProcessor: { from_pretrained: (id: string) => Promise<(image: RawImageLike) => Promise<{ pixel_values: unknown }>> }
   RawImage: {
     new (data: Uint8Array, width: number, height: number, channels: number): RawImageLike
@@ -48,7 +53,17 @@ async function loadModel(mod: TransformersModule) {
   if (!loaded) {
     mod.env.cacheDir = join(homedir(), '.cache', 'flexlayer', 'models')
     loaded = Promise.all([
-      mod.AutoModel.from_pretrained(MODEL_ID, { dtype: 'fp16' }),
+      mod.AutoModel.from_pretrained(MODEL_ID, {
+        dtype: 'fp16',
+        device: 'cpu',
+        // 关掉内存池，前向结束后把中间结果还给系统。线程收成 1，避免每个线程再复制一份工作区。
+        session_options: {
+          enableCpuMemArena: false,
+          intraOpNumThreads: 1,
+          interOpNumThreads: 1,
+          executionMode: 'sequential',
+        },
+      }),
       mod.AutoProcessor.from_pretrained(MODEL_ID),
     ])
       .then(([model, processor]) => ({ model, processor }))
