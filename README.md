@@ -4,7 +4,7 @@
 
 Flex Layer 用标签描述一帧画面：图形用 SVG 的写法，文字用 HTML 的写法，布局用 CSS flexbox。渲染器读入 `.layer`，输出 PNG 和一份布局报告。
 
-规范见 [SPEC.md](SPEC.md)。给模型的入口见 [AGENTS.md](AGENTS.md)，一页写法见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，字体、图片和配色见 [docs/RESOURCES.md](docs/RESOURCES.md)。当前版本是 0.4.0。
+规范见 [SPEC.md](SPEC.md)。给模型的入口见 [AGENTS.md](AGENTS.md)，一页写法见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，字体、图片和配色见 [docs/RESOURCES.md](docs/RESOURCES.md)。当前版本是 0.4.2。
 
 `layer` 上的 `camera` 是这一层的镜头。不写时，有网格、`ground` 或 `rotateX`、`rotateY`、`z` 的最外层用自己的 `height` 当视距。`rotateX`、`rotateY`、`z` 写在要转动或推近的那一层上。`sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 和这些平面共用同一台视距。例子：`npx tsx src/cli.ts render examples/perspective.layer -o perspective.png`，`npx tsx src/cli.ts render examples/meshes.layer -o meshes.png`，`npx tsx src/cli.ts render examples/solids.layer -o solids.png`，`npx tsx src/cli.ts render examples/rounded.layer -o rounded.png`。
 
@@ -157,7 +157,7 @@ const root = h(
 await renderLayer(root)
 ```
 
-抠主体和前景遮罩都在仓库里的 `packages/select`，不在 npm 上，渲染器只读它写出的文件。进入这个目录执行 `npm ci && npm run build`。`npx flexlayer-select mask photo.jpg` 先跑大约 19MB 的深度模型，写出 `photo.foreground.png`，并返回这块前景的 `x`、`y`、`width`、`height`。不写点，从伸进远处的尖往下长。要留下某一块就写 `--point x,y`，可以写多次，多个点按最近和最远连成一段。边要跟抠图模型走时加 `--refine`，那一次才下载大约 100MB 的 BiRefNet lite fp16。深度模型会先放掉，再载入抠图模型。只抠主体时仍用 `npx flexlayer-select cutout photo.jpg --preset portrait`。
+抠主体和前景遮罩都在仓库里的 `packages/select`，不在 npm 上，渲染器只读它写出的文件。进入这个目录执行 `npm install && npm run build`。`npx flexlayer-select mask photo.jpg` 先跑大约 19MB 的深度模型，写出 `photo.foreground.png`，并返回这块前景的 `x`、`y`、`width`、`height`。不写点，从伸进远处的尖往下长。要留下的地方写 `--point x,y`，不要的地方写 `--omit x,y`，都可以写多次，看完遮罩可以再补点重跑。边要跟抠图模型走时加 `--refine`，那一次才下载大约 470MB 的 BiRefNet 512 fp16。深度模型会先放掉，再载入抠图模型。只抠主体时仍用 `npx flexlayer-select cutout photo.jpg --preset portrait`。
 
 按帧生成一组 PNG 和一张联系表：
 

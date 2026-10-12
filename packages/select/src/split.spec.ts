@@ -57,29 +57,97 @@ describe('splitLayers', () => {
     expect(split.box!.x + split.box!.width).toBeLessThanOrEqual(32)
   })
 
-  it('一个点只留和它差不多远的一段，两个点盖住从尖到座', () => {
+  it('正向点沿着连着的楼身长满，点在近处的地面上不会把楼带上', () => {
     const depth = depthOf(48, 36, (x, y) => {
       const inTower = x >= 18 && x <= 30 && y >= 8 && y <= 24
       const ground = y >= 26
-      if (inTower) return 100 + (y - 8) * 5
+      if (inTower) return 100 + (y - 8) * 3
       if (ground) return 230
       if (y >= 14) return 40
       return 0
     })
-    const area = (alpha: Uint8ClampedArray) => alpha.reduce((sum, value) => sum + (value >= 128 ? 1 : 0), 0)
     const spire = splitLayers({ depth, width: 48, height: 36, points: [{ x: 24, y: 8 }] })
     const base = splitLayers({ depth, width: 48, height: 36, points: [{ x: 24, y: 24 }] })
-    const both = splitLayers({ depth, width: 48, height: 36, points: [{ x: 24, y: 8 }, { x: 24, y: 24 }] })
-    expect(area(spire.alpha)).toBeGreaterThan(8)
-    expect(area(base.alpha)).toBeGreaterThan(8)
-    expect(area(both.alpha)).toBeGreaterThan(area(spire.alpha) + 20)
-    expect(area(both.alpha)).toBeGreaterThan(area(base.alpha) + 20)
-    expect(spire.box!.y + spire.box!.height).toBeLessThan(16)
-    expect(base.box!.y).toBeGreaterThan(16)
-    expect(both.box!.y).toBeLessThan(12)
-    expect(both.box!.y + both.box!.height).toBeGreaterThan(22)
-    expect(both.alpha[30 * 48 + 24]).toBe(0)
-    expect(both.alpha[18 * 48 + 4]).toBe(0)
+    const yard = splitLayers({ depth, width: 48, height: 36, points: [{ x: 24, y: 32 }] })
+    expect(spire.alpha[8 * 48 + 24]).toBeGreaterThan(128)
+    expect(spire.alpha[16 * 48 + 24]).toBeGreaterThan(200)
+    expect(spire.alpha[23 * 48 + 24]).toBeGreaterThan(200)
+    expect(spire.alpha[30 * 48 + 24]).toBe(0)
+    expect(spire.alpha[18 * 48 + 4]).toBe(0)
+    expect(base.alpha[8 * 48 + 24]).toBeGreaterThan(128)
+    expect(base.alpha[16 * 48 + 24]).toBeGreaterThan(200)
+    expect(base.alpha[30 * 48 + 24]).toBe(0)
+    expect(yard.alpha[32 * 48 + 24]).toBeGreaterThan(200)
+    expect(yard.alpha[16 * 48 + 24]).toBe(0)
+  })
+
+  it('反向点把离它更近的一段去掉，楼身还留着', () => {
+    const depth = depthOf(48, 36, (x, y) => {
+      if (y < 8) return 0
+      if (y >= 31) return 250
+      return 90 + (y - 8) * 4
+    })
+    const open = splitLayers({ depth, width: 48, height: 36, points: [{ x: 24, y: 10 }] })
+    const cut = splitLayers({
+      depth,
+      width: 48,
+      height: 36,
+      points: [{ x: 24, y: 10 }],
+      omit: [{ x: 24, y: 28 }],
+    })
+    expect(open.alpha[16 * 48 + 24]).toBeGreaterThan(200)
+    expect(open.alpha[28 * 48 + 24]).toBeGreaterThan(200)
+    expect(cut.alpha[16 * 48 + 24]).toBeGreaterThan(200)
+    expect(cut.alpha[28 * 48 + 24]).toBe(0)
+    expect(cut.alpha[2 * 48 + 24]).toBe(0)
+  })
+
+  it('差不多远的反向点把旁边那一块去掉', () => {
+    const depth = depthOf(48, 36, (x, y) => {
+      const tower = x >= 8 && x <= 20 && y >= 8 && y <= 24
+      const wing = x >= 27 && x <= 40 && y >= 8 && y <= 24
+      const bridge = x >= 21 && x <= 26 && y >= 14 && y <= 16
+      if (tower || wing || bridge) return 150
+      if (y >= 28) return 230
+      return 0
+    })
+    const split = splitLayers({
+      depth,
+      width: 48,
+      height: 36,
+      points: [{ x: 14, y: 16 }],
+      omit: [{ x: 34, y: 16 }],
+    })
+    expect(split.alpha[12 * 48 + 14]).toBeGreaterThan(200)
+    expect(split.alpha[12 * 48 + 36]).toBe(0)
+    expect(split.alpha[30 * 48 + 14]).toBe(0)
+    expect(split.alpha[4 * 48 + 14]).toBe(0)
+  })
+
+  it('只写反向点时，从自动遮罩里挖掉那一块', () => {
+    const kept = splitLayers({ depth: tower(), width: 48, height: 36, omit: [{ x: 4, y: 30 }] })
+    expect(kept.alpha[16 * 48 + 24]).toBeGreaterThan(200)
+    expect(kept.flat).toBe(false)
+    const gone = splitLayers({ depth: tower(), width: 48, height: 36, omit: [{ x: 24, y: 16 }] })
+    expect(gone.flat).toBe(true)
+    expect(gone.box).toBeNull()
+  })
+
+  it('点在一圈轮廓上时，把连着的里面补上', () => {
+    const depth = depthOf(40, 30, (x, y) => {
+      const ground = y >= 26
+      const inside = x >= 14 && x <= 26 && y >= 10 && y <= 16
+      const edge = x >= 12 && x <= 28 && y >= 8 && y <= 18 && !inside
+      if (ground) return 230
+      if (inside) return 120
+      if (edge) return 100
+      return 0
+    })
+    const split = splitLayers({ depth, width: 40, height: 30, points: [{ x: 12, y: 12 }] })
+    expect(split.alpha[12 * 40 + 12]).toBeGreaterThan(128)
+    expect(split.alpha[13 * 40 + 20]).toBeGreaterThan(200)
+    expect(split.alpha[28 * 40 + 20]).toBe(0)
+    expect(split.alpha[2 * 40 + 2]).toBe(0)
   })
 
   it('点在楼身上的一条缝时，仍选中这座楼', () => {
@@ -107,9 +175,10 @@ describe('splitLayers', () => {
   it('点要落在图片里面', () => {
     expect(() => splitLayers({ depth: tower(), width: 48, height: 36, points: [{ x: 48, y: 10 }] })).toThrow('点要落在图片里面')
     expect(() => splitLayers({ depth: tower(), width: 48, height: 36, points: [{ x: -1, y: 10 }] })).toThrow('点要落在图片里面')
+    expect(() => splitLayers({ depth: tower(), width: 48, height: 36, omit: [{ x: 10, y: 40 }] })).toThrow('点要落在图片里面')
   })
 
-  it('refine 时点中的深度段留下，没点到的远处那一块去掉', () => {
+  it('refine 时正向点留在抠图边上，没点到的远处那一块去掉', () => {
     const depth = tower()
     const matte = new Uint8ClampedArray(48 * 36)
     for (let y = 8; y <= 24; y++) {

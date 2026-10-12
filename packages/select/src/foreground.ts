@@ -16,10 +16,15 @@ export type ForegroundOptions = {
   /** 边用抠图模型，深度只去掉远处粘上的部分。 */
   refine?: boolean
   /**
-   * 要点中的主体，可以多个。不传就从伸进远处的尖往下长。
-   * 远近取这些点里最近和最远。
+   * 要留下的地方，可以多个。不传就从伸进远处的尖往下长。
+   * 沿着深度连着的一块长出去，近端停在地面以上。
    */
   points?: KeepPoint[]
+  /**
+   * 不要的地方，可以多个。落在要留的这块里面时，离它更近的去掉。
+   * 没有正向点时，从自动遮罩里挖掉点到的那一块。
+   */
+  omit?: KeepPoint[]
   baseDir?: string
 }
 
@@ -34,8 +39,10 @@ export type ForegroundMask = {
   width: number | null
   /** 前景高度。没有前景时是 null。 */
   height: number | null
-  /** 这次点中的位置。没点时是空数组。 */
+  /** 这次点中要留下的位置。没点时是空数组。 */
   points: Array<[number, number]>
+  /** 这次点中不要的位置。没点时是空数组。 */
+  omit: Array<[number, number]>
 }
 
 function stemOf(file: string): string {
@@ -50,6 +57,7 @@ function stemOf(file: string): string {
  */
 export async function foregroundMask(src: string, options: ForegroundOptions = {}): Promise<ForegroundMask> {
   const points = options.points ?? []
+  const omit = options.omit ?? []
   const trimmed = src.trim()
   if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) throw new Error('mask 只接受本地图片')
   const baseDir = options.baseDir ?? process.cwd()
@@ -67,10 +75,11 @@ export async function foregroundMask(src: string, options: ForegroundOptions = {
     matte = new Uint8ClampedArray(await segment(rgba, width, height))
     if (matte.length !== width * height) throw new Error('分割结果的像素数和原图不一致')
   }
-  const split = splitLayers({ depth, width, height, matte, points })
+  const split = splitLayers({ depth, width, height, matte, points, omit })
   const stem = stemOf(srcFile)
   const mask = `${stem}.foreground.png`
   const recorded = points.map((point) => [point.x, point.y] as [number, number])
+  const omitted = omit.map((point) => [point.x, point.y] as [number, number])
   const record = {
     mask: basename(mask),
     x: split.box?.x ?? null,
@@ -78,8 +87,9 @@ export async function foregroundMask(src: string, options: ForegroundOptions = {
     width: split.box?.width ?? null,
     height: split.box?.height ?? null,
     points: recorded,
+    omit: omitted,
   }
   writePng(mask, maskRgba(split.alpha), width, height)
   writeFileSync(`${stem}.foreground.json`, `${JSON.stringify(record, null, 2)}\n`)
-  return { mask, x: record.x, y: record.y, width: record.width, height: record.height, points: recorded }
+  return { mask, x: record.x, y: record.y, width: record.width, height: record.height, points: recorded, omit: omitted }
 }

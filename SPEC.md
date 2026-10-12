@@ -387,7 +387,7 @@ const cut = analyzeImage('photo.subject.png')
 
 ### 抠图 flexlayer-select
 
-渲染器不跑模型。`analyzeImage` 只量一张已经抠好的图，不生成遮罩。生成遮罩在单独的包 `flexlayer-select` 里：用 BiRefNet lite 的 512 输入 ONNX（`studioludens/birefnet-lite-512`）写出和原图一样大的缓存，再用上面的 `analyzeImage` 自检。这个包不在 npm 上。在仓库里进入 `packages/select`，执行 `npm ci && npm run build`。模型第一次使用时下载到 `~/.cache/flexlayer/models`，用的是 fp16，大约 100MB。完整的 512 fp16 大约 470MB，解码器中间结果会到 3GB，这里不用。`@huggingface/transformers` 是这个包的可选依赖，根包不加。
+渲染器不跑模型。`analyzeImage` 只量一张已经抠好的图，不生成遮罩。生成遮罩在单独的包 `flexlayer-select` 里：用 BiRefNet 512 的 fp16 ONNX（`onnx-community/BiRefNet_512x512-ONNX`，大约 470MB）写出和原图一样大的缓存，再用上面的 `analyzeImage` 自检。这个包不在 npm 上。在仓库里进入 `packages/select`，执行 `npm install && npm run build`。模型第一次使用时下载到 `~/.cache/flexlayer/models`。解码器中间结果大约 3GB，修边前会先放掉深度会话。`@huggingface/transformers` 是这个包的可选依赖，根包不加。
 
 ```bash
 npx flexlayer-select cutout photo.jpg --preset portrait
@@ -408,20 +408,20 @@ npx flexlayer-select apply photo.jpg --add 2 --subtract 1
 ```bash
 npx flexlayer-select mask photo.jpg
 npx flexlayer-select mask photo.jpg --point 820,640 --point 860,900
-npx flexlayer-select mask photo.jpg --point 820,420,860,900 --refine
+npx flexlayer-select mask photo.jpg --point 820,420 --omit 900,1100 --refine
 ```
 
-默认只跑深度模型 Depth Anything V2 Small 的 q4f16（Apache-2.0，大约 19MB）。不写点，从伸进远处的那一尖往下长出前景，地面留在外面。`--refine` 再跑 BiRefNet lite，边用抠图模型的，深度只把远处粘上来的部分去掉。深度会话在载入抠图模型之前放掉，避免两份叠在一起。深度没有明显起伏、又没有点时遮罩是空的，`x`、`y`、`width`、`height` 为 `null`。
+默认只跑深度模型 Depth Anything V2 Small 的 q4f16（Apache-2.0，大约 19MB）。不写点，从伸进远处的那一尖往下长出前景，地面留在外面。`--refine` 再跑 BiRefNet 512，边用抠图模型的，深度只把远处粘上来的部分去掉。深度会话在载入抠图模型之前放掉，避免两份叠在一起。深度没有明显起伏、又没有点时遮罩是空的，`x`、`y`、`width`、`height` 为 `null`。
 
-要留下某一块，就点在它上面。`--point` 可以写多次，也可以一次写成 `x,y,x,y`。点几个点，远近取这些点里最近和最远，连在一起、深度落在这段里的留下。一个点只留和它差不多远的那一圈；从尖点到座，才盖得住整座楼。比最近点还近的地面不会进来。点要落在图片里面。名字（比如「钟楼」）认不出来：那要另下一份定位模型，深度图只知道远近。
+分层用正负点，不再按两个点之间的远近收成一段。`--point` 点在要留下的地方，`--omit` 点在不要的地方，都可以写多次，也可以一次写成 `x,y,x,y`。看完遮罩可以再补点重跑。正向点沿着深度连着的一块长出去；没写反向点时，近端停在地面以上，和没点时同一条线。点已经比这条线更近，就只留点到的那一层。反向点落在这块里面时，和正向点各自往外长，离反向点更近的那一块去掉，不会按一条更深的深度把楼身挖空。只写 `--omit` 时，从自动遮罩里挖掉点到的那一块。点要落在图片里面。名字（比如「钟楼」）认不出来：那要另下一份定位模型，深度图只知道远近。
 
 `photo.jpg` 旁边得到 `photo.foreground.png` 和 `photo.foreground.json`。遮罩和原图一样大，白的地方是前景，alpha 和亮度是同一个值。json 就是这次的返回值：
 
 ```json
-{ "mask": "photo.foreground.png", "x": 643, "y": 481, "width": 861, "height": 640, "points": [[820, 640], [860, 900]] }
+{ "mask": "photo.foreground.png", "x": 643, "y": 481, "width": 861, "height": 640, "points": [[820, 640], [860, 900]], "omit": [] }
 ```
 
-`x`、`y` 是前景外接矩形的左上角，`width`、`height` 是它的宽高，单位是图片像素。没写点时 `points` 是 `[]`。
+`x`、`y` 是前景外接矩形的左上角，`width`、`height` 是它的宽高，单位是图片像素。没写点时 `points` 和 `omit` 都是 `[]`。
 
 标记里原图在后，用这张遮罩罩住同一张原图，就得到盖在前面的那一层：
 
@@ -437,7 +437,10 @@ npx flexlayer-select mask photo.jpg --point 820,420,860,900 --refine
 ```ts
 import { foregroundMask } from 'flexlayer-select'
 
-const fg = await foregroundMask('photo.jpg', { points: [{ x: 820, y: 640 }, { x: 860, y: 900 }] })
+const fg = await foregroundMask('photo.jpg', {
+  points: [{ x: 820, y: 640 }, { x: 860, y: 900 }],
+  omit: [{ x: 900, y: 1100 }],
+})
 ```
 
 ### 图标

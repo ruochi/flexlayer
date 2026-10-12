@@ -45,8 +45,9 @@ describe('foregroundMask', () => {
       width: number
       height: number
     }
-    expect(record).toEqual({ mask: 'photo.foreground.png', x: result.x, y: result.y, width: result.width, height: result.height, points: [] })
+    expect(record).toEqual({ mask: 'photo.foreground.png', x: result.x, y: result.y, width: result.width, height: result.height, points: [], omit: [] })
     expect(result.points).toEqual([])
+    expect(result.omit).toEqual([])
     const image = await readRgba(result.mask)
     expect(image.width).toBe(48)
     expect(image.height).toBe(36)
@@ -69,9 +70,10 @@ describe('foregroundMask', () => {
     } finally {
       console.log = log
     }
-    const printed = JSON.parse(logs.join('\n')) as { mask: string; x: number; y: number; width: number; height: number; points: number[][] }
+    const printed = JSON.parse(logs.join('\n')) as { mask: string; x: number; y: number; width: number; height: number; points: number[][]; omit: number[][] }
     expect(printed.mask).toBe('photo.foreground.png')
     expect(printed.points).toEqual([])
+    expect(printed.omit).toEqual([])
     expect(printed.x).toBeGreaterThanOrEqual(17)
     expect(printed.width).toBeGreaterThan(8)
     expect(printed.height).toBeGreaterThan(8)
@@ -87,16 +89,18 @@ describe('foregroundMask', () => {
       logs.push(args.map(String).join(' '))
     }
     try {
-      await runSelect(['mask', src, '--point', '24,12', '--point', '24,20,28,16'], { depth: () => depth })
+      await runSelect(['mask', src, '--point', '24,12', '--point', '24,20,28,16', '--omit', '4,30'], { depth: () => depth })
     } finally {
       console.log = log
     }
-    const printed = JSON.parse(logs.join('\n')) as { points: number[][]; x: number; width: number }
+    const printed = JSON.parse(logs.join('\n')) as { points: number[][]; omit: number[][]; x: number; width: number }
     expect(printed.points).toEqual([[24, 12], [24, 20], [28, 16]])
+    expect(printed.omit).toEqual([[4, 30]])
     expect(printed.x).toBeGreaterThanOrEqual(17)
     expect(printed.width).toBeGreaterThan(8)
-    const record = JSON.parse(readFileSync(join(dir, 'photo.foreground.json'), 'utf8')) as { points: number[][] }
+    const record = JSON.parse(readFileSync(join(dir, 'photo.foreground.json'), 'utf8')) as { points: number[][]; omit: number[][] }
     expect(record.points).toEqual([[24, 12], [24, 20], [28, 16]])
+    expect(record.omit).toEqual([[4, 30]])
   })
 
   it('点的写法不对时报错', async () => {
@@ -106,5 +110,7 @@ describe('foregroundMask', () => {
     await expect(runSelect(['mask', src, '--point', '钟楼'])).rejects.toThrow('点要写成 x,y')
     await expect(runSelect(['mask', src, '--point', '24'])).rejects.toThrow('点要写成 x,y')
     await expect(runSelect(['mask', src, '--point', '100,10'])).rejects.toThrow('点要落在图片里面')
+    await expect(runSelect(['mask', src, '--omit', '4'])).rejects.toThrow('点要写成 x,y')
+    await expect(runSelect(['mask', src, '--omit', '100,10'])).rejects.toThrow('点要落在图片里面')
   })
 })
