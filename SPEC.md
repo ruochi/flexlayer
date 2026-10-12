@@ -1030,7 +1030,7 @@ for await (const { frame, png, report } of renderFrames(scene, { from: 0, to: 30
 | `edges` | 这些顶点之间的棱。`a`、`b` 是 `points` 的下标。`outline` 是轮廓，`crease` 是看得见的折棱，`hidden` 是被挡住的整条棱 |
 | `d` | 看得见的轮廓，SVG 路径，坐标和 `points` 相同。球是解析出来的圆，不把细分三角的顶点放进 `points` |
 
-网格不在带 `perspective` 的层里时，这三项都没有，和没写 `mask` 一样。`rect` 这些不是网格的元素也没有。坐标已经算上嵌套层的位置和缩放，不算这一层和祖先的平面旋转。标注贴着某个角时，用 `points` 里看得见的点，再加上这一层的 `left`、`top`。`create` 只做投影，填充仍在绘制时发生；被挡住的棱在这里整条标成 `hidden`，画面上的虚线仍按像素一段一段判断。
+网格不在带 `perspective` 的层里时，这三项都没有，和没写 `mask` 一样。`rect` 这些不是网格的元素也没有。坐标已经算上嵌套层的位置和缩放，不算这一层和祖先的平面旋转。标注贴着某个角时，用 `points` 里看得见的点，再加上这一层的 `left`、`top`。`create` 只做投影，填充仍在绘制时发生；被挡住的棱在这里整条标成 `hidden`，画面上的虚线仍按像素一段一段判断。渲染时加的窄圆角不进这三项，折点仍是原来的棱。
 
 ```tsx
 const scene = canvas.create(

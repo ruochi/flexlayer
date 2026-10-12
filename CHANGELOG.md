@@ -27,6 +27,14 @@
 
 默认字体从 `DEFAULT_FONT_FAMILY` 读。带 `blur`、`grade` 或 `<mask>` 的层在取景放大后只光栅化落在画面里的一块，并留出模糊和羽化要采样的边。取景窗或 `overflow="hidden"` 裁开的文字边不再报 `outside-safe`；裁完仍露在安全区外的字还是要报。
 
+`analyzeImage` 改成同步返回，和 `glyph` 一样。
+
+`canvas.create` 在数值透视里带回网格投影后的 `points`、`edges` 和轮廓 `d`。球只给圆。渲染时加的窄圆角不进这三项。
+
+面数不超过 200 的网格，渲染时在折棱上向里收一条最多 8px 的窄圆角。写了 `rx`、描了边，或本来就圆的，保持原来的棱。
+
+Material Symbols 的字形停在基线上方。图标着墨放进行盒正中，不再每种图标偏得不一样。
+
 `draw` 回调的 `ctx` 可以 `drawImage`。已经排好的一帧用 `renderLayer(node, { format: 'rgba' })` 拿走不预乘像素和画布宽高。
 
 去掉各平台的插件清单，只留 `skills/flexlayer/SKILL.md` 一份。`AGENTS.md` 收成入口，细则留在 SPEC。删掉已经落地的 `docs/PLAN.md`；效果和公式的实现备注并进 `docs/IMPLEMENTATION.md`。网格基准挪到 `scripts/bench-mesh.mjs`。勾股演示的视频和大图不再入库。

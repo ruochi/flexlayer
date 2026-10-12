@@ -1233,12 +1233,11 @@ function buildModelFresh(node: MeshLayoutNode): ModelPrim[] {
     const indices = prim.indices ?? Uint32Array.from({ length: count - (count % 3) }, (_, i) => i)
     if (indices.length < 3) continue
     const normals = prim.normals && prim.normals.length === src.length ? prim.normals : smoothNormals(positions, indices)
-    const beveled = node.stroke === 'none' ? bevelFewFaces(positions, indices) : null
     const color = prim.color
     out.push({
-      positions: beveled?.positions ?? positions,
-      normals: beveled?.normals ?? normals,
-      indices: beveled?.indices ?? indices,
+      positions,
+      normals,
+      indices,
       color: [
         byte(color[0] * 255),
         byte(color[1] * 255),
@@ -1259,8 +1258,13 @@ function geometryOfFresh(node: MeshLayoutNode): MeshGeometry | null {
   else if (node.mesh.type === 'torus') geo = buildTorus(node)
   else if (node.mesh.type === 'tube') geo = buildTube(node)
   else if (node.mesh.type === 'extrude') geo = buildExtrude(node)
-  if (!geo || node.stroke !== 'none') return geo
-  return bevelFewFaces(geo.positions, geo.indices) ?? geo
+  return geo
+}
+
+/** 窄圆角只进光栅。投影仍用原来的折点，避免圆角把正面的角标成挡住。 */
+function paintGeometry(node: MeshLayoutNode, positions: Float32Array, normals: Float32Array, indices: Uint32Array) {
+  if (node.stroke !== 'none') return { positions, normals, indices }
+  return bevelFewFaces(positions, indices) ?? { positions, normals, indices }
 }
 
 function geometryOf(node: MeshLayoutNode): MeshGeometry | null {
@@ -1296,7 +1300,7 @@ export type MeshPrim = {
   doubleSided: boolean
 }
 
-/** 一只网格的图元。模型和几何体都从这里拿，投影和绘制用同一份顶点。 */
+/** 一只网格的图元。模型和几何体都从这里拿。投影用这些折点；窄圆角在绘制时另加。 */
 export function meshPrims(node: MeshLayoutNode): MeshPrim[] {
   if (node.mesh.type === 'model') {
     return buildModel(node).map((prim) => ({
@@ -3520,11 +3524,12 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
     const opacity = (instance.opacity ?? 1) * node.opacity
     if (node.mesh.type === 'model') {
       for (const prim of buildModel(node)) {
+        const painted = paintGeometry(node, prim.positions, prim.normals, prim.indices)
         batches.push({
-          positions: prim.positions,
-          normals: prim.normals,
+          positions: painted.positions,
+          normals: painted.normals,
           uvs: null,
-          indices: prim.indices,
+          indices: painted.indices,
           r: prim.color[0],
           g: prim.color[1],
           b: prim.color[2],
@@ -3540,22 +3545,23 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
           toLayer: instance.toLayer,
           originX: o.x,
           originY: o.y,
-          ...meshLineFields(node, opacity, prim.positions, prim.indices, owner),
+          ...meshLineFields(node, opacity, painted.positions, painted.indices, owner),
         })
       }
       continue
     }
     const geometry = geometryOf(node)
     if (!geometry) continue
+    const painted = paintGeometry(node, geometry.positions, geometry.normals, geometry.indices)
     const glass = node.material?.kind === 'glass'
     const clear = node.fill === 'none' || node.fill === 'transparent'
     const fillNone = clear && !glass
     const [r, g, b, a] = fillNone ? [0, 0, 0, 0] : clear ? [255, 255, 255, 0] : fillBytes(node.fill, opacity)
     batches.push({
-      positions: geometry.positions,
-      normals: geometry.normals,
+      positions: painted.positions,
+      normals: painted.normals,
       uvs: null,
-      indices: geometry.indices,
+      indices: painted.indices,
       r,
       g,
       b,
@@ -3571,7 +3577,7 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
       toLayer: instance.toLayer,
       originX: o.x,
       originY: o.y,
-      ...meshLineFields(node, opacity, geometry.positions, geometry.indices, owner),
+      ...meshLineFields(node, opacity, painted.positions, painted.indices, owner),
     })
   }
   for (const plane of planes) {
