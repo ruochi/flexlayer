@@ -26,7 +26,7 @@ import { backdropFilters, filtersPad, getFilter, orderedFilters } from './filter
 import { fitImageRect } from './image.js'
 import { canvasPaint, isGradient } from './gradient.js'
 import { gradientStyle, isGradientPaint, type GradientBox } from './gradientField.js'
-import { applyToBox, aroundPivot, IDENTITY, intersectBox, invert, multiply, originOffset, translated, type Matrix } from './matrix.js'
+import { apply, applyToBox, aroundPivot, IDENTITY, intersectBox, invert, multiply, originOffset, translated, type Matrix } from './matrix.js'
 import { invalidDrawIssue } from './draw-tag.js'
 import { openSvgPath } from './path.js'
 import { cameraItems, projectOnLayer } from './camera.js'
@@ -793,18 +793,22 @@ function drawMaskedLayerInk(
     drawUnmaskedSubtree(ctx, node, spread, ink, state)
     return
   }
+  const full = { x: node.x, y: node.y, width: node.width, height: node.height }
+  const crop = visibleBitmap(ctx as PaintCtx, full, Math.ceil((node.maskFeather ?? 0) * 3 + Math.abs(spread) + 8))
+  if (!crop) return
   const k = Math.max(transformScale(ctx), 1e-3)
-  const w = Math.max(1, Math.ceil(node.width * k))
-  const h = Math.max(1, Math.ceil(node.height * k))
+  const w = Math.max(1, Math.ceil(crop.width * k))
+  const h = Math.max(1, Math.ceil(crop.height * k))
   const canvas = createCanvas(w, h)
   const octx = canvas.getContext('2d') as PaintCtx
-  octx.setTransform(k, 0, 0, k, -node.x * k, -node.y * k)
+  octx.setTransform(k, 0, 0, k, -crop.x * k, -crop.y * k)
   drawUnmaskedSubtree(octx, node, 0, '#ffffff', state)
   applyLayerMask(
     canvas,
     masks,
     k,
-    0,
+    node.x - crop.x,
+    node.y - crop.y,
     0,
     { canvasWidth: w, canvasHeight: h, frame: 0, fps: 30, issues: [] },
     node.maskFeather ?? 0,
@@ -815,10 +819,10 @@ function drawMaskedLayerInk(
   octx.fillStyle = ink
   octx.fillRect(0, 0, w, h)
   const blit = (dctx: PaintCtx) => {
-    dctx.drawImage(canvas, node.x, node.y, node.width, node.height)
+    dctx.drawImage(canvas, crop.x, crop.y, crop.width, crop.height)
   }
   if (Math.abs(spread) < 1e-3) blit(ctx as PaintCtx)
-  else paintDilatedInk(ctx as PaintCtx, spread, ink, { x: node.x, y: node.y, width: node.width, height: node.height }, blit)
+  else paintDilatedInk(ctx as PaintCtx, spread, ink, crop, blit)
 }
 
 /** layer overlay：自身 chrome + 子树着墨。写了 mask 的层用蒙版之后的轮廓。 */
@@ -1029,7 +1033,8 @@ function applyLayerMask(
   canvas: Canvas,
   shapes: LayoutNode[],
   k: number,
-  origin: number,
+  originX: number,
+  originY: number,
   t: number,
   state: PaintState,
   feather = 0,
@@ -1042,7 +1047,7 @@ function applyLayerMask(
     pw,
     ph,
     shapes,
-    (ctx) => ctx.setTransform(k, 0, 0, k, origin * k, origin * k),
+    (ctx) => ctx.setTransform(k, 0, 0, k, originX * k, originY * k),
     feather * k,
     invert,
     t,
@@ -2382,9 +2387,7 @@ function compositeMaskedOuter(
   body: Canvas,
   node: LayoutNode,
   k: number,
-  effectPad: number,
-  tw: number,
-  th: number,
+  crop: Box,
   state: PaintState,
 ): Canvas {
   const sil = createCanvas(body.width, body.height)
@@ -2396,11 +2399,11 @@ function compositeMaskedOuter(
   const out = createCanvas(body.width, body.height)
   const octx = out.getContext('2d') as PaintCtx
   octx.setTransform(k, 0, 0, k, 0, 0)
-  octx.translate(-node.x + effectPad, -node.y + effectPad)
-  const bounds = { x: node.x - effectPad, y: node.y - effectPad, width: tw, height: th }
+  octx.translate(-crop.x, -crop.y)
+  const bounds = crop
   const drawSil = (spread: number) => {
     const blit = (dctx: PaintCtx) => {
-      dctx.drawImage(sil, node.x - effectPad, node.y - effectPad, tw, th)
+      dctx.drawImage(sil, crop.x, crop.y, crop.width, crop.height)
     }
     if (Math.abs(spread) < 1e-3) blit(octx)
     else paintDilatedInk(octx, spread, SILHOUETTE, bounds, blit)
@@ -2410,12 +2413,76 @@ function compositeMaskedOuter(
   paintInkStrokes(octx, node, 'outer', {
     bounds,
     draw: (dctx) => {
-      dctx.drawImage(sil, node.x - effectPad, node.y - effectPad, tw, th)
+      dctx.drawImage(sil, crop.x, crop.y, crop.width, crop.height)
     },
   })
   octx.setTransform(1, 0, 0, 1, 0, 0)
   octx.drawImage(body, 0, 0)
   return out
+}
+
+/** 当前画布四个角逆变换后的外接矩形。旋转时比真正看得见的区域略大。 */
+function canvasUserBounds(ctx: PaintCtx): Box | null {
+  const canvas = ctx.canvas
+  if (canvas.width <= 0 || canvas.height <= 0) return null
+  const inv = invert(ctx.getTransform())
+  if (!inv) return null
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const dx of [0, canvas.width]) {
+    for (const dy of [0, canvas.height]) {
+      const [x, y] = apply(inv, dx, dy)
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null
+      minX = Math.min(minX, x)
+      minY = Math.min(minY, y)
+      maxX = Math.max(maxX, x)
+      maxY = Math.max(maxY, y)
+    }
+  }
+  if (maxX - minX < 1e-3 || maxY - minY < 1e-3) return null
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
+}
+
+/**
+ * 离屏只留落在当前画布里的一块，再向外留出模糊和羽化要采样的边。
+ * 整张都看得见时返回原来的矩形，调用方可以走和以前一样的尺寸。
+ */
+function visibleBitmap(ctx: PaintCtx, full: Box, margin: number): Box | null {
+  const seen = canvasUserBounds(ctx)
+  if (!seen) return full
+  const minX = seen.x - margin
+  const minY = seen.y - margin
+  const maxX = seen.x + seen.width + margin
+  const maxY = seen.y + seen.height + margin
+  if (
+    minX <= full.x + 0.5 &&
+    minY <= full.y + 0.5 &&
+    maxX >= full.x + full.width - 0.5 &&
+    maxY >= full.y + full.height - 0.5
+  ) {
+    return full
+  }
+  const x0 = Math.max(full.x, minX)
+  const y0 = Math.max(full.y, minY)
+  const x1 = Math.min(full.x + full.width, maxX)
+  const y1 = Math.min(full.y + full.height, maxY)
+  if (x1 - x0 < 1 || y1 - y0 < 1) return null
+  const sx0 = Math.max(full.x, Math.floor(x0))
+  const sy0 = Math.max(full.y, Math.floor(y0))
+  const sx1 = Math.min(full.x + full.width, Math.ceil(x1))
+  const sy1 = Math.min(full.y + full.height, Math.ceil(y1))
+  if (sx1 - sx0 < 1 || sy1 - sy0 < 1) return null
+  if (
+    sx0 <= full.x + 1e-6 &&
+    sy0 <= full.y + 1e-6 &&
+    sx1 >= full.x + full.width - 1e-6 &&
+    sy1 >= full.y + full.height - 1e-6
+  ) {
+    return full
+  }
+  return { x: sx0, y: sy0, width: sx1 - sx0, height: sy1 - sy0 }
 }
 
 function paintWithLayerFilter(ctx: PaintCtx, node: LayoutNode, debug: boolean, t: number, state: PaintState) {
@@ -2434,11 +2501,17 @@ function paintWithLayerFilter(ctx: PaintCtx, node: LayoutNode, debug: boolean, t
   if (masks && node.backdropBlur) effectPad = Math.max(effectPad, Math.ceil(node.backdropBlur * 2 + 4))
   const tw = Math.max(1, Math.ceil(node.width + effectPad * 2))
   const th = Math.max(1, Math.ceil(node.height + effectPad * 2))
+  const full = { x: node.x - effectPad, y: node.y - effectPad, width: tw, height: th }
+  const feather = node.kind === 'layer' ? node.maskFeather ?? 0 : 0
+  const crop = visibleBitmap(ctx, full, Math.max(effectPad, Math.ceil(blur * 3 + feather * 3 + 8)))
+  if (!crop) return
   const k = transformScale(ctx)
-  const off = createCanvas(Math.max(1, Math.ceil(tw * k)), Math.max(1, Math.ceil(th * k)))
+  const off = createCanvas(Math.max(1, Math.ceil(crop.width * k)), Math.max(1, Math.ceil(crop.height * k)))
   const octx = off.getContext('2d') as PaintCtx
   octx.setTransform(k, 0, 0, k, 0, 0)
-  octx.translate(-node.x + effectPad, -node.y + effectPad)
+  octx.translate(-crop.x, -crop.y)
+  const originX = node.x - crop.x
+  const originY = node.y - crop.y
   // 有 mask 时玻璃必须画进离屏，采样仍来自主画布，最后和阴影、模糊一起被裁掉
   const sampleHere = masks != null && (node.glass != null || node.backdropBlur != null)
   const deferOuter = masks != null && node.glass == null && hasOwnOuter(node)
@@ -2449,11 +2522,11 @@ function paintWithLayerFilter(ctx: PaintCtx, node: LayoutNode, debug: boolean, t
     skipNoise: pixel.length > 0,
     skipOwnOuter: deferOuter,
   })
-  if (pixel.length) applyPixelFilters(off, pixel, k, effectPad, effectPad, node.width, node.height)
+  if (pixel.length) applyPixelFilters(off, pixel, k, originX, originY, node.width, node.height)
   if (!masks) {
     ctx.save()
     ctx.filter = filter || 'none'
-    ctx.drawImage(off, node.x - effectPad, node.y - effectPad, tw, th)
+    ctx.drawImage(off, crop.x, crop.y, crop.width, crop.height)
     ctx.filter = 'none'
     ctx.restore()
     if (pixel.length && node.noise) paintNoise(ctx, node, node.noise)
@@ -2465,22 +2538,22 @@ function paintWithLayerFilter(ctx: PaintCtx, node: LayoutNode, debug: boolean, t
     const fctx = target.getContext('2d') as PaintCtx
     fctx.setTransform(k, 0, 0, k, 0, 0)
     fctx.filter = filter
-    fctx.drawImage(off, 0, 0, tw, th)
+    fctx.drawImage(off, 0, 0, crop.width, crop.height)
     fctx.filter = 'none'
   }
   if (pixel.length && node.noise) {
     const nctx = target.getContext('2d') as PaintCtx
     nctx.save()
     nctx.setTransform(k, 0, 0, k, 0, 0)
-    nctx.translate(-node.x + effectPad, -node.y + effectPad)
+    nctx.translate(-crop.x, -crop.y)
     paintNoise(nctx, node, node.noise)
     nctx.restore()
   }
-  applyLayerMask(target, masks, k, effectPad, t, state, node.kind === 'layer' ? node.maskFeather ?? 0 : 0, node.kind === 'layer' ? node.maskInvert ?? false : false)
-  if (deferOuter) target = compositeMaskedOuter(target, node, k, effectPad, tw, th, state)
+  applyLayerMask(target, masks, k, originX, originY, t, state, feather, node.kind === 'layer' ? node.maskInvert ?? false : false)
+  if (deferOuter) target = compositeMaskedOuter(target, node, k, crop, state)
   ctx.save()
   ctx.filter = 'none'
-  ctx.drawImage(target, node.x - effectPad, node.y - effectPad, tw, th)
+  ctx.drawImage(target, crop.x, crop.y, crop.width, crop.height)
   ctx.restore()
 }
 

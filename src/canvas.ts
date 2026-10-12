@@ -2,7 +2,7 @@ import { applyToBox, aroundPivot, originOffset } from './matrix.js'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { registerComponent } from './components.js'
-import { ensureBuiltinFontsSync, fontReady, registerFontPath, resolveFontSrcSync } from './fonts.js'
+import { DEFAULT_FONT_FAMILY, ensureBuiltinFontsSync, fontReady, registerFontPath, resolveFontSrcSync } from './fonts.js'
 import { fontFamiliesOf, measureLayer, noteMeasuredSize, parseSafe, prepareAssetsSync, type MeasureEnv } from './layout.js'
 import type { FvgNode } from './parse.js'
 import { divHasFlowBreak, isDisplayFlex } from './rules.js'
@@ -124,7 +124,7 @@ function measure(node: FvgNode, maxContentWidth: number) {
   const env: MeasureEnv = {
     baseDir: layerBaseDir(),
     color: node.attrs.color ?? '#111111',
-    fontFamily: node.attrs['font-family'] ?? 'ChillDuanSans',
+    fontFamily: node.attrs['font-family'] ?? DEFAULT_FONT_FAMILY,
     maxContentWidth,
   }
   return measureLayer(node, env)

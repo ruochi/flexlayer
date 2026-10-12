@@ -132,7 +132,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 
 `overflow="hidden"` 按 layer 的盒子裁剪子元素。默认 `visible`。被裁掉的是子元素；这一层自己的阴影、模糊仍可以画到盒子外面。祖先的 `overflow="hidden"` 会把子元素的阴影和光晕一起裁掉。已经被这样裁掉、画布上看不见的部分不报 `effect-clipped`。
 
-`view="x y w h"` 把这一层变成镜头。`width` `height` 是屏幕上的取景窗，`x` `y` 是窗口在父层里的位置。`view` 是舞台坐标里被取的矩形，铺满取景窗：窗口上的一点是舞台上对应点乘 `取景窗 / view` 的宽高。窗口外的内容裁掉，和 `overflow="hidden"` 一样，不报 `overflow-canvas`。`view` 没被直接子元素转完、缩完的四边形盖住时报 `view-outside`（error），成片会露底。四边形是这一层直接子元素的布局盒子，绕它自己的 `origin` 做了 `rotate` 和 `scale`。直接子元素是 `<g>` 时，用 `transform` 之后里面每个形状的四边形，不用这一组的外接矩形。镜头四个角都落在这些四边形里才算盖住；多个子元素时，每个角落在其中一块里即可，角都盖住但中间有缝时可能不报。宽高比和取景窗差超过 1% 时不拉伸，按宽度保持中心重算高度，并 `warn`。要写 `width` 和 `height`。不要和 `perspective` 或 `camera` 写在同一层。屏幕上不跟着镜头放大的章节、字幕、标注，写在这一层外面，用成片像素。`zoomView(center, zoom, size)` 用来算推到某一点的 `view`。`bleed` 已不再使用，写了会 `warn`。
+`view="x y w h"` 把这一层变成镜头。`width` `height` 是屏幕上的取景窗，`x` `y` 是窗口在父层里的位置。`view` 是舞台坐标里被取的矩形，铺满取景窗：窗口上的一点是舞台上对应点乘 `取景窗 / view` 的宽高。窗口外的内容裁掉，和 `overflow="hidden"` 一样，不报 `overflow-canvas`。裁开后贴着窗口的文字边也不报 `outside-safe`；裁完仍露在安全区外的字还是要报。`view` 没被直接子元素转完、缩完的四边形盖住时报 `view-outside`（error），成片会露底。四边形是这一层直接子元素的布局盒子，绕它自己的 `origin` 做了 `rotate` 和 `scale`。直接子元素是 `<g>` 时，用 `transform` 之后里面每个形状的四边形，不用这一组的外接矩形。镜头四个角都落在这些四边形里才算盖住；多个子元素时，每个角落在其中一块里即可，角都盖住但中间有缝时可能不报。宽高比和取景窗差超过 1% 时不拉伸，按宽度保持中心重算高度，并 `warn`。要写 `width` 和 `height`。不要和 `perspective` 或 `camera` 写在同一层。屏幕上不跟着镜头放大的章节、字幕、标注，写在这一层外面，用成片像素。`zoomView(center, zoom, size)` 用来算推到某一点的 `view`。`bleed` 已不再使用，写了会 `warn`。
 
 检查和绘制都按屏幕上的实际大小。`scale` 和 `view` 叠出来的倍数写在报告的 `screenScale`（两轴绝对值的几何平均，等于 1 不写）。最小字号拿 `font-size × screenScale` 和 `min(画布宽, 画布高) / 1080 × 24` 比。1080p 横屏和竖屏都是 24px。阴影、光晕、模糊的外扩同样乘这个倍数。`--debug` 的布局框和着墨框保持 1 屏幕像素，不跟着放大。网格光栅按这个倍数提高分辨率，推近后笔画仍然清楚。
 
@@ -522,7 +522,7 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 
 效果只影响绘制，不改变布局盒子。**一律按着墨（墨迹 / alpha）计算，不按布局盒子**：文字跟字形，形状跟实际画出来的填充和描边，`fill="none"` 只留描边，不把中间填上。`layer` / `flex` 的 `shadow` 和 `glow` 跟着这一层实际画出来的子树，不跟空的布局盒子；这一层若是三维场景，描边、阴影和发光跟着已经画好的那张画面。其余效果里，layer 只算自身边框，flex 只算自身背景和边框。`blur` / `filter` / `blend` 作用在已绘制像素上。
 
-绘制顺序只此一份：`backdrop-blur` / `glass` 取样 → `shadow` → `glow` → `stroke` 的外侧（`outside` 与 `center` 的外半）→ 本体（`overflow="hidden"` 在这里裁子元素）→ `stroke` 的内侧（`inside` 与 `center` 的内半）→ `inner-shadow` → `inner-glow` → `overlay` → `noise`。若有 `blur`、`filter`、`grade`、其它已注册滤镜或 `<mask>`，先画进离屏，依次做像素滤镜（含 `grade`，`order` 小的在前）、`blur` / 画布滤镜（含 `filter`），有像素滤镜时再叠 `noise`，然后按 `<mask>` 的 alpha 裁掉。蒙版层自己的外阴影、外发光和外侧描边不进这次裁切，裁完之后按留下的轮廓再画；子元素的阴影仍在离屏里，会被蒙版裁掉。最后贴回。画布底色不进 `<mask>`。写了像素滤镜时颗粒不被染色。同时写了 `blur` 与 `filter` 时，图层模糊以 `blur` 为准，并报 `info`。`glass` 与 `backdrop-blur` 同时出现时以 `glass` 为准，并报 `info`。
+绘制顺序只此一份：`backdrop-blur` / `glass` 取样 → `shadow` → `glow` → `stroke` 的外侧（`outside` 与 `center` 的外半）→ 本体（`overflow="hidden"` 在这里裁子元素）→ `stroke` 的内侧（`inside` 与 `center` 的内半）→ `inner-shadow` → `inner-glow` → `overlay` → `noise`。若有 `blur`、`filter`、`grade`、其它已注册滤镜或 `<mask>`，先画进离屏，依次做像素滤镜（含 `grade`，`order` 小的在前）、`blur` / 画布滤镜（含 `filter`），有像素滤镜时再叠 `noise`，然后按 `<mask>` 的 alpha 裁掉。取景或祖先把这一层放大后，离屏只画落在当前画布里的那一块，并留出模糊、羽化和外扩效果要采样的边；整层都在画面里时仍画整张。蒙版层自己的外阴影、外发光和外侧描边不进这次裁切，裁完之后按留下的轮廓再画；子元素的阴影仍在离屏里，会被蒙版裁掉。最后贴回。画布底色不进 `<mask>`。写了像素滤镜时颗粒不被染色。同时写了 `blur` 与 `filter` 时，图层模糊以 `blur` 为准，并报 `info`。`glass` 与 `backdrop-blur` 同时出现时以 `glass` 为准，并报 `info`。
 
 每个效果都按同一套字段描述：归属、语法、是否复用 paint、作用范围、在上面这条顺序里的位置、报告与问题码、图格。实现取舍见 [docs/EFFECTS.md](docs/EFFECTS.md)。图在 [docs/GALLERY.md](docs/GALLERY.md)。
 
@@ -767,7 +767,7 @@ registerFilter({
 | code | 级别 | 含义 |
 | --- | --- | --- |
 | `overflow-canvas` | error | 着墨超出画布。镜头用 `view` 裁在取景窗里的部分不算。`bleed` 不再关掉这条 |
-| `outside-safe` | warn | 文字超出安全区 |
+| `outside-safe` | warn | 文字超出安全区。被取景窗或 `overflow="hidden"` 裁掉的那条边不算；裁完仍露在安全区外的字还是要报 |
 | `text-overflow` | error | 文字超出了写死的宽度或高度 |
 | `flex-overflow` | warn | 子元素超出了写死尺寸的 flex 容器 |
 | `text-overlap` | warn | 两段文字的着墨区域重叠 |

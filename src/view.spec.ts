@@ -180,4 +180,34 @@ describe('view', () => {
     )
     expect(report.issues.some((issue) => issue.code === 'overflow-canvas' || issue.code === 'view-outside')).toBe(false)
   })
+
+  it('取景窗裁开的字不报 outside-safe，窗内仍在安全区外的字要报', async () => {
+    const cut = await checkFvg(
+      page(
+        `<layer width="200" height="80" view="0 0 200 80"><rect x="0" y="0" width="200" height="80" fill="#111" /><layer x="-40" y="8"><p style="font-size:28px; white-space:nowrap">窗外的字被裁开以后还很长很长</p></layer></layer>`,
+        'width="200" height="80" safe="16"',
+      ),
+    )
+    const cutText = cut.elements.find((el) => el.tag === 'p')
+    expect(cutText?.ink.left).toBeLessThan(16)
+    expect(cut.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
+    expect(cut.issues.some((issue) => issue.code === 'outside-safe')).toBe(false)
+
+    const shown = await checkFvg(
+      page(
+        `<layer width="200" height="80" view="0 0 200 80"><rect x="0" y="0" width="200" height="80" fill="#111" /><layer x="4" y="8"><p style="font-size:28px; white-space:nowrap">靠左</p></layer></layer>`,
+        'width="200" height="80" safe="16"',
+      ),
+    )
+    expect(shown.elements.find((el) => el.tag === 'p')?.ink.left).toBeLessThan(16)
+    expect(shown.issues.some((issue) => issue.code === 'outside-safe')).toBe(true)
+    expect(shown.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
+
+    const hidden = await checkFvg(
+      `<layer width="200" height="80" safe="16" overflow="hidden" background="#111"><layer x="-40" y="8"><p style="font-size:28px; white-space:nowrap">窗外的字被裁开以后还很长很长</p></layer></layer>`,
+    )
+    expect(hidden.elements.find((el) => el.tag === 'p')?.ink.left).toBeLessThan(16)
+    expect(hidden.issues.some((issue) => issue.code === 'outside-safe')).toBe(false)
+    expect(hidden.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
+  })
 })

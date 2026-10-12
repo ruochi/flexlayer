@@ -14,7 +14,7 @@ import { checkDerive, isDeriveKind } from './derive.js'
 import { imageInk, peekLayerImage, preloadLayerImageSync, preloadLayerImagesSync, parseObjectFit, parseObjectPosition } from './image.js'
 import type { FvgNode } from './parse.js'
 import { parseFvg } from './parse.js'
-import { ensureBuiltinFontsSync, primaryFontFamily, registerFontsFromDocumentSync } from './fonts.js'
+import { DEFAULT_FONT_FAMILY, ensureBuiltinFontsSync, primaryFontFamily, registerFontsFromDocumentSync } from './fonts.js'
 import { classAttr, ICON_FONT_FAMILY, symbolsClassOf } from './icons.js'
 import { materialize } from './components.js'
 import { catmullRomPath } from './curve.js'
@@ -3491,7 +3491,7 @@ export function prepareAssetsSync(root: FvgNode | null, baseDir: string, options
     fontNodes.filter((font) => font.family && font.src),
     baseDir,
   )
-  const families = new Set<string>([options.fontFamily ?? root?.attrs['font-family'] ?? 'ChillDuanSans'])
+  const families = new Set<string>([options.fontFamily ?? root?.attrs['font-family'] ?? DEFAULT_FONT_FAMILY])
   if (root) collectFontFamilies(root, families)
   ensureBuiltinFontsSync(families)
   const srcs = [...(options.images ?? [])]
@@ -3526,7 +3526,7 @@ export function layoutSync(rootNode: FvgNode, assets: LayoutAssets): FvgDocument
   const width = parseNumber(attrs.width) ?? 1080
   const height = parseNumber(attrs.height) ?? 1920
   let color = attrs.color?.trim() || '#111111'
-  const fontFamily = attrs['font-family'] ?? 'ChillDuanSans'
+  const fontFamily = attrs['font-family'] ?? DEFAULT_FONT_FAMILY
   const safe = parseSafe(attrs.safe, width, height)
   const maxContentWidth = width - safe.left - safe.right
 
