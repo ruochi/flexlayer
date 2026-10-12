@@ -6,14 +6,14 @@
 
 ```bash
 npx flexlayer-select mask photo.jpg
-npx flexlayer-select mask photo.jpg --point 820,640 --point 860,900 --refine
+npx flexlayer-select mask photo.jpg --point 820,640 --omit 900,1100 --refine
 ```
 
-默认只跑深度模型 Depth Anything V2 Small 的 q4f16（Apache-2.0，大约 19MB）。不写点，前景从伸进远处的尖往下长，地面留在外面。`--point` 可以写多次，点在要留下的地方。多个点按这些点里最近和最远连成一段，连在一起的留下。一个点落在远处的尖上时，近端放到地面以上，把楼身补上。`--refine` 再跑下面的 BiRefNet，边用抠图模型，深度只去掉没点到的那一段。
+默认只跑深度模型 Depth Anything V2 Small 的 q4f16（Apache-2.0，大约 19MB）。不写点，前景从伸进远处的尖往下长，地面留在外面。`--point` 点在要留下的地方，`--omit` 点在不要的地方，都可以写多次。看完遮罩可以再补点重跑。正向点沿着连着的一块长出去，近端和没点时停在同一条地面线上。反向点落在这块里面时，离它更近的那一块去掉。`--refine` 再跑下面的 BiRefNet，边用抠图模型，深度只去掉没点到的那一段。
 
-写出 `photo.foreground.png` 和 `photo.foreground.json`。遮罩里白的地方是前景。json 带这张遮罩的文件名，前景的 `x`、`y`、`width`、`height`，以及这次的 `points`。没有前景时位置和大小是 `null`。没写点时 `points` 是 `[]`。
+写出 `photo.foreground.png` 和 `photo.foreground.json`。遮罩里白的地方是前景。json 带这张遮罩的文件名，前景的 `x`、`y`、`width`、`height`，以及这次的 `points` 和 `omit`。没有前景时位置和大小是 `null`。没写点时这两个数组是 `[]`。
 
-程序里用 `foregroundMask('photo.jpg', { points: [{ x: 820, y: 640 }, { x: 860, y: 900 }] })`，返回同一组字段，`mask` 是写出来的路径。标记里用 `<mask><img src="photo.foreground.png" channel="luma" /></mask>` 罩住原图。
+程序里用 `foregroundMask('photo.jpg', { points: [{ x: 820, y: 640 }], omit: [{ x: 900, y: 1100 }] })`，返回同一组字段，`mask` 是写出来的路径。标记里用 `<mask><img src="photo.foreground.png" channel="luma" /></mask>` 罩住原图。
 
 ---
 

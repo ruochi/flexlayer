@@ -157,7 +157,7 @@ const root = h(
 await renderLayer(root)
 ```
 
-抠主体和前景遮罩都在仓库里的 `packages/select`，不在 npm 上，渲染器只读它写出的文件。进入这个目录执行 `npm install && npm run build`。`npx flexlayer-select mask photo.jpg` 先跑大约 19MB 的深度模型，写出 `photo.foreground.png`，并返回这块前景的 `x`、`y`、`width`、`height`。不写点，从伸进远处的尖往下长。要留下某一块就写 `--point x,y`，可以写多次。多个点按最近和最远连成一段；一个点落在远处的尖上时，近端放到地面以上。边要跟抠图模型走时加 `--refine`，那一次才下载大约 470MB 的 BiRefNet 512 fp16。深度模型会先放掉，再载入抠图模型。只抠主体时仍用 `npx flexlayer-select cutout photo.jpg --preset portrait`。
+抠主体和前景遮罩都在仓库里的 `packages/select`，不在 npm 上，渲染器只读它写出的文件。进入这个目录执行 `npm install && npm run build`。`npx flexlayer-select mask photo.jpg` 先跑大约 19MB 的深度模型，写出 `photo.foreground.png`，并返回这块前景的 `x`、`y`、`width`、`height`。不写点，从伸进远处的尖往下长。要留下的地方写 `--point x,y`，不要的地方写 `--omit x,y`，都可以写多次，看完遮罩可以再补点重跑。边要跟抠图模型走时加 `--refine`，那一次才下载大约 470MB 的 BiRefNet 512 fp16。深度模型会先放掉，再载入抠图模型。只抠主体时仍用 `npx flexlayer-select cutout photo.jpg --preset portrait`。
 
 按帧生成一组 PNG 和一张联系表：
 
