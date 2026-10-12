@@ -412,7 +412,7 @@ export namespace JSX {
       channel?: string
       /** 只在 mask 里：编号，例如 "3 5" */
       pick?: string
-      /** 只在 mask 里：subject、mask、regions 或 plate，读缓存不跑模型 */
+      /** 只在 mask 里：subject、mask 或 regions，读缓存不跑模型 */
       derive?: string
     }
     image: FvgHtml & { src?: string; alt?: string }

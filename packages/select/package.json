@@ -1,7 +1,7 @@
 {
   "name": "flexlayer-select",
   "version": "0.1.0",
-  "description": "从照片里抠出主体，写成 Flex Layer 的蒙版和编号选择题",
+  "description": "从照片里取出前景遮罩，或抠出主体并写成编号选择题",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

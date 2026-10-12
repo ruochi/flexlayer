@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { basename, isAbsolute, resolve } from 'node:path'
 
-export const DERIVE_KINDS = ['subject', 'mask', 'regions', 'plate'] as const
+export const DERIVE_KINDS = ['subject', 'mask', 'regions'] as const
 export type DeriveKind = (typeof DERIVE_KINDS)[number]
 
 export function isDeriveKind(value: string): value is DeriveKind {
@@ -30,29 +30,26 @@ export type DeriveStatus =
   | { status: 'stale'; file: string; command: string }
   | { status: 'ok'; file: string }
 
-function commandFor(srcFile: string, meta: { preset?: string; tool?: string }, kind: DeriveKind): string {
-  const name = basename(srcFile)
-  if (kind === 'plate' || meta.tool === 'layers' || meta.preset === 'layers') return `npx flexlayer-select layers ${name}`
-  return `npx flexlayer-select cutout ${name} --preset ${meta.preset?.trim() || 'portrait'}`
+function commandFor(srcFile: string, preset: string): string {
+  return `npx flexlayer-select cutout ${basename(srcFile)} --preset ${preset}`
 }
 
 /** 缓存不存在、或原图哈希和配方对不上。文件在但过期时仍返回 file，调用方可以先画再警告。 */
 export function checkDerive(src: string, baseDir: string, kind: DeriveKind): DeriveStatus {
   const paths = derivePaths(src, baseDir, kind)
   if (!paths) return { status: 'remote' }
-  const recordedMeta: { preset?: string; tool?: string; srcHash?: string } = {}
+  let preset = 'portrait'
+  let recorded: string | undefined
   if (existsSync(paths.meta)) {
     try {
-      const meta = JSON.parse(readFileSync(paths.meta, 'utf8')) as { srcHash?: string; preset?: string; tool?: string }
-      if (typeof meta.preset === 'string') recordedMeta.preset = meta.preset
-      if (typeof meta.tool === 'string') recordedMeta.tool = meta.tool
-      if (typeof meta.srcHash === 'string') recordedMeta.srcHash = meta.srcHash
+      const meta = JSON.parse(readFileSync(paths.meta, 'utf8')) as { srcHash?: string; preset?: string }
+      if (typeof meta.preset === 'string' && meta.preset.trim()) preset = meta.preset.trim()
+      if (typeof meta.srcHash === 'string') recorded = meta.srcHash
     } catch {
-      recordedMeta.srcHash = undefined
+      recorded = undefined
     }
   }
-  const command = commandFor(paths.srcFile, recordedMeta, kind)
-  const recorded = recordedMeta.srcHash
+  const command = commandFor(paths.srcFile, preset)
   if (!existsSync(paths.file)) return { status: 'missing', command }
   let current = ''
   try {

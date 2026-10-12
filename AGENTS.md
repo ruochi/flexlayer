@@ -54,7 +54,7 @@ Flex Layer 把**生成**和**渲染**分开，中间只交接一份 **`.layer` �
 | 蒙版读黑白图或编号 | `<img mask-mode="luminance">` | `<img channel="luma">`、`<img pick="3 5">`。只写在 mask 里 | `invalid-attr` |
 | 羽化和反选写在 `<mask>` 上 | `<rect feather="8">` | `<mask feather="8" invert="true">` | `invalid-attr` |
 | 预览写在标记里 | 只靠命令行开关 | `<preview of="#cut" show="overlay checker black white edges" />`。正常成片不画，`render --preview` 才出拼图 | `invalid-attr` |
-| 蒙版缓存用 `derive` | 把抠图结果写回原图 | `<img src="photo.jpg" derive="subject" />`，净背景写 `derive="plate"`。没有缓存报 `missing-mask`，哈希对不上报 `stale-mask` | `missing-mask`、`stale-mask` |
+| 蒙版缓存用 `derive` | 把抠图结果写回原图 | `<img src="photo.jpg" derive="subject" />`。没有缓存报 `missing-mask`，哈希对不上报 `stale-mask` | `missing-mask`、`stale-mask` |
 | 透视写在父 `layer`，转动和 `z` 写在子元素 | `<rect perspective="900" rotateY="20">` | `<layer perspective="900"><rect rotateY="20" z="40" /></layer>`。平行投影写 `perspective="parallel"` | `invalid-attr`、`flatten-3d` |
 | 球体、圆柱、圆环、线管、长方体、拉伸和 glb 放在带 `perspective` 的 layer 里 | `<sphere r="40">` 没有视距 | `<layer perspective="700"><sphere cx="80" cy="80" r="40" /></layer>`。圆柱 `<cylinder cx cy r height>`，圆环 `<torus cx cy r tube>`，线管 `<tube d r>`。`box` 的 `rx` 圆棱，`round` 选边；圆柱的 `rx` 圆口，`round` 写 `top` 或 `bottom`。`model` 只写 `src`，尺寸写在外包 layer | `flatten-3d`、`missing-model` |
 | 镜头写 `camera`，`perspective` 是焦距简写 | 另起 `<camera>`，或和 `view` 写在同一层 | `<layer camera="fov 40, at 980 640 0, orbit 35 18, distance 1200">`。`perspective="1484"` 等于 `focal 1484`。景深写 `aperture`、`focus`、`max`；要保持清楚的表面写 `sharp="true"`。`preserve-3d` 写在 layer 或 flex 上，压平效果仍收成一张图并报 info | `invalid-attr`、`flattened-3d`、`behind-camera` |
@@ -104,7 +104,7 @@ export default canvas.create(
 - 动画导出 `composition`（见 SPEC 第 13 章）。文件头写 `/** @jsxImportSource flexlayer */`，标签不用 import。`flexlayer check` / `render` 会执行它。`--emit out.layer` 把展开结果写回 `.layer`。`draw={(ctx, el) => ...}` 里只用 `ctx` 和 `el`，否则 `--emit` 报 `emit-draw`，并且不写出 `<draw>`。不要用 `Math.random` 或 `Date.now`。可重复的随机数用 `random(seed)` 或 `noise`。例子：`examples/slide.tsx`。
 - 要从字体取出某个字的轮廓，`import { glyph } from 'flexlayer'`。`glyph('春眠', { font: 'Kai', size: 120, weight: 700 })` 同步按码位返回数组，每项有 `text`、`d`、`font`、`size`、`weight`、字宽 `width`、字身高度 `height`、`baseline`、`ink` 和 `missing`。`d` 的原点在字身左上角，y 向下，单位是像素。字宽和字身高度来自字体，不来自路径外接框。缺字（`😀`、`𠀀`）`missing` 为 `true`，`d` 是同一个缺字方框。可变字体只出默认字重。见 SPEC 5.4。
 - 要检查一张抠图结果或黑白蒙版，`import { analyzeImage } from 'flexlayer'`。`await analyzeImage('photo.subject.png')` 返回 `width`、`height`、`channel`、留下的比例 `area`、外接矩形 `ink`、碎片数 `pieces`、最大几块 `parts`、洞数 `holes`、软边宽度 `softEdge` 和轮廓 `d`。坐标是图片像素。有透明像素时看 alpha，否则看亮度，可以用 `channel` 指定。`d` 直接写进 `<mask><path d /></mask>`；单独画出来要写 `stroke="none"`。和 `glyph` 一样不进渲染，同一张图只算一次。见 SPEC 第 6 章。
-- 抠主体和分层用仓库里的 `packages/select`（包名 `flexlayer-select`），不要把模型放进渲染器，也不要写 `npm install flexlayer-select`：这个包不在 npm 上。在 `packages/select` 里执行 `npm ci && npm run build`。分层：`npx flexlayer-select layers photo.jpg --title 长安夜`，深度模型是 q4f16，大约 19MB。`--refine` 才跑 BiRefNet，fp16 大约 470MB，不是 940MB 的 fp32。写出 `photo.subject.png`、`photo.plate.png`、`photo.scene.json`。`.tsx` 里 `scene('photo.jpg').fit(title)` 把字夹进两层之间。蒙版里净背景写 `derive="plate"`。只抠主体、不做分层时仍用 `npx flexlayer-select cutout photo.jpg --preset portrait`。没装这个包时，`flexlayer select` 只提示这条安装路径。
+- 抠主体和前景遮罩用仓库里的 `packages/select`（包名 `flexlayer-select`），不要把模型放进渲染器，也不要写 `npm install flexlayer-select`：这个包不在 npm 上。在 `packages/select` 里执行 `npm ci && npm run build`。前景遮罩：`npx flexlayer-select mask photo.jpg`，深度模型是 q4f16，大约 19MB。返回 `photo.foreground.png` 和前景的 `x`、`y`、`width`、`height`，数在 `photo.foreground.json`。标记里用 `<mask><img src="photo.foreground.png" channel="luma" /></mask>` 罩住原图。`--refine` 才跑 BiRefNet，fp16 大约 470MB，不是 940MB 的 fp32。只抠主体时仍用 `npx flexlayer-select cutout photo.jpg --preset portrait`，写出 `photo.subject.png` 和 `photo.cutout.json`，标记里写 `<img src="photo.jpg" derive="subject" />`。没装这个包时，`flexlayer select` 只提示这条安装路径。
 
 ```ts
 import { renderLayer } from 'flexlayer'
@@ -123,7 +123,6 @@ const { png, report } = await renderLayer(source, { baseDir: process.cwd() })
 | `renderLayer` / `checkLayer` | 渲染 PNG，或只排版并出报告 |
 | `glyph` | 同步按码位取轮廓 |
 | `analyzeImage` | 读一张图，量面积、碎片、洞、软边，并描出轮廓 `d` |
-| `scene` / `fitTitle` | 读 `photo.scene.json`。`scene(src).fit(title)` 把字夹进背景和主体之间，返回 `x`、`y` 和每个字被挡住的比例 |
 | `registerFilter` / `unregisterFilter` / `getFilter` / `listFilters` | 登记像素或画布滤镜。内置 `grade` 和 `filter` 也在这张表上 |
 | `h` | 不用 JSX 时建节点 |
 | `renderFrames` / `renderComposition` / `interpolate` / `spring` / `sequence` / `random` / `noise` / `zoomView` | 逐帧产出，或一次拿回全部 PNG。`interpolate` 可写多点区间和 `Easing`。`random`、`noise` 由 seed 决定。`zoomView(center, zoom, size)` 返回镜头的 `view` |

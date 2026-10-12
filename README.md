@@ -159,7 +159,7 @@ const root = h(
 await renderLayer(root)
 ```
 
-抠主体和分层都在仓库里的 `packages/select`，不在 npm 上，渲染器只读它写出的缓存。进入这个目录执行 `npm ci && npm run build`。`npx flexlayer-select layers photo.jpg --title 长安夜` 先跑大约 19MB 的深度模型，分成背景和主体，标题夹在两层之间。边要跟抠图模型走时加 `--refine`，那一次才下载大约 470MB 的 fp16。标记里主体画 `photo.subject.png`，净背景写 `<img src="photo.jpg" derive="plate" />`。`.tsx` 用 `scene('photo.jpg').fit(title)` 量字该放哪。
+抠主体和前景遮罩都在仓库里的 `packages/select`，不在 npm 上，渲染器只读它写出的文件。进入这个目录执行 `npm ci && npm run build`。`npx flexlayer-select mask photo.jpg` 先跑大约 19MB 的深度模型，写出 `photo.foreground.png`，并返回这块前景的 `x`、`y`、`width`、`height`。边要跟抠图模型走时加 `--refine`，那一次才下载大约 470MB 的 fp16。只抠主体时仍用 `npx flexlayer-select cutout photo.jpg --preset portrait`。
 
 按帧生成一组 PNG 和一张联系表：
 

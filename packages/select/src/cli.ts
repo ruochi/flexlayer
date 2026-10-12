@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { cutout, type Segmenter } from './cutout.js'
-import { layers, type DepthEstimator } from './layers.js'
+import { foregroundMask, type DepthEstimator } from './foreground.js'
 import { applyAnswers, cutoutMarkup, type Answer } from './markup.js'
 import { isPreset, type Preset } from './preset.js'
 
@@ -16,11 +16,11 @@ export type SelectHooks = {
 
 function usageText(): string {
   return `用法:
-  flexlayer-select layers <图片> [--title 文字] [--cover 0.2] [--refine]
+  flexlayer-select mask <图片> [--refine]
   flexlayer-select cutout <图片> [--preset portrait|product|flat]
   flexlayer-select apply <图片> [--add 3,5] [--subtract 9]
 
-layers 按远近分成背景和主体，字可以夹在两层之间。--refine 用抠图模型修边。
+mask 取出前景遮罩，返回遮罩路径和这块前景的位置、大小。--refine 用抠图模型修边。
 cutout 把主体、蒙版、编号区域和配方写到图片旁边。
 apply 把编号题的答案写进 <mask>：--add 收进选区，--subtract 从选区去掉。`
 }
@@ -99,31 +99,29 @@ async function applyCommand(argv: string[]) {
   console.log(layerPath)
 }
 
-async function layersCommand(argv: string[], hooks: SelectHooks) {
+async function maskCommand(argv: string[], hooks: SelectHooks) {
   const { file, rest } = takeFile(argv)
-  const titleFlag = flag(rest, 'title')
-  const coverFlag = flag(titleFlag.rest, 'cover')
-  const refine = coverFlag.rest.includes('--refine')
-  const leftover = coverFlag.rest.filter((token) => token !== '--refine')
+  const refine = rest.includes('--refine')
+  const leftover = rest.filter((token) => token !== '--refine')
   if (leftover.length > 0) throw new Error(usageText())
-  const cover = coverFlag.value == null ? undefined : Number(coverFlag.value)
-  if (cover != null && !Number.isFinite(cover)) throw new Error('cover 要在 0 到 0.8 之间')
-  const result = await layers(resolve(file), {
-    title: titleFlag.value,
-    cover,
+  const result = await foregroundMask(resolve(file), {
     refine,
     depth: hooks.depth,
     segment: hooks.segment,
   })
-  console.log(result.markup.trimEnd())
-  console.log(result.flat ? 'flat' : 'layers 2')
-  console.log(result.layer)
+  console.log(JSON.stringify({
+    mask: basename(result.mask),
+    x: result.x,
+    y: result.y,
+    width: result.width,
+    height: result.height,
+  }, null, 2))
 }
 
 export async function runSelect(argv: string[], hooks: SelectHooks = {}): Promise<void> {
   const [cmd, ...rest] = argv
-  if (cmd === 'layers') {
-    await layersCommand(rest, hooks)
+  if (cmd === 'mask') {
+    await maskCommand(rest, hooks)
     return
   }
   if (cmd === 'cutout') {
