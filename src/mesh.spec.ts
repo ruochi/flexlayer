@@ -1,9 +1,9 @@
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { describe, expect, it } from 'vitest'
-import { solidBoxGlb } from './glb.js'
+import { parseGlb, solidBoxGlb } from './glb.js'
 import { BOX_EDGES, roundedBoxGeometry } from './mesh-round.js'
 import { BEVEL_RADIUS, bevelFewFaces } from './mesh-bevel.js'
 import { checkFvg, renderFvg } from './render.js'
@@ -665,7 +665,7 @@ describe('网格绘制', () => {
     expect(nearSphere).toBe(true)
   })
 
-  it('面数不超过 12 的网格在渲染时加窄圆角，面数多的保持原样', () => {
+  it('面数不超过 200 的网格在渲染时加窄圆角，再多就保持原样', () => {
     const hw = 50
     const hh = 40
     const hd = 30
@@ -706,12 +706,64 @@ describe('网格绘制', () => {
 
     const many: number[] = []
     const manyIdx: number[] = []
-    for (let i = 0; i < 13; i++) {
+    for (let i = 0; i < 201; i++) {
       const base = i * 3
-      many.push(i * 10, 0, 0, i * 10 + 1, 0, 0, i * 10, 1, 0.2 + i)
+      many.push(i * 10, 0, 0, i * 10 + 1, 0, 0, i * 10, 1, 0.2 + i * 0.01)
       manyIdx.push(base, base + 1, base + 2)
     }
     expect(bevelFewFaces(Float32Array.from(many), Uint32Array.from(manyIdx))).toBeNull()
+  })
+
+  it('八角钻石不超过 200 个面，窄圆角向里收，不超出原来的盒子', () => {
+    const prim = parseGlb(readFileSync(join(process.cwd(), 'examples/diamond.glb')))[0]!
+    let minX = Infinity
+    let minY = Infinity
+    let minZ = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    let maxZ = -Infinity
+    for (let i = 0; i < prim.positions.length; i += 3) {
+      minX = Math.min(minX, prim.positions[i]!)
+      maxX = Math.max(maxX, prim.positions[i]!)
+      minY = Math.min(minY, prim.positions[i + 1]!)
+      maxY = Math.max(maxY, prim.positions[i + 1]!)
+      minZ = Math.min(minZ, prim.positions[i + 2]!)
+      maxZ = Math.max(maxZ, prim.positions[i + 2]!)
+    }
+    const s = 210 / (maxX - minX)
+    const cx = (minX + maxX) / 2
+    const cy = (minY + maxY) / 2
+    const cz = (minZ + maxZ) / 2
+    const positions = new Float32Array(prim.positions.length)
+    let bminX = Infinity
+    let bminY = Infinity
+    let bminZ = Infinity
+    let bmaxX = -Infinity
+    let bmaxY = -Infinity
+    let bmaxZ = -Infinity
+    for (let i = 0; i < prim.positions.length; i += 3) {
+      positions[i] = (prim.positions[i]! - cx) * s
+      positions[i + 1] = (prim.positions[i + 1]! - cy) * s
+      positions[i + 2] = (prim.positions[i + 2]! - cz) * s
+      bminX = Math.min(bminX, positions[i]!)
+      bmaxX = Math.max(bmaxX, positions[i]!)
+      bminY = Math.min(bminY, positions[i + 1]!)
+      bmaxY = Math.max(bmaxY, positions[i + 1]!)
+      bminZ = Math.min(bminZ, positions[i + 2]!)
+      bmaxZ = Math.max(bmaxZ, positions[i + 2]!)
+    }
+    const indices = prim.indices!
+    const built = bevelFewFaces(positions, indices)
+    expect(built).toBeTruthy()
+    expect(built!.indices.length).toBeGreaterThan(indices.length)
+    for (let i = 0; i < built!.positions.length; i += 3) {
+      expect(built!.positions[i]!).toBeGreaterThanOrEqual(bminX - 0.2)
+      expect(built!.positions[i]!).toBeLessThanOrEqual(bmaxX + 0.2)
+      expect(built!.positions[i + 1]!).toBeGreaterThanOrEqual(bminY - 0.2)
+      expect(built!.positions[i + 1]!).toBeLessThanOrEqual(bmaxY + 0.2)
+      expect(built!.positions[i + 2]!).toBeGreaterThanOrEqual(bminZ - 0.2)
+      expect(built!.positions[i + 2]!).toBeLessThanOrEqual(bmaxZ + 0.2)
+    }
   })
 
   it('box 圆角：z 向棱挖掉正面角，沿宽的棱和正面四棱仍是直角轮廓', async () => {
