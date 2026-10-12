@@ -11,7 +11,7 @@ import { applyPoseMatrix, behindCamera, type Perspective } from './perspective.j
 import { meshIntersections } from './mesh-intersect.js'
 import { roundedBoxGeometry, roundedCylinderGeometry } from './mesh-round.js'
 import { tessellateSvgPath } from './path.js'
-import type { LayerLayoutNode, LayoutNode, MeshLayoutNode } from './types.js'
+import type { GroundLayoutNode, LayerLayoutNode, LayoutNode, MeshLayoutNode } from './types.js'
 
 type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: number }
 
@@ -44,10 +44,13 @@ type RasterBitmap = {
   polygon?: Array<{ u: number; v: number }>
 }
 
+export type GroundDraw = { node: GroundLayoutNode; toLayer: Mat4; opacity?: number }
+
 export type SoftwareMeshInput = {
   layer: LayerLayoutNode
   perspective: Perspective
   meshes: Array<{ node: MeshLayoutNode; toLayer: Mat4; opacity?: number }>
+  grounds?: GroundDraw[]
   planes: Array<{ node: LayoutNode; peeled: LayoutNode; toLayer: Mat4 }>
   scale: number
   raster: (node: LayoutNode, toLayer?: number[]) => RasterBitmap
@@ -2256,6 +2259,160 @@ function resolveColor(color: Uint8ClampedArray, sw: number, sh: number, dw: numb
   return out
 }
 
+function groundBasis(toLayer: Mat4): { p: { x: number; y: number; z: number }; n: { x: number; y: number; z: number } } | null {
+  const p = applyPoseMatrix(toLayer, 0, 0, 0)
+  const ax = applyPoseMatrix(toLayer, 1, 0, 0)
+  const ay = applyPoseMatrix(toLayer, 0, 1, 0)
+  const n = cross(
+    { x: ax.x - p.x, y: ax.y - p.y, z: ax.z - p.z },
+    { x: ay.x - p.x, y: ay.y - p.y, z: ay.z - p.z },
+  )
+  const len = Math.hypot(n.x, n.y, n.z)
+  if (len < 1e-8) return null
+  return { p, n: { x: n.x / len, y: n.y / len, z: n.z / len } }
+}
+
+function hitParallelPlane(sx: number, sy: number, basis: { p: { x: number; y: number; z: number }; n: { x: number; y: number; z: number } }) {
+  if (Math.abs(basis.n.z) < 1e-6) return null
+  const { p, n } = basis
+  const z = p.z - ((sx - p.x) * n.x + (sy - p.y) * n.y) / n.z
+  return { x: sx, y: sy, z }
+}
+
+function hitPerspectivePlane(
+  sx: number,
+  sy: number,
+  camX: number,
+  camY: number,
+  camZ: number,
+  focal: number,
+  n: { x: number; y: number; z: number },
+  numer: number,
+) {
+  const dx = sx - camX
+  const dy = sy - camY
+  const dz = -focal
+  const denom = dx * n.x + dy * n.y + dz * n.z
+  if (Math.abs(denom) < 1e-8) return null
+  const t = numer / denom
+  if (!(t > 1e-3)) return null
+  return { x: camX + t * dx, y: camY + t * dy, z: camZ + t * dz }
+}
+
+function blurMask(src: Float32Array, w: number, h: number, radius: number): Float32Array {
+  const r = Math.min(48, Math.round(radius / 3))
+  if (r < 1) return src
+  let cur = src
+  const win = r * 2 + 1
+  for (let pass = 0; pass < 3; pass++) {
+    const tmp = new Float32Array(w * h)
+    const out = new Float32Array(w * h)
+    for (let y = 0; y < h; y++) {
+      const row = y * w
+      let sum = 0
+      for (let x = -r; x <= r; x++) sum += cur[row + Math.min(w - 1, Math.max(0, x))]!
+      for (let x = 0; x < w; x++) {
+        tmp[row + x] = sum / win
+        sum -= cur[row + Math.min(w - 1, Math.max(0, x - r))]!
+        sum += cur[row + Math.min(w - 1, Math.max(0, x + r + 1))]!
+      }
+    }
+    for (let x = 0; x < w; x++) {
+      let sum = 0
+      for (let y = -r; y <= r; y++) sum += tmp[Math.min(h - 1, Math.max(0, y)) * w + x]!
+      for (let y = 0; y < h; y++) {
+        out[y * w + x] = sum / win
+        sum -= tmp[Math.min(h - 1, Math.max(0, y - r)) * w + x]!
+        sum += tmp[Math.min(h - 1, Math.max(0, y + r + 1)) * w + x]!
+      }
+    }
+    cur = out
+  }
+  return cur
+}
+
+function blendOver(color: Uint8ClampedArray, di: number, sr: number, sg: number, sb: number, sa: number) {
+  if (sa <= 0) return
+  const pi = di * 4
+  if (sa >= 255 || color[pi + 3] === 0) {
+    color[pi] = sr
+    color[pi + 1] = sg
+    color[pi + 2] = sb
+    color[pi + 3] = sa
+    return
+  }
+  const inv = 255 - sa
+  const dA = color[pi + 3]!
+  const outA = sa + (dA * inv) / 255
+  color[pi] = byte((sr * sa + (color[pi]! * dA * inv) / 255) / outA)
+  color[pi + 1] = byte((sg * sa + (color[pi + 1]! * dA * inv) / 255) / outA)
+  color[pi + 2] = byte((sb * sa + (color[pi + 2]! * dA * inv) / 255) / outA)
+  color[pi + 3] = byte(outA)
+}
+
+/**
+ * 地面是无限平面，旋转和盒子同一套姿态。
+ * 不写 fill 时不画表面，只在主光被挡住的地方叠影子。
+ * 平面延伸到灭点：射线和镜头平面平行的那一侧不画。
+ */
+function paintGrounds(
+  grounds: GroundDraw[],
+  color: Uint8ClampedArray,
+  depth: Float32Array,
+  shadow: ShadowMap | null,
+  pw: number,
+  ph: number,
+  originX: number,
+  originY: number,
+  pixelScale: number,
+  perspective: Perspective,
+  px: number,
+  py: number,
+) {
+  if (grounds.length === 0 || pw < 1 || ph < 1) return
+  const focal = perspective === 'parallel' ? null : perspective
+  for (const ground of grounds) {
+    const basis = groundBasis(ground.toLayer)
+    if (!basis) continue
+    const opacity = (ground.opacity ?? 1) * ground.node.opacity
+    if (!(opacity > 0)) continue
+    const n = basis.n
+    const numer =
+      focal == null ? 0 : (basis.p.x - px) * n.x + (basis.p.y - py) * n.y + (basis.p.z - focal) * n.z
+    const count = pw * ph
+    const cover = new Uint8Array(count)
+    const shade = new Float32Array(count)
+    const fill = ground.node.fill ? fillBytes(ground.node.fill, opacity) : null
+    const ink = fillBytes(ground.node.shadowColor, opacity * ground.node.shadowOpacity)
+    const wantShadow = shadow != null && ink[3] > 0
+    for (let iy = 0; iy < ph; iy++) {
+      const sy = originY + (iy + 0.5) / pixelScale
+      const row = iy * pw
+      for (let ix = 0; ix < pw; ix++) {
+        const sx = originX + (ix + 0.5) / pixelScale
+        const hit =
+          focal == null
+            ? hitParallelPlane(sx, sy, basis)
+            : hitPerspectivePlane(sx, sy, px, py, focal, focal, n, numer)
+        if (!hit) continue
+        const di = row + ix
+        const stored = depth[di]!
+        if (stored > -1e20 && !(hit.z > stored + 0.05)) continue
+        cover[di] = 1
+        if (wantShadow && occluded(shadow, hit.x, hit.y, hit.z, n.x, n.y, n.z)) shade[di] = 1
+        if ((fill && fill[3] > 0) || shade[di]! > 0) depth[di] = hit.z
+      }
+    }
+    const blurred = blurMask(shade, pw, ph, ground.node.shadowBlur * pixelScale)
+    for (let di = 0; di < count; di++) {
+      if (!cover[di]) continue
+      if (fill && fill[3] > 0) blendOver(color, di, fill[0], fill[1], fill[2], fill[3])
+      const a = blurred[di]!
+      if (a > 0 && ink[3] > 0) blendOver(color, di, ink[0], ink[1], ink[2], byte(ink[3] * a))
+    }
+  }
+}
+
 function rasterize(
   batches: Batch[],
   layer: LayerLayoutNode,
@@ -2263,6 +2420,7 @@ function rasterize(
   scale: number,
   samplesRequested: number,
   clip: RasterRect,
+  grounds: GroundDraw[] = [],
 ): MeshFrame {
   const vx = layer.width / 2
   const vy = layer.height / 2
@@ -2302,6 +2460,12 @@ function rasterize(
     }
     authored.push(verts)
     projected.push(proj)
+  }
+  if (grounds.length > 0) {
+    if (clip.x < minX) minX = clip.x
+    if (clip.y < minY) minY = clip.y
+    if (clip.x + clip.width > maxX) maxX = clip.x + clip.width
+    if (clip.y + clip.height > maxY) maxY = clip.y + clip.height
   }
   if (!Number.isFinite(minX) || !Number.isFinite(minY)) return emptyMeshFrame()
   const covered = {
@@ -2434,6 +2598,7 @@ function rasterize(
   })
   for (const index of solid) paintBatch(index)
   for (const index of glass) paintBatch(index)
+  paintGrounds(grounds, color, depth, shadow, pw, ph, originX, originY, pixelScale, perspective, px, py)
   const outW = Math.max(1, Math.round(viewW * base))
   const outH = Math.max(1, Math.round(viewH * base))
   const frameOf = (canvas: Canvas): MeshFrame => ({
@@ -3510,6 +3675,7 @@ function compositeSprites(sprites: MeshFrame[]): MeshFrame {
 
 export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
   const { layer, perspective, meshes, planes, scale, raster } = input
+  const grounds = input.grounds ?? []
   const samples = input.samples === 1 || input.samples === 2 || input.samples === 4 ? input.samples : 4
   const clip = input.clip ?? { x: 0, y: 0, width: layer.width, height: layer.height }
   const batches: Batch[] = []
@@ -3587,6 +3753,8 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
     batch.owner = plane.node.sharp ? -(ownerId + 1) : ownerId
     batches.push(batch)
   }
-  if (layer.dof && perspective !== 'parallel') return rasterizeDofObjects(batches, layer, perspective, scale, samples, clip)
-  return rasterize(batches, layer, perspective, scale, samples, clip)
+  if (layer.dof && perspective !== 'parallel' && grounds.length === 0) {
+    return rasterizeDofObjects(batches, layer, perspective, scale, samples, clip)
+  }
+  return rasterize(batches, layer, perspective, scale, samples, clip, grounds)
 }

@@ -359,6 +359,22 @@ export namespace JSX {
         scale?: number | string
         opacity?: number | string
       }
+    /** 无限平面，只接影子。旋转和 box 一样。不写 fill 时地面透明。 */
+    ground: LayerPositioned & {
+      fill?: string
+      /** 影子模糊，像素。默认 0 */
+      'shadow-blur'?: number | string
+      /** 影子不透明度，0 到 1。默认 0.4 */
+      'shadow-opacity'?: number | string
+      /** 影子颜色。默认 #000000 */
+      'shadow-color'?: string
+      rotate?: number | string
+      rotateX?: number | string
+      rotateY?: number | string
+      z?: number | string
+      scale?: number | string
+      opacity?: number | string
+    }
     extrude: LayerPositioned &
       LayerEffects & {
         d?: string

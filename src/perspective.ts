@@ -159,7 +159,7 @@ export function cameraSceneCustom(layer: LayerLayoutNode): boolean {
 
 /** 子树里有要单独进当前镜头的网格、姿态或还能展开的 preserve-3d。压平的层和另一台镜头拦住。 */
 function subtreeEntersCamera(node: LayoutNode): boolean {
-  if (node.kind === 'mesh' || has3dPose(node)) return true
+  if (node.kind === 'mesh' || node.kind === 'ground' || has3dPose(node)) return true
   if (node.preserve3d && !flattenReason(node) && (node.kind === 'layer' || node.kind === 'flex')) return true
   if (node.kind !== 'layer' && node.kind !== 'flex') return false
   if (flattenReason(node)) return false
@@ -765,7 +765,7 @@ export function drawSolidPolygon(ctx: DrawCtx, color: string, polygon: Array<{ x
 export function perspectiveIssues(root: LayoutNode): Issue[] {
   const issues: Issue[] = []
   const visit = (node: LayoutNode, inCamera: boolean, distance: Perspective | undefined, projected: boolean, custom: boolean) => {
-    if (node.kind === 'mesh') {
+    if (node.kind === 'mesh' || node.kind === 'ground') {
       if (distance == null) {
         issues.push({
           level: 'warn',
@@ -774,7 +774,7 @@ export function perspectiveIssues(root: LayoutNode): Issue[] {
           message: `${node.tag} 没有落在镜头里`,
           hint: '给这一层正的 height。不写 camera 时视距等于 height，要改视距写 camera="900"',
         })
-      } else if (!custom && behindCamera(node.z ?? 0, distance)) {
+      } else if (node.kind === 'mesh' && !custom && behindCamera(node.z ?? 0, distance)) {
         issues.push({
           level: 'warn',
           code: 'behind-camera',

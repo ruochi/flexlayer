@@ -550,6 +550,16 @@ export type MeshMaterial = {
   roughness: number
 }
 
+/** 无限平面。不写 fill 时透明，只接网格沿主光投下的影子。旋转和 box 同一套。 */
+export type GroundLayoutNode = LayoutNodeBase & {
+  kind: 'ground'
+  /** 不写、`none`、`transparent` 时没有地面颜色。 */
+  fill: string | null
+  shadowBlur: number
+  shadowOpacity: number
+  shadowColor: string
+}
+
 export type MeshLayoutNode = LayoutNodeBase & {
   kind: 'mesh'
   mesh: MeshSpec
@@ -575,6 +585,7 @@ export type LayoutNode =
   | LineLayoutNode
   | CustomLayoutNode
   | MeshLayoutNode
+  | GroundLayoutNode
 
 /** `view="x y w h"`。x y 是舞台坐标，w h 是被取的宽高。 */
 export type ViewRect = { x: number; y: number; width: number; height: number }

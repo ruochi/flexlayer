@@ -63,7 +63,7 @@ import { applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset
 import { layoutMath } from './math/layout.js'
 import { asBlockFlow, checkChildAttrs, checkTextBoxChildren, haloAttrIssues, hasTwoPoint, hiddenAttrIssues, isDisplayFlex, isHtmlTag, legacyCenterIssues, materialAttrIssues, originValueIssues, rowColumnHint, styleIssues, typoAttrIssues } from './rules.js'
 import { fitViewAspect, parseView, viewExceeds } from './view.js'
-import { FONT_TAG, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag, tagSpellingHint } from './tags.js'
+import { FONT_TAG, isGroundTag, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag, tagSpellingHint } from './tags.js'
 import { boundsOf, parseSvgTransform } from './svg-transform.js'
 import type {
   Anchor,
@@ -87,6 +87,7 @@ import type {
   LineGeometry,
   LineLayoutNode,
   MeshLayoutNode,
+  GroundLayoutNode,
   MaskOp,
   MeshMaterial,
   NoiseSpec,
@@ -1750,6 +1751,96 @@ function layoutMesh(node: LayerNode, ctx: LayoutContext): MeshLayoutNode {
   }
 }
 
+function layoutGround(node: LayerNode, ctx: LayoutContext): GroundLayoutNode {
+  warnNestedMasks(node, ctx)
+  const appearance = readAttrAppearance(node.attrs)
+  let fill: string | null = null
+  const rawFill = node.attrs.fill?.trim()
+  if (rawFill && rawFill !== 'none' && rawFill !== 'transparent') {
+    if (isGradient(rawFill)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'ground 的 fill 不支持渐变，只使用第一个颜色',
+        hint: '改成纯色，或把渐变画在别的平面上',
+      })
+    }
+    fill = solidPaint(rawFill, '#000000')
+  }
+  const shadowBlur = readNonNegative(node.attrs['shadow-blur'], 0, ctx, 'shadow-blur', '例如 shadow-blur="16"')
+  const shadowOpacity = readUnitInterval(node.attrs['shadow-opacity'], 0.4, ctx, 'shadow-opacity', '例如 shadow-opacity="0.45"')
+  const rawShadow = node.attrs['shadow-color']?.trim()
+  if (rawShadow && isGradient(rawShadow)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: 'shadow-color 只收纯色',
+      hint: '写成 #000000',
+    })
+  }
+  const shadowColor = solidPaint(rawShadow, '#000000')
+  return {
+    kind: 'ground',
+    path: ctx.pathPrefix,
+    id: node.attrs.id,
+    tag: node.tag,
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+    ink: { x: 0, y: 0, width: 0, height: 0 },
+    ...appearance,
+    fill,
+    shadowBlur,
+    shadowOpacity,
+    shadowColor,
+    ...layoutDrawMeta(node, ctx),
+  }
+}
+
+function readNonNegative(raw: string | undefined, fallback: number, ctx: LayoutContext, label: string, hint: string): number {
+  if (raw == null || raw.trim() === '') return fallback
+  const value = parseNumber(raw)
+  if (value == null || value < 0) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 ${label}: ${raw}`,
+      hint,
+    })
+    return fallback
+  }
+  return value
+}
+
+function readUnitInterval(raw: string | undefined, fallback: number, ctx: LayoutContext, label: string, hint: string): number {
+  if (raw == null || raw.trim() === '') return fallback
+  const value = parseNumber(raw)
+  if (value == null) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 ${label}: ${raw}`,
+      hint,
+    })
+    return fallback
+  }
+  if (value < 0 || value > 1) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `${label} 要在 0 到 1 之间`,
+      hint,
+    })
+  }
+  return Math.min(1, Math.max(0, value))
+}
+
 function layoutLineNode(node: LayerNode, ctx: LayoutContext, defaultStroke: string): LineLayoutNode {
   warnNestedMasks(node, ctx)
   let geom: LineGeometry
@@ -1954,6 +2045,17 @@ function measureFlexChild(raw: LayerNode, ctx: LayoutContext, direction: 'row' |
       preferredCross: direction === 'row' ? laid.height : laid.width,
       isText: true,
       source: node,
+    }
+  }
+  if (isGroundTag(node.tag)) {
+    const laid = layoutGround(node, ctx)
+    return {
+      node: laid,
+      minMain: 0,
+      minCross: 0,
+      preferredMain: 0,
+      preferredCross: 0,
+      isText: false,
     }
   }
   if (isMeshTag(node.tag)) {
@@ -3049,7 +3151,7 @@ function rawNeedsCamera(node: LayerNode): boolean {
     if (typeof child === 'string') continue
     const tag = child.tag.toLowerCase()
     if (tag === 'mask' || tag === 'preview' || tag === 'symbol' || tag === 'draw' || tag === 'font') continue
-    if (isMeshTag(tag) || nonzeroAttr(child.attrs.rotateX) || nonzeroAttr(child.attrs.rotateY) || nonzeroAttr(child.attrs.z)) return true
+    if (isMeshTag(tag) || isGroundTag(tag) || nonzeroAttr(child.attrs.rotateX) || nonzeroAttr(child.attrs.rotateY) || nonzeroAttr(child.attrs.z)) return true
     if (tag === 'layer' && wroteCameraAttr(child)) continue
     if (rawNeedsCamera(child)) return true
   }
@@ -3058,7 +3160,7 @@ function rawNeedsCamera(node: LayerNode): boolean {
 
 /** 排完的子树里还有没被内层镜头接住的网格或姿态。 */
 function laidNeedsCamera(node: LayoutNode): boolean {
-  if (node.kind === 'mesh' || has3dPose(node)) return true
+  if (node.kind === 'mesh' || node.kind === 'ground' || has3dPose(node)) return true
   if (node.kind === 'layer' && node.perspective != null) return false
   if (node.kind === 'layer' || node.kind === 'flex') return node.children.some(laidNeedsCamera)
   return false
@@ -3137,6 +3239,7 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
     else if (isImageTag(laidSource.tag)) laid = layoutImage(laidSource, subCtx)
     else if (isTextBoxTag(laidSource.tag)) laid = layoutTextBox(laidSource, subCtx, textMax)
     else if (isShapeTag(laidSource.tag)) laid = layoutShape(laidSource, subCtx, ctx.color)
+    else if (isGroundTag(laidSource.tag)) laid = layoutGround(laidSource, subCtx)
     else if (isMeshTag(laidSource.tag)) laid = layoutMesh(laidSource, subCtx)
     else if (laidSource.tag === 'layer') laid = layoutLayer(laidSource, subCtx)
     else if (laidSource.tag === 'math') laid = layoutMath(laidSource, subCtx)

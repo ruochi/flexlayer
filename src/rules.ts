@@ -5,7 +5,7 @@ import { cssPropertyNames, diagnoseStyle, parseNumber, parseStyle, readOrigin } 
 import { MATH_TAGS } from './math/rules.js'
 import { isInlineTag, isTextBoxTag } from './text.js'
 import type { Issue, IssueLevel } from './types.js'
-import { isImageTag, isLineTag, isMeshTag, isShapeTag } from './tags.js'
+import { isGroundTag, isImageTag, isLineTag, isMeshTag, isShapeTag } from './tags.js'
 
 const BLOCK_IN_TEXT = new Set(['h1', 'h2', 'h3', 'p', 'div'])
 
@@ -196,6 +196,7 @@ function usesAttributes(node: LayerNode): boolean {
     isShapeTag(node.tag) ||
     isLineTag(node.tag) ||
     isMeshTag(node.tag) ||
+    isGroundTag(node.tag) ||
     Boolean(node.draw)
   )
 }
@@ -270,6 +271,8 @@ const TAG_LOCAL_ATTRS: Record<string, readonly string[]> = {
   img: ['channel', 'pick', 'derive'],
   image: ['channel', 'pick', 'derive'],
 }
+
+const GROUND_ONLY_ATTRS = ['shadow-blur', 'shadow-opacity', 'shadow-color'] as const
 
 /** 超过 2 的距离直接记成 3，调用方只关心是否落在阈值里。 */
 function editDistance(a: string, b: string): number {
@@ -456,6 +459,48 @@ export function originValueIssues(raw: string | undefined, path: string): Issue[
       '九宫格如 center、top-left；或相对盒子左上角写 120 80、30% 40%。只写一个数时另一轴是中心',
     ),
   ]
+}
+
+/** `shadow-blur` 这三项只写在 ground 上。`angle` 不是地面的旋转。 */
+export function groundAttrIssues(node: LayerNode, path: string): Issue[] {
+  const out: Issue[] = []
+  if (isGroundTag(node.tag) && present(node.attrs, 'angle')) {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        'ground 不用 angle',
+        '倾斜和 box 一样，写 rotate、rotateX、rotateY。正的 rotateX 让平面上边远离观众',
+      ),
+    )
+  }
+  if (isGroundTag(node.tag) && present(node.attrs, 'shadow')) {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        'ground 不使用 shadow',
+        '影子写 shadow-blur、shadow-opacity、shadow-color。地面颜色写 fill',
+      ),
+    )
+  }
+  if (!isGroundTag(node.tag)) {
+    const used = GROUND_ONLY_ATTRS.filter((key) => present(node.attrs, key))
+    if (used.length > 0) {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-attr',
+          path,
+          `${used.join('、')} 只写在 ground 上`,
+          '例如 <ground y="520" rotateX="70" shadow-blur="16" shadow-opacity="0.45" />',
+        ),
+      )
+    }
+  }
+  return out
 }
 
 /** 只检查归属表里的已知属性。拼写接近已知属性的名字会 warn，其余留给 draw。 */
@@ -816,6 +861,8 @@ export function checkChildAttrs(node: LayerNode, parent: 'layer' | 'flex', path:
       ),
     )
   }
+
+  out.push(...groundAttrIssues(node, path))
 
   if (usesAttributes(node) && hasStyle(attrs)) {
     out.push(

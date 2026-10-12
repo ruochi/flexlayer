@@ -635,7 +635,7 @@ function hasChrome(node: LayoutNode): boolean {
 }
 
 function leavesTexture(node: LayoutNode): boolean {
-  if (node.kind === 'mesh') return false
+  if (node.kind === 'mesh' || node.kind === 'ground') return false
   if (node.kind === 'layer' || node.kind === 'flex') {
     if (node.kind === 'layer' && hasPerspective(node.perspective)) return true
     if (hasChrome(node) || node.draw != null) return true
@@ -645,7 +645,7 @@ function leavesTexture(node: LayoutNode): boolean {
 }
 
 export type CameraItem = {
-  kind: 'plane' | 'mesh' | 'chrome'
+  kind: 'plane' | 'mesh' | 'chrome' | 'ground'
   node: LayoutNode
   /** 节点局部到这一层镜头空间（已经乘过视图矩阵）。 */
   toLayer: number[]
@@ -685,6 +685,10 @@ export function cameraItems(layer: LayerLayoutNode): CameraItem[] {
       push({ kind: 'mesh', node, toLayer, posed: true, opacity, depth: meshPivotDepth(node, toLayer) })
       return
     }
+    if (node.kind === 'ground') {
+      push({ kind: 'ground', node, toLayer, posed: true, opacity, depth: 0 })
+      return
+    }
     if (node.kind === 'layer' && hasPerspective(node.perspective)) return
     if (node.kind === 'layer' || node.kind === 'flex') {
       const insetX = node.kind === 'flex' ? node.padding.left + (node.border?.width ?? 0) : 0
@@ -699,6 +703,10 @@ export function cameraItems(layer: LayerLayoutNode): CameraItem[] {
     const toLayer = view ? mulMat4(view, toLocal) : toLocal
     if (node.kind === 'mesh') {
       push({ kind: 'mesh', node, toLayer, posed: true, opacity, depth: meshPivotDepth(node, toLayer) })
+      return
+    }
+    if (node.kind === 'ground') {
+      push({ kind: 'ground', node, toLayer, posed: true, opacity, depth: 0 })
       return
     }
     const nested = node.kind === 'layer' && hasPerspective(node.perspective)

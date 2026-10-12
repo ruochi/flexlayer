@@ -1,6 +1,6 @@
 import { statSync } from 'node:fs'
 import type { Canvas } from '@napi-rs/canvas'
-import type { LayerLayoutNode, LayoutNode, MeshLayoutNode } from './types.js'
+import type { GroundLayoutNode, LayerLayoutNode, LayoutNode, MeshLayoutNode } from './types.js'
 import type { Perspective } from './perspective.js'
 
 /** 画进父层的网格画面。和 mesh.ts 的 MeshFrame 同一形状，避免两个模块互相引用。 */
@@ -14,6 +14,7 @@ export type MeshCacheScene = {
   layer: LayerLayoutNode
   perspective: Perspective
   meshes: Array<{ node: MeshLayoutNode; toLayer: Mat4; opacity?: number }>
+  grounds?: Array<{ node: GroundLayoutNode; toLayer: Mat4; opacity?: number }>
   planes: Array<{ node: LayoutNode; peeled: LayoutNode; toLayer: Mat4 }>
   scale: number
   samples: number
@@ -221,6 +222,14 @@ function hashKind(node: LayoutNode): string | null {
       dash: node.dash ?? null,
     })
   }
+  if (node.kind === 'ground') {
+    return stable({
+      fill: node.fill,
+      shadowBlur: node.shadowBlur,
+      shadowOpacity: node.shadowOpacity,
+      shadowColor: node.shadowColor,
+    })
+  }
   if (node.kind === 'mesh') {
     const mesh = node.mesh
     const stamp = mesh.type === 'model' && mesh.file ? modelStamp(mesh.file) : ''
@@ -244,7 +253,7 @@ function hashKind(node: LayoutNode): string | null {
  */
 export function meshSceneCacheKey(scene: MeshCacheScene): string | null {
   const parts: string[] = [
-    'mesh-scene-v2',
+    'mesh-scene-v3',
     scene.layer.dof ? `dof ${qnum(scene.layer.dof.aperture)} ${qnum(scene.layer.dof.focus)} ${qnum(scene.layer.dof.maxBlur)}` : 'dof',
     String(qnum(scene.layer.width)),
     String(qnum(scene.layer.height)),
@@ -276,6 +285,19 @@ export function meshSceneCacheKey(scene: MeshCacheScene): string | null {
     })
     if (body == null) return null
     parts.push(body)
+  }
+  for (const instance of scene.grounds ?? []) {
+    const body = stable({
+      fill: instance.node.fill,
+      shadowBlur: instance.node.shadowBlur,
+      shadowOpacity: instance.node.shadowOpacity,
+      shadowColor: instance.node.shadowColor,
+      opacity: instance.node.opacity,
+      instOpacity: instance.opacity ?? 1,
+      toLayer: instance.toLayer,
+    })
+    if (body == null) return null
+    parts.push(`ground|${body}`)
   }
   for (const plane of scene.planes) {
     const peeled = hashNode(plane.peeled)

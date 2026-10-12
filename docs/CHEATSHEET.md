@@ -6,7 +6,7 @@
 
 | 标签 | 做什么 |
 | --- | --- |
-| `layer` | 根画布兼定位容器。根上写 `width` `height` `background`（画布底色，省略则 PNG 透明）`color` `safe`。定位用 `x` `y` `anchor`（默认左上角，没写是 0），还有 `opacity` `rotate` `rotateX` `rotateY` `z` `scale` `origin`。`view="x y w h"` 是镜头：这一层的宽高是屏幕上的取景窗，四个数是舞台上被取的矩形，窗口外裁掉。`camera` 是这一层的镜头（一个视距，或 `focal` / `fov` / `lens` / `parallel`，以及 `at` `orbit` `roll` `distance` `from` `vanish`；`aperture` `focus` `max` 是景深）。不写时，有网格或 `rotateX`、`rotateY`、`z` 的最外层用自己的 `height` 当视距。`camera="parallel"` 视线平行，没有近大远小。`preserve-3d` 让子元素进入外层镜头。可嵌套 |
+| `layer` | 根画布兼定位容器。根上写 `width` `height` `background`（画布底色，省略则 PNG 透明）`color` `safe`。定位用 `x` `y` `anchor`（默认左上角，没写是 0），还有 `opacity` `rotate` `rotateX` `rotateY` `z` `scale` `origin`。`view="x y w h"` 是镜头：这一层的宽高是屏幕上的取景窗，四个数是舞台上被取的矩形，窗口外裁掉。`camera` 是这一层的镜头（一个视距，或 `focal` / `fov` / `lens` / `parallel`，以及 `at` `orbit` `roll` `distance` `from` `vanish`；`aperture` `focus` `max` 是景深）。不写时，有网格、`ground` 或 `rotateX`、`rotateY`、`z` 的最外层用自己的 `height` 当视距。`camera="parallel"` 视线平行，没有近大远小。`preserve-3d` 让子元素进入外层镜头。可嵌套 |
 | `draw` | 子标签。正文是 JS（`ctx`、`el`），画在父元素内容之后 |
 | `div` 写 `display:flex` | 排布。默认横向；竖排加 `flex-direction:column`。`gap` `row-gap` `column-gap` `align-items` `align-content` `justify-content` `flex-wrap` `padding` 都在 `style` 里。**`align-items` 默认 `center`（CSS 里是 `stretch`）：column 忘写 `align-items` 会全部居中**。左对齐写 `align-items:flex-start`。横排按文字基线对齐写 `align-items:baseline`，同一行被撑高后 `center` 和 `end` 按新的行盒再排，竖排写了仍按 `flex-start`。`letter-spacing` 可以写 `0.05em`。`align-content` 默认 `flex-start`，管换行后的多行。`justify-content` 只管主轴，改不了这一层在父级交叉轴上的位置 |
 
@@ -28,6 +28,7 @@
 | `circle` | `cx cy r`，圆心 | 同上 |
 | `sphere` | `cx cy r`，圆心，再加上 `z`。布局盒子是边长 `2r` 的正方形 | 放进 layer，不写 `camera` 时视距等于 height |
 | `box` | `x y width height depth`。`rx` 圆棱，`round` 选边（不写是 12 条都圆，如 `front`、`x`、`front-top`）。`x y` 是左上角，布局不计厚度 | 放进 layer，不写 `camera` 时视距等于 height |
+| `ground` | 没有大小。`x y z` 是平面上的一点。`rotate` `rotateX` `rotateY` 和 `box` 一样，`rotateX="90"` 是水平地面。不写 `fill` 时只有影子。`shadow-blur` 默认 0，`shadow-opacity` 默认 0.4，`shadow-color` 默认 `#000000` | 放进 layer，不写 `camera` 时视距等于 height |
 | `cylinder` | `cx cy r height`。轴竖直，`height` 是长度，圆截面朝镜头鼓出 `r`。`rx` 圆上下口，`round` 可写 `top` 或 `bottom`。盒子宽 `2r`、高 `height`，中心是 `cx cy` | 放进 layer，不写 `camera` 时视距等于 height |
 | `torus` | `cx cy r tube`。环躺在平面里，`r` 是环心到管心，`tube` 是管半径。盒子边长 `2(r+tube)` | 放进 layer，不写 `camera` 时视距等于 height |
 | `tube` | `d` 是中心线，`r` 是管半径。`Z` 闭合成环，开口两端封平盖。`x y` 是包围盒（四边各扩 `r`）的左上角 | 放进 layer，不写 `camera` 时视距等于 height |

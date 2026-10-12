@@ -27,6 +27,7 @@
 | 描边 | 只写 `stroke`。形状可加 `stroke-width`；沿墨迹写 `stroke="6 #000 outside"` | `invalid-attr` |
 | 整棵子树的效果 | `<layer grade="lomo" overlay="#00000066">` | `invalid-attr` |
 | 网格 | `<layer><sphere cx="80" cy="80" r="40" /></layer>`。不写 `camera` 时视距等于 height | `flatten-3d` |
+| 地面 | `<ground y="520" rotateX="70" shadow-blur="16" />`。旋转和 `box` 一样。不写 `fill` 时只有影子 | `invalid-attr` |
 | 结构化数据 | `data={{ values: [1, 2] }}`。`.layer` 写 `data='{"values":[1,2]}'` | `invalid-attr` |
 | 故意出现的问题 | `expect="overflow-canvas: 出血图"`。没出现报 `unused-expect` | `unused-expect` |
 
