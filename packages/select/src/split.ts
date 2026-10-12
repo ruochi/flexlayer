@@ -10,6 +10,11 @@ export type SplitInput = {
    * 不传就只按深度，从伸进远处的尖往下长。
    */
   matte?: Uint8ClampedArray
+  /**
+   * 前景收到多远，0 到 1，默认 0.5。
+   * 调大遮罩变大，调小只留更靠近镜头的一段。
+   */
+  front?: number
 }
 
 export type SplitResult = {
@@ -91,21 +96,32 @@ function otsu(values: number[]): number {
 }
 
 /** 抠图选区里，按深度留下近的一块。远处粘上来的楼会掉下去，边还是抠图的边。 */
-function keepNear(matte: Uint8ClampedArray, depth: Uint8ClampedArray): Uint8ClampedArray {
+function keepNear(matte: Uint8ClampedArray, depth: Uint8ClampedArray, front: number): Uint8ClampedArray {
   const inside: number[] = []
-  for (let i = 0; i < matte.length; i++) if (matte[i]! >= 128) inside.push(depth[i]!)
+  let lo = 255
+  let hi = 0
+  for (let i = 0; i < matte.length; i++) {
+    if (matte[i]! < 128) continue
+    const value = depth[i]!
+    inside.push(value)
+    if (value < lo) lo = value
+    if (value > hi) hi = value
+  }
   const alpha = new Uint8ClampedArray(matte.length)
   if (inside.length === 0) return alpha
   const cut = otsu(inside)
+  const threshold = front >= 0.5
+    ? cut + (lo - cut) * ((front - 0.5) / 0.5)
+    : hi + (cut - hi) * (front / 0.5)
   const soft = 6
   for (let i = 0; i < matte.length; i++) {
-    const t = Math.min(1, Math.max(0, (depth[i]! - (cut - soft)) / (soft * 2)))
+    const t = Math.min(1, Math.max(0, (depth[i]! - (threshold - soft)) / (soft * 2)))
     alpha[i] = clampByte(matte[i]! * t)
   }
   return alpha
 }
 
-function growFromSkyline(depth: Uint8ClampedArray, width: number, height: number): Uint8Array | null {
+function growFromSkyline(depth: Uint8ClampedArray, width: number, height: number, front: number): Uint8Array | null {
   const n = width * height
   let lo = 255
   let hi = 0
@@ -154,9 +170,13 @@ function growFromSkyline(depth: Uint8ClampedArray, width: number, height: number
     rowFar[y] = median(band)
   }
 
-  const cap = ground * 0.72
-  const floor = Math.max(skyCut, cap * 0.45)
-  const margin = Math.max(8, ground * 0.1)
+  const capMid = ground * 0.72
+  const floorMid = Math.max(skyCut, capMid * 0.45)
+  const marginMid = Math.max(8, ground * 0.1)
+  const widen = Math.max(0, (front - 0.5) / 0.5)
+  const cap = capMid + (hi - capMid) * widen
+  const floor = floorMid + (skyCut - floorMid) * widen
+  const margin = marginMid * (1 - widen)
   const grown = new Uint8Array(n)
   const stack = new Int32Array(n)
   let head = 0
@@ -179,6 +199,22 @@ function growFromSkyline(depth: Uint8ClampedArray, width: number, height: number
         grown[ni] = 1
         stack[head++] = ni
       }
+    }
+  }
+  if (front < 0.5) {
+    let near = 0
+    let far = 255
+    let seen = 0
+    for (let i = 0; i < n; i++) {
+      if (!grown[i]) continue
+      const value = depth[i]!
+      if (value > near) near = value
+      if (value < far) far = value
+      seen += 1
+    }
+    if (seen > 0) {
+      const cut = near - (front / 0.5) * (near - far)
+      for (let i = 0; i < n; i++) if (grown[i] && depth[i]! < cut) grown[i] = 0
     }
   }
   let count = 0
@@ -214,14 +250,16 @@ function bounds(alpha: Uint8ClampedArray, width: number, height: number): Box | 
 export function splitLayers(input: SplitInput): SplitResult {
   const { depth, width, height } = input
   const n = width * height
+  const front = input.front ?? 0.5
+  if (!(front >= 0 && front <= 1)) throw new Error('front 要在 0 到 1 之间')
   if (depth.length !== n) throw new Error('深度图和图片不一样大')
   if (input.matte && input.matte.length !== n) throw new Error('选区和图片不一样大')
 
   let alpha: Uint8ClampedArray
   if (input.matte) {
-    alpha = keepNear(input.matte, depth)
+    alpha = keepNear(input.matte, depth, front)
   } else {
-    const grown = growFromSkyline(depth, width, height)
+    const grown = growFromSkyline(depth, width, height, front)
     alpha = new Uint8ClampedArray(n)
     if (grown) {
       const hard = new Float32Array(n)

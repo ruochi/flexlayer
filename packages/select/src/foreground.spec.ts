@@ -45,7 +45,8 @@ describe('foregroundMask', () => {
       width: number
       height: number
     }
-    expect(record).toEqual({ mask: 'photo.foreground.png', x: result.x, y: result.y, width: result.width, height: result.height })
+    expect(record).toEqual({ mask: 'photo.foreground.png', x: result.x, y: result.y, width: result.width, height: result.height, front: 0.5 })
+    expect(result.front).toBe(0.5)
     const image = await readRgba(result.mask)
     expect(image.width).toBe(48)
     expect(image.height).toBe(36)
@@ -68,10 +69,31 @@ describe('foregroundMask', () => {
     } finally {
       console.log = log
     }
-    const printed = JSON.parse(logs.join('\n')) as { mask: string; x: number; y: number; width: number; height: number }
+    const printed = JSON.parse(logs.join('\n')) as { mask: string; x: number; y: number; width: number; height: number; front: number }
     expect(printed.mask).toBe('photo.foreground.png')
+    expect(printed.front).toBe(0.5)
     expect(printed.x).toBeGreaterThanOrEqual(17)
     expect(printed.width).toBeGreaterThan(8)
     expect(printed.height).toBeGreaterThan(8)
+  })
+
+  it('命令行把 front 写进返回值', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flexlayer-mask-front-'))
+    const src = join(dir, 'photo.png')
+    const depth = paint(src)
+    const logs: string[] = []
+    const log = console.log
+    console.log = (...args: unknown[]) => {
+      logs.push(args.map(String).join(' '))
+    }
+    try {
+      await runSelect(['mask', src, '--front', '0.2'], { depth: () => depth })
+    } finally {
+      console.log = log
+    }
+    const printed = JSON.parse(logs.join('\n')) as { front: number; height: number }
+    expect(printed.front).toBe(0.2)
+    const record = JSON.parse(readFileSync(join(dir, 'photo.foreground.json'), 'utf8')) as { front: number }
+    expect(record.front).toBe(0.2)
   })
 })

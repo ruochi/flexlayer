@@ -6,14 +6,16 @@
 
 ```bash
 npx flexlayer-select mask photo.jpg
-npx flexlayer-select mask photo.jpg --refine
+npx flexlayer-select mask photo.jpg --front 0.7 --refine
 ```
 
 默认只跑深度模型 Depth Anything V2 Small 的 q4f16（Apache-2.0，大约 19MB）。前景从伸进远处的尖往下长，地面留在外面。`--refine` 再跑下面的 BiRefNet，边用抠图模型，深度只去掉远处粘上的部分。
 
-写出 `photo.foreground.png` 和 `photo.foreground.json`。遮罩里白的地方是前景。json 带这张遮罩的文件名，以及前景的 `x`、`y`、`width`、`height`。没有前景时这四个数是 `null`。
+写出 `photo.foreground.png` 和 `photo.foreground.json`。遮罩里白的地方是前景。json 带这张遮罩的文件名，前景的 `x`、`y`、`width`、`height`，以及这次的 `front`。没有前景时位置和大小是 `null`。
 
-程序里用 `foregroundMask('photo.jpg')`，返回同一组字段，`mask` 是写出来的路径。标记里用 `<mask><img src="photo.foreground.png" channel="luma" /></mask>` 罩住原图。
+`--front` 是前后分界，0 到 1，默认 0.5。调大，遮罩变大；调小，只留更靠近镜头的一段。
+
+程序里用 `foregroundMask('photo.jpg', { front: 0.7 })`，返回同一组字段，`mask` 是写出来的路径。标记里用 `<mask><img src="photo.foreground.png" channel="luma" /></mask>` 罩住原图。
 
 ---
 

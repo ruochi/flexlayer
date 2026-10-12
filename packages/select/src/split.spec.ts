@@ -56,4 +56,34 @@ describe('splitLayers', () => {
     expect(split.box!.x).toBeGreaterThanOrEqual(18)
     expect(split.box!.x + split.box!.width).toBeLessThanOrEqual(32)
   })
+
+  it('front 调大遮罩变大，调小只留更近的一段', () => {
+    const depth = depthOf(48, 36, (x, y) => {
+      const inTower = x >= 18 && x <= 30 && y >= 8 && y <= 24
+      const ground = y >= 26
+      if (inTower) return 100 + (y - 8) * 5
+      if (ground) return 230
+      if (y >= 14) return 40
+      return 0
+    })
+    const tight = splitLayers({ depth, width: 48, height: 36, front: 0.15 })
+    const mid = splitLayers({ depth, width: 48, height: 36, front: 0.5 })
+    const wide = splitLayers({ depth, width: 48, height: 36, front: 1 })
+    const area = (alpha: Uint8ClampedArray) => alpha.reduce((sum, value) => sum + (value >= 128 ? 1 : 0), 0)
+    expect(area(tight.alpha)).toBeGreaterThan(8)
+    expect(area(mid.alpha)).toBeGreaterThan(area(tight.alpha))
+    expect(area(wide.alpha)).toBeGreaterThan(area(mid.alpha))
+    expect(wide.box!.y + wide.box!.height).toBeGreaterThan(mid.box!.y + mid.box!.height)
+  })
+
+  it('refine 时 front 调大把远处粘上的一块收回来', () => {
+    const depth = tower()
+    const matte = new Uint8ClampedArray(48 * 36)
+    for (let y = 8; y <= 24; y++) {
+      for (let x = 18; x <= 30; x++) matte[y * 48 + x] = 255
+      for (let x = 34; x <= 42; x++) matte[y * 48 + x] = 255
+    }
+    const wide = splitLayers({ depth, width: 48, height: 36, matte, front: 1 })
+    expect(wide.alpha[16 * 48 + 38]).toBeGreaterThan(100)
+  })
 })

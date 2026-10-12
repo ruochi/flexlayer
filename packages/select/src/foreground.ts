@@ -15,6 +15,11 @@ export type ForegroundOptions = {
   segment?: Segmenter
   /** 边用抠图模型，深度只去掉远处粘上的部分。 */
   refine?: boolean
+  /**
+   * 前景收到多远，0 到 1，默认 0.5。
+   * 调大遮罩变大，调小只留更靠近镜头的一段。
+   */
+  front?: number
   baseDir?: string
 }
 
@@ -29,6 +34,8 @@ export type ForegroundMask = {
   width: number | null
   /** 前景高度。没有前景时是 null。 */
   height: number | null
+  /** 这次用的前后分界，0 到 1。 */
+  front: number
 }
 
 function stemOf(file: string): string {
@@ -42,6 +49,8 @@ function stemOf(file: string): string {
  * `photo.jpg` 得到 `photo.foreground.png` 和 `photo.foreground.json`。
  */
 export async function foregroundMask(src: string, options: ForegroundOptions = {}): Promise<ForegroundMask> {
+  const front = options.front ?? 0.5
+  if (!(front >= 0 && front <= 1)) throw new Error('front 要在 0 到 1 之间')
   const trimmed = src.trim()
   if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) throw new Error('mask 只接受本地图片')
   const baseDir = options.baseDir ?? process.cwd()
@@ -58,7 +67,7 @@ export async function foregroundMask(src: string, options: ForegroundOptions = {
     matte = new Uint8ClampedArray(await segment(rgba, width, height))
     if (matte.length !== width * height) throw new Error('分割结果的像素数和原图不一致')
   }
-  const split = splitLayers({ depth, width, height, matte })
+  const split = splitLayers({ depth, width, height, matte, front })
   const stem = stemOf(srcFile)
   const mask = `${stem}.foreground.png`
   const record = {
@@ -67,8 +76,9 @@ export async function foregroundMask(src: string, options: ForegroundOptions = {
     y: split.box?.y ?? null,
     width: split.box?.width ?? null,
     height: split.box?.height ?? null,
+    front,
   }
   writePng(mask, maskRgba(split.alpha), width, height)
   writeFileSync(`${stem}.foreground.json`, `${JSON.stringify(record, null, 2)}\n`)
-  return { mask, x: record.x, y: record.y, width: record.width, height: record.height }
+  return { mask, x: record.x, y: record.y, width: record.width, height: record.height, front }
 }

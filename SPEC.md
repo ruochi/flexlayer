@@ -403,15 +403,18 @@ npx flexlayer-select apply photo.jpg --add 2 --subtract 1
 
 ```bash
 npx flexlayer-select mask photo.jpg
-npx flexlayer-select mask photo.jpg --refine
+npx flexlayer-select mask photo.jpg --front 0.7
+npx flexlayer-select mask photo.jpg --refine --front 0.3
 ```
 
 默认只跑深度模型 Depth Anything V2 Small 的 q4f16（Apache-2.0，大约 19MB），从伸进远处的那一尖往下长出前景，地面留在外面。`--refine` 再跑 BiRefNet，边用抠图模型的，深度只把远处粘上来的部分去掉。深度没有明显起伏时遮罩是空的，`x`、`y`、`width`、`height` 为 `null`。
 
+`--front` 是前后分界，0 到 1，默认 0.5，不写和写 0.5 是同一张遮罩。调大，分界往远处推，遮罩变大，靠近镜头的地面和远处粘上的部分会进来。调小，只留更靠近镜头的一段。拼接时可以按这个数来回试。
+
 `photo.jpg` 旁边得到 `photo.foreground.png` 和 `photo.foreground.json`。遮罩和原图一样大，白的地方是前景，alpha 和亮度是同一个值。json 就是这次的返回值：
 
 ```json
-{ "mask": "photo.foreground.png", "x": 643, "y": 481, "width": 861, "height": 640 }
+{ "mask": "photo.foreground.png", "x": 643, "y": 481, "width": 861, "height": 640, "front": 0.5 }
 ```
 
 `x`、`y` 是前景外接矩形的左上角，`width`、`height` 是它的宽高，单位是图片像素。
@@ -430,7 +433,7 @@ npx flexlayer-select mask photo.jpg --refine
 ```ts
 import { foregroundMask } from 'flexlayer-select'
 
-const fg = await foregroundMask('photo.jpg')
+const fg = await foregroundMask('photo.jpg', { front: 0.7 })
 ```
 
 ### 图标

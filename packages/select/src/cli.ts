@@ -16,11 +16,11 @@ export type SelectHooks = {
 
 function usageText(): string {
   return `用法:
-  flexlayer-select mask <图片> [--refine]
+  flexlayer-select mask <图片> [--front 0.5] [--refine]
   flexlayer-select cutout <图片> [--preset portrait|product|flat]
   flexlayer-select apply <图片> [--add 3,5] [--subtract 9]
 
-mask 取出前景遮罩，返回遮罩路径和这块前景的位置、大小。--refine 用抠图模型修边。
+mask 取出前景遮罩，返回遮罩路径和这块前景的位置、大小。--front 是前后分界，0 到 1，默认 0.5，调大遮罩变大。--refine 用抠图模型修边。
 cutout 把主体、蒙版、编号区域和配方写到图片旁边。
 apply 把编号题的答案写进 <mask>：--add 收进选区，--subtract 从选区去掉。`
 }
@@ -101,11 +101,15 @@ async function applyCommand(argv: string[]) {
 
 async function maskCommand(argv: string[], hooks: SelectHooks) {
   const { file, rest } = takeFile(argv)
-  const refine = rest.includes('--refine')
-  const leftover = rest.filter((token) => token !== '--refine')
+  const frontFlag = flag(rest, 'front')
+  const refine = frontFlag.rest.includes('--refine')
+  const leftover = frontFlag.rest.filter((token) => token !== '--refine')
   if (leftover.length > 0) throw new Error(usageText())
+  const front = frontFlag.value == null ? undefined : Number(frontFlag.value)
+  if (front != null && !(front >= 0 && front <= 1)) throw new Error('front 要在 0 到 1 之间')
   const result = await foregroundMask(resolve(file), {
     refine,
+    front,
     depth: hooks.depth,
     segment: hooks.segment,
   })
@@ -115,6 +119,7 @@ async function maskCommand(argv: string[], hooks: SelectHooks) {
     y: result.y,
     width: result.width,
     height: result.height,
+    front: result.front,
   }, null, 2))
 }
 

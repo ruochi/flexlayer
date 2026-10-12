@@ -39,7 +39,7 @@ npx flexlayer render scene.tsx --frames out/ --from 0 --to 90
 
 检查抠图结果或黑白蒙版用 `await analyzeImage('cut.png')`：返回留下的比例 `area`、外接矩形 `ink`、碎片数 `pieces`、洞数 `holes`、软边宽度 `softEdge` 和轮廓 `d`，坐标是图片像素。`d` 直接写进 `<mask><path d /></mask>`。
 
-抠主体和前景遮罩不在渲染器里，`analyzeImage` 只量已经抠好的图。包 `flexlayer-select` 不在 npm 上。在仓库里进入 `packages/select`，执行 `npm ci && npm run build`。前景遮罩：`npx flexlayer-select mask photo.jpg`，深度模型 q4f16 大约 19MB。返回 `photo.foreground.png` 和前景的 `x` `y` `width` `height`。标记里用 `<mask><img src="photo.foreground.png" channel="luma" /></mask>` 罩住原图。`--refine` 才下载 BiRefNet 的 fp16，大约 470MB。只抠主体时仍用 `npx flexlayer-select cutout photo.jpg --preset portrait`。预览写 `<preview of="#cut" show="overlay checker black white edges" />`。`show` 是合法属性。正常成片不画预览，`npx flexlayer render scene.layer --preview out.png` 才出拼图。蒙版层自己的 `shadow`、`glow` 和外侧 `stroke` 按留下的轮廓伸出蒙版。
+抠主体和前景遮罩不在渲染器里，`analyzeImage` 只量已经抠好的图。包 `flexlayer-select` 不在 npm 上。在仓库里进入 `packages/select`，执行 `npm ci && npm run build`。前景遮罩：`npx flexlayer-select mask photo.jpg --front 0.5`，深度模型 q4f16 大约 19MB。返回 `photo.foreground.png` 和前景的 `x` `y` `width` `height`。`--front` 调大遮罩变大，调小只留更近的一段。标记里用 `<mask><img src="photo.foreground.png" channel="luma" /></mask>` 罩住原图。`--refine` 才下载 BiRefNet 的 fp16，大约 470MB。只抠主体时仍用 `npx flexlayer-select cutout photo.jpg --preset portrait`。预览写 `<preview of="#cut" show="overlay checker black white edges" />`。`show` 是合法属性。正常成片不画预览，`npx flexlayer render scene.layer --preview out.png` 才出拼图。蒙版层自己的 `shadow`、`glow` 和外侧 `stroke` 按留下的轮廓伸出蒙版。
 
 ```tsx
 /** @jsxImportSource flexlayer */
