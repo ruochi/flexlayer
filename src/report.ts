@@ -6,7 +6,7 @@ import { apply, applyToBox, aroundPivot, IDENTITY, intersectBox, matrixScale, mu
 import { applyPoseMatrix, behindCamera, cameraSceneCustom, has3dPose, hasPerspective, planeDepth, poseMatrix, posePoint, project as projectPoint, splitsForCamera, type Perspective } from './perspective.js'
 import { maskStats } from './mask-stats.js'
 import { innerInkStrokeReach, outerInkStrokeReach } from './style.js'
-import type { Box, ElementReport, FvgDocument, FvgReport, InlineOwner, Issue, LayerLayoutNode, LayoutNode, MeshLayoutNode, TextLayoutNode } from './types.js'
+import type { Box, ElementReport, LayerDocument, LayerReport, InlineOwner, Issue, LayerLayoutNode, LayoutNode, MeshLayoutNode, TextLayoutNode } from './types.js'
 import { boxToRect, emptyBox, translateBox, unionBoxes } from './types.js'
 import { viewMatrix } from './view.js'
 
@@ -802,7 +802,7 @@ function layoutQuad(node: LayoutNode, plane: PlaneSpace, planeRoot: boolean): Qu
   return [pts[0]!, pts[1]!, pts[2]!, pts[3]!]
 }
 
-function effectOutside(box: Box, doc: FvgDocument): boolean {
+function effectOutside(box: Box, doc: LayerDocument): boolean {
   return box.x < -1e-3 || box.y < -1e-3 || box.x + box.width > doc.width + 1e-3 || box.y + box.height > doc.height + 1e-3
 }
 
@@ -822,7 +822,7 @@ function attachDefocus(node: LayoutNode, elements: ElementReport[]) {
   }
 }
 
-export function buildReport(doc: FvgDocument): FvgReport {
+export function buildReport(doc: LayerDocument): LayerReport {
   const elements: ElementReport[] = []
   const effects: EffectRecord[] = []
   const inkSlack: number[] = []

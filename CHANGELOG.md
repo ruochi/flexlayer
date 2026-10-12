@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0
+
+删掉还能用的旧写法。下面这些现在会报错，或不再导出：
+
+- 标签必须是规范里的小写。`<Layer>`、`<Circle>` 不再归一后照常画。根上写了大写，直接拒绝；子元素报 `unknown-tag`（error），hint 给出小写写法。旧根标签 `fvg` 同样不接受。
+- 不再导出 `renderFvg`、`checkFvg`。`parseFvg` 改名为 `parseLayer`。`FvgNode`、`FvgReport` 等类型改成 `LayerNode`、`LayerReport`。
+- 不再把旧包名重定向到 `flexlayer`。
+- `glass` 只接受预设名，或 `clear, blur 8, tint #fff2` 这种逗号写法。`regular 8 #ffffff22`、单独的像素数不再接受。
+
+`layer` 上的 `cx` / `cy`、`ink-stroke` 仍会指出正确写法。
+
 ## 0.2.58
 
 实现提交：`bbbad19239c9ec2956bb48ff758ca58a729af60c`
@@ -93,6 +104,6 @@
 - 进程级场景缓存按内容哈希，不按对象引用。浮点数量化到 `1e-4`。`draw`、玻璃、`grade`、读背景的滤镜等无法稳定哈希的内容不缓存。命中时像素逐字节相同。上限默认 256MB，渲染选项 `meshCache` 或环境变量 `FLEXLAYER_MESH_CACHE`（字节数，或 `0` / `off` / `false`）可改、可关。
 - 挤出、圆角和 `model` 的几何按参数另做缓存，物体在转、形状不变时不必重建。
 - 颜色、深度、所有者和阴影深度缓冲按进程复用，只填本帧的矩形。
-- `meshSamples` 接到 `renderFvg`、`renderFrames`、`renderToCanvas` 和命令行 `--mesh-samples`。
+- `meshSamples` 接到 `renderLayer`、`renderFrames`、`renderToCanvas` 和命令行 `--mesh-samples`。
 
 基准（`node bench-mesh.mjs`，1920×1080，单进程，默认 4× 采样）：地面加挤出字静止约 19 ms/帧，只有字静止约 23 ms/帧，字在转约 280 ms/帧。

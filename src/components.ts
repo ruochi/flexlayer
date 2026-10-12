@@ -1,19 +1,19 @@
 import { h } from './h.js'
 import type { JSX } from './jsx-runtime.js'
-import type { FvgChild, FvgNode } from './parse.js'
+import type { LayerChild, LayerNode } from './parse.js'
 
 export type ComponentProps = {
-  children?: FvgChild[]
-  [key: string]: string | FvgChild[] | undefined
+  children?: LayerChild[]
+  [key: string]: string | LayerChild[] | undefined
 }
 
-export type ComponentResult = FvgNode | FvgChild[] | null | undefined
+export type ComponentResult = LayerNode | LayerChild[] | null | undefined
 
 export type ComponentFn = (props: ComponentProps) => ComponentResult
 
 /** 在 declare module 里声明过的标签，回调参数用那份属性；没声明的仍是宽松的 ComponentProps。 */
 type PropsOf<Name extends string> = Name extends keyof JSX.IntrinsicElements
-  ? JSX.IntrinsicElements[Name] & { children?: FvgChild[] }
+  ? JSX.IntrinsicElements[Name] & { children?: LayerChild[] }
   : ComponentProps
 
 const REGISTRY_KEY = '__flexlayerComponents'
@@ -48,7 +48,7 @@ function attr(props: object, name: string): string | undefined {
 }
 
 /** 内置箭头。展开成线加一个张角 30° 的三角。head 缺省是 max(12, stroke-width * 4)。 */
-export function arrowComponent(props: PropsOf<'arrow'>): FvgNode {
+export function arrowComponent(props: PropsOf<'arrow'>): LayerNode {
   const x1 = Number(attr(props, 'x1') ?? 0)
   const y1 = Number(attr(props, 'y1') ?? 0)
   const x2 = Number(attr(props, 'x2') ?? 0)
@@ -97,7 +97,7 @@ export function arrowComponent(props: PropsOf<'arrow'>): FvgNode {
 
 registerComponent('arrow', arrowComponent)
 
-function asNode(rendered: FvgNode | FvgChild[] | null | undefined): FvgNode | null {
+function asNode(rendered: LayerNode | LayerChild[] | null | undefined): LayerNode | null {
   if (rendered == null) return null
   if (Array.isArray(rendered)) return h('g', {}, ...rendered)
   if (typeof rendered === 'string') return h('g', {}, rendered)
@@ -105,7 +105,7 @@ function asNode(rendered: FvgNode | FvgChild[] | null | undefined): FvgNode | nu
 }
 
 /** 只展开这一层标签。普通节点原样返回，好让量过的 layer 还是同一个对象。 */
-export function materialize(node: FvgNode, stack: string[] = []): FvgNode {
+export function materialize(node: LayerNode, stack: string[] = []): LayerNode {
   const name = node.tag.toLowerCase()
   const render = registry().get(name)
   if (!render || stack.includes(name) || stack.length > 8) return node

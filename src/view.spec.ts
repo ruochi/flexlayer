@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { initFontsForMeasure } from './fonts.js'
-import { checkFvg, renderFvg } from './render.js'
+import { checkLayer, renderLayer } from './render.js'
 import { zoomView } from './view.js'
 
 beforeAll(async () => {
@@ -30,7 +30,7 @@ describe('view', () => {
   })
 
   it('取景窗铺满 view 指定的舞台矩形，窗外的不画', async () => {
-    const { png, report } = await renderFvg(
+    const { png, report } = await renderLayer(
       page(`
         <layer width="40" height="40" view="20 0 20 20">
           <rect x="0" y="0" width="40" height="20" fill="#ff0000" />
@@ -56,12 +56,12 @@ describe('view', () => {
   })
 
   it('舞台盖不住 view 时报 view-outside，比例不对就重算高度', async () => {
-    const outside = await checkFvg(
+    const outside = await checkLayer(
       page(`<layer width="100" height="100" view="-10 0 50 50"><layer width="80" height="80"><rect x="0" y="0" width="80" height="80" fill="#fff" /></layer></layer>`),
     )
     expect(outside.issues.some((issue) => issue.code === 'view-outside' && issue.level === 'error')).toBe(true)
 
-    const fitted = await checkFvg(
+    const fitted = await checkLayer(
       page(`<layer width="100" height="50" view="0 0 40 40"><rect x="0" y="0" width="80" height="80" fill="#fff" /></layer>`, 'width="100" height="50" safe="0"'),
     )
     const view = fitted.elements.find((el) => el.view)?.view
@@ -71,7 +71,7 @@ describe('view', () => {
   })
 
   it('转过的矩形盖不住镜头时报 view-outside，放大后的矩形盖住就不报', async () => {
-    const turned = await checkFvg(
+    const turned = await checkLayer(
       page(
         `<layer width="100" height="100" view="0 0 100 100"><rect x="0" y="0" width="100" height="100" rotate="45" fill="#fff" /></layer>`,
         'width="120" height="120" safe="0"',
@@ -79,7 +79,7 @@ describe('view', () => {
     )
     expect(turned.issues.some((issue) => issue.code === 'view-outside' && issue.level === 'error')).toBe(true)
 
-    const grown = await checkFvg(
+    const grown = await checkLayer(
       page(
         `<layer width="100" height="100" view="0 0 100 100"><rect x="0" y="0" width="50" height="50" scale="2" origin="top-left" fill="#fff" /></layer>`,
         'width="100" height="100" safe="0"',
@@ -87,7 +87,7 @@ describe('view', () => {
     )
     expect(grown.issues.some((issue) => issue.code === 'view-outside')).toBe(false)
 
-    const bare = await checkFvg(
+    const bare = await checkLayer(
       page(
         `<layer width="100" height="100" view="0 0 100 100"><rect x="0" y="0" width="50" height="50" fill="#fff" /></layer>`,
         'width="100" height="100" safe="0"',
@@ -97,7 +97,7 @@ describe('view', () => {
   })
 
   it('g 旋转后露出的角报 view-outside，转完仍盖住就不报', async () => {
-    const turned = await checkFvg(
+    const turned = await checkLayer(
       page(
         `<layer width="100" height="100" view="0 0 100 100"><g transform="rotate(45 50 50)"><rect x="0" y="0" width="100" height="100" fill="#fff" /></g></layer>`,
         'width="120" height="120" safe="0"',
@@ -105,7 +105,7 @@ describe('view', () => {
     )
     expect(turned.issues.some((issue) => issue.code === 'view-outside' && issue.level === 'error')).toBe(true)
 
-    const nested = await checkFvg(
+    const nested = await checkLayer(
       page(
         `<layer width="100" height="100" view="0 0 100 100"><g transform="rotate(45 50 50)"><g><rect x="0" y="0" width="100" height="100" fill="#fff" /></g></g></layer>`,
         'width="120" height="120" safe="0"',
@@ -113,7 +113,7 @@ describe('view', () => {
     )
     expect(nested.issues.some((issue) => issue.code === 'view-outside' && issue.level === 'error')).toBe(true)
 
-    const attr = await checkFvg(
+    const attr = await checkLayer(
       page(
         `<layer width="100" height="100" view="0 0 100 100"><g rotate="45"><rect x="0" y="0" width="100" height="100" fill="#fff" /></g></layer>`,
         'width="120" height="120" safe="0"',
@@ -121,7 +121,7 @@ describe('view', () => {
     )
     expect(attr.issues.some((issue) => issue.code === 'view-outside' && issue.level === 'error')).toBe(true)
 
-    const covered = await checkFvg(
+    const covered = await checkLayer(
       page(
         `<layer width="100" height="100" view="0 0 100 100"><g transform="rotate(45 50 50)"><rect x="-50" y="-50" width="200" height="200" fill="#fff" /></g></layer>`,
         'width="100" height="100" safe="0"',
@@ -129,7 +129,7 @@ describe('view', () => {
     )
     expect(covered.issues.some((issue) => issue.code === 'view-outside')).toBe(false)
 
-    const plain = await checkFvg(
+    const plain = await checkLayer(
       page(
         `<layer width="100" height="100" view="0 0 100 100"><g><rect x="0" y="0" width="100" height="100" fill="#fff" /></g></layer>`,
         'width="100" height="100" safe="0"',
@@ -139,40 +139,40 @@ describe('view', () => {
   })
 
   it('最小字号按短边，横竖屏同一档', async () => {
-    const wide = await checkFvg(`<layer width="1920" height="1080" safe="0"><p style="font-size:28px; white-space:nowrap">正文</p></layer>`)
+    const wide = await checkLayer(`<layer width="1920" height="1080" safe="0"><p style="font-size:28px; white-space:nowrap">正文</p></layer>`)
     expect(wide.issues.some((issue) => issue.code === 'min-font-size')).toBe(false)
-    const wideSmall = await checkFvg(`<layer width="1920" height="1080" safe="0"><p style="font-size:20px; white-space:nowrap">正文</p></layer>`)
+    const wideSmall = await checkLayer(`<layer width="1920" height="1080" safe="0"><p style="font-size:20px; white-space:nowrap">正文</p></layer>`)
     expect(wideSmall.issues.find((issue) => issue.code === 'min-font-size')?.message).toContain('24.0px')
-    const tall = await checkFvg(`<layer width="1080" height="1920" safe="0"><p style="font-size:20px; white-space:nowrap">正文</p></layer>`)
+    const tall = await checkLayer(`<layer width="1080" height="1920" safe="0"><p style="font-size:20px; white-space:nowrap">正文</p></layer>`)
     expect(tall.issues.find((issue) => issue.code === 'min-font-size')?.message).toContain('24.0px')
   })
 
   it('最小字号和模糊外扩按屏幕尺寸', async () => {
-    const shrunk = await checkFvg(
+    const shrunk = await checkLayer(
       `<layer width="1080" height="1080" safe="0"><p style="font-size:30px; white-space:nowrap; scale:0.5">字</p></layer>`,
     )
     const small = shrunk.issues.find((issue) => issue.code === 'min-font-size')
     expect(small?.message).toContain('屏幕上的字号 15.0px')
 
-    const zoomed = await checkFvg(
+    const zoomed = await checkLayer(
       `<layer width="1080" height="400" safe="0"><layer width="1080" height="400" view="0 0 540 200"><layer width="540" height="200"><p style="font-size:16px; white-space:nowrap">字</p></layer></layer></layer>`,
     )
     expect(zoomed.issues.some((issue) => issue.code === 'min-font-size')).toBe(false)
     const text = zoomed.elements.find((el) => el.tag === 'p')
     expect(text?.screenScale).toBeCloseTo(2, 2)
 
-    const glow = await checkFvg(
+    const glow = await checkLayer(
       page(`<rect x="30" y="30" width="20" height="20" fill="#fff" blur="8" scale="2" origin="top-left" />`),
     )
     expect(glow.issues.some((issue) => issue.code === 'effect-clipped')).toBe(true)
-    const plain = await checkFvg(
+    const plain = await checkLayer(
       page(`<rect x="30" y="30" width="20" height="20" fill="#fff" blur="8" />`),
     )
     expect(plain.issues.some((issue) => issue.code === 'effect-clipped')).toBe(false)
   })
 
   it('取景窗外的着墨不报 overflow-canvas', async () => {
-    const report = await checkFvg(
+    const report = await checkLayer(
       page(
         `<layer width="100" height="50" view="0 0 100 50"><layer width="200" height="100"><circle cx="-20" cy="25" r="30" fill="#fff" /><rect x="0" y="0" width="200" height="100" fill="#fff" /></layer></layer>`,
         'width="100" height="50" safe="0"',
@@ -182,7 +182,7 @@ describe('view', () => {
   })
 
   it('取景窗裁开的字不报 outside-safe，窗内仍在安全区外的字要报', async () => {
-    const cut = await checkFvg(
+    const cut = await checkLayer(
       page(
         `<layer width="200" height="80" view="0 0 200 80"><rect x="0" y="0" width="200" height="80" fill="#111" /><layer x="-40" y="8"><p style="font-size:28px; white-space:nowrap">窗外的字被裁开以后还很长很长</p></layer></layer>`,
         'width="200" height="80" safe="16"',
@@ -193,7 +193,7 @@ describe('view', () => {
     expect(cut.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
     expect(cut.issues.some((issue) => issue.code === 'outside-safe')).toBe(false)
 
-    const shown = await checkFvg(
+    const shown = await checkLayer(
       page(
         `<layer width="200" height="80" view="0 0 200 80"><rect x="0" y="0" width="200" height="80" fill="#111" /><layer x="4" y="8"><p style="font-size:28px; white-space:nowrap">靠左</p></layer></layer>`,
         'width="200" height="80" safe="16"',
@@ -203,7 +203,7 @@ describe('view', () => {
     expect(shown.issues.some((issue) => issue.code === 'outside-safe')).toBe(true)
     expect(shown.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
 
-    const hidden = await checkFvg(
+    const hidden = await checkLayer(
       `<layer width="200" height="80" safe="16" overflow="hidden" background="#111"><layer x="-40" y="8"><p style="font-size:28px; white-space:nowrap">窗外的字被裁开以后还很长很长</p></layer></layer>`,
     )
     expect(hidden.elements.find((el) => el.tag === 'p')?.ink.left).toBeLessThan(16)

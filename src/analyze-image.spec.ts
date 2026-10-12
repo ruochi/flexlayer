@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { analyzeImage } from './analyze-image.js'
-import { renderFvg } from './render.js'
+import { renderLayer } from './render.js'
 
 function png(width: number, height: number, paint: (ctx: SKRSContext2D) => void): Buffer {
   const canvas = createCanvas(width, height)
@@ -97,7 +97,7 @@ describe('analyzeImage', () => {
     const info = analyzeImage(dataUrl(original))
     expect(info.pieces).toBe(2)
     expect(info.holes).toBe(1)
-    const { png: redrawn } = await renderFvg(`<layer width="120" height="90"><path d="${info.d}" fill="#fff" stroke="none" /></layer>`)
+    const { png: redrawn } = await renderLayer(`<layer width="120" height="90"><path d="${info.d}" fill="#fff" stroke="none" /></layer>`)
     const again = analyzeImage(dataUrl(redrawn))
     expect(again.pieces).toBe(2)
     expect(again.holes).toBe(1)
@@ -115,7 +115,7 @@ describe('analyzeImage', () => {
       }),
     )
     const info = analyzeImage(src)
-    const { report } = await renderFvg(
+    const { report } = await renderLayer(
       `<layer width="60" height="40"><layer id="cut" width="60" height="40"><mask><path d="${info.d}" /></mask><rect width="60" height="40" fill="#fff" /></layer></layer>`,
     )
     const cut = report.elements.find((el) => el.id === 'cut')

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { checkFvg } from './render.js'
+import { checkLayer } from './render.js'
 
 async function issues(source: string) {
-  const report = await checkFvg(source)
+  const report = await checkLayer(source)
   return report
 }
 
@@ -125,13 +125,16 @@ describe('属性归属', () => {
     expect(root.issues.some((issue) => issue.path === 'layer' && issue.hint === '是不是想写 width？')).toBe(true)
   })
 
-  it('大写标签照常渲染，并提示改成小写', async () => {
-    const report = await issues(`<Layer width="80" height="80"><Circle cx="40" cy="40" r="10" fill="#fff" /></Layer>`)
-    expect(report.elements.some((element) => element.tag === 'circle')).toBe(true)
-    const notes = report.issues.filter((issue) => issue.code === 'non-canonical' && issue.message.includes('应写成'))
-    expect(notes.map((issue) => issue.message)).toEqual(
-      expect.arrayContaining([expect.stringContaining('<Layer>'), expect.stringContaining('<Circle>')]),
-    )
+  it('大写根标签直接拒绝', async () => {
+    await expect(issues(`<Layer width="80" height="80"><circle cx="40" cy="40" r="10" fill="#fff" /></Layer>`)).rejects.toThrow(/改成 <layer>/)
+  })
+
+  it('大写子标签报 unknown-tag，不按小写渲染', async () => {
+    const report = await issues(`<layer width="80" height="80"><Circle cx="40" cy="40" r="10" fill="#fff" /></layer>`)
+    expect(report.elements.some((element) => element.tag === 'circle')).toBe(false)
+    const hit = report.issues.find((issue) => issue.code === 'unknown-tag' && issue.message.includes('Circle'))
+    expect(hit?.level).toBe('error')
+    expect(hit?.hint).toBe('改成 <circle>')
   })
 
   it('HTML 上的 cx、cy 只警告一次', async () => {

@@ -1,4 +1,4 @@
-import type { FvgChild, FvgNode, SourceLoc } from './parse.js'
+import type { LayerChild, LayerNode, SourceLoc } from './parse.js'
 import { formatSourceLoc } from './source-loc.js'
 import { readDrawFunction } from './syntax.js'
 import type { DrawFn, Issue, LayoutNode } from './types.js'
@@ -11,7 +11,7 @@ export function compileDrawBody(body: string): DrawFn {
   return new Function('ctx', 'el', `"use strict";\n${body}`) as DrawFn
 }
 
-function drawBodyText(node: FvgNode): string {
+function drawBodyText(node: LayerNode): string {
   return node.children.map((c) => (typeof c === 'string' ? c : '')).join('')
 }
 
@@ -24,8 +24,8 @@ function withSource(issue: Issue, loc?: SourceLoc): Issue {
   return { ...issue, source: formatSourceLoc(loc) }
 }
 
-export function attachDrawTags(node: FvgNode, issues: Issue[], path: string): void {
-  const kept: FvgChild[] = []
+export function attachDrawTags(node: LayerNode, issues: Issue[], path: string): void {
+  const kept: LayerChild[] = []
   const bodies: Array<{ body: string; path: string; loc?: SourceLoc }> = []
 
   let elementIndex = 0

@@ -57,9 +57,9 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | 网格 | `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model`。放在带 `perspective` 的 `layer` 里 |
 | 字体 | `font`（只作为根元素的子元素，`family` 加 `src`） |
 
-- 标签一律小写。写成 `<Circle>` 仍会渲染，并报 `non-canonical`。HTML 只写 `style`，`layer` 和图形只写属性。图片的 `src`、`alt` 仍是属性。
+- 标签一律小写。`<Circle>` 不按小写渲染。根上写了大写或 `fvg`，直接拒绝。子元素报 `unknown-tag`（error），hint 给出小写写法。HTML 只写 `style`，`layer` 和图形只写属性。图片的 `src`、`alt` 仍是属性。
 - 后写的元素画在上面。
-- 不认识的标签会被忽略，并在报告里给出警告。
+- 不认识的标签会被忽略，并在报告里给出警告。写成了已知标签的大写时是 error，不画。
 
 ## 3. 通用属性与归属
 
@@ -600,10 +600,7 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 | `backdrop-blur` | 单个非负像素 | 背景模糊：糊元素背后已画内容，再透过半透明本体看见 |
 | `glass` | 见下 | 边缘凸弧面透镜折射 + 色散 + 朝光高光。与 `backdrop-blur` 同时写时以 `glass` 为准 |
 
-`glass` 有两种写法，都有效：
-
-- 空格：`clear` / `regular` / `thick`，后可跟模糊像素与色调，如 `clear #a8c8ff20`、`regular 8 #ffffff22`、`0`。
-- 逗号（和 `grade` 同一套：预设在前，后面按名字覆盖）：`clear, blur 8, tint #fff2`。可覆盖的名字还有 `refraction`、`specular`、`bezel`、`dispersion`。
+`glass` 先写预设名 `clear`、`regular` 或 `thick`。要改模糊或色调，用逗号接在预设后面：`clear, blur 8, tint #fff2`。可覆盖的名字还有 `refraction`、`specular`、`bezel`、`dispersion`。`regular 8 #ffffff22`、单独的像素数这类空格写法不接受。
 
 三档预设：`clear` 模糊 0（背景完全清晰，只有折射）、`regular` 模糊 6、`thick` 模糊 36（毛玻璃）。折射只发生在墨迹边缘的弧面带（宽约短边 24%，最多 64px）：背景向内取样、在边缘被放大弯折，中心平坦区原样透出。glass 的投影不会透过玻璃被看到。
 
@@ -813,7 +810,7 @@ registerFilter({
 | `min-font-size` | warn | 屏幕上的字号小于 `min(画布宽, 画布高) / 1080 × 24`。屏幕字号是 `font-size × screenScale`。1080p 横屏和竖屏都是 24px |
 | `auto-wrap` | info | 文字超出可用宽度，被自动换行 |
 | `non-canonical` | info | 含义明确，但不是规范写法。照常渲染，`hint` 里是规范写法 |
-| `unknown-tag` | warn | 不认识的标签 |
+| `unknown-tag` | warn | 不认识的标签。写成已知标签的大写时是 error，hint 给出小写写法，不按小写渲染 |
 | `invalid-attr` | warn | 属性放错了位置，或两种写法混用。和已知属性编辑距离不超过 2 的名字也记在这里，`hint` 给出正确写法；候选按标签收窄，过短或没有共同开头的不推荐。其余不认识的属性名不报，留给 `draw`。`style` 里不支持或写错的声明也记在这里。`anchor` 写错、路径 `d` 无法解析同样是这个码；路径失败时跳过这一笔，不中断整张图 |
 | `invalid-child` | warn | 非法子元素：线条或 `g` 放进 flex 容器，文字盒子（`h1`–`h3`、`p`、`span`，以及只含文字的 `div`）里放了 `h1`–`h3`、`p`、`div`、`layer`、`g` 或 `math`，`mask` 放错位置或一层写了多个。含这些子元素的 `div` 按块级竖排，不报这条。文字盒子里的 `<img>` 跟文字排在同一段里，不报这条 |
 | `empty-mask` | warn | `mask` 里没有可用的形状或图片，不生效 |

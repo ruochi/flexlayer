@@ -4,14 +4,14 @@ import { join } from 'node:path'
 import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { describe, expect, it } from 'vitest'
 import { solidBoxGlb } from './glb.js'
-import { checkFvg, renderFvg } from './render.js'
+import { checkLayer, renderLayer } from './render.js'
 import type { RenderOptions } from './types.js'
 
 const dir = mkdtempSync(join(tmpdir(), 'flexlayer-software-mesh-'))
 writeFileSync(join(dir, 'box.glb'), solidBoxGlb([0.15, 0.82, 0.35, 1]))
 
 function render(source: string, options: RenderOptions = {}) {
-  return renderFvg(source, options)
+  return renderLayer(source, options)
 }
 
 async function pixelAt(png: Buffer, x: number, y: number) {
@@ -208,7 +208,7 @@ describe('软件光栅', () => {
     const outside = await pixelAt(spilled.png, layerLeft - 6, 60)
     expect(outside[0]).toBeGreaterThan(80)
     expect(spilled.report.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
-    const clipped = await checkFvg(
+    const clipped = await checkLayer(
       `<layer width="80" height="80" background="#000" perspective="160"><sphere cx="14" cy="40" r="12" z="70" fill="#ff2244" /></layer>`,
     )
     expect(clipped.issues.some((issue) => issue.code === 'overflow-canvas' && issue.path.includes('sphere'))).toBe(true)
@@ -672,7 +672,7 @@ describe('软件光栅', () => {
   })
 
   it('halo 不配 stroke、写在平面上，或 stroke-width 超过三个数，会警告', async () => {
-    const report = await checkFvg(`
+    const report = await checkLayer(`
       <layer width="180" height="140" perspective="400">
         <box x="20" y="30" width="40" height="30" depth="20" halo="3" />
         <rect x="10" y="10" width="20" height="20" fill="#fff" halo="3" />

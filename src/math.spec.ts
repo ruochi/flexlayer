@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { layoutSource } from './layout.js'
 import { mathConstant } from './math/font.js'
-import { renderFvg } from './render.js'
+import { renderLayer } from './render.js'
 import type { FlexLayoutNode, LayoutNode } from './types.js'
 
 function findByTag(root: LayoutNode, tag: string): LayoutNode[] {
@@ -301,7 +301,7 @@ describe('mathml', () => {
   })
 
   it('同一个公式里的记号相交不报 text-overlap', async () => {
-    const { report } = await renderFvg(
+    const { report } = await renderLayer(
       frame('<math display="block"><msubsup><mo>∫</mo><mn>0</mn><mn>1</mn></msubsup><mroot><mi>x</mi><mn>3</mn></mroot></math>'),
     )
     expect(report.issues.filter((i) => i.code === 'text-overlap')).toEqual([])
@@ -349,7 +349,7 @@ describe('mathml', () => {
 
   it('分数线和根号画在布局盒子里', async () => {
     const source = frame('<layer x="100" y="100"><math><mfrac><mi>N</mi><mi>M</mi></mfrac><msqrt><mi>x</mi></msqrt></math></layer>')
-    const { png, report } = await renderFvg(source)
+    const { png, report } = await renderLayer(source)
     for (const tag of ['rule', 'surd']) {
       const el = report.elements.find((e) => e.tag === tag)
       expect(el, tag).toBeTruthy()

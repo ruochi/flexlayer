@@ -290,7 +290,7 @@ export type ElementReport = {
   filters?: FilterReport[]
 }
 
-export type FvgReport = {
+export type LayerReport = {
   /** 格式版本 */
   flexlayer: string
   width: number
@@ -579,7 +579,7 @@ export type LayoutNode =
 /** `view="x y w h"`。x y 是舞台坐标，w h 是被取的宽高。 */
 export type ViewRect = { x: number; y: number; width: number; height: number }
 
-export type FvgDocument = {
+export type LayerDocument = {
   width: number
   height: number
   background: string

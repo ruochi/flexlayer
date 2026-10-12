@@ -1,6 +1,6 @@
 import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { describe, expect, it } from 'vitest'
-import { renderFvg } from './render.js'
+import { renderLayer } from './render.js'
 import type { ElementReport } from './types.js'
 
 type Bounds = { left: number; top: number; right: number; bottom: number }
@@ -85,7 +85,7 @@ function textEl(report: { elements: ElementReport[] }, tag: string) {
 
 describe('字形着墨', () => {
   it('横排 10.1 的报告 ink 与像素误差不超过 1px', async () => {
-    const { png, report } = await renderFvg(
+    const { png, report } = await renderLayer(
       `<layer width="1080" height="400" background="transparent" color="#1b1612" font-family="Song">
         <layer x="76" y="40" anchor="top-left"><h2 style="font-size:190px; font-weight:700; line-height:1; white-space:nowrap">10.1</h2></layer>
       </layer>`,
@@ -98,7 +98,7 @@ describe('字形着墨', () => {
   })
 
   it('竖排文字的报告 ink 与像素误差不超过 1px', async () => {
-    const { png, report } = await renderFvg(
+    const { png, report } = await renderLayer(
       `<layer width="600" height="900" background="transparent" color="#1b1612" font-family="Song">
         <h1 style="font-size:180px; font-weight:700; line-height:1; writing-mode:vertical-rl">国庆</h1>
       </layer>`,
@@ -107,7 +107,7 @@ describe('字形着墨', () => {
   })
 
   it('中英数字混排的报告 ink 与像素误差不超过 1px', async () => {
-    const { png, report } = await renderFvg(
+    const { png, report } = await renderLayer(
       `<layer width="900" height="400" background="transparent" color="#1b1612" font-family="Song">
         <h1 style="font-size:120px; font-weight:700; line-height:1; white-space:nowrap">国A10</h1>
       </layer>`,
@@ -123,7 +123,7 @@ describe('outside-safe 按真实着墨', () => {
     </layer>`
 
   it('盒子在安全区外、笔画在安全区内时不误报', async () => {
-    const { report } = await renderFvg(scene(56))
+    const { report } = await renderLayer(scene(56))
     const h2 = textEl(report, 'h2')
     expect(h2.box.left).toBeCloseTo(56, 3)
     expect(h2.ink.left).toBeGreaterThanOrEqual(64)
@@ -131,9 +131,9 @@ describe('outside-safe 按真实着墨', () => {
   })
 
   it('真实笔画推到 60 时仍会报', async () => {
-    const first = await renderFvg(scene(56))
+    const first = await renderLayer(scene(56))
     const inset = textEl(first.report, 'h2').ink.left - 56
-    const { report } = await renderFvg(scene(60 - inset))
+    const { report } = await renderLayer(scene(60 - inset))
     const h2 = textEl(report, 'h2')
     expect(h2.ink.left).toBeCloseTo(60, 3)
     expect(report.issues.some((issue) => issue.code === 'outside-safe' && issue.path.includes('h2'))).toBe(true)
@@ -149,7 +149,7 @@ describe('anchor-box=ink', () => {
     </layer>`
 
   it('top-left 时笔画左上角落在 x y', async () => {
-    const { png, report } = await renderFvg(placed('top-left', 76, 560))
+    const { png, report } = await renderLayer(placed('top-left', 76, 560))
     const pixels = await alphaBounds(png)
     expectNear(pixels.left, 76, 'left')
     expectNear(pixels.top, 560, 'top')
@@ -162,14 +162,14 @@ describe('anchor-box=ink', () => {
   })
 
   it.each(ANCHORS.filter((anchor) => anchor !== 'top-left'))('%s 的着墨九宫格点落在 x y', async (anchor) => {
-    const { png } = await renderFvg(placed(anchor, 500, 500))
+    const { png } = await renderLayer(placed(anchor, 500, 500))
     const [x, y] = anchorPoint(await alphaBounds(png), anchor)
     expectNear(x, 500, 'x')
     expectNear(y, 500, 'y')
   })
 
   it('外层取两个子 layer 的着墨并集', async () => {
-    const { png } = await renderFvg(
+    const { png } = await renderLayer(
       `<layer width="800" height="800" background="transparent" color="#111111" font-family="Song">
         <layer x="120" y="140" anchor="top-left" anchor-box="ink">
           <layer x="30" y="20" anchor="top-left"><h1 style="font-size:100px; font-weight:700; line-height:1">甲</h1></layer>
@@ -183,7 +183,7 @@ describe('anchor-box=ink', () => {
   })
 
   it('use 也按着墨定位', async () => {
-    const { png, report } = await renderFvg(
+    const { png, report } = await renderLayer(
       `<layer width="600" height="400" background="transparent" color="#111111" font-family="Song">
         <symbol id="mark"><h1 style="font-size:120px; font-weight:700; line-height:1">国</h1></symbol>
         <use href="#mark" x="80" y="60" anchor="top-left" anchor-box="ink" />
@@ -196,7 +196,7 @@ describe('anchor-box=ink', () => {
   })
 
   it('同时写 rotate 时说明对齐点是旋转前的着墨', async () => {
-    const { report } = await renderFvg(
+    const { report } = await renderLayer(
       `<layer width="400" height="400" background="transparent" font-family="Song">
         <layer x="200" y="200" anchor-box="ink" rotate="12"><h1 style="font-size:80px">国</h1></layer>
       </layer>`,
@@ -208,7 +208,7 @@ describe('anchor-box=ink', () => {
   })
 
   it('空文字退回盒子并报 info', async () => {
-    const { report } = await renderFvg(
+    const { report } = await renderLayer(
       `<layer width="400" height="300" background="transparent">
         <layer x="80" y="90" anchor="top-left" anchor-box="ink"><h1></h1></layer>
       </layer>`,
@@ -222,7 +222,7 @@ describe('anchor-box=ink', () => {
   })
 
   it('全透明子树退回盒子', async () => {
-    const { report } = await renderFvg(
+    const { report } = await renderLayer(
       `<layer width="400" height="300" background="transparent" font-family="Song">
         <layer x="80" y="90" anchor="top-left" anchor-box="ink"><h1 style="opacity:0; font-size:120px">国</h1></layer>
       </layer>`,
@@ -234,7 +234,7 @@ describe('anchor-box=ink', () => {
   })
 
   it('overflow=hidden 按裁剪后的着墨定位', async () => {
-    const { png } = await renderFvg(
+    const { png } = await renderLayer(
       `<layer width="500" height="300" background="transparent">
         <layer x="40" y="40" anchor="top-left" anchor-box="ink" width="120" height="80" overflow="hidden">
           <rect x="-30" y="10" width="80" height="40" fill="#000000" />
@@ -249,7 +249,7 @@ describe('anchor-box=ink', () => {
 
 describe('ink-inset', () => {
   it('190px 左对齐文字提示按着墨贴齐', async () => {
-    const { report } = await renderFvg(
+    const { report } = await renderLayer(
       `<layer width="800" height="400" background="transparent" color="#111" font-family="Song">
         <layer x="76" y="40" anchor="top-left"><h2 style="font-size:190px; font-weight:700; line-height:1; white-space:nowrap">10.1</h2></layer>
       </layer>`,
@@ -261,7 +261,7 @@ describe('ink-inset', () => {
   })
 
   it('24px 小字不提示', async () => {
-    const { report } = await renderFvg(
+    const { report } = await renderLayer(
       `<layer width="400" height="200" background="transparent" color="#111">
         <layer x="40" y="40" anchor="top-left"><p style="font-size:24px; line-height:1">小字</p></layer>
       </layer>`,
@@ -272,7 +272,7 @@ describe('ink-inset', () => {
 
 describe('anchor-box 归属', () => {
   it('写在 HTML 上报 warn', async () => {
-    const { report } = await renderFvg(`<layer width="200" height="100"><h1 anchor-box="ink">甲</h1></layer>`)
+    const { report } = await renderLayer(`<layer width="200" height="100"><h1 anchor-box="ink">甲</h1></layer>`)
     const hit = report.issues.find((issue) => issue.message.includes('anchor-box'))
     expect(hit?.level).toBe('warn')
     expect(hit?.hint).toContain('layer')

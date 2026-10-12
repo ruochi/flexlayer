@@ -1,18 +1,18 @@
-import type { FvgNode } from './parse.js'
+import type { LayerNode } from './parse.js'
 import type { DrawFn } from './types.js'
 
 /** HTML 用 style；layer 和图形用属性。 */
-type FvgStyle = string | Record<string, string | number | undefined>
+type LayerStyle = string | Record<string, string | number | undefined>
 
-type JsxChild = string | number | boolean | null | undefined | FvgNode | JsxChild[]
+type JsxChild = string | number | boolean | null | undefined | LayerNode | JsxChild[]
 
 /**
  * 不认识的属性名留给 draw，和 .layer 一样保留。
  * 属性该写在哪由检查报 invalid-attr，不在这里再用类型禁一遍。
  */
-type JsxAttr = string | number | boolean | undefined | FvgStyle | DrawFn | JsxChild
+type JsxAttr = string | number | boolean | undefined | LayerStyle | DrawFn | JsxChild
 
-type FvgNodeBase = {
+type LayerNodeBase = {
   id?: string
   draw?: DrawFn
   /** 结构化数据。`draw` 里读 `el.data`，不要把对象塞进别的属性。 */
@@ -24,16 +24,16 @@ type FvgNodeBase = {
 }
 
 /** 文字和图片。视觉属性写 style。 */
-type FvgHtml = FvgNodeBase & {
-  style?: FvgStyle
+type LayerHtml = LayerNodeBase & {
+  style?: LayerStyle
 }
 
-type FvgGraphic = FvgNodeBase & {
+type LayerGraphic = LayerNodeBase & {
   /** 只在 mask 里：add、subtract、intersect、xor */
   op?: string
 }
 
-type FvgPositioned = FvgGraphic & {
+type LayerPositioned = LayerGraphic & {
   x?: number | string
   y?: number | string
   anchor?: string
@@ -44,13 +44,13 @@ type FvgPositioned = FvgGraphic & {
 }
 
 /** circle、ellipse、sphere、cylinder、torus 的圆心。 */
-type FvgCenter = {
+type LayerCenter = {
   cx?: number | string
   cy?: number | string
 }
 
 /** 线条类。stroke-width 默认 4，fill 默认 none。 */
-type FvgLinePaint = {
+type LayerLinePaint = {
   fill?: string
   stroke?: string
   strokeWidth?: number | string
@@ -64,7 +64,7 @@ type FvgLinePaint = {
   origin?: string
 }
 
-type FvgEffects = {
+type LayerEffects = {
   // jsx-effects:begin
   /** 0 8 16 #00000055 */
   shadow?: string
@@ -90,7 +90,7 @@ type FvgEffects = {
 }
 
 /** 仅 layer：纯色/渐变叠加 */
-type FvgLayerOverlay = {
+type LayerOverlay = {
   // jsx-overlay:begin
   /** #00000066 */
   overlay?: string
@@ -98,7 +98,7 @@ type FvgLayerOverlay = {
 }
 
 /** 仅 layer：调色。例如 grade="lomo 0.8, fade 0.1"，grade-mask 的 alpha 是强度 */
-type FvgLayerGrade = {
+type LayerGrade = {
   // jsx-grade:begin
   /** lomo 0.8, fade 0.1 */
   grade?: string
@@ -107,8 +107,8 @@ type FvgLayerGrade = {
 // jsx-grade:end
 }
 
-type FvgShape = FvgPositioned &
-  FvgEffects & {
+type LayerShape = LayerPositioned &
+  LayerEffects & {
     r?: number | string
     rx?: number | string
     ry?: number | string
@@ -127,7 +127,7 @@ type FvgShape = FvgPositioned &
   }
 
 export namespace JSX {
-  export type Element = FvgNode
+  export type Element = LayerNode
   export interface ElementChildrenAttribute {
     children: {}
   }
@@ -140,10 +140,10 @@ export namespace JSX {
      * 根画布与定位容器。`x`、`y` 是左上角，没写是 0。
      * `background` 只在根上当画布底色；嵌套 layer 不填背景，色块用 rect / HTML / draw。
      */
-    layer: FvgPositioned &
-      FvgEffects &
-      FvgLayerOverlay &
-      FvgLayerGrade & {
+    layer: LayerPositioned &
+      LayerEffects &
+      LayerOverlay &
+      LayerGrade & {
         width?: number | string
         height?: number | string
         /** 仅根节点：画布底色。嵌套 layer 写了会 warn 并忽略 */
@@ -195,63 +195,63 @@ export namespace JSX {
         'border-radius'?: string | number
       }
     /** 子标签：正文 JS，可用 ctx、el；不参与布局 */
-    draw: FvgGraphic
-    symbol: FvgGraphic & { width?: number | string; height?: number | string }
+    draw: LayerGraphic
+    symbol: LayerGraphic & { width?: number | string; height?: number | string }
     /**
      * 蒙版。只作为 layer 的直接子元素。
      * 里面写 rect / circle / ellipse / polygon / path / img / g。运算用 op，不沿用 CSS。
      */
-    mask: FvgGraphic & {
+    mask: LayerGraphic & {
       /** 羽化半径，像素 */
       feather?: number | string
       /** true 时反选 */
       invert?: string | boolean
     }
     /** 正常渲染不画。render --preview 才出选区预览 */
-    preview: FvgGraphic & {
+    preview: LayerGraphic & {
       /** #id，指向要预览的 layer */
       of?: string
       /** overlay checker black white edges */
       show?: string
     }
-    use: FvgPositioned & {
+    use: LayerPositioned & {
       href?: string
       rotate?: number | string
       scale?: number | string
       /** 忽略；色块用 rect / HTML / draw */
       background?: string
     }
-    rect: FvgShape
-    circle: FvgShape & FvgCenter
-    ellipse: FvgShape & FvgCenter
-    g: FvgGraphic & {
+    rect: LayerShape
+    circle: LayerShape & LayerCenter
+    ellipse: LayerShape & LayerCenter
+    g: LayerGraphic & {
       transform?: string
       fill?: string
       stroke?: string
       opacity?: number | string
       'stroke-width'?: number | string
     }
-    line: FvgGraphic &
-      FvgLinePaint & {
+    line: LayerGraphic &
+      LayerLinePaint & {
         x1?: number | string
         y1?: number | string
         x2?: number | string
         y2?: number | string
       }
-    arrow: FvgGraphic &
-      FvgLinePaint & {
+    arrow: LayerGraphic &
+      LayerLinePaint & {
         x1?: number | string
         y1?: number | string
         x2?: number | string
         y2?: number | string
         head?: number | string
       }
-    polyline: FvgGraphic & FvgLinePaint & { points?: string }
-    polygon: FvgGraphic & FvgLinePaint & { points?: string }
-    path: FvgGraphic & FvgLinePaint & { d?: string }
-    sphere: FvgPositioned &
-      FvgCenter &
-      FvgEffects & {
+    polyline: LayerGraphic & LayerLinePaint & { points?: string }
+    polygon: LayerGraphic & LayerLinePaint & { points?: string }
+    path: LayerGraphic & LayerLinePaint & { d?: string }
+    sphere: LayerPositioned &
+      LayerCenter &
+      LayerEffects & {
         r?: number | string
         fill?: string
         /** 可见折棱和轮廓。球只画轮廓圆 */
@@ -271,9 +271,9 @@ export namespace JSX {
         opacity?: number | string
       }
     /** 竖直圆柱。轴沿画面上下，圆截面朝镜头鼓出 r。 */
-    cylinder: FvgPositioned &
-      FvgCenter &
-      FvgEffects & {
+    cylinder: LayerPositioned &
+      LayerCenter &
+      LayerEffects & {
         r?: number | string
         /** 沿画面竖直方向的长度 */
         height?: number | string
@@ -297,9 +297,9 @@ export namespace JSX {
         opacity?: number | string
       }
     /** 躺在所在平面里的圆环。r 是环心到管心，tube 是管半径。 */
-    torus: FvgPositioned &
-      FvgCenter &
-      FvgEffects & {
+    torus: LayerPositioned &
+      LayerCenter &
+      LayerEffects & {
         r?: number | string
         tube?: number | string
         fill?: string
@@ -318,8 +318,8 @@ export namespace JSX {
         opacity?: number | string
       }
     /** 沿路径扫出的圆管。d 是中心线，r 是管半径。 */
-    tube: FvgPositioned &
-      FvgEffects & {
+    tube: LayerPositioned &
+      LayerEffects & {
         d?: string
         r?: number | string
         fill?: string
@@ -337,8 +337,8 @@ export namespace JSX {
         scale?: number | string
         opacity?: number | string
       }
-    box: FvgPositioned &
-      FvgEffects & {
+    box: LayerPositioned &
+      LayerEffects & {
         width?: number | string
         height?: number | string
         depth?: number | string
@@ -361,8 +361,8 @@ export namespace JSX {
         scale?: number | string
         opacity?: number | string
       }
-    extrude: FvgPositioned &
-      FvgEffects & {
+    extrude: LayerPositioned &
+      LayerEffects & {
         d?: string
         depth?: number | string
         fill?: string
@@ -380,7 +380,7 @@ export namespace JSX {
         opacity?: number | string
       }
     /** 外部 glb。位置和宽高写在外包的 layer 上，src 只写在这里。面色来自文件。 */
-    model: FvgGraphic & {
+    model: LayerGraphic & {
       src?: string
       fill?: string
       stroke?: string
@@ -390,22 +390,22 @@ export namespace JSX {
       halo?: number | string
       material?: string
     }
-    curve: FvgGraphic & FvgLinePaint & { points?: string; closed?: boolean | string }
-    h1: FvgHtml
-    h2: FvgHtml
-    h3: FvgHtml
-    p: FvgHtml
+    curve: LayerGraphic & LayerLinePaint & { points?: string; closed?: boolean | string }
+    h1: LayerHtml
+    h2: LayerHtml
+    h3: LayerHtml
+    p: LayerHtml
     /** 排布容器。可以直接放文字、图片，以及写了宽高的 layer。 */
-    div: FvgHtml & { 'preserve-3d'?: boolean | string; sharp?: boolean | string }
-    span: FvgHtml
-    strong: FvgHtml
-    b: FvgHtml
-    em: FvgHtml
-    i: FvgHtml
-    u: FvgHtml
-    br: FvgHtml
+    div: LayerHtml & { 'preserve-3d'?: boolean | string; sharp?: boolean | string }
+    span: LayerHtml
+    strong: LayerHtml
+    b: LayerHtml
+    em: LayerHtml
+    i: LayerHtml
+    u: LayerHtml
+    br: LayerHtml
     /** HTML 图片。src、alt 是属性，宽高写 style。`image` 与 `img` 相同。 */
-    img: FvgHtml & {
+    img: LayerHtml & {
       src?: string
       alt?: string
       /** 只在 mask 里：alpha 或 luma */
@@ -415,24 +415,24 @@ export namespace JSX {
       /** 只在 mask 里：subject、mask 或 regions，读缓存不跑模型 */
       derive?: string
     }
-    image: FvgHtml & { src?: string; alt?: string }
-    math: FvgHtml
-    mrow: FvgHtml
-    mi: FvgHtml
-    mn: FvgHtml
-    mo: FvgHtml
-    mtext: FvgHtml
-    mfrac: FvgHtml
-    msub: FvgHtml
-    msup: FvgHtml
-    msubsup: FvgHtml
-    msqrt: FvgHtml
-    mroot: FvgHtml
-    munder: FvgHtml
-    mover: FvgHtml
-    munderover: FvgHtml
-    mtable: FvgHtml
-    mtr: FvgHtml
-    mtd: FvgHtml
+    image: LayerHtml & { src?: string; alt?: string }
+    math: LayerHtml
+    mrow: LayerHtml
+    mi: LayerHtml
+    mn: LayerHtml
+    mo: LayerHtml
+    mtext: LayerHtml
+    mfrac: LayerHtml
+    msub: LayerHtml
+    msup: LayerHtml
+    msubsup: LayerHtml
+    msqrt: LayerHtml
+    mroot: LayerHtml
+    munder: LayerHtml
+    mover: LayerHtml
+    munderover: LayerHtml
+    mtable: LayerHtml
+    mtr: LayerHtml
+    mtd: LayerHtml
   }
 }

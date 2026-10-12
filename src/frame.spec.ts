@@ -7,7 +7,7 @@ import { initFontsForMeasure } from './fonts.js'
 import { mergeFrameIssues, sampleFrames } from './check-frames.js'
 import { Easing, interpolate, noise, random, renderComposition, renderFrames, sequence, spring, type Composition } from './frame.js'
 import { formatIssueLine } from './report.js'
-import { renderFvg } from './render.js'
+import { renderLayer } from './render.js'
 
 beforeAll(async () => {
   for (const dir of [join(homedir(), '.cache', 'flexlayer', 'fonts'), '/tmp/flexlayer-test']) {
@@ -55,8 +55,8 @@ describe('el.t', () => {
         },
       }),
     )
-    await renderFvg(root)
-    await renderFvg(root, { t: 1.5 })
+    await renderLayer(root)
+    await renderLayer(root, { t: 1.5 })
     expect(seen).toEqual([0, 1.5])
   })
 })
@@ -136,7 +136,7 @@ describe('renderFrames', () => {
       { width: '8', height: '8', background: '#000000' },
       h('rect', { width: '4', height: '4', fill: '#ffffff' }),
     )
-    const direct = await renderFvg(node, { format: 'rgba' })
+    const direct = await renderLayer(node, { format: 'rgba' })
     const comp: Composition = {
       id: 'one',
       width: 8,
@@ -152,11 +152,11 @@ describe('renderFrames', () => {
     expect(direct.rgba.length).toBe(8 * 8 * 4)
     expect(direct.rgba.equals(streamed[0]!.rgba!)).toBe(true)
     expect('png' in direct).toBe(false)
-    const scaled = await renderFvg(node, { format: 'rgba', scale: 2 })
+    const scaled = await renderLayer(node, { format: 'rgba', scale: 2 })
     expect(scaled.width).toBe(16)
     expect(scaled.height).toBe(16)
     expect(scaled.rgba.length).toBe(16 * 16 * 4)
-    const png = await renderFvg(node)
+    const png = await renderLayer(node)
     expect(png.png.length).toBeGreaterThan(8)
     expect('rgba' in png).toBe(false)
   })

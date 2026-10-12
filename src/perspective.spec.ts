@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { h } from './h.js'
-import { checkFvg } from './render.js'
+import { checkLayer } from './render.js'
 import { applyPoseMatrix, poseMatrix, poseOffset, posePoint, project } from './perspective.js'
 import { parseOrigin } from './style.js'
 import type { LayoutNode } from './types.js'
 
 function node(partial: Partial<LayoutNode> & Pick<LayoutNode, 'kind'>): LayoutNode {
   return {
-    path: 'Layer',
-    tag: 'Layer',
+    path: 'layer',
+    tag: 'layer',
     x: 0,
     y: 0,
     width: 80,
@@ -70,14 +70,14 @@ describe('perspective', () => {
   })
 
   it('没有 perspective 时 rotateY 报 flatten-3d', async () => {
-    const report = await checkFvg(
-      h('Layer', { width: '100', height: '100' }, h('Rect', { x: '30', y: '30',  width: '40', height: '40', rotateY: '20', fill: '#fff' })),
+    const report = await checkLayer(
+      h('layer', { width: '100', height: '100' }, h('rect', { x: '30', y: '30',  width: '40', height: '40', rotateY: '20', fill: '#fff' })),
     )
     expect(report.issues.some((issue) => issue.code === 'flatten-3d')).toBe(true)
   })
 
   it('倾斜后落在画布里的大平面不报 overflow-canvas，并给出 quad', async () => {
-    const report = await checkFvg(
+    const report = await checkLayer(
       `<layer width="300" height="200" background="#111" perspective="400"><rect x="-30" y="60" width="360" height="80" fill="#fff" z="-200" rotateX="25" /></layer>`,
     )
     const rect = report.elements.find((el) => el.tag === 'rect')
@@ -115,7 +115,7 @@ describe('perspective', () => {
   })
 
   it('平面里的子元素也按投影报告 quad', async () => {
-    const report = await checkFvg(
+    const report = await checkLayer(
       `<layer width="300" height="200" perspective="400"><layer x="-30" y="60" width="360" height="80" z="-200" rotateX="25"><rect x="20" y="10" width="60" height="30" fill="#fff"  /></layer></layer>`,
     )
     const layer = report.elements.find((el) => el.tag === 'layer' && el.quad)
@@ -140,7 +140,7 @@ describe('perspective', () => {
   })
 
   it('嵌套 layer 上的 perspective 把 quad 算到画布坐标', async () => {
-    const report = await checkFvg(
+    const report = await checkLayer(
       `<layer width="400" height="300"><layer x="100" y="100" width="200" height="120" perspective="300"><rect x="80" y="45" width="40" height="30" fill="#fff" rotateY="20" /></layer></layer>`,
     )
     const rect = report.elements.find((el) => el.tag === 'rect')
@@ -162,7 +162,7 @@ describe('perspective', () => {
 
   it('parallel 不按 z 放大，大的 z 仍绘制', async () => {
     expect(project(100, 100, 'parallel', { x: 20, y: 40, z: 1000 })).toEqual({ x: 20, y: 40 })
-    const parallel = await checkFvg(
+    const parallel = await checkLayer(
       `<layer width="200" height="120" perspective="parallel"><rect width="40" height="40" x="20" y="40" fill="#fff" z="80" /></layer>`,
     )
     const rect = parallel.elements.find((el) => el.tag === 'rect')
@@ -171,13 +171,13 @@ describe('perspective', () => {
     expect(rect!.ink.width).toBeCloseTo(40, 0)
     expect(rect!.ink.height).toBeCloseTo(40, 0)
     expect(parallel.issues.some((issue) => issue.code === 'behind-camera' || issue.code === 'invalid-attr')).toBe(false)
-    const far = await checkFvg(
+    const far = await checkLayer(
       `<layer width="200" height="120" perspective="parallel"><rect width="40" height="40" x="20" y="40" fill="#fff" z="5000" /></layer>`,
     )
     const farRect = far.elements.find((el) => el.tag === 'rect')
     expect(farRect!.ink.width).toBeCloseTo(40, 0)
     expect(far.issues.some((issue) => issue.code === 'behind-camera')).toBe(false)
-    const numeric = await checkFvg(
+    const numeric = await checkLayer(
       `<layer width="200" height="120" perspective="200"><rect width="40" height="40" x="20" y="40" fill="#fff" z="80" /></layer>`,
     )
     const grown = numeric.elements.find((el) => el.tag === 'rect')
@@ -185,7 +185,7 @@ describe('perspective', () => {
   })
 
   it('perspective 写了别的词时报 invalid-attr', async () => {
-    const report = await checkFvg(
+    const report = await checkLayer(
       `<layer width="100" height="100" perspective="foo"><rect x="30" y="30" width="40" height="40" fill="#fff" rotateY="20" /></layer>`,
     )
     expect(report.issues.some((issue) => issue.code === 'invalid-attr')).toBe(true)
@@ -193,11 +193,11 @@ describe('perspective', () => {
   })
 
   it('z 超过视距时报 behind-camera', async () => {
-    const report = await checkFvg(
+    const report = await checkLayer(
       h(
-        'Layer',
+        'layer',
         { width: '100', height: '100', perspective: '80' },
-        h('Rect', { x: '40', y: '40',  width: '20', height: '20', z: '80', fill: '#fff' }),
+        h('rect', { x: '40', y: '40',  width: '20', height: '20', z: '80', fill: '#fff' }),
       ),
     )
     expect(report.issues.some((issue) => issue.code === 'behind-camera')).toBe(true)

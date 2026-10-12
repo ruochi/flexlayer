@@ -6,7 +6,7 @@ type DrawCtx = CanvasRenderingContext2D & {
 }
 import { labelParts } from './bitmap.js'
 import { paintLayerIsolated, rasterizeMask } from './paint.js'
-import type { FvgDocument, LayerLayoutNode, LayoutNode, PreviewSpec } from './types.js'
+import type { LayerDocument, LayerLayoutNode, LayoutNode, PreviewSpec } from './types.js'
 
 const LABEL = 16
 
@@ -152,7 +152,7 @@ function panelsFor(spec: PreviewSpec, layer: LayerLayoutNode): Panel[] {
 }
 
 /** 把文档里的 `<preview>` 拼成一张图。没有 preview 时返回 null。 */
-export function renderPreviewSheet(doc: FvgDocument): Canvas | null {
+export function renderPreviewSheet(doc: LayerDocument): Canvas | null {
   if (!doc.previews?.length) return null
   const rows: Panel[][] = []
   for (const spec of doc.previews) {

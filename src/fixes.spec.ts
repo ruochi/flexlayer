@@ -10,7 +10,7 @@ import { h } from './h.js'
 import { initFontsForMeasure } from './fonts.js'
 import { layoutSource } from './layout.js'
 import { loadLayerFile } from './load-source.js'
-import { checkFvg, renderFvg } from './render.js'
+import { checkLayer, renderLayer } from './render.js'
 
 const pkgDir = join(fileURLToPath(import.meta.url), '..', '..')
 
@@ -69,7 +69,7 @@ describe('样式、换行和运行时', () => {
     )
     const text = px.root.children[0] as { textLayout: { lines: Array<{ height: number }> } }
     expect(text.textLayout.lines[0]!.height).toBeGreaterThanOrEqual(48)
-    const bad = await checkFvg(`<layer width="400" height="200"><p style="font-size:32px; line-height:20em; text-align:centerr">甲</p></layer>`)
+    const bad = await checkLayer(`<layer width="400" height="200"><p style="font-size:32px; line-height:20em; text-align:centerr">甲</p></layer>`)
     const messages = bad.issues.map((issue) => issue.message)
     expect(messages.some((message) => message.includes('line-height'))).toBe(true)
     expect(messages.some((message) => message.includes('text-align'))).toBe(true)
@@ -113,15 +113,15 @@ describe('样式、换行和运行时', () => {
   })
 
   it('根号里的文字不和前面的公式重叠', async () => {
-    const report = await checkFvg(
+    const report = await checkLayer(
       `<layer width="800" height="200" safe="0"><div style="display:flex; align-items:center"><span style="font-size:48px">因此</span><math><msqrt><mi>x</mi><mo>+</mo><mi>y</mi></msqrt></math></div></layer>`,
     )
     expect(report.issues.some((issue) => issue.code === 'text-overlap')).toBe(false)
   })
 
   it('圆角等于半边时和圆的像素一致', async () => {
-    const round = await renderFvg(`<layer width="60" height="60" background="#000"><rect x="10" y="10" width="40" height="40" rx="20" fill="#fff" /></layer>`)
-    const circle = await renderFvg(`<layer width="60" height="60" background="#000"><circle cx="30" cy="30" r="20" fill="#fff" /></layer>`)
+    const round = await renderLayer(`<layer width="60" height="60" background="#000"><rect x="10" y="10" width="40" height="40" rx="20" fill="#fff" /></layer>`)
+    const circle = await renderLayer(`<layer width="60" height="60" background="#000"><circle cx="30" cy="30" r="20" fill="#fff" /></layer>`)
     const corner = await pixel(round.png, 12, 12)
     const circleCorner = await pixel(circle.png, 12, 12)
     expect(Math.abs(corner[0] - circleCorner[0])).toBeLessThan(8)
@@ -130,20 +130,20 @@ describe('样式、换行和运行时', () => {
   })
 
   it('写错的路径和 draw 运行错误不会让整张图退出', async () => {
-    const pathReport = await checkFvg(`<layer width="80" height="80"><path d="not a path" fill="#fff" /></layer>`)
+    const pathReport = await checkLayer(`<layer width="80" height="80"><path d="not a path" fill="#fff" /></layer>`)
     expect(pathReport.issues.some((issue) => issue.code === 'invalid-attr' && issue.message.includes('路径'))).toBe(true)
     const source = `<layer width="40" height="40" background="#000">\n  <rect width="20" height="20" fill="#fff">\n    <draw>\nctx.notAMethod()\n    </draw>\n  </rect>\n</layer>`
-    const { png, report } = await renderFvg(source)
+    const { png, report } = await renderLayer(source)
     const hit = report.issues.find((issue) => issue.code === 'invalid-draw' && issue.message.includes('运行出错'))
     expect(hit?.source).toBe('3:5')
     expect(png[0]).toBe(0x89)
   })
 
   it('拼写提示按标签收窄', async () => {
-    const report = await checkFvg(`<layer width="80" height="40"><rect x="0" y="0" widht="20" height="10" fil="#ff0000" /><p styl="color:#fff">甲</p></layer>`)
+    const report = await checkLayer(`<layer width="80" height="40"><rect x="0" y="0" widht="20" height="10" fil="#ff0000" /><p styl="color:#fff">甲</p></layer>`)
     const hints = report.issues.filter((issue) => issue.message.includes('不认识的属性')).map((issue) => issue.hint)
     expect(hints).toEqual(expect.arrayContaining(['是不是想写 width？', '是不是想写 fill？']))
-    const style = await checkFvg(`<layer width="80" height="40"><p style="font-szie:20px">甲</p></layer>`)
+    const style = await checkLayer(`<layer width="80" height="40"><p style="font-szie:20px">甲</p></layer>`)
     expect(style.issues.some((issue) => issue.hint?.includes('font-size'))).toBe(true)
     expect(style.issues.some((issue) => issue.hint?.includes('cx'))).toBe(false)
   })
@@ -182,14 +182,6 @@ describe('样式、换行和运行时', () => {
     const doc = await layoutSource(loaded.node, dir)
     const text = doc.root.children[0] as { text: string }
     expect(text.text).toContain('标记甲')
-  })
-
-  it('旧包名会提示改成 flexlayer', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'flexlayer-legacy-'))
-    const file = join(dir, 'old.tsx')
-    const legacy = '@' + 'dc/flexlayer'
-    writeFileSync(file, `/** @jsxImportSource flexlayer */\nimport { canvas } from '${legacy}'\nexport default <layer width="10" height="10" />\n`)
-    await expect(loadLayerFile(file)).rejects.toThrow(/flexlayer/)
   })
 
   it('命令行执行 tsx 时 registerFilter 和渲染用同一份注册表', () => {

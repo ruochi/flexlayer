@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { h } from './h.js'
 import { initFontsForMeasure } from './fonts.js'
 import { layoutSource } from './layout.js'
-import { renderFvg } from './render.js'
+import { renderLayer } from './render.js'
 
 const pkgDir = join(fileURLToPath(import.meta.url), '..', '..')
 const helloPath = join(pkgDir, 'examples', 'hello.layer')
@@ -47,7 +47,7 @@ describe('draw(ctx, el)', () => {
         },
       }),
     )
-    const { png } = await renderFvg(root, { scale: 1 })
+    const { png } = await renderLayer(root, { scale: 1 })
     const [r, g, b, a] = await pixelAt(png, 3, 3)
     expect([r, g, b, a]).toEqual([255, 0, 0, 255])
     const corner = await pixelAt(png, 0, 0)
@@ -68,7 +68,7 @@ describe('draw(ctx, el)', () => {
         },
       }),
     )
-    await renderFvg(root)
+    await renderLayer(root)
     expect(seen).toEqual({ frame: 0, fps: 0 })
   })
 
@@ -105,7 +105,7 @@ describe('draw(ctx, el)', () => {
       ),
     )
 
-    const { png } = await renderFvg(root, { scale: 1 })
+    const { png } = await renderLayer(root, { scale: 1 })
     expect(seen).toMatchObject({
       cx: '200',
       color: '#ff0000',
@@ -152,7 +152,7 @@ describe('draw(ctx, el)', () => {
     expect(laid.width).toBe(80)
     expect(typeof laid.draw).toBe('function')
 
-    const { png, report } = await renderFvg(root)
+    const { png, report } = await renderLayer(root)
     expect(drawCalled).toBe(true)
     expect(report.issues.some((i) => i.code === 'unknown-tag')).toBe(false)
     const ring = report.elements.find((e) => e.tag === 'Ring')
@@ -180,7 +180,7 @@ describe('draw(ctx, el)', () => {
         },
       }),
     )
-    const { png } = await renderFvg(root)
+    const { png } = await renderLayer(root)
     expect(seen).toEqual({ w: 100, h: 0 })
     const doc = await layoutSource(root, process.cwd())
     const line = doc.root.children[0]!
@@ -205,7 +205,7 @@ describe('draw(ctx, el)', () => {
         },
       }),
     )
-    await renderFvg(root)
+    await renderLayer(root)
     expect(total).toBe('33')
   })
 
@@ -229,7 +229,7 @@ describe('draw(ctx, el)', () => {
       h('rect', { x: '65', y: '15',  width: '10', height: '10', fill: '#00ff00' }),
     )
 
-    const { png } = await renderFvg(root, { t: 0.25 })
+    const { png } = await renderLayer(root, { t: 0.25 })
     expect(seen).toEqual({ w: 80, h: 40, t: 0.25 })
     expect(childAtDraw![1]).toBeGreaterThan(200)
     const corner = await pixelAt(png, 1, 1)
@@ -244,7 +244,7 @@ describe('draw(ctx, el)', () => {
 
   it('hello.layer 无 draw 时结果不变', async () => {
     const source = await readFile(helloPath, 'utf8')
-    const { report } = await renderFvg(source, {
+    const { report } = await renderLayer(source, {
       baseDir: join(pkgDir, 'examples'),
     })
     expect(report.width).toBe(1080)
@@ -253,7 +253,7 @@ describe('draw(ctx, el)', () => {
   })
 
   it('.layer 里的 <draw> 在子元素之后着色', async () => {
-    const { png, report } = await renderFvg(
+    const { png, report } = await renderLayer(
       `<layer width="80" height="40" background="#000000">
         <rect x="65" y="15" width="10" height="10" fill="#00ff00" />
         <draw>
@@ -271,7 +271,7 @@ describe('draw(ctx, el)', () => {
   })
 
   it('嵌套 layer 用 <draw> 填色，不用 background', async () => {
-    const { png, report } = await renderFvg(
+    const { png, report } = await renderLayer(
       `<layer width="60" height="40" background="#0000ff">
         <layer x="0" y="5" width="30" height="30">
           <draw>
@@ -291,7 +291,7 @@ describe('draw(ctx, el)', () => {
   })
 
   it('<draw> 语法错误报 invalid-draw', async () => {
-    const { report } = await renderFvg(
+    const { report } = await renderLayer(
       `<layer width="40" height="40" background="#000">
         <draw>ctx.fillStyle = </draw>
       </layer>`,

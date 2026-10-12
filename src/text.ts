@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module'
-import type { FvgChild, FvgNode } from './parse.js'
+import type { LayerChild, LayerNode } from './parse.js'
 import { applyCanvasFont } from './fonts.js'
 import { applySymbolsClass, classAttr, rewriteIconLigatures, symbolsClassNotes, type SymbolsNote } from './icons.js'
 import { getMeasureCtx } from './measureCtx.js'
@@ -130,13 +130,13 @@ function normalizeInlineSegments(segs: TextSegment[]): TextSegment[] {
 }
 
 function walkInline(
-  nodes: FvgChild[],
+  nodes: LayerChild[],
   style: TextRunStyle,
   out: TextSegment[],
   hardBreakNext: boolean,
   parentPath: string,
   inherited: InlineOwner | undefined,
-  imageSize?: (node: FvgNode, path: string) => TextSegment['atom'],
+  imageSize?: (node: LayerNode, path: string) => TextSegment['atom'],
   onSymbols?: (notes: SymbolsNote[], path: string) => void,
 ): void {
   let breakNext = hardBreakNext
@@ -199,10 +199,10 @@ function walkInline(
 }
 
 export function extractTextSegments(
-  node: FvgNode,
+  node: LayerNode,
   defaults: TextBoxDefaults,
   parentPath = '',
-  imageSize?: (node: FvgNode, path: string) => TextSegment['atom'],
+  imageSize?: (node: LayerNode, path: string) => TextSegment['atom'],
   onSymbols?: (notes: SymbolsNote[], path: string) => void,
 ): TextSegment[] {
   const base: TextRunStyle = {

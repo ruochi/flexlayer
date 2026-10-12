@@ -6,33 +6,28 @@ import { dirname, extname, join, relative, isAbsolute, resolve, sep } from 'node
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import * as esbuild from 'esbuild'
 import type { Composition } from './frame.js'
-import type { FvgNode } from './parse.js'
+import type { LayerNode } from './parse.js'
 import { setLayerBaseDir } from './canvas.js'
 import { formatSourceLoc } from './source-loc.js'
 import { registerFontsFromDocument } from './fonts.js'
-import { moduleSpecifiers, nondeterministicCalls, staticLayerFonts } from './syntax.js'
+import { nondeterministicCalls, staticLayerFonts } from './syntax.js'
 import type { Issue } from './types.js'
 
 const CODE_EXT = new Set(['.tsx', '.jsx', '.ts', '.js'])
 const require = createRequire(import.meta.url)
 const BUILTINS = new Set(builtinModules)
-const LEGACY_PACKAGE = '@' + 'dc/' + 'flexlayer'
 let tsxHooked = false
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
 
 export type LoadedLayer =
   | { kind: 'markup'; source: string }
-  | { kind: 'node'; node: FvgNode; issues: Issue[] }
+  | { kind: 'node'; node: LayerNode; issues: Issue[] }
   | { kind: 'composition'; composition: Composition; issues: Issue[] }
 
 type ExecutedLayer = Exclude<LoadedLayer, { kind: 'markup' }>
 
-function isNode(value: unknown): value is FvgNode {
+function isNode(value: unknown): value is LayerNode {
   if (!value || typeof value !== 'object') return false
-  const node = value as FvgNode
+  const node = value as LayerNode
   return typeof node.tag === 'string' && node.attrs != null && typeof node.attrs === 'object' && Array.isArray(node.children)
 }
 
@@ -65,7 +60,7 @@ function locatedFile(file: string, baseDir: string): string {
   return isAbsolute(file) ? file : resolve(baseDir, file)
 }
 
-function absolutizeLocs(node: FvgNode, baseDir: string): void {
+function absolutizeLocs(node: LayerNode, baseDir: string): void {
   if (node.loc && !isAbsolute(node.loc.file)) node.loc.file = resolve(baseDir, node.loc.file)
   for (const child of node.children) {
     if (typeof child !== 'string') absolutizeLocs(child, baseDir)
@@ -99,10 +94,6 @@ function resolveExport(mod: Record<string, unknown>, file: string): ExecutedLaye
     if (isComposition(rendered)) return { kind: 'composition', composition: rendered, issues: [] }
   }
   throw new Error(`${shown} 需要默认导出 <layer> 节点、返回该节点的函数，或 Composition（也可以命名导出 composition）`)
-}
-
-function legacyPackage(specifier: string): boolean {
-  return specifier === LEGACY_PACKAGE || specifier.startsWith(`${LEGACY_PACKAGE}/`)
 }
 
 function flexlayerEntry(specifier: string): string {
@@ -141,11 +132,6 @@ async function importCode(file: string): Promise<Record<string, unknown>> {
         {
           name: 'flexlayer-jsx',
           setup(build) {
-            const legacy = new RegExp(`^${escapeRegExp(LEGACY_PACKAGE)}(/|$)`)
-            build.onResolve({ filter: legacy }, (args) => ({
-              path: args.path,
-              errors: [{ text: '包名已改为 flexlayer。请把导入改成 flexlayer' }],
-            }))
             build.onResolve({ filter: /^flexlayer(\/.*)?$/ }, (args) => ({
               path: flexlayerEntry(args.path),
               external: true,
@@ -154,29 +140,6 @@ async function importCode(file: string): Promise<Record<string, unknown>> {
             build.onLoad({ filter: /\.[cm]?[jt]sx?$/ }, async (args) => {
               if (args.path.includes(`${sep}node_modules${sep}`)) return null
               const contents = await readFile(args.path, 'utf8')
-              // esbuild 会在解析前丢掉没用到的 import，改名提示要在读源码时给出。
-              const legacyHit = moduleSpecifiers(contents, args.path).find((spec) => legacyPackage(spec.specifier))
-              if (legacyHit) {
-                const ext = extname(args.path).toLowerCase()
-                const loader = ext === '.tsx' ? 'tsx' : ext === '.ts' ? 'ts' : ext === '.jsx' ? 'jsx' : 'js'
-                const lineText = contents.split(/\r?\n/)[legacyHit.line - 1] ?? ''
-                return {
-                  contents,
-                  loader,
-                  errors: [
-                    {
-                      text: '包名已改为 flexlayer。请把导入改成 flexlayer',
-                      location: {
-                        file: args.path,
-                        line: legacyHit.line,
-                        column: Math.max(0, legacyHit.column - 1),
-                        length: legacyHit.specifier.length,
-                        lineText,
-                      },
-                    },
-                  ],
-                }
-              }
               if (!contents.includes('import.meta.url')) return null
               const ext = extname(args.path).toLowerCase()
               const loader = ext === '.tsx' ? 'tsx' : ext === '.ts' ? 'ts' : ext === '.jsx' ? 'jsx' : 'js'
@@ -187,7 +150,7 @@ async function importCode(file: string): Promise<Record<string, unknown>> {
             })
             // 打包进临时文件后，裸包名从 /tmp 解析不到。改成绝对路径再标成外部依赖。
             build.onResolve({ filter: /^[^./]/ }, (args) => {
-              if (args.path === 'flexlayer' || args.path.startsWith('flexlayer/') || args.path === LEGACY_PACKAGE || args.path.startsWith(`${LEGACY_PACKAGE}/`)) {
+              if (args.path === 'flexlayer' || args.path.startsWith('flexlayer/')) {
                 return null
               }
               if (args.path.startsWith('node:') || BUILTINS.has(args.path)) return { path: args.path, external: true }

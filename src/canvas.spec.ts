@@ -8,7 +8,7 @@ import { freshFontLoadsCount } from './fonts.js'
 import { h } from './h.js'
 import { freshImageLoadsCount } from './image.js'
 import { layoutSource } from './layout.js'
-import { checkLayer, renderFvg } from './render.js'
+import { checkLayer, renderLayer } from './render.js'
 
 async function pixelAt(png: Buffer, x: number, y: number) {
   const img = await loadImage(png)
@@ -651,7 +651,7 @@ describe('g 与组件', () => {
     const group = doc.root.children[0] as { x: number; y: number; width: number; height: number; children: Array<{ fill: string }> }
     expect(group).toMatchObject({ x: 20, y: 10, width: 40, height: 30 })
     expect(group.children[0]?.fill).toBe('#00ff00')
-    const { png } = await renderFvg(
+    const { png } = await renderLayer(
       `<layer width="80" height="60" background="#000000"><g transform="translate(30,20)" fill="#00ff00"><rect x="0" y="0" width="10" height="10" /></g></layer>`,
     )
     const moved = await pixelAt(png, 35, 25)
@@ -674,7 +674,7 @@ describe('g 与组件', () => {
     const group = node.children[0] as { tag: string; children: Array<{ tag: string }> }
     expect(group.tag).toBe('g')
     expect(group.children.map((child) => child.tag).sort()).toEqual(['line', 'polygon'])
-    const { png } = await renderFvg(source)
+    const { png } = await renderLayer(source)
     const shaft = await pixelAt(png, 40, 20)
     const head = await pixelAt(png, 68, 24)
     const sky = await pixelAt(png, 10, 4)
