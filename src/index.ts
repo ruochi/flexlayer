@@ -1,4 +1,4 @@
-export { renderFvg, checkFvg, renderLayer, checkLayer, type RenderResult } from './render.js'
+export { renderFvg, checkFvg, renderLayer, checkLayer, type RenderResult, type RgbaRenderResult } from './render.js'
 export { canvas, create, type CreatedLayer, type MeshEdgeKind, type MeshPoint, type MeshProjectedEdge, type PlacedChar, type PlacedElement, type PlacedLine, type PlacedMask, type PlacedText } from './canvas.js'
 export { registerComponent, arrowComponent, type ComponentFn, type ComponentProps } from './components.js'
 export { glyph, type Glyph, type GlyphInk, type GlyphOptions } from './glyph.js'
@@ -35,6 +35,7 @@ export type {
   DrawFn,
   DrawElSnapshot,
   DrawComputedStyle,
+  SKRSContext2D,
 } from './types.js'
 export type { FvgNode, FvgChild } from './parse.js'
 export { resources, palettes, images, grades, glass, blends } from './resources.js'

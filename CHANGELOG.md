@@ -16,6 +16,8 @@
 
 默认字体从 `DEFAULT_FONT_FAMILY` 读。带 `blur`、`grade` 或 `<mask>` 的层在取景放大后只光栅化落在画面里的一块，并留出模糊和羽化要采样的边。取景窗或 `overflow="hidden"` 裁开的文字边不再报 `outside-safe`；裁完仍露在安全区外的字还是要报。
 
+`draw` 回调的 `ctx` 可以 `drawImage`。已经排好的一帧用 `renderLayer(node, { format: 'rgba' })` 拿走不预乘像素和画布宽高。
+
 ## 0.2.57
 
 实现提交：`ec49b328201f03385ff6b4d26323d05fb07f1309`

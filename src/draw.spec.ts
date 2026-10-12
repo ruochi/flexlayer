@@ -28,6 +28,32 @@ async function pixelAt(png: Buffer, x: number, y: number): Promise<[number, numb
 }
 
 describe('draw(ctx, el)', () => {
+  it('回调里的 ctx 可以直接 drawImage', async () => {
+    const stamp = createCanvas(4, 4)
+    const sctx = stamp.getContext('2d')
+    sctx.fillStyle = '#ff0000'
+    sctx.fillRect(0, 0, 4, 4)
+    const root = h(
+      'layer',
+      { width: '8', height: '8', background: '#ffffff' },
+      h('rect', {
+        x: '2',
+        y: '2',
+        width: '4',
+        height: '4',
+        fill: '#0000ff',
+        draw: (ctx) => {
+          ctx.drawImage(stamp, 0, 0)
+        },
+      }),
+    )
+    const { png } = await renderFvg(root, { scale: 1 })
+    const [r, g, b, a] = await pixelAt(png, 3, 3)
+    expect([r, g, b, a]).toEqual([255, 0, 0, 255])
+    const corner = await pixelAt(png, 0, 0)
+    expect(corner).toEqual([255, 255, 255, 255])
+  })
+
   it('单帧时 el.frame 和 el.fps 为 0', async () => {
     let seen: { frame: number; fps: number } | null = null
     const root = h(

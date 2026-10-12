@@ -887,7 +887,7 @@ flexlayer select cutout photo.jpg --preset portrait             # 转给 flexlay
 </layer>
 ```
 
-绘制顺序：先画该元素默认内容（文字、形状、线条、子节点），再调用 `draw`。`ctx` 原点在元素盒子的左上角，坐标范围 `(0,0)` 到 `(el.w, el.h)`，并且已经包含该元素和所有祖先 `layer` 的 `rotate`、`scale`（绕各自的 `origin`）。线条的盒子是纯几何范围，所以水平线的 `el.h` 是 0。尺寸用 `el.w`、`el.h`，不要从 `el.attr` 推算。`opacity` 由外层统一乘到 `globalAlpha`。自定义属性原样出现在 `el.attr` 里。结构化数据写 `data`，不进 `attr`：程序里 `data={{ values: [3, 5, 8] }}`，`.layer` 里 `data='{"values":[3,5,8]}'`。`JSON.parse` 失败报 `invalid-attr`（error）。别的属性传了对象或数组也报 `invalid-attr`，不会变成 `"[object Object]"`。`--emit` 把 `data` 写成 JSON、放在单引号属性里；函数、`Map` 和循环引用报 `emit-data`，并且不写出这个属性。
+绘制顺序：先画该元素默认内容（文字、形状、线条、子节点），再调用 `draw`。`ctx` 原点在元素盒子的左上角，坐标范围 `(0,0)` 到 `(el.w, el.h)`，并且已经包含该元素和所有祖先 `layer` 的 `rotate`、`scale`（绕各自的 `origin`）。`ctx` 的类型是 `SKRSContext2D`，带 `drawImage`，可以直接贴上图片或另一张画布。线条的盒子是纯几何范围，所以水平线的 `el.h` 是 0。尺寸用 `el.w`、`el.h`，不要从 `el.attr` 推算。`opacity` 由外层统一乘到 `globalAlpha`。自定义属性原样出现在 `el.attr` 里。结构化数据写 `data`，不进 `attr`：程序里 `data={{ values: [3, 5, 8] }}`，`.layer` 里 `data='{"values":[3,5,8]}'`。`JSON.parse` 失败报 `invalid-attr`（error）。别的属性传了对象或数组也报 `invalid-attr`，不会变成 `"[object Object]"`。`--emit` 把 `data` 写成 JSON、放在单引号属性里；函数、`Map` 和循环引用报 `emit-data`，并且不写出这个属性。
 
 `el` 字段：
 
@@ -959,6 +959,8 @@ const { frames, contactSheet } = await renderComposition(scene)
 
 `renderFrames(comp, { from, to, step, format })` 是异步迭代器，逐帧产出，不把整段留在内存里。`to` 含端点，缺省从 0 到最后一帧，`step` 缺省为 1。`format` 缺省 `'png'`；`'rgba'` 时 `rgba` 是不预乘的原始像素，长度为 `width × height × 4`，`width` 和 `height` 是这一帧画布的像素尺寸。每一项还有 `frame`、`t` 和 `report`。
 
+已经排好的一帧直接交给 `renderLayer(node, { format: 'rgba' })`。返回的 `rgba`、`width`、`height` 和 `report` 与 `renderFrames` 的同一路像素相同，这一路不编码 PNG。`format` 缺省为 `'png'`，这时仍返回 `png` 和 `report`。`component` 继续同步返回节点。
+
 ```ts
 for await (const { frame, png, report } of renderFrames(scene, { from: 0, to: 30 })) {
   // png 是这一帧
@@ -986,7 +988,7 @@ for await (const { frame, png, report } of renderFrames(scene, { from: 0, to: 30
 
 ## 14. 预留
 
-- 把帧序列编码成视频。原始像素已经可以从 `renderFrames` 的 `rgba` 或命令行 `--rgba` 拿走，编码由调用方完成，flexlayer 不依赖 ffmpeg。时间轴预览还没有。
+- 把帧序列编码成视频。原始像素已经可以从 `renderLayer` 的 `format: 'rgba'`、`renderFrames` 的 `rgba` 或命令行 `--rgba` 拿走，编码由调用方完成，flexlayer 不依赖 ffmpeg。时间轴预览还没有。
 - 墨迹布局：按着墨范围计算间距、居中、包裹。
 - `Icon`。
 - `Scene3D` 这个名字仍保留，不要挪作他用。`sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 画在父 `layer` 的 `perspective` 里，见第 3 章。单独的视口、作者灯光和阴影还没有，讨论见 [docs/proposals/3D.md](docs/proposals/3D.md)。
