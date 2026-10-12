@@ -24,7 +24,7 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
  * 写了 stroke 时，在超采样缓冲上按屏幕像素描折棱和轮廓，再和填充一起平均缩回。
  * 两只都写了 stroke 的网格相互穿过时，交界线算折棱，颜色和宽度跟后写的那只。
  * hidden 只画被这只网格自己挡住的棱，虚线是 6 实 4 空。交界线被这两只中任意一只挡住时同样算隐藏线。
- * 不写 material 时是磨砂：主光乘 fill。plastic 和 metal 用同一套磨砂明暗，再叠竖向工作室环境，没有缩成一点的高光。glass 是假玻璃，后画：反射留着主灯，再把环境沿折射方向加上。
+ * 不写 material 时是磨砂：主光乘 fill。plastic 和 metal 用同一套磨砂明暗，再叠竖向工作室环境，没有缩成一点的高光。glass 是假玻璃，后画：反射留着主灯，折射再按位置扫这张环境。
  * 同一条折线上的短段接成一条再取虚线相位，圆弧不会接成实线。
  */
 
@@ -281,11 +281,17 @@ function reflectView(v: { x: number; y: number; z: number }, n: { x: number; y: 
 
 /**
  * 反射：主灯在方位 -68°、仰角 24°。少转 20°、少抬 8°，方窗停在形体里偏左上。
- * 折射是另一路：进玻璃再从背面出来，直接取这张环境，不加这层平移。
+ * 折射：进玻璃再从背面出来，把出射对准主灯，再按离开形体中心的位置扫过这张环境。
+ * 球面上这个偏移几乎是 0，方和钻石的平面才能看见贴图。
  */
 const GLASS_AZ = ((-68 + 20) * Math.PI) / 180
 const GLASS_EL = ((24 - 8) * Math.PI) / 180
+const GLASS_KEY_AZ = (-68 * Math.PI) / 180
+const GLASS_KEY_EL = (24 * Math.PI) / 180
 const GLASS_IOR = 1.5
+/** 平面上离开中心的距离。大约 50px 就扫出主灯那一块。 */
+const GLASS_FAN = 0.02
+const glassCenter = { x: 0, y: 0, z: 0 }
 
 function glassReflect(dir: { x: number; y: number; z: number }) {
   const len = Math.hypot(dir.x, dir.y, dir.z) || 1
@@ -331,10 +337,42 @@ function sphereExit(
   return refractView({ x: -inside.x, y: -inside.y, z: -inside.z }, { x: -n2.x, y: -n2.y, z: -n2.z }, GLASS_IOR)
 }
 
-function glassTransmit(v: { x: number; y: number; z: number }, n: { x: number; y: number; z: number }) {
+function aimFromBack(dir: { x: number; y: number; z: number }, gain: number) {
+  const len = Math.hypot(dir.x, dir.y, dir.z) || 1
+  const dx = dir.x / len
+  const dy = dir.y / len
+  const dz = dir.z / len
+  let az = Math.atan2(dx, dz)
+  let el = Math.asin(Math.max(-1, Math.min(1, dy)))
+  let dAz = az - Math.PI
+  if (dAz > Math.PI) dAz -= Math.PI * 2
+  if (dAz < -Math.PI) dAz += Math.PI * 2
+  az = GLASS_KEY_AZ + dAz * gain
+  el = GLASS_KEY_EL + el * gain
+  const limit = Math.PI / 2 - 1e-4
+  if (el > limit) el = limit
+  if (el < -limit) el = -limit
+  const cel = Math.cos(el)
+  return { x: Math.sin(az) * cel, y: Math.sin(el), z: Math.cos(az) * cel }
+}
+
+function glassTransmit(
+  v: { x: number; y: number; z: number },
+  n: { x: number; y: number; z: number },
+  x: number,
+  y: number,
+  z: number,
+) {
   const inside = refractView(v, n, 1 / GLASS_IOR)
   if (!inside) return null
-  return sphereExit(n, inside)
+  const exit = sphereExit(n, inside)
+  if (!exit) return null
+  const aimed = aimFromBack(exit, 1.8)
+  const ox = x - glassCenter.x
+  const oy = glassCenter.y - y
+  const oz = z - glassCenter.z
+  const nd = ox * n.x + oy * n.y + oz * n.z
+  return unit(aimed.x + (ox - n.x * nd) * GLASS_FAN, aimed.y + (oy - n.y * nd) * GLASS_FAN, aimed.z + (oz - n.z * nd) * GLASS_FAN)
 }
 
 type ShadeCamera = { x: number; y: number; z: number; parallel?: boolean }
@@ -382,7 +420,7 @@ function materialBytes(
   const ndotv = clamp01(n.x * v.x + n.y * v.y + n.z * v.z)
   const fresnel = 0.04 + 0.96 * (1 - ndotv) ** 5
   const transmit = 1 - fresnel
-  const through = glassTransmit(v, n)
+  const through = glassTransmit(v, n, x, y, z)
   let bendR = 0
   let bendG = 0
   let bendB = 0
@@ -399,15 +437,15 @@ function materialBytes(
   const winB = win.b
   const cover = batch.a / 255
   const lum = (r: number, g: number, b: number) => (r + g + b) / (3 * 255)
-  const bright = Math.min(1, lum(bendR, bendG, bendB) * transmit + lum(winR, winG, winB) * transmit * 0.85 + fresnel)
+  const bright = Math.min(1, lum(bendR, bendG, bendB) * transmit + lum(winR, winG, winB) * transmit * 0.28 + fresnel)
   const alpha = cover + (1 - cover) * bright
   const dim = blocked ? 0.72 : 1
   const chan = (c: number, bendC: number, winC: number, reflC: number) => {
     const tint = c / 255
     const windowTint = 0.35 + 0.65 * tint
     const base = tint * shade * 0.08 * dim
-    const reflection = (winC / 255) * windowTint * 0.85 * transmit * dim + (reflC / 255) * fresnel
-    const refraction = (bendC / 255) * windowTint * transmit * 0.9 * dim
+    const reflection = (winC / 255) * windowTint * 0.28 * transmit * dim + (reflC / 255) * fresnel
+    const refraction = (bendC / 255) * windowTint * transmit * dim
     return byte(Math.min(1, base + reflection + refraction) * 255)
   }
   return [chan(batch.r, bendR, winR, envR), chan(batch.g, bendG, winG, envG), chan(batch.b, bendB, winB, envB), byte(alpha * 255)]
@@ -2231,6 +2269,19 @@ function rasterize(
     const batch = batches[batchIndex]!
     const verts = authored[batchIndex]!
     const screen = projected[batchIndex]!
+    if (batch.material === 'glass' && verts.length > 0) {
+      let sx = 0
+      let sy = 0
+      let sz = 0
+      for (const vert of verts) {
+        sx += vert.x
+        sy += vert.y
+        sz += vert.z
+      }
+      glassCenter.x = sx / verts.length
+      glassCenter.y = sy / verts.length
+      glassCenter.z = sz / verts.length
+    }
     const indices = batch.indices
     for (let i = 0; i < indices.length; i += 3) {
       const i0 = indices[i]!
