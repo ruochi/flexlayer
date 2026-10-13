@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.4
+
+挤出的棱按厚度的 1/40 收一条小圆角。盒子和路径用 `depth`，圆柱用轴向长度。五星这种凹轮廓，以及带洞的字形，也收。写了 `rx` 或描了 `stroke` 的保持原来的棱。
+
 ## 0.6.3
 
 `.layer` 里的 `<script>` 在子进程里读 `@napi-rs/canvas`。`node_modules` 整目录、pnpm 虚拟目录这种符号链接，`realpath` 还要读链接自己和它的父目录，以前名单里没有，于是报 `Access to this API has been restricted`，画布是空的。
