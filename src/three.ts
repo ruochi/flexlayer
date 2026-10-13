@@ -5,9 +5,11 @@ import type { GlbPrimitive } from './glb.js'
  * 不 import three：用 isMesh / isBufferGeometry 认类型，避免同一包的两份构建对不上 instanceof。
  * 坐标保持 three 的 y 向上。翻到作者空间的 y 向下发生在投影，这里再翻会把绕序翻两次。
  * 负行列式（镜像缩放）会把三角形绕序翻一次，这里换回正面。
- * 不读着色器、灯光、贴图、顶点色和骨骼；SkinnedMesh 只用绑定姿态。
+ * 不读灯光、法线贴图和骨骼；SkinnedMesh 只用绑定姿态。着色器不执行。
  * Lambert、Toon 走磨砂。Phong 的 shininess 收成粗糙度，100 是光滑。透射不小于 0.5 走玻璃。
  * 其余按金属度：不小于 0.5 是金属，否则是塑料。粗糙度越低，环境越清楚。
+ * 内存里的 map 按 uv 给底色染色，再走同一套明暗。顶点色乘上材质色。emissive 加在明暗之后。
+ * ShaderMaterial 只从 uniforms 里取一个颜色当底色。
  */
 
 type Mat4 = number[]
@@ -25,7 +27,7 @@ type Obj = {
   material?: unknown
   instanceMatrix?: unknown
   count?: number
-  attributes?: { position?: unknown; normal?: unknown }
+  attributes?: { position?: unknown; normal?: unknown; uv?: unknown; color?: unknown }
   index?: unknown
   groups?: unknown
   drawRange?: { start?: number; count?: number }
@@ -38,6 +40,11 @@ type Obj = {
   getY?: (index: number) => number
   getZ?: (index: number) => number
   color?: { r?: number; g?: number; b?: number }
+  r?: number
+  g?: number
+  b?: number
+  x?: number
+  y?: number
   opacity?: number
   roughness?: number
   metalness?: number
@@ -48,6 +55,23 @@ type Obj = {
   isMeshToonMaterial?: boolean
   isMeshPhongMaterial?: boolean
   isMeshPhysicalMaterial?: boolean
+  isShaderMaterial?: boolean
+  isRawShaderMaterial?: boolean
+  isColor?: boolean
+  vertexColors?: boolean | number
+  emissive?: { r?: number; g?: number; b?: number }
+  emissiveIntensity?: number
+  map?: unknown
+  image?: unknown
+  width?: number
+  height?: number
+  flipY?: boolean
+  wrapS?: number
+  wrapT?: number
+  repeat?: { x?: number; y?: number }
+  uniforms?: unknown
+  value?: unknown
+  format?: number
   start?: number
   materialIndex?: number
 }
@@ -85,6 +109,24 @@ export function modelRevision(prims: GlbPrimitive[]): string {
     word(Math.round(prim.metalness * 1000))
     word(prim.doubleSided ? 1 : 0)
     word(prim.shade === 'matte' ? 1 : prim.shade === 'plastic' ? 2 : prim.shade === 'metal' ? 3 : prim.shade === 'glass' ? 4 : 0)
+    if (prim.uvs) hashFloats(prim.uvs, word)
+    if (prim.colors) hashFloats(prim.colors, word)
+    if (prim.emissive) for (const channel of prim.emissive) word(Math.round(channel * 1000))
+    if (prim.map) {
+      word(prim.map.w)
+      word(prim.map.h)
+      word(prim.map.flipY ? 1 : 0)
+      word(Math.round(prim.map.repeatU * 1000))
+      word(Math.round(prim.map.repeatV * 1000))
+      word(Math.round(prim.map.offsetU * 1000))
+      word(Math.round(prim.map.offsetV * 1000))
+      word(prim.map.wrapS)
+      word(prim.map.wrapT)
+      const pixels = prim.map.rgba
+      for (let i = 0; i < pixels.length; i += 4) {
+        word((pixels[i]! | (pixels[i + 1]! << 8) | (pixels[i + 2]! << 16) | ((pixels[i + 3] ?? 0) << 24)) >>> 0)
+      }
+    }
   }
   return `${(h1 >>> 0).toString(16).padStart(8, '0')}${(h2 >>> 0).toString(16).padStart(8, '0')}`
 }
@@ -138,6 +180,10 @@ function emitMesh(mesh: Obj, out: GlbPrimitive[]) {
   const count = attrCount(position)
   if (count < 3) return
   const normalAttr = asObj(geometry.attributes?.normal) ?? asObj(geometry.getAttribute?.('normal'))
+  const uvAttr = asObj(geometry.attributes?.uv) ?? asObj(geometry.getAttribute?.('uv'))
+  const colorAttr = asObj(geometry.attributes?.color) ?? asObj(geometry.getAttribute?.('color'))
+  const uvs = uvAttr && attrCount(uvAttr) >= count ? readVec2Array(uvAttr, count) : undefined
+  const rawColors = colorAttr && attrCount(colorAttr) >= count ? readVec3Array(colorAttr, count) : undefined
   const indexAttr = asObj(geometry.index)
   const indexCount = indexAttr ? attrCount(indexAttr) : count
   const ranges = rangesOf(geometry, indexCount)
@@ -182,6 +228,15 @@ function emitMesh(mesh: Obj, out: GlbPrimitive[]) {
         indices[written++] = flip ? b : c
       }
       if (written < 3) continue
+      let colors: Float32Array | undefined
+      if (pbr.vertexColors && rawColors) {
+        colors = new Float32Array(count * 3)
+        for (let i = 0; i < count; i++) {
+          colors[i * 3] = clamp01(rawColors[i * 3]! * pbr.color[0])
+          colors[i * 3 + 1] = clamp01(rawColors[i * 3 + 1]! * pbr.color[1])
+          colors[i * 3 + 2] = clamp01(rawColors[i * 3 + 2]! * pbr.color[2])
+        }
+      }
       out.push({
         positions,
         normals,
@@ -191,6 +246,10 @@ function emitMesh(mesh: Obj, out: GlbPrimitive[]) {
         metalness: pbr.metalness,
         doubleSided: pbr.doubleSided,
         shade: pbr.shade,
+        uvs,
+        colors,
+        map: pbr.map,
+        emissive: pbr.emissive,
       })
     }
   }
@@ -241,6 +300,9 @@ function readPbr(material: unknown): {
   doubleSided: boolean
   back: boolean
   shade: 'matte' | 'plastic' | 'metal' | 'glass'
+  vertexColors: boolean
+  map?: GlbPrimitive['map']
+  emissive?: [number, number, number]
 } {
   const mat = asObj(material)
   const color = mat?.color
@@ -253,6 +315,14 @@ function readPbr(material: unknown): {
     g = linearToSrgb(finite(color.g, 0))
     b = linearToSrgb(finite(color.b, 0))
   }
+  if (mat?.isShaderMaterial === true || mat?.isRawShaderMaterial === true) {
+    const picked = shaderColor(mat)
+    if (picked) {
+      r = linearToSrgb(picked.r)
+      g = linearToSrgb(picked.g)
+      b = linearToSrgb(picked.b)
+    }
+  }
   const side = finite(mat?.side, 0)
   const metalness = clamp01(finite(mat?.metalness, 0))
   const classified = classifyShade(mat, metalness)
@@ -263,7 +333,137 @@ function readPbr(material: unknown): {
     doubleSided: side === 2,
     back: side === 1,
     shade: classified.shade,
+    vertexColors: mat?.vertexColors === true || mat?.vertexColors === 2,
+    map: readMap(mat),
+    emissive: readEmissive(mat),
   }
+}
+
+const SHADER_COLOR_NAMES = ['color', 'uColor', 'diffuse', 'uDiffuse', 'baseColor', 'uBaseColor']
+
+/** 着色器不跑。优先同名 uniform，其次名字里带 color 的，再其次任意 Color。 */
+function shaderColor(mat: Obj): { r: number; g: number; b: number } | null {
+  const uniforms = asObj(mat.uniforms)
+  if (!uniforms) return null
+  const entries = Object.entries(uniforms)
+  for (const name of SHADER_COLOR_NAMES) {
+    const found = entries.find(([key]) => key === name)
+    const color = found ? colorOf(asObj(found[1])?.value, true) : null
+    if (color) return color
+  }
+  for (const [key, uniform] of entries) {
+    if (!/color|diffuse|tint/i.test(key)) continue
+    const color = colorOf(asObj(uniform)?.value, true)
+    if (color) return color
+  }
+  for (const [, uniform] of entries) {
+    const color = colorOf(asObj(uniform)?.value, false)
+    if (color) return color
+  }
+  return null
+}
+
+function colorOf(value: unknown, named: boolean): { r: number; g: number; b: number } | null {
+  const obj = asObj(value)
+  if (!obj || typeof obj.r !== 'number' || typeof obj.g !== 'number' || typeof obj.b !== 'number') return null
+  if (!named && obj.isColor !== true) return null
+  return { r: obj.r, g: obj.g, b: obj.b }
+}
+
+function readEmissive(mat: Obj | null): [number, number, number] | undefined {
+  const color = mat?.emissive
+  if (!color || typeof color.r !== 'number') return undefined
+  const intensity = finite(mat?.emissiveIntensity, 1)
+  const r = clamp01(linearToSrgb(color.r) * intensity)
+  const g = clamp01(linearToSrgb(finite(color.g, 0)) * intensity)
+  const b = clamp01(linearToSrgb(finite(color.b, 0)) * intensity)
+  if (r <= 1e-4 && g <= 1e-4 && b <= 1e-4) return undefined
+  return [r, g, b]
+}
+
+/** 只读已经在内存里的像素。网址贴图还没解码时当没有。 */
+function readMap(mat: Obj | null): GlbPrimitive['map'] {
+  const map = asObj(mat?.map)
+  if (!map) return undefined
+  const image = asObj(map.image)
+  const rgba = image ? rgbaOf(image) : null
+  if (!rgba) return undefined
+  const repeat = asObj(map.repeat)
+  const offset = asObj(map.offset)
+  return {
+    rgba: rgba.rgba,
+    w: rgba.w,
+    h: rgba.h,
+    flipY: map.flipY !== false,
+    repeatU: finite(repeat?.x, 1),
+    repeatV: finite(repeat?.y, 1),
+    offsetU: finite(offset?.x, 0),
+    offsetV: finite(offset?.y, 0),
+    wrapS: finite(map.wrapS, 1001),
+    wrapT: finite(map.wrapT, 1001),
+  }
+}
+
+function rgbaOf(image: Obj): { rgba: Uint8ClampedArray; w: number; h: number } | null {
+  const w = finite(image.width, 0)
+  const h = finite(image.height, 0)
+  const data = image.data
+  if (w > 0 && h > 0 && data && typeof (data as ArrayLike<number>).length === 'number') {
+    const src = data as ArrayLike<number>
+    const rgba = new Uint8ClampedArray(w * h * 4)
+    if (src.length >= w * h * 4) {
+      for (let i = 0; i < rgba.length; i++) rgba[i] = src[i] ?? 0
+      return { rgba, w, h }
+    }
+    if (src.length >= w * h * 3) {
+      for (let i = 0, j = 0; j < rgba.length; i += 3, j += 4) {
+        rgba[j] = src[i] ?? 0
+        rgba[j + 1] = src[i + 1] ?? 0
+        rgba[j + 2] = src[i + 2] ?? 0
+        rgba[j + 3] = 255
+      }
+      return { rgba, w, h }
+    }
+  }
+  const getContext = (image as { getContext?: (kind: string) => { getImageData?: (x: number, y: number, w: number, h: number) => { data: Uint8ClampedArray } } | null }).getContext
+  if (w > 0 && h > 0 && typeof getContext === 'function') {
+    try {
+      const ctx = getContext.call(image, '2d')
+      const pixels = ctx?.getImageData?.(0, 0, w, h)
+      if (pixels && pixels.data.length >= w * h * 4) return { rgba: pixels.data, w, h }
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+function readVec2Array(attr: Obj, count: number): Float32Array {
+  const out = new Float32Array(count * 2)
+  for (let i = 0; i < count; i++) {
+    const v = readVec2(attr, i)
+    out[i * 2] = v[0]
+    out[i * 2 + 1] = v[1]
+  }
+  return out
+}
+
+function readVec3Array(attr: Obj, count: number): Float32Array {
+  const out = new Float32Array(count * 3)
+  for (let i = 0; i < count; i++) {
+    const v = readVec3(attr, i)
+    out[i * 3] = v[0]
+    out[i * 3 + 1] = v[1]
+    out[i * 3 + 2] = v[2]
+  }
+  return out
+}
+
+function readVec2(attr: Obj, index: number): [number, number] {
+  if (typeof attr.getX === 'function' && typeof attr.getY === 'function') {
+    return [finite(attr.getX(index), 0), finite(attr.getY(index), 0)]
+  }
+  return [readComponent(attr, index, 0), readComponent(attr, index, 1)]
 }
 
 /** Lambert / Toon 只有明暗。Phong 的 shininess 100 收成粗糙度 0，环境最清楚。透射过半才用假玻璃。 */

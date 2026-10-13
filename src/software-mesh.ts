@@ -2,7 +2,7 @@ import { createCanvas, type Canvas, type CanvasRenderingContext2D } from '@napi-
 import { readFileSync, statSync } from 'node:fs'
 import { studioAt } from './env-map.js'
 import { solidPaint } from './gradient.js'
-import { parseGlb } from './glb.js'
+import { parseGlb, type GlbPrimitive } from './glb.js'
 import { heldModelPrims } from './three.js'
 import { bevelFewFaces, bevelRadius } from './mesh-bevel.js'
 import { originOffset } from './matrix.js'
@@ -107,6 +107,13 @@ type Batch = {
   texture: Uint8ClampedArray | null
   tw: number
   th: number
+  /** 底色贴图。取样后乘进明暗，不像平面贴图那样直接当像素。 */
+  albedoMap?: GlbPrimitive['map']
+  /** 每个顶点的底色，0–255。 */
+  colors?: Float32Array
+  emissiveR?: number
+  emissiveG?: number
+  emissiveB?: number
   toLayer: Mat4
   originX: number
   originY: number
@@ -126,6 +133,9 @@ type Vert = {
   nz: number
   u: number
   v: number
+  cr?: number
+  cg?: number
+  cb?: number
 }
 
 type ScreenVert = Vert & { sx: number; sy: number; invW: number }
@@ -189,6 +199,10 @@ type ModelPrim = {
   metalness: number
   doubleSided: boolean
   shade?: 'matte' | 'plastic' | 'metal' | 'glass'
+  uvs?: Float32Array
+  colors?: Float32Array
+  map?: GlbPrimitive['map']
+  emissive?: [number, number, number]
 }
 
 const geometryCache = new Map<string, MeshGeometry | null>()
@@ -423,7 +437,12 @@ function materialBytes(
   y: number,
   z: number,
   camera: ShadeCamera,
+  albedo?: [number, number, number, number],
 ): [number, number, number, number] {
+  const cr = albedo?.[0] ?? batch.r
+  const cg = albedo?.[1] ?? batch.g
+  const cb = albedo?.[2] ?? batch.b
+  const ca = albedo?.[3] ?? batch.a
   const n = shadeNormal(nx, ny, nz, back)
   const v = camera.parallel ? { x: 0, y: 0, z: 1 } : unit(camera.x - x, y - camera.y, camera.z - z)
   const reflect = reflectView(v, n)
@@ -437,7 +456,7 @@ function materialBytes(
     const darken = (batch.material === 'metal' ? 0.92 : 0.4) * ease
     const lighten = batch.material === 'metal' ? 0.45 : 0.22
     const chan = (channel: number, envC: number) => byte(envOverMatte(channel, shade, envC, darken, lighten))
-    return [chan(batch.r, envR), chan(batch.g, envG), chan(batch.b, envB), batch.a]
+    return [chan(cr, envR), chan(cg, envG), chan(cb, envB), ca]
   }
   const ndotv = clamp01(n.x * v.x + n.y * v.y + n.z * v.z)
   const fresnel = 0.04 + 0.96 * (1 - ndotv) ** 5
@@ -469,7 +488,7 @@ function materialBytes(
   const reflR = soften(envR)
   const reflG = soften(envG)
   const reflB = soften(envB)
-  const cover = batch.a / 255
+  const cover = ca / 255
   const lum = (r: number, g: number, b: number) => (r + g + b) / (3 * 255)
   const dim = blocked ? 0.72 : 1
   const chan = (c: number, bendC: number, winC: number, reflC: number, rimC: number) => {
@@ -488,9 +507,9 @@ function materialBytes(
   const bright = reflectionLum + (1 - reflectionLum) * refractionLum
   const alpha = cover + (1 - cover) * bright
   return [
-    chan(batch.r, bendR, winR, reflR, rimR),
-    chan(batch.g, bendG, winG, reflG, rimG),
-    chan(batch.b, bendB, winB, reflB, rimB),
+    chan(cr, bendR, winR, reflR, rimR),
+    chan(cg, bendG, winG, reflG, rimG),
+    chan(cb, bendB, winB, reflB, rimB),
     byte(alpha * 255),
   ]
 }
@@ -1344,6 +1363,10 @@ function buildModelFresh(node: MeshLayoutNode): ModelPrim[] {
       metalness: Math.min(1, Math.max(0, prim.metalness)),
       doubleSided: prim.doubleSided,
       shade: prim.shade,
+      uvs: prim.uvs,
+      colors: prim.colors ? scaleVertexColors(prim.colors) : undefined,
+      map: prim.map,
+      emissive: prim.emissive,
     })
   }
   return out
@@ -1457,7 +1480,7 @@ type Texel = { r: number; g: number; b: number; a: number }
 
 const TEXEL: Texel = { r: 0, g: 0, b: 0, a: 0 }
 
-function sampleTexture(data: Uint8ClampedArray, tw: number, th: number, u: number, v: number): Texel {
+function sampleTexture(data: Uint8ClampedArray, tw: number, th: number, u: number, v: number, flipY = true): Texel {
   if (tw < 1 || th < 1) {
     TEXEL.r = 0
     TEXEL.g = 0
@@ -1465,8 +1488,10 @@ function sampleTexture(data: Uint8ClampedArray, tw: number, th: number, u: numbe
     TEXEL.a = 0
     return TEXEL
   }
-  const x = Math.min(Math.max(u, 0), 1) * Math.max(tw - 1, 0)
-  const y = (1 - Math.min(Math.max(v, 0), 1)) * (th - 1)
+  const uu = Math.min(Math.max(u, 0), 1)
+  const vv = Math.min(Math.max(v, 0), 1)
+  const x = uu * Math.max(tw - 1, 0)
+  const y = (flipY ? 1 - vv : vv) * (th - 1)
   const x0 = Math.floor(x)
   const y0 = Math.floor(y)
   const x1 = Math.min(x0 + 1, tw - 1)
@@ -1491,10 +1516,48 @@ function sampleTexture(data: Uint8ClampedArray, tw: number, th: number, u: numbe
   return TEXEL
 }
 
+/** RepeatWrapping 是 1000，MirroredRepeatWrapping 是 1002，其余钳制。 */
+function wrapMap(value: number, mode: number): number {
+  if (mode === 1000) return value - Math.floor(value)
+  if (mode === 1002) {
+    const period = Math.floor(value)
+    const frac = value - period
+    return period % 2 === 0 ? frac : 1 - frac
+  }
+  return Math.min(1, Math.max(0, value))
+}
+
+/** 顶点色和底色贴图乘在一起，再交给磨砂、塑料、金属或玻璃。 */
+function shadeAlbedo(batch: Batch, a: ScreenVert, b: ScreenVert, c: ScreenVert, w0: number, w1: number, w2: number, iw: number): [number, number, number, number] {
+  const mix = (pa: number, pb: number, pc: number) => (w0 * pa * a.invW + w1 * pb * b.invW + w2 * pc * c.invW) / iw
+  let r = a.cr != null && b.cr != null && c.cr != null ? mix(a.cr, b.cr, c.cr) : batch.r
+  let g = a.cg != null && b.cg != null && c.cg != null ? mix(a.cg, b.cg, c.cg) : batch.g
+  let bl = a.cb != null && b.cb != null && c.cb != null ? mix(a.cb, b.cb, c.cb) : batch.b
+  let alpha = batch.a
+  const map = batch.albedoMap
+  if (map) {
+    const u = wrapMap(mix(a.u, b.u, c.u) * map.repeatU + map.offsetU, map.wrapS)
+    const v = wrapMap(mix(a.v, b.v, c.v) * map.repeatV + map.offsetV, map.wrapT)
+    const tex = sampleTexture(map.rgba, map.w, map.h, u, v, map.flipY)
+    r = (r * tex.r) / 255
+    g = (g * tex.g) / 255
+    bl = (bl * tex.b) / 255
+    alpha = (alpha * tex.a) / 255
+  }
+  return [byte(r), byte(g), byte(bl), byte(alpha)]
+}
+
+function scaleVertexColors(colors: Float32Array): Float32Array {
+  const out = new Float32Array(colors.length)
+  for (let i = 0; i < colors.length; i++) out[i] = byte(colors[i]! * 255)
+  return out
+}
+
 function lerpVert(a: Vert, b: Vert, z: number): Vert {
   const denom = b.z - a.z
   const t = Math.abs(denom) < 1e-8 ? 0 : (z - a.z) / denom
   const mix = (p: number, q: number) => p + (q - p) * t
+  const color = a.cr == null && b.cr == null ? undefined : mix(a.cr ?? 0, b.cr ?? 0)
   return {
     x: mix(a.x, b.x),
     y: mix(a.y, b.y),
@@ -1504,6 +1567,9 @@ function lerpVert(a: Vert, b: Vert, z: number): Vert {
     nz: mix(a.nz, b.nz),
     u: mix(a.u, b.u),
     v: mix(a.v, b.v),
+    cr: color,
+    cg: a.cg == null && b.cg == null ? undefined : mix(a.cg ?? 0, b.cg ?? 0),
+    cb: a.cb == null && b.cb == null ? undefined : mix(a.cb ?? 0, b.cb ?? 0),
   }
 }
 
@@ -1890,7 +1956,21 @@ function drawFlatLambert(
   shadow: ShadowMap | null,
   writeOwner: boolean,
 ): boolean {
-  if (batch.material !== 'lambert' || !batch.shaded || batch.a < 255 || !batch.depthWrite || batch.texture || batch.outline) return false
+  if (
+    batch.material !== 'lambert' ||
+    !batch.shaded ||
+    batch.a < 255 ||
+    !batch.depthWrite ||
+    batch.texture ||
+    batch.outline ||
+    batch.albedoMap ||
+    batch.colors ||
+    (batch.emissiveR ?? 0) > 0 ||
+    (batch.emissiveG ?? 0) > 0 ||
+    (batch.emissiveB ?? 0) > 0
+  ) {
+    return false
+  }
   const area = (b.sx - a.sx) * (c.sy - a.sy) - (b.sy - a.sy) * (c.sx - a.sx)
   if (Math.abs(area) < 1e-8) return true
   const back = area > 0
@@ -2124,6 +2204,7 @@ function drawTriangle(
       let sg = batch.g
       let sb = batch.b
       let sa = batch.a
+      const albedo = batch.albedoMap || a.cr != null ? shadeAlbedo(batch, a, b, c, w0, w1, w2, iw) : undefined
       if (texture) {
         const u = (w0 * a.u * a.invW + w1 * b.u * b.invW + w2 * c.u * c.invW) / iw
         const v = (w0 * a.v * a.invW + w1 * b.v * b.invW + w2 * c.v * c.invW) / iw
@@ -2135,21 +2216,30 @@ function drawTriangle(
         sa = tex.a
       } else if (batch.material !== 'lambert') {
         const shade = flat ? (blocked ? shutShade : openShade) : shadeOf(nx, ny, nz, back, blocked)
-        const painted = materialBytes(batch, nx, ny, nz, back, shade, blocked, px, py, pz, camera)
+        const painted = materialBytes(batch, nx, ny, nz, back, shade, blocked, px, py, pz, camera, albedo)
         sr = painted[0]
         sg = painted[1]
         sb = painted[2]
         sa = painted[3]
       } else if (batch.shaded) {
         const shade = flat ? (blocked ? shutShade : openShade) : shadeOf(nx, ny, nz, back, blocked)
-        sr = byte(batch.r * shade)
-        sg = byte(batch.g * shade)
-        sb = byte(batch.b * shade)
+        const r = albedo?.[0] ?? batch.r
+        const g = albedo?.[1] ?? batch.g
+        const b = albedo?.[2] ?? batch.b
+        sr = byte(r * shade)
+        sg = byte(g * shade)
+        sb = byte(b * shade)
+        sa = albedo?.[3] ?? batch.a
       } else if (blocked) {
         const dim = shadowScale(nx, ny, nz, back)
         sr = byte(batch.r * dim)
         sg = byte(batch.g * dim)
         sb = byte(batch.b * dim)
+      }
+      if ((batch.emissiveR ?? 0) > 0 || (batch.emissiveG ?? 0) > 0 || (batch.emissiveB ?? 0) > 0) {
+        sr = byte(sr + (batch.emissiveR ?? 0))
+        sg = byte(sg + (batch.emissiveG ?? 0))
+        sb = byte(sb + (batch.emissiveB ?? 0))
       }
       // 贴图上全透明的像素不挡后面的棱。线框没有贴图，空的面仍要写深度，隐藏线才分得出来。
       if (batch.depthWrite && (batch.texture ? sa > 0 : batch.a > 0 || batch.lines != null)) {
@@ -2238,6 +2328,9 @@ function loadScreen(into: ScreenVert, v: Vert, screen: Float32Array, index: numb
   into.nz = v.nz
   into.u = v.u
   into.v = v.v
+  into.cr = v.cr
+  into.cg = v.cg
+  into.cb = v.cb
   into.sx = screen[o]!
   into.sy = screen[o + 1]!
   into.invW = screen[o + 2]!
@@ -2245,7 +2338,7 @@ function loadScreen(into: ScreenVert, v: Vert, screen: Float32Array, index: numb
 }
 
 function projectClipped(v: Vert, perspective: Perspective, vx: number, vy: number, originX: number, originY: number, pixelScale: number): ScreenVert {
-  const into: ScreenVert = { x: v.x, y: v.y, z: v.z, nx: v.nx, ny: v.ny, nz: v.nz, u: v.u, v: v.v, sx: 0, sy: 0, invW: 1 }
+  const into: ScreenVert = { x: v.x, y: v.y, z: v.z, nx: v.nx, ny: v.ny, nz: v.nz, u: v.u, v: v.v, cr: v.cr, cg: v.cg, cb: v.cb, sx: 0, sy: 0, invW: 1 }
   if (perspective === 'parallel') {
     into.sx = (v.x - originX) * pixelScale
     into.sy = (v.y - originY) * pixelScale
@@ -2561,7 +2654,20 @@ function rasterize(
       const n = transformNormal(batch.toLayer, batch.normals[i * 3]!, batch.normals[i * 3 + 1]!, batch.normals[i * 3 + 2]!)
       const u = batch.uvs ? batch.uvs[i * 2]! : 0
       const v = batch.uvs ? batch.uvs[i * 2 + 1]! : 0
-      verts[i] = { x: p.x, y: p.y, z: p.z, nx: n.x, ny: n.y, nz: n.z, u, v }
+      const colors = batch.colors
+      verts[i] = {
+        x: p.x,
+        y: p.y,
+        z: p.z,
+        nx: n.x,
+        ny: n.y,
+        nz: n.z,
+        u,
+        v,
+        cr: colors ? colors[i * 3] : undefined,
+        cg: colors ? colors[i * 3 + 1] : undefined,
+        cb: colors ? colors[i * 3 + 2] : undefined,
+      }
       const front = layerProject(p, perspective, px, py)
       const o = i * 3
       if (front) {
@@ -3809,7 +3915,7 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
     const opacity = (instance.opacity ?? 1) * node.opacity
     if (node.mesh.type === 'model') {
       for (const prim of buildModel(node)) {
-        const painted = paintGeometry(node, prim.positions, prim.normals, prim.indices)
+        const painted = prim.map || prim.colors ? { positions: prim.positions, normals: prim.normals, indices: prim.indices } : paintGeometry(node, prim.positions, prim.normals, prim.indices)
         const authored = node.material
         const material = authored ? shadeMaterial(authored.kind) : prim.shade ? shadeMaterial(prim.shade) : prim.metalness >= 0.5 ? 'metal' : 'plastic'
         const roughness = authored ? authored.roughness : prim.roughness
@@ -3817,7 +3923,7 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
         batches.push({
           positions: painted.positions,
           normals: painted.normals,
-          uvs: null,
+          uvs: prim.uvs && prim.uvs.length >= (prim.positions.length / 3) * 2 ? prim.uvs : null,
           indices: painted.indices,
           r: prim.color[0],
           g: prim.color[1],
@@ -3833,6 +3939,11 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
           texture: null,
           tw: 0,
           th: 0,
+          albedoMap: prim.map,
+          colors: prim.colors,
+          emissiveR: prim.emissive ? byte(prim.emissive[0] * 255) : 0,
+          emissiveG: prim.emissive ? byte(prim.emissive[1] * 255) : 0,
+          emissiveB: prim.emissive ? byte(prim.emissive[2] * 255) : 0,
           toLayer: instance.toLayer,
           originX: o.x,
           originY: o.y,

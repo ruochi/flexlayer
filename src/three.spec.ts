@@ -16,6 +16,15 @@ import { typecheckLayerFile } from './typecheck.js'
 
 const pkgDir = join(fileURLToPath(import.meta.url), '..', '..')
 
+function quadGeometry() {
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0]), 3))
+  geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]), 2))
+  geometry.setIndex([0, 1, 2, 0, 2, 3])
+  geometry.computeVertexNormals()
+  return geometry
+}
+
 function triangleGeometry() {
   const geometry = new THREE.BufferGeometry()
   geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]), 3))
@@ -150,6 +159,40 @@ describe('fromThree', () => {
     expect(faint[0]!.shade).toBe('plastic')
     expect(faint[0]!.roughness).toBeCloseTo(0.4)
   })
+
+  it('贴图、顶点色、自发光和着色器颜色进到底色', () => {
+    const data = new Uint8Array([255, 0, 0, 255, 0, 0, 255, 255])
+    const map = new THREE.DataTexture(data, 2, 1)
+    const textured = fromThree(new THREE.Mesh(quadGeometry(), new THREE.MeshLambertMaterial({ map })))
+    expect(textured[0]!.map?.w).toBe(2)
+    expect(textured[0]!.map?.rgba[0]).toBe(255)
+    expect(textured[0]!.map?.rgba[4]).toBe(0)
+    expect(textured[0]!.uvs?.[0]).toBe(0)
+    expect(textured[0]!.uvs?.[2]).toBe(1)
+
+    const colors = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0])
+    const painted = quadGeometry()
+    painted.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+    const vertex = fromThree(new THREE.Mesh(painted, new THREE.MeshLambertMaterial({ vertexColors: true, color: '#ffffff' })))
+    expect(vertex[0]!.colors?.[0]).toBeCloseTo(1)
+    expect(vertex[0]!.colors?.[3]).toBeCloseTo(0)
+
+    const glow = fromThree(new THREE.Mesh(triangleGeometry(), new THREE.MeshStandardMaterial({ color: '#000000', emissive: '#00ff00', emissiveIntensity: 1 })))
+    expect(glow[0]!.emissive?.[1]).toBeGreaterThan(0.9)
+
+    const shader = fromThree(
+      new THREE.Mesh(
+        triangleGeometry(),
+        new THREE.ShaderMaterial({
+          uniforms: { uColor: { value: new THREE.Color('#e23b2f') } },
+          vertexShader: 'void main() {}',
+          fragmentShader: 'void main() {}',
+        }),
+      ),
+    )
+    expect(shader[0]!.shade).toBe('plastic')
+    expect(shader[0]!.color[0]).toBeGreaterThan(shader[0]!.color[2]!)
+  })
 })
 
 describe('model object 和 unit', () => {
@@ -213,6 +256,51 @@ describe('model object 和 unit', () => {
     const glassGap = Math.abs(matte[0]! - pane[0]!) + Math.abs(matte[1]! - pane[1]!) + Math.abs(matte[2]! - pane[2]!)
     expect(matteGap).toBeGreaterThan(8)
     expect(glassGap).toBeGreaterThan(8)
+
+    async function quadAt(material: THREE.Material, x: number, y: number) {
+      const mesh = new THREE.Mesh(quadGeometry(), material)
+      mesh.material.side = THREE.DoubleSide
+      const frame = await renderLayer(
+        h('layer', { width: 80, height: 80, camera: 'parallel', background: '#000000' }, h('model', { object: mesh, unit: 40 })),
+      )
+      return pixelAt(frame.png, x, y)
+    }
+    const split = new THREE.DataTexture(new Uint8Array([255, 0, 0, 255, 0, 0, 255, 255]), 2, 1)
+    const lambertMap = await quadAt(new THREE.MeshLambertMaterial({ color: '#ffffff', map: split }), 28, 40)
+    const lambertFar = await quadAt(new THREE.MeshLambertMaterial({ color: '#ffffff', map: split }), 52, 40)
+    expect(lambertMap[0]).toBeGreaterThan((lambertMap[2] ?? 0) + 30)
+    expect(lambertFar[2]).toBeGreaterThan((lambertFar[0] ?? 0) + 30)
+    const metalMap = await quadAt(new THREE.MeshStandardMaterial({ color: '#ffffff', map: split, metalness: 1, roughness: 0.35 }), 28, 40)
+    const metalFar = await quadAt(new THREE.MeshStandardMaterial({ color: '#ffffff', map: split, metalness: 1, roughness: 0.35 }), 52, 40)
+    expect(Math.abs((metalMap[0] ?? 0) - (metalFar[0] ?? 0)) + Math.abs((metalMap[2] ?? 0) - (metalFar[2] ?? 0))).toBeGreaterThan(8)
+
+    const colored = quadGeometry()
+    colored.setAttribute('color', new THREE.BufferAttribute(new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0]), 3))
+    const colorFrame = await renderLayer(
+      h(
+        'layer',
+        { width: 80, height: 80, camera: 'parallel', background: '#000000' },
+        h('model', { object: new THREE.Mesh(colored, new THREE.MeshLambertMaterial({ color: '#ffffff', vertexColors: true })), unit: 40 }),
+      ),
+    )
+    const leftColor = await pixelAt(colorFrame.png, 28, 40)
+    const rightColor = await pixelAt(colorFrame.png, 52, 40)
+    expect(leftColor[0]).toBeGreaterThan((leftColor[2] ?? 0) + 20)
+    expect(rightColor[2]).toBeGreaterThan((rightColor[0] ?? 0) + 20)
+
+    const dark = await quadAt(new THREE.MeshStandardMaterial({ color: '#000000', roughness: 1, metalness: 0 }), 40, 40)
+    const lit = await quadAt(new THREE.MeshStandardMaterial({ color: '#000000', emissive: '#3dff7a', emissiveIntensity: 1, roughness: 1, metalness: 0 }), 40, 40)
+    expect(lit[1]).toBeGreaterThan((dark[1] ?? 0) + 30)
+    const shaderPx = await quadAt(
+      new THREE.ShaderMaterial({
+        uniforms: { uColor: { value: new THREE.Color('#e23b2f') } },
+        vertexShader: 'void main() {}',
+        fragmentShader: 'void main() {}',
+      }),
+      40,
+      40,
+    )
+    expect(shaderPx[0]).toBeGreaterThan((shaderPx[2] ?? 0) + 20)
   }, 30000)
 
   it('glb 写了 unit 就不再撑满盒子', async () => {

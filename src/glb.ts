@@ -11,6 +11,25 @@ export type GlbPrimitive = {
   doubleSided: boolean
   /** three.js 材质换算。glb 不写，仍按金属度分 metal / plastic。 */
   shade?: 'matte' | 'plastic' | 'metal' | 'glass'
+  /** 每个顶点的 uv。 */
+  uvs?: Float32Array
+  /** 每个顶点的底色，0–1，已经乘过材质色。 */
+  colors?: Float32Array
+  /** 已经在内存里的底色贴图。按 uv 取样后参与明暗。 */
+  map?: {
+    rgba: Uint8ClampedArray
+    w: number
+    h: number
+    flipY: boolean
+    repeatU: number
+    repeatV: number
+    offsetU: number
+    offsetV: number
+    wrapS: number
+    wrapT: number
+  }
+  /** 自发光，0–1，已经乘过强度。加在明暗之后。 */
+  emissive?: [number, number, number]
 }
 
 type Mat4 = number[]

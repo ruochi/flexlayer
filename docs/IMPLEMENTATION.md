@@ -133,6 +133,7 @@
 - 负的线性行列式（镜像缩放）在 `fromThree` 里把三角形换回正面。glb 路径不改绕序。
 - `unit` 是 1 个模型单位对应的像素，不减包围盒中心。默认 origin 在盒子中心，所以模型原点落在外包 layer 的中心。多只 `<model>` 写同一个 `unit`，相对位置还在。
 - 不写 `material` 时按 three.js 的材质种类换算。`MeshLambertMaterial` 和 `MeshToonMaterial` 用 `matte`，只有明暗。`MeshPhongMaterial` 用 `plastic`，`roughness = clamp(1 - shininess / 100)`，`shininess` 100 是光滑，环境最清楚。`MeshPhysicalMaterial` 的 `transmission` 不小于 0.5 用 `glass`（假折射：方窗、轮廓光、一层折射）。其余金属度不小于 0.5 用 `metal`，否则 `plastic`，粗糙度来自图元，缺省 0.65。写了 `material` 则整只模型都用它。glb 没有种类标记，仍按金属度分。
+- `map` 的像素已经在内存里时，按 uv 取样，乘上材质色，再进同一套明暗。金属和塑料仍用工作室环境。网址还没解码的贴图当没有。顶点色乘上材质色后按顶点插值。`emissive` 乘上 `emissiveIntensity`，加在明暗之后，不照亮别的物体。`ShaderMaterial` 不执行，从 `color`、`uColor`、`diffuse` 这类 uniform 里取一个颜色当底色。
 - 内存网格的图元放在 `WeakMap` 里，规格上只留内容哈希。场景缓存按这个哈希失效，不把 Object3D 放进键。
 - `src/three.ts` 不 import `three`。类型看 `isMesh`。`flexlayer/three` 是同一份文件。裸包名从导入它的源文件往上找 `node_modules`，按 `package.json` 的 `import` 条件取文件，不走 `require.resolve`。
 
