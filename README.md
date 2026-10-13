@@ -4,7 +4,7 @@
 
 Flex Layer 用标签描述一帧画面：图形用 SVG 的写法。文字和排布是 HTML，按 HTML 渲染，`style` 的初始值就是 CSS 的。渲染器读入 `.layer`，输出 PNG 和一份布局报告。
 
-规范见 [SPEC.md](SPEC.md)。给模型的入口见 [AGENTS.md](AGENTS.md)，一页写法见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，字体、图片和配色见 [docs/RESOURCES.md](docs/RESOURCES.md)。当前版本是 0.6.5。
+规范见 [SPEC.md](SPEC.md)。给模型的入口见 [AGENTS.md](AGENTS.md)，一页写法见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，字体、图片和配色见 [docs/RESOURCES.md](docs/RESOURCES.md)。当前版本是 0.6.6。
 
 `layer` 上的 `camera` 是这一层的镜头。不写时，有实体、`ground` 或 `rotateX`、`rotateY`、`z` 的最外层用自己的 `height` 当视距。形状写了正的 `depth` 就沿 z 挤出。另有 `sphere`、`torus`、`tube`、`model`。例子：`npx tsx src/cli.ts render examples/perspective.layer -o perspective.png`，`npx tsx src/cli.ts render examples/meshes.layer -o meshes.png`，`npx tsx src/cli.ts render examples/solids.layer -o solids.png`，`npx tsx src/cli.ts render examples/rounded.layer -o rounded.png`。
 
@@ -84,7 +84,7 @@ import { renderLayer } from 'flexlayer'
 const { png, report } = await renderLayer(source, { scale: 0.5 })
 ```
 
-嵌套 `layer` 不填背景，色块写法见 [AGENTS.md](AGENTS.md)。新的像素滤镜用 `registerFilter` 登记，内置的 `grade` 和 `filter` 也在这个接口上，见 [SPEC.md](SPEC.md) 第 9.3 节。自定义像素用 `<canvas>` 和 `<script>`：
+嵌套 `layer` 不填背景，色块写法见 [AGENTS.md](AGENTS.md)。新的像素滤镜用 `registerFilter` 登记，内置的 `grade` 和 `filter` 也在这个接口上，见 [SPEC.md](SPEC.md)「效果」。自定义像素用 `<canvas>` 和 `<script>`：
 
 ```html
 <layer width="400" height="300" background="#0f1115">

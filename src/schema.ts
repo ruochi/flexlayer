@@ -469,7 +469,7 @@ const DOC_GROUP_LABEL: Record<DocGroup, string> = {
   html: 'HTML，按 CSS 渲染，写在 `style` 里。初始值不另写。`layer` 或图形写了 `style` 报 `warn`',
   graphic: '图形属性，坐标是所在 `layer` 的局部坐标',
   image: '只写在 `img` 或 `model` 上。`unit`、`object` 只写在 `model` 上。图片宽高仍放进 `style`',
-  effect: '图形和 `layer` 写属性；文字写在 `style`。见第 9 章',
+  effect: '图形和 `layer` 写属性；文字写在 `style`。语法在 attrs.json',
   'layer-only': '只写在 `layer` 上。写在别处或写进 `style` 报 `warn`',
   data: '任何元素都可以写。值是 JSON，不进普通属性。程序里直接传对象或数组',
   expect: '任何元素都可以写。声明预期中的问题码，出现在该节点或子树里时降为 info。没出现报 `unused-expect`',

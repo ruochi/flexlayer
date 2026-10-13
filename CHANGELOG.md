@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.6
+
+说明收成四块：`layer`、支持的 HTML 和 SVG、实体和镜头、蒙版和程序。通用的 CSS、SVG 和公式间距不再在正文里展开。问题码、蒙版、`glyph` 和 `canvas.create` 仍在 SPEC 里。写法没有删。
+
 ## 0.6.5
 
 `<model>` 在 tsx 里可以写 `object`，传入 three.js 的 Object3D。几何体进 Flex Layer 自己的场景，和文字、线稿、标注共用深度。`unit` 保留原始坐标，1 个模型单位等于这么多像素。不写 `material` 时，图元的金属度和粗糙度映射到 `metal` / `plastic`。
