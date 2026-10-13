@@ -51,6 +51,7 @@ function normalizeChildren(children: unknown): LayerChild[] {
   }
   if (typeof children === 'string') return [children]
   if (typeof children === 'number') return [String(children)]
+  if (typeof children === 'function') return [children as unknown as LayerChild]
   if (typeof children === 'object') return [children as LayerChild]
   return []
 }

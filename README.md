@@ -39,7 +39,7 @@ npm install github:ruochi/flexlayer
 
 ```bash
 npx tsx src/cli.ts render examples/hello.layer -o hello.png --report hello.json
-npx tsx src/cli.ts render examples/draw-layer.layer -o draw-layer.png   # layer + <draw>
+npx tsx src/cli.ts render examples/draw-layer.layer -o draw-layer.png   # layer + canvas
 npx tsx src/cli.ts render examples/hello.layer --debug --scale 0.5
 npx tsx src/cli.ts check examples/hello.layer
 npx tsx src/cli.ts render examples/hello.layer -o hello.png --watch
@@ -84,45 +84,23 @@ import { renderLayer } from 'flexlayer'
 const { png, report } = await renderLayer(source, { scale: 0.5 })
 ```
 
-嵌套 `layer` 不填背景，色块写法见 [AGENTS.md](AGENTS.md)。新的像素滤镜用 `registerFilter` 登记，内置的 `grade` 和 `filter` 也在这个接口上，见 [SPEC.md](SPEC.md) 第 9.3 节。`.layer` 里可以用 `<draw>`，程序侧用 `draw={fn}`：
+嵌套 `layer` 不填背景，色块写法见 [AGENTS.md](AGENTS.md)。新的像素滤镜用 `registerFilter` 登记，内置的 `grade` 和 `filter` 也在这个接口上，见 [SPEC.md](SPEC.md) 第 9.3 节。自定义像素用 `<canvas>` 和 `<script>`：
 
 ```html
 <layer width="400" height="300" background="#0f1115">
-  <layer width="160" height="80" x="120" y="110">
-    <draw>
+  <layer x="120" y="110">
+    <canvas id="bar" width="160" height="80"></canvas>
+    <script>
+      const canvas = document.querySelector('#bar')
+      const ctx = canvas.getContext('2d')
       ctx.fillStyle = '#3ecfc4'
-      ctx.fillRect(0, 0, el.w, el.h)
-    </draw>
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+    </script>
   </layer>
 </layer>
 ```
 
-用 `h()` 或 JSX 时，任意元素可挂 `draw={(ctx, el) => { ... }}`，再交给 `renderLayer(root)`：
-
-```ts
-import { h, renderLayer } from 'flexlayer'
-
-const root = h(
-  'layer',
-  { width: '400', height: '300', background: '#fff' },
-  h(
-    'layer',
-    { x: '120', y: '110' },
-    h(
-      'h1',
-      {
-        draw: (ctx, el) => {
-          ctx.strokeStyle = el.computed.color
-          ctx.strokeRect(0, 0, el.w, el.h)
-        },
-      },
-      '标题',
-    ),
-  ),
-)
-
-await renderLayer(root)
-```
+`.tsx` 里的 `<script>` 可以是闭包，排版之后执行。`performance.now()` 是这一帧的毫秒。
 
 从字体取出某个字的轮廓，调用后直接得到数组。`d` 的原点在字身左上角，字宽和字身高度来自字体：
 

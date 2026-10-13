@@ -638,7 +638,7 @@ function leavesTexture(node: LayoutNode): boolean {
   if (node.kind === 'mesh' || node.kind === 'ground') return false
   if (node.kind === 'layer' || node.kind === 'flex') {
     if (node.kind === 'layer' && hasPerspective(node.perspective)) return true
-    if (hasChrome(node) || node.draw != null) return true
+    if (hasChrome(node)) return true
     return node.children.some((child) => leavesTexture(child))
   }
   return node.width > 0 || node.height > 0

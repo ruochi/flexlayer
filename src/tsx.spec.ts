@@ -184,56 +184,35 @@ describe('JSX 类型', () => {
 })
 
 describe('emitLayer', () => {
-  it('只使用 ctx 和 el 的 draw 写回 <draw>', () => {
+  it('script 文本写回 <script>', () => {
     const node = h(
       'layer',
       { width: '40', height: '20', background: '#000' },
-      h('rect', {
-        width: '10',
-        height: '10',
-        fill: '#fff',
-        draw: (ctx, el) => {
-          const color = '#fff'
-          ctx.fillStyle = color
-          ctx.fillRect(0, 0, el.w, el.h)
-        },
-      }),
+      h('canvas', { id: 'bar', width: '10', height: '10' }),
+      h('script', null, `const canvas = document.querySelector('#bar')\ncanvas.getContext('2d').fillRect(0, 0, canvas.width, canvas.height)`),
     )
     const emitted = emitLayer(node)
     expect(emitted.issues).toEqual([])
-    expect(emitted.source).toContain('<draw>')
-    expect(emitted.source).toContain('ctx.fillRect(0, 0, el.w, el.h)')
+    expect(emitted.source).toContain('<script>')
+    expect(emitted.source).toContain('canvas.getContext')
   })
 
-  it('引用外部变量时告警', () => {
-    const color = '#fff'
-    const node = h(
-      'rect',
-      {
-        width: '10',
-        height: '10',
-        draw: (ctx, el) => {
-          ctx.fillStyle = color
-          ctx.fillRect(0, 0, el.w, el.h)
-        },
-      },
-    )
+  it('script 闭包不写回', () => {
+    const node = h('script', null, () => {
+      const canvas = document.querySelector('#bar')
+      void canvas
+    })
     const emitted = emitLayer(node)
-    expect(emitted.issues.map((issue) => issue.code)).toContain('emit-draw')
-    expect(emitted.source).not.toContain('<draw>')
-    expect(emitted.source).not.toContain('color')
+    expect(emitted.issues.map((issue) => issue.code)).toContain('emit-script')
+    expect(emitted.source).not.toContain('querySelector')
   })
 
   it('同一行声明的多个变量不算外部引用', () => {
-    const node = h('rect', {
-      width: '10',
-      height: '10',
-      draw: (ctx, el) => {
-        const r = 58, c = 75
-        ctx.fillRect(c, r, el.w, el.h)
-      },
-    })
-    expect(emitLayer(node).issues).toEqual([])
+    const read = readDrawFunction(`(ctx, el) => {
+      const r = 58, c = 75
+      ctx.fillRect(c, r, el.w, el.h)
+    }`)
+    expect(read?.free).toEqual([])
   })
 
   it('注释、字符串和换行后的第二个声明不是外部变量', () => {
@@ -261,23 +240,18 @@ describe('emitLayer', () => {
   })
 
   it('换行声明、解构和内层函数都不算外部变量', () => {
-    const node = h('rect', {
-      width: '10',
-      height: '10',
-      draw: (ctx, el) => {
-        const a =
-          1, b = 2
-        const { w: width } = el
-        const label = 'color'
-        // palette
-        function paint() {
-          ctx.fillStyle = label
-          ctx.fillRect(b, a, width, el.h)
-        }
-        paint()
-      },
-    })
-    expect(emitLayer(node).issues).toEqual([])
+    const read = readDrawFunction(`(ctx, el) => {
+      const a =
+        1, b = 2
+      const { w: width } = el
+      const label = 'color'
+      function paint() {
+        ctx.fillStyle = label
+        ctx.fillRect(b, a, width, el.h)
+      }
+      paint()
+    }`)
+    expect(read?.free).toEqual([])
   })
 
   it('文字和表达式挨在一起时，写回的 .layer 不插入空格', async () => {
@@ -289,12 +263,12 @@ describe('emitLayer', () => {
     expect(text).toBe("'{}' ×3个")
   })
 
-  it('<draw> 引用外部变量时不让整张图退出', async () => {
+  it('<draw> 不再执行，图仍然出来', async () => {
     const source = `<layer width="40" height="40" background="#000">\n  <rect width="10" height="10" fill="#fff">\n    <draw>\nctx.fillStyle = OUT\n</draw>\n  </rect>\n</layer>`
     const report = await checkLayer(source)
-    const issue = report.issues.find((item) => item.code === 'invalid-draw')
+    const issue = report.issues.find((item) => item.code === 'invalid-child')
     expect(issue?.level).toBe('error')
-    expect(issue?.message).toContain('OUT')
+    expect(issue?.message).toContain('不再有 <draw>')
     expect(issue?.path).toBe('layer/rect[0]/draw[0]')
     expect(issue?.source).toBe('3:5')
     const { renderLayer } = await import('./render.js')

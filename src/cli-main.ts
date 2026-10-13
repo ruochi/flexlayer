@@ -18,8 +18,8 @@ const CONTACT_LIMIT = 300
 
 function usage(): never {
   console.error(`用法:
-  flexlayer render <file.layer|file.tsx> [-o out.png] [--report out.json] [--scale 0.5] [--debug] [--preview out.png] [--emit out.layer] [--frame N] [--frames dir] [--from N] [--to N] [--step N] [--rgba -|file] [--mesh-samples 1|2|4] [--watch]
-  flexlayer check <file.layer|file.tsx> [--report out.json] [--emit out.layer] [--frame N] [--frames all|A-B|N] [--step N] [--watch]
+  flexlayer render <file.layer|file.tsx> [-o out.png] [--report out.json] [--scale 0.5] [--debug] [--preview out.png] [--emit out.layer] [--frame N] [--frames dir] [--from N] [--to N] [--step N] [--rgba -|file] [--mesh-samples 1|2|4] [--no-script] [--watch]
+  flexlayer check <file.layer|file.tsx> [--report out.json] [--emit out.layer] [--frame N] [--frames all|A-B|N] [--step N] [--no-script] [--watch]
   flexlayer select …   转给 flexlayer-select。没安装时提示安装命令
 
 .tsx / .jsx / .ts / .js 会先执行，得到和 .layer 相同的节点树。
@@ -29,6 +29,7 @@ Composition 用 --frame N 渲染一帧；不写时，范围内帧数不超过 ${
 check 不写 --frames 时抽查第 0 帧、中间一帧和最后一帧。--frames all 或 --frames 120-300 检查这一段。
 --emit 把展开后的节点写回 .layer。
 --preview 按文档里的 <preview> 另写一张选区预览，正常成片不包含它。
+--no-script 不执行 <script>，canvas 保持透明。
 --watch 在源文件和它引用的相对路径变化后再跑一遍。不和 --rgba、--frames 一起用。`)
   process.exit(2)
 }
@@ -51,6 +52,7 @@ function parseArgs(argv: string[]) {
   let preview: string | undefined
   let meshSamples: 1 | 2 | 4 | undefined
   let watchMode = false
+  let noScript = false
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i]!
     const next = () => {
@@ -71,6 +73,7 @@ function parseArgs(argv: string[]) {
     else if (a === '--to') to = Number(next())
     else if (a === '--step') step = Number(next())
     else if (a === '--watch') watchMode = true
+    else if (a === '--no-script') noScript = true
     else if (a === '--mesh-samples') {
       const n = Number(next())
       if (n !== 1 && n !== 2 && n !== 4) usage()
@@ -87,7 +90,7 @@ function parseArgs(argv: string[]) {
   if (cmd === 'render' && rgba != null && framesArg != null) usage()
   if (cmd === 'check' && step != null && framesArg == null) usage()
   if (watchMode && (rgba != null || framesArg != null)) usage()
-  return { cmd, file, out, report, emit, framesArg, rgba, frame, from, to, step, scale, debug, preview, meshSamples, watchMode }
+  return { cmd, file, out, report, emit, framesArg, rgba, frame, from, to, step, scale, debug, preview, meshSamples, watchMode, noScript }
 }
 
 function frameInput(frame: number, fps: number): FrameInput {
@@ -300,7 +303,7 @@ async function run(args: ReturnType<typeof parseArgs>) {
   if (args.cmd === 'check') {
     if (loaded.kind !== 'composition') {
       const node = loaded.kind === 'markup' ? loaded.source : loaded.node
-      const report = await checkLayer(node, { baseDir })
+      const report = await checkLayer(node, { baseDir, noScript: args.noScript })
       if (typeof node !== 'string') await emitNode(node, args.emit, report)
       attachFileIssues(report)
       printCheckResult(report)
@@ -319,7 +322,7 @@ async function run(args: ReturnType<typeof parseArgs>) {
     let emitAt: LayerNode | undefined
     for (const frame of frames) {
       const node = loaded.composition.component(frameInput(frame, loaded.composition.fps))
-      const one = await checkLayer(node, { baseDir })
+      const one = await checkLayer(node, { baseDir, noScript: args.noScript, t: frame / loaded.composition.fps, frame, fps: loaded.composition.fps })
       if (!report) report = one
       if (frame === (args.frame ?? 0)) emitAt = node
       parts.push({ frame, issues: one.issues })
@@ -349,6 +352,7 @@ async function run(args: ReturnType<typeof parseArgs>) {
         frame: args.frame,
         fps: comp.fps,
         meshSamples: args.meshSamples,
+        noScript: args.noScript,
       })
       attachFileIssues(report)
       await emitNode(node, args.emit, report)
@@ -400,6 +404,7 @@ async function run(args: ReturnType<typeof parseArgs>) {
       step: args.step,
       format: args.rgba ? 'rgba' : 'png',
       meshSamples: args.meshSamples,
+      noScript: args.noScript,
     })) {
       if (rendered.rgba && rgbaStream) await writeChunk(rgbaStream, rendered.rgba)
       if (args.framesArg && rendered.png) {
@@ -438,7 +443,7 @@ async function run(args: ReturnType<typeof parseArgs>) {
   }
 
   const source = loaded.kind === 'markup' ? loaded.source : loaded.node
-  const { png, report } = await renderLayer(source, { baseDir, scale: args.scale, debug: args.debug, meshSamples: args.meshSamples })
+  const { png, report } = await renderLayer(source, { baseDir, scale: args.scale, debug: args.debug, meshSamples: args.meshSamples, noScript: args.noScript })
   if (loaded.kind === 'node') await emitNode(loaded.node, args.emit, report)
   attachFileIssues(report)
   const outPath = outPng(abs, args.out)

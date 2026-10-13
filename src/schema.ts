@@ -463,7 +463,7 @@ const DOC_GROUP_LABEL: Record<DocGroup, string> = {
   image: '只写在 `img` 或 `model` 上。图片宽高仍放进 `style`',
   effect: '图形和 `layer` 写属性；文字写在 `style`。见第 9 章',
   'layer-only': '只写在 `layer` 上。写在别处或写进 `style` 报 `warn`',
-  data: '任何元素都可以写。值是 JSON；程序里直接传对象或数组。`draw` 读 `el.data`，不在 `el.attr`',
+  data: '任何元素都可以写。值是 JSON，不进普通属性。程序里直接传对象或数组',
   expect: '任何元素都可以写。声明预期中的问题码，出现在该节点或子树里时降为 info。没出现报 `unused-expect`',
 }
 

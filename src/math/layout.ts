@@ -1032,7 +1032,6 @@ export function layoutMath(node: LayerNode, host: MathLayoutHost, rowAlign?: str
   laid.attr = { ...node.attrs }
   laid.style = style
   laid.computed = { color, fontFamily: family, fontSize, fontWeight: 400, opacity }
-  laid.draw = node.draw
   laid.data = node.data
   laid.text = ''
   laid.baseline = oy + ascent

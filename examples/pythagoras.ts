@@ -1,5 +1,14 @@
 import type { CanvasRenderingContext2D } from '@napi-rs/canvas'
-import { h, interpolate, spring, type Composition, type DrawElSnapshot, type LayerNode } from '../src/index.js'
+import { h, interpolate, spring, type Composition, type LayerNode } from '../src/index.js'
+
+type FlexCanvas = {
+  width: number
+  height: number
+  getContext(type: '2d'): CanvasRenderingContext2D
+}
+declare const document: {
+  querySelector(selector: string): FlexCanvas | null
+}
 
 const W = 1920
 const H = 1080
@@ -64,12 +73,15 @@ function label(content: string, color: string, at: Pt, anchor: string, opacity: 
   )
 }
 
-function drawDots(ctx: CanvasRenderingContext2D, el: DrawElSnapshot) {
+function paintDots() {
+  const canvas = document.querySelector('#dots')
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
   const step = 48
-  const drift = (el.t * 6) % step
+  const drift = ((performance.now() / 1000) * 6) % step
   ctx.fillStyle = 'rgba(255,255,255,0.05)'
-  for (let y = step / 2; y < el.h; y += step) {
-    for (let x = drift - step; x < el.w + step; x += step) {
+  for (let y = step / 2; y < canvas.height; y += step) {
+    for (let x = drift - step; x < canvas.width + step; x += step) {
       ctx.beginPath()
       ctx.arc(x, y, 2, 0, Math.PI * 2)
       ctx.fill()
@@ -90,11 +102,14 @@ function pill(ctx: CanvasRenderingContext2D, width: number, height: number) {
   ctx.fill()
 }
 
-function drawProgress(ctx: CanvasRenderingContext2D, el: DrawElSnapshot) {
+function paintProgress() {
+  const canvas = document.querySelector('#progress')
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
   ctx.fillStyle = 'rgba(255,255,255,0.08)'
-  pill(ctx, el.w, el.h)
+  pill(ctx, canvas.width, canvas.height)
   ctx.fillStyle = C
-  pill(ctx, el.w * clamp01(el.t / LAST_T), el.h)
+  pill(ctx, canvas.width * clamp01(performance.now() / 1000 / LAST_T), canvas.height)
 }
 
 function intro(frame: number) {
@@ -472,13 +487,15 @@ export const pythagoras: Composition = {
     h(
       'layer',
       { width: String(W), height: String(H), background: BG, color: INK },
-      h('Dots', { x: '0', y: '0', width: String(W), height: String(H), draw: drawDots }),
+      h('canvas', { id: 'dots', x: '0', y: '0', width: String(W), height: String(H) }),
+      h('script', null, paintDots),
       intro(frame),
       header(frame),
       caption(frame),
       h('layer', { x: '860', y: '200', width: '1000', height: '800' }, figure(frame), proof(frame)),
       outro(frame),
-      h('Progress', { x: String(W / 2 - 840), y: '1033', width: '1680', height: '6', draw: drawProgress }),
+      h('canvas', { id: 'progress', x: String(W / 2 - 840), y: '1033', width: '1680', height: '6' }),
+      h('script', null, paintProgress),
     ),
 }
 

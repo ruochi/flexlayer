@@ -129,13 +129,13 @@ describe('样式、换行和运行时', () => {
     expect(mid[0]).toBeGreaterThan(200)
   })
 
-  it('写错的路径和 draw 运行错误不会让整张图退出', async () => {
+  it('写错的路径和 script 运行错误不会让整张图退出', async () => {
     const pathReport = await checkLayer(`<layer width="80" height="80"><path d="not a path" fill="#fff" /></layer>`)
     expect(pathReport.issues.some((issue) => issue.code === 'invalid-attr' && issue.message.includes('路径'))).toBe(true)
-    const source = `<layer width="40" height="40" background="#000">\n  <rect width="20" height="20" fill="#fff">\n    <draw>\nctx.notAMethod()\n    </draw>\n  </rect>\n</layer>`
+    const source = `<layer width="40" height="40" background="#000">\n  <canvas id="bar" width="20" height="20"></canvas>\n  <script>\nnotAMethod()\n  </script>\n</layer>`
     const { png, report } = await renderLayer(source)
-    const hit = report.issues.find((issue) => issue.code === 'invalid-draw' && issue.message.includes('运行出错'))
-    expect(hit?.source).toBe('3:5')
+    const hit = report.issues.find((issue) => issue.code === 'invalid-script' && issue.message.includes('运行出错'))
+    expect(hit?.source).toBe('3:3')
     expect(png[0]).toBe(0x89)
   })
 
@@ -153,12 +153,12 @@ describe('样式、换行和运行时', () => {
     expect(emitLayer(node).source).toContain('你好<span>世界</span>啊')
   })
 
-  it('--emit 保留 draw 里的 ctx', async () => {
+  it('--emit 保留 script 里的文本', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'flexlayer-emit-'))
-    const file = join(dir, 'draw.tsx')
+    const file = join(dir, 'paint.tsx')
     writeFileSync(
       file,
-      `/** @jsxImportSource flexlayer */\nexport default (\n  <layer width="40" height="40" background="#000">\n    <rect width="20" height="20" fill="#fff" draw={(ctx, el) => { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, el.w, el.h) }} />\n  </layer>\n)\n`,
+      `/** @jsxImportSource flexlayer */\nexport default (\n  <layer width="40" height="40" background="#000">\n    <canvas id="bar" width="20" height="20" />\n    <script>{\`ctx.fillRect(0, 0, 10, 10)\`}</script>\n  </layer>\n)\n`,
     )
     const loaded = await loadLayerFile(file)
     expect(loaded.kind).toBe('node')

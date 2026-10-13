@@ -1,5 +1,3 @@
-import type { DrawFn } from './types.js'
-
 /** JSX 自动运行时记下来的位置。行和列都从 1 开始。 */
 export type SourceLoc = {
   file: string
@@ -11,8 +9,7 @@ export type LayerNode = {
   tag: string
   attrs: Record<string, string>
   children: LayerChild[]
-  draw?: DrawFn
-  /** 结构化数据。不进 `attrs`，`draw` 里从 `el.data` 读。 */
+  /** 结构化数据。不进 `attrs`。 */
   data?: unknown
   /** `camera` 写成对象时挂在这里，不进 `attrs`。字符串仍在 `attrs.camera`。 */
   camera?: unknown
@@ -22,8 +19,10 @@ export type LayerNode = {
   dataError?: string
   /** `.tsx` 里这个标签所在的位置。`.layer` 解析出来的节点没有。 */
   loc?: SourceLoc
-  /** `<draw>` 正文所在的位置。运行出错时报告用它，而不是父标签的位置。 */
-  drawLoc?: SourceLoc
+  /** `<script>` 的闭包。文本子节点仍在 `children` 里。 */
+  scriptFns?: Array<() => void>
+  /** 程序侧还写了 `draw`。排版时报错，不再执行。 */
+  legacyDraw?: boolean
 }
 
 export type LayerChild = string | LayerNode
@@ -140,10 +139,10 @@ export function parseLayer(source: string): LayerNode[] {
     const raw = open[1]
     const tag = raw
     const attrs = parseAttrs(open[2] ?? '')
-    // <draw> 正文是原始 JS，里面的 < 不要当标签解析
-    if (tag === 'draw' && !open[3]) {
+    // <script> 和已删除的 <draw> 正文是原始 JS，里面的 < 不要当标签解析
+    if ((tag === 'script' || tag === 'draw') && !open[3]) {
       const bodyStart = lt + open[0].length
-      const closeMatch = /<\/draw\s*>/i.exec(src.slice(bodyStart))
+      const closeMatch = new RegExp(`</${tag}\\s*>`, 'i').exec(src.slice(bodyStart))
       const body = closeMatch ? src.slice(bodyStart, bodyStart + closeMatch.index) : src.slice(bodyStart)
       const node = nodeFor(raw, attrs, body ? [body] : [])
       node.loc = { file: '', ...lineColAt(lineStarts, lt) }

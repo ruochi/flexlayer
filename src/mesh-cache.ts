@@ -90,7 +90,7 @@ function modelStamp(file: string): string {
 
 /** 子树里有画不出来的、或会跟着时间走的东西时返回 null。 */
 function hashNode(node: LayoutNode): string | null {
-  if (node.draw) return null
+  if (node.kind === 'canvas') return null
   if (node.glass || node.backdropBlur != null) return null
   if (node.blend && node.blend !== 'source-over') return null
   if (node.grade) return null
@@ -252,7 +252,7 @@ function hashKind(node: LayoutNode): string | null {
 
 /**
  * 按内容而不是对象引用。浮点数量化到 1e-4。
- * 子树无法哈希（draw、玻璃、跟着时间走的效果）时返回 null。
+ * 子树无法哈希（canvas、玻璃、跟着时间走的效果）时返回 null。
  */
 export function meshSceneCacheKey(scene: MeshCacheScene): string | null {
   const parts: string[] = [

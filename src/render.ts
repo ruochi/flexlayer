@@ -1,6 +1,7 @@
 import type { Canvas } from '@napi-rs/canvas'
 import { layoutSync, prepareAssets, readLayerRoot } from './layout.js'
 import { paintDocument } from './paint.js'
+import { applyCanvasScripts } from './run-scripts.js'
 import { renderPreviewSheet } from './preview.js'
 import { buildReport } from './report.js'
 import type { LayerReport, RenderOptions } from './types.js'
@@ -38,6 +39,13 @@ export async function renderToCanvas(source: string | LayerNode, options: Render
   const opened = readLayerRoot(source)
   const assets = await prepareAssets(opened.root, baseDir, { fonts: opened.fonts })
   const doc = layoutSync(opened.root, assets)
+  await applyCanvasScripts(doc, {
+    t: options.t ?? 0,
+    frame: options.frame ?? 0,
+    fps: options.fps ?? 0,
+    scale: options.scale ?? 1,
+    noScript: options.noScript,
+  })
   const canvas = await paintDocument(doc.root, {
     width: doc.width,
     height: doc.height,
@@ -83,5 +91,12 @@ export async function checkLayer(source: string | LayerNode, options: RenderOpti
   const opened = readLayerRoot(source)
   const assets = await prepareAssets(opened.root, baseDir, { fonts: opened.fonts })
   const doc = layoutSync(opened.root, assets)
+  await applyCanvasScripts(doc, {
+    t: options.t ?? 0,
+    frame: options.frame ?? 0,
+    fps: options.fps ?? 0,
+    scale: options.scale ?? 1,
+    noScript: options.noScript,
+  })
   return buildReport(doc)
 }

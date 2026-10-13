@@ -10,7 +10,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 3. **y 轴向下**：和 Canvas、HTML 一致，`y="400"` 表示距离父级顶部 400 像素。
 4. **显式写了就照做**：写了尺寸、位置就严格使用，不会被悄悄改掉；有问题只在报告里指出。
 5. **没写的由渲染器决定，并写进报告**：比如自动换行。
-6. **写错了要说怎么改**：有歧义或会被忽略的写法报 `warn` 并给出 `hint`；含义明确但不规范的写法照常渲染，报 `info`。和已知属性编辑距离不超过 2 的名字报 `warn`，`hint` 写出正确属性，例如 `widht` 提示改成 `width`。其余不认识的名字仍留给 `draw`。
+6. **写错了要说怎么改**：有歧义或会被忽略的写法报 `warn` 并给出 `hint`；含义明确但不规范的写法照常渲染，报 `info`。和已知属性编辑距离不超过 2 的名字报 `warn`，`hint` 写出正确属性，例如 `widht` 提示改成 `width`。其余不认识的名字不报。
 
 给模型的入口见 [AGENTS.md](AGENTS.md)，规则正文在本文。效果图见 [docs/GALLERY.md](docs/GALLERY.md)。
 
@@ -45,7 +45,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | 类别 | 标签 |
 | --- | --- |
 | 容器 | `layer`（嵌套不填背景）。`div` 里放 `p` 或标题时从上到下排；横排和间距用 `display:flex` |
-| 绘制 | `draw`（子标签，正文 JS；程序侧也可用 `draw={fn}`） |
+| 绘制 | `canvas` 加 `script`。见第 12 章 |
 | 文字 | `h1`、`h2`、`h3`、`p`、`div`、`span`；行内：`span`、`strong`、`b`、`em`、`br` |
 | 图片 | `img`（`image` 是同一个标签） |
 | 图标 | 不是单独的标签。`<span class="material-symbols-outlined">home</span>`，字重写 `font-weight` |
@@ -104,7 +104,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | `src`、`alt` | 只写在 `img` 或 `model` 上。图片宽高仍放进 `style` |
 | `shadow`、`glow`、`inner-shadow`、`inner-glow`、`blur`、`backdrop-blur`、`glass`、`noise`、`filter`、`blend` | 图形和 `layer` 写属性；文字写在 `style`。见第 9 章 |
 | `camera`、`shadows`、`overlay`、`grade`、`grade-mask`、`view` | 只写在 `layer` 上。写在别处或写进 `style` 报 `warn` |
-| `data` | 任何元素都可以写。值是 JSON；程序里直接传对象或数组。`draw` 读 `el.data`，不在 `el.attr` |
+| `data` | 任何元素都可以写。值是 JSON，不进普通属性。程序里直接传对象或数组 |
 | `expect` | 任何元素都可以写。声明预期中的问题码，出现在该节点或子树里时降为 info。没出现报 `unused-expect` |
 <!-- attrs:ownership:end -->
 
@@ -173,7 +173,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 </mask>
 ```
 
-`border`、`border-radius`、`overflow` 写在 `layer` 的属性上，不写 `style`。**`layer` 不填背景**：它只合成子元素画出来的内容。色块用 `rect` 的 `fill`、HTML 的 `style="background: …"`，或子标签 `<draw>` 自己画。`layer` / `use` 上写 `background` 会警告并忽略。画布底色只写在根节点 `<layer background>`。根上没写时不铺底色，输出的 PNG 背景是透明的。
+`border`、`border-radius`、`overflow` 写在 `layer` 的属性上，不写 `style`。**`layer` 不填背景**：它只合成子元素画出来的内容。色块用 `rect` 的 `fill`、HTML 的 `style="background: …"`，或 `<canvas>` 自己画。`layer` / `use` 上写 `background` 会警告并忽略。画布底色只写在根节点 `<layer background>`。根上没写时不铺底色，输出的 PNG 背景是透明的。
 
 一组 HTML 要放到画面上，包一层 `layer`，把 `x`、`y`、`anchor` 写在 `layer` 上。写了宽高的 `layer` 也可以放进 `div`，和文字、图片排在一起，见 4.2。图形用这一层的局部坐标。这一层作为 flex 或块级子项时，位置由排布决定。
 
@@ -819,13 +819,13 @@ registerFilter({
 | `auto-wrap` | info | 文字超出可用宽度，被自动换行 |
 | `non-canonical` | info | 含义明确，但不是规范写法。照常渲染，`hint` 里是规范写法 |
 | `unknown-tag` | warn | 不认识的标签。写成已知标签的大写时是 error，hint 给出小写写法，不按小写渲染 |
-| `invalid-attr` | warn | 属性放错了位置，或两种写法混用。和已知属性编辑距离不超过 2 的名字也记在这里，`hint` 给出正确写法；候选按标签收窄，过短或没有共同开头的不推荐。其余不认识的属性名不报，留给 `draw`。`style` 里不支持或写错的声明也记在这里。`anchor` 写错、路径 `d` 无法解析同样是这个码；路径失败时跳过这一笔，不中断整张图 |
-| `invalid-child` | warn | 非法子元素：线条或 `g` 放进 flex 容器，文字盒子（`h1`–`h3`、`p`、`span`，以及只含文字的 `div`）里放了 `h1`–`h3`、`p`、`div`、`layer`、`g` 或 `math`，`mask` 放错位置或一层写了多个。含这些子元素的 `div` 按块级竖排，不报这条。文字盒子里的 `<img>` 跟文字排在同一段里，不报这条 |
+| `invalid-attr` | warn | 属性放错了位置，或两种写法混用。和已知属性编辑距离不超过 2 的名字也记在这里，`hint` 给出正确写法；候选按标签收窄，过短或没有共同开头的不推荐。其余不认识的属性名不报。`style` 里不支持或写错的声明也记在这里。`anchor` 写错、路径 `d` 无法解析同样是这个码；路径失败时跳过这一笔，不中断整张图。`draw` 回调是 error |
+| `invalid-child` | warn | 非法子元素：线条或 `g` 放进 flex 容器，文字盒子（`h1`–`h3`、`p`、`span`，以及只含文字的 `div`）里放了 `h1`–`h3`、`p`、`div`、`layer`、`g` 或 `math`，`mask` 放错位置或一层写了多个。含这些子元素的 `div` 按块级竖排，不报这条。文字盒子里的 `<img>` 跟文字排在同一段里，不报这条。`<draw>` 是 error |
 | `empty-mask` | warn | `mask` 里没有可用的形状或图片，不生效 |
 | `mask-op-noop` | warn | 蒙版的某一步没有改变选区。`changed` 为 0 |
 | `missing-mask` | error | `derive` 的缓存不存在，或 `src` 不是本地图片，或缓存文件读不了 |
 | `stale-mask` | warn | 缓存还在，但原图哈希和 `*.cutout.json` 里的 `srcHash` 对不上。先按现有文件画 |
-| `invalid-draw` | error / warn | `<draw>` 语法错误或运行出错（error），或内容为空（warn）。运行出错带上源码位置，其余内容照常绘制 |
+| `invalid-script` | error / warn / info | `<script>` 语法错误或运行出错（error），内容为空（warn），或 `--no-script` 跳过（info）。运行出错带上源码位置，其余内容照常绘制 |
 | `missing-image` | warn | `img` 的 `src` 读不到 |
 | `missing-icon` | warn | `class="material-symbols-outlined"`（或 `font-family` 指到 `Symbols`）里的名字不是 Material Symbols 的图标名 |
 | `missing-model` | warn | `model` 的 `src` 缺失、不是 `.glb`，或文件读不到；没有可放入的宽高时也是这个码 |
@@ -841,7 +841,9 @@ registerFilter({
 | `flatten-3d` | warn | `rotateX`、`rotateY`、`z` 没有落在镜头里，仍按二维绘制。`sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model`、`ground` 同样报这个码，并且不绘制。`preserve-3d` 展开进外层镜头的子孙不报 |
 | `flattened-3d` | info | 写了 `preserve-3d`，但这层有透明度、模糊、滤镜、调色、蒙版或 `overflow="hidden"` 等会把子树收成一张图的效果 |
 | `behind-camera` | warn | 平面中心或网格支点乘过镜头矩阵之后 `w` 小于等于 0，不绘制。`camera="parallel"` 没有镜头平面，不报这个码 |
-| `emit-draw` | warn | `--emit` 时 `draw` 函数用了外部变量，或读不出函数体。按语法判断：字符串、注释，以及同一条声明里的多个名字，都不算外部变量。这种 `<draw>` 不会写进 `.layer` |
+| `unsupported-dom` | error | 脚本用了子集以外的 DOM。`hint` 给出能用的写法。已经记了这条就不再另记 `invalid-script` |
+| `emit-draw` | warn | `--emit` 时还写着 `draw` 回调。不再写出 `<draw>` |
+| `emit-script` | warn | `--emit` 时 `<script>` 是闭包。函数体写不回 `.layer` |
 | `emit-data` | warn | `--emit` 时 `data` 含函数、`Map`、循环引用或其它不能写成 JSON 的值，没有写回这个属性 |
 | `unused-expect` | warn | 节点写了 `expect`，但该节点和子树里没有这个问题码。多帧检查时，只要有一帧用上就不报。字段 `expect.code` 是没对上的问题码 |
 | `nondeterministic` | warn | `.tsx` 里调用了 `Math.random()`、`Date.now()`、`crypto.randomUUID()` 或 `crypto.getRandomValues()`。字符串、注释和类型里的同名文字不算。同一帧可能得到不同的图 |
@@ -869,76 +871,45 @@ flexlayer render scene.layer --preview out.png                  # 按 <preview> 
 flexlayer select cutout photo.jpg --preset portrait             # 转给 flexlayer-select。没安装时提示在 packages/select 里构建
 ```
 
-`.tsx`、`.jsx`、`.ts`、`.js` 会先执行，并做类型检查，类型错误记为 `type-error`。标准库和 Node 的类型由渲染器自带，不依赖文件旁边的 `node_modules`。`import ... from 'node:fs'` 可以类型检查。不认识的属性名和 `.layer` 一样保留给 `draw`，不算 `type-error`。属性放错位置同样由检查报 `invalid-attr`，不记成类型错误。`import './x.tsx'` 这种带扩展名的引用可以通过。有类型错误时仍然出图，退出码为 1。文件里写 `/** @jsxImportSource flexlayer */`，标签和属性与 `.layer` 相同。默认导出一个 `<layer>` 节点，或返回该节点的函数。命名导出 `composition`（或默认导出）可以是第 13 章的 `Composition`。执行结果是同一棵节点树，后面的布局、问题码和绘制都不变。推荐用 `canvas.create(<layer>…</layer>)` 量好再摆。`create` 是同步的，准备在进程里记住，多帧不会重新开始。见第 15 章。`check` 在没有 `--frame` 和 `--frames` 时抽查第 0 帧、中间一帧和最后一帧。`--frames all` 检查每一帧，`--frames 120-300` 检查这一段（含两端），`--frames 12` 只检查这一帧，`--step N` 是步长。`--emit` 把树写回 `.layer`；`draw` 函数若用了外部变量，记 `emit-draw`，并且不写出 `<draw>`。帧数超过 300 且没有 `--frame`、`--frames` 或 `--rgba` 时不渲染联系表。`--frames <目录>` 边渲染边写 `frame-0000.png` 这种文件，文件名是帧号。`--from`、`--to` 含端点。`--rgba -` 按帧把不预乘的原始像素连续写到标准输出，日志改走标准错误，并在标准错误打出一行 `ffmpeg -f rawvideo -pix_fmt rgba -s WxH -r fps -i -`。`--rgba` 后面写成文件路径时，像素写入该文件。flexlayer 不调用 ffmpeg。多帧渲染打印的问题是全部帧合并后的结果。
+`.tsx`、`.jsx`、`.ts`、`.js` 会先执行，并做类型检查，类型错误记为 `type-error`。标准库和 Node 的类型由渲染器自带，不依赖文件旁边的 `node_modules`。`import ... from 'node:fs'` 可以类型检查。不认识的属性名和 `.layer` 一样保留，不算 `type-error`。属性放错位置同样由检查报 `invalid-attr`，不记成类型错误。`import './x.tsx'` 这种带扩展名的引用可以通过。有类型错误时仍然出图，退出码为 1。文件里写 `/** @jsxImportSource flexlayer */`，标签和属性与 `.layer` 相同。默认导出一个 `<layer>` 节点，或返回该节点的函数。命名导出 `composition`（或默认导出）可以是第 13 章的 `Composition`。执行结果是同一棵节点树，后面的布局、问题码和绘制都不变。推荐用 `canvas.create(<layer>…</layer>)` 量好再摆。`create` 是同步的，准备在进程里记住，多帧不会重新开始。见第 15 章。`check` 在没有 `--frame` 和 `--frames` 时抽查第 0 帧、中间一帧和最后一帧。`--frames all` 检查每一帧，`--frames 120-300` 检查这一段（含两端），`--frames 12` 只检查这一帧，`--step N` 是步长。`--emit` 把树写回 `.layer`；`script` 闭包记 `emit-script`，不把函数体写回去。`--no-script` 不执行脚本。帧数超过 300 且没有 `--frame`、`--frames` 或 `--rgba` 时不渲染联系表。`--frames <目录>` 边渲染边写 `frame-0000.png` 这种文件，文件名是帧号。`--from`、`--to` 含端点。`--rgba -` 按帧把不预乘的原始像素连续写到标准输出，日志改走标准错误，并在标准错误打出一行 `ffmpeg -f rawvideo -pix_fmt rgba -s WxH -r fps -i -`。`--rgba` 后面写成文件路径时，像素写入该文件。flexlayer 不调用 ffmpeg。多帧渲染打印的问题是全部帧合并后的结果。
 
 `--preview` 只用于单帧。文档里没有 `<preview>` 时报错，不改已经写出的成片。`flexlayer select` 把后面的参数转给 `flexlayer-select`，见第 6 章。
 
 默认字体寒蝉端黑体，以及 [docs/RESOURCES.md](docs/RESOURCES.md) 里的其它字体，首次使用时自动下载到 `~/.cache/flexlayer/fonts`。
 
-## 12. 自定义绘制 draw
+## 12. canvas 和 script
 
-程序调用（`.tsx` 或 `h()`）时，任意元素可挂 `draw={(ctx, el) => { ... }}`。
-
-在 `.layer` 文件里用子标签 `<draw>…</draw>`，正文是 JavaScript，可用变量只有 `ctx` 与 `el`（与回调参数相同）。`<draw>` 不参与布局，画在父元素默认内容之后；同一个元素只能有一个 `<draw>`。程序侧已挂 `draw` 回调时，忽略标签并警告。运行时抛错记为 `invalid-draw`，带上 `<draw>` 的位置，不让整张图退出。
+自定义像素用 `<canvas>` 和 `<script>`，不再有 `<draw>` 或 `draw` 回调。写了 `<draw>` 报 `invalid-child`（error），写了 `draw` 回调报 `invalid-attr`（error）。图的其余部分照常绘制。
 
 ```html
-<layer width="200" height="120" x="0" y="0">
-  <draw>
+<layer x="120" y="110">
+  <canvas id="bar" width="160" height="80"></canvas>
+  <script>
+    const canvas = document.querySelector('#bar')
+    const ctx = canvas.getContext('2d')
     ctx.fillStyle = '#3ecfc4'
-    ctx.fillRect(0, 0, el.w, el.h)
-    ctx.strokeStyle = el.computed.color
-    ctx.strokeRect(4, 4, el.w - 8, el.h - 8)
-  </draw>
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+  </script>
 </layer>
 ```
 
-绘制顺序：先画该元素默认内容（文字、形状、线条、子节点），再调用 `draw`。`ctx` 原点在元素盒子的左上角，坐标范围 `(0,0)` 到 `(el.w, el.h)`，并且已经包含该元素和所有祖先 `layer` 的 `rotate`、`scale`（绕各自的 `origin`）。`ctx` 的类型是 `SKRSContext2D`，带 `drawImage`，可以直接贴上图片或另一张画布。线条的盒子是纯几何范围，所以水平线的 `el.h` 是 0。尺寸用 `el.w`、`el.h`，不要从 `el.attr` 推算。`opacity` 由外层统一乘到 `globalAlpha`。自定义属性原样出现在 `el.attr` 里。结构化数据写 `data`，不进 `attr`：程序里 `data={{ values: [3, 5, 8] }}`，`.layer` 里 `data='{"values":[3,5,8]}'`。`JSON.parse` 失败报 `invalid-attr`（error）。别的属性传了对象或数组也报 `invalid-attr`，不会变成 `"[object Object]"`。`--emit` 把 `data` 写成 JSON、放在单引号属性里；函数、`Map` 和循环引用报 `emit-data`，并且不写出这个属性。
+`width`、`height` 属性是位图尺寸，也是默认布局尺寸。不写时是 300×150。`style` 里的宽高只改布局，不改位图。脚本里给 `canvas.width` 赋值会清空并重设位图，`getBoundingClientRect()` 仍是布局尺寸。`devicePixelRatio` 等于渲染的 `--scale`。写成 `canvas.width = rect.width * devicePixelRatio` 才和成片一样锐；不写就和视网膜屏上没乘像素比一样糊。
 
-`el` 字段：
+脚本在排版之后、绘制之前执行。绘制顺序是文档顺序，后面的 canvas 盖住前面的。canvas 先画进它所在层的平面，再跟着这一层已有的 `camera`、`rotateX`、`rotateY`、`z` 投影。它不是贴到球面上的纹理。
 
-| 字段 | 说明 |
-| --- | --- |
-| `tag`、`id` | 标签名与 `id` |
-| `text` | 该节点直接文本子节点（不含行内标签内的字） |
-| `attr` | 标签原始属性（含 `x`、`y`、`anchor`、`style` 字符串等） |
-| `style` | 本标签 `style` 解析后的键值 |
-| `computed` | `color`、`fontFamily`、`fontSize`、`fontWeight`、`opacity`（继承根上的 `color` / `font-family` 与文字默认字号） |
-| `w`、`h` | 布局外框宽高 |
-| `t` | 当前秒数。单帧缺省为 0 |
-| `frame`、`fps` | 当前帧号和每秒帧数。单帧缺省为 0 |
-| `data` | `data` 属性解析后的值。没有这个属性时是 `undefined`。不在 `attr` 里 |
+每一帧都是一张新画布。脚本先跑一遍，然后只调用一轮 `requestAnimationFrame`，参数是这一帧的毫秒。回调里再登记的下一轮不会在这一帧执行。立刻画，和画在 `requestAnimationFrame` 里，都会出现在这一帧。跨帧累加的拖尾做不到。
 
-未知标签若同时带有 `draw` 以及 `width` 与 `height`（属性或 `style`），会当作自定义盒子参与布局，不再报 `unknown-tag`；缺少尺寸时仍警告并跳过。
+`performance.now()` 和 `Date.now()` 返回这一帧的毫秒，单帧是 0。`Math.random` 按帧播种，同一帧重复渲染结果相同。`.layer` 里的脚本文本在子进程里执行，文件和网络关掉。`.tsx` 里的函数闭包留在本进程，因为闭包带不进子进程。`--no-script` 跳过脚本，canvas 保持透明，记一条 info。
 
-```ts
-import { h, renderLayer } from 'flexlayer'
+可用的只有 `document.querySelector`、`document.getElementById`、`canvas.getContext('2d')`、`getComputedStyle`、`canvas.dataset`、`requestAnimationFrame`、`performance.now`、`getBoundingClientRect`、`devicePixelRatio`。选择器只支持 `#id`、`canvas`、`canvas#id`。别的 DOM 报 `unsupported-dom`，`hint` 里写能用的写法。`getComputedStyle` 给出 CSS 字符串，例如 `fontSize` 是 `"40px"`。`.layer` 的 `data-*` 出现在 `dataset` 里，值是字符串。`.tsx` 要结构化数据就写在闭包里。`data` 属性仍是 JSON，不进普通属性。
 
-const root = h('layer', { width: '1080', height: '1920', background: '#0f1115', color: '#ffffff' },
-  h('layer', { x: '540', y: '700', anchor: 'center' },
-    h('h1', {
-      style: 'font-size:96px; color:#f7931a',
-      draw: (ctx, el) => {
-        ctx.strokeStyle = el.computed.color
-        ctx.lineWidth = 8
-        ctx.beginPath()
-        ctx.moveTo(0, el.h - 6)
-        ctx.lineTo(el.w, el.h - 6)
-        ctx.stroke()
-      },
-    }, '比特币减半'),
-  ),
-)
-
-await renderLayer(root)
-```
+脚本抛错记 `invalid-script`，带上 `<script>` 的位置，不让整张图退出。语法错误也是这个码。空的 `<script>` 是 warn。
 
 JSX 可将 `jsxImportSource` 设为 `flexlayer`，使用 `flexlayer/jsx-runtime`。
 
-带 `draw` 且写了尺寸的自定义元素，定位和形状相同。根节点 `<layer>` 的 `draw` / `<draw>` 和其它元素一样，在画布底色和子元素画完之后执行。`el.w`、`el.h` 是画布尺寸，`el.t` 是当前秒数。`opacity`、`rotate`、`scale` 作用到整幅画面。
-
 ## 13. 帧序列
 
-动画由程序按时间生成一棵 Flex Layer 节点，再交给渲染器。`t` 的单位是秒。单帧 `renderLayer` 不传 `t` 时，`el.t` 为 `0`。
+动画由程序按时间生成一棵 Flex Layer 节点，再交给渲染器。`t` 的单位是秒。单帧 `renderLayer` 不传 `t` 时，脚本里的 `performance.now()` 为 `0`。
 
 ```ts
 import { h, renderComposition, type Composition } from 'flexlayer'
@@ -974,7 +945,7 @@ for await (const { frame, png, report } of renderFrames(scene, { from: 0, to: 30
 
 `createContactSheet({ count, width, height })` 可以逐帧 `add` PNG 或画布，最后 `toPng()`。尺寸规则和 `renderComposition` 的联系表相同。`contactSheetFromPngs` 仍一次吃进全部 PNG。
 
-随时间变化的位置、尺寸和文字写在 `component` 里，布局每一帧重新计算。`draw` 里用 `el.t` 读取秒数，用 `el.frame` 和 `el.fps` 读取帧号和帧率。单帧渲染不传这两个数时，它们是 `0`。
+随时间变化的位置、尺寸和文字写在 `component` 里，布局每一帧重新计算。脚本里用 `performance.now()` 读取毫秒。单帧不传 `t` 时它是 `0`。每一帧都是新画布，拖尾不会留到下一帧。
 
 这几个纯函数不绘制画面：
 
@@ -1024,7 +995,7 @@ for await (const { frame, png, report } of renderFrames(scene, { from: 0, to: 30
 
 `glyph()` 的轮廓原点在字身左上角。把一个字摆回去：`x` 用 `chars` 里的 `x`，`y` 用 `line.baseline - glyph.baseline`。
 
-返回值上还有 `elements`。这一层里每个排进去的元素一条，按文档顺序，父元素在子元素前面。根层自己不在里面，它的盒子就是 `left`、`top`、`right`、`bottom`。`mask`、`symbol`、`draw` 不进这张表。没有子元素时是空数组。坐标和 `text` 同一套：相对这一层布局盒的左上角，嵌套层的位置和缩放已经算进去，这一层和祖先的旋转不算。下一块要贴着某个圆或矩形，用这里的 `box`，再加上这一层的 `left`、`top`。
+返回值上还有 `elements`。这一层里每个排进去的元素一条，按文档顺序，父元素在子元素前面。根层自己不在里面，它的盒子就是 `left`、`top`、`right`、`bottom`。`mask`、`symbol`、`script` 不进这张表。没有子元素时是空数组。坐标和 `text` 同一套：相对这一层布局盒的左上角，嵌套层的位置和缩放已经算进去，这一层和祖先的旋转不算。下一块要贴着某个圆或矩形，用这里的 `box`，再加上这一层的 `left`、`top`。
 
 | 字段 | 含义 |
 | --- | --- |

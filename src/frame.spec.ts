@@ -38,21 +38,15 @@ const slide: Composition = {
     ),
 }
 
-describe('el.t', () => {
-  it('不传 t 时为 0，传入后 draw 读到同一个数', async () => {
+describe('script 时钟', () => {
+  it('不传 t 时为 0，传入后 performance.now 是同一毫秒', async () => {
     const seen: number[] = []
     const root = h(
       'layer',
       { width: '40', height: '40', background: '#ffffff' },
-      h('rect', {
-        width: '10',
-        height: '10',
-        x: '15',
-        y: '15',
-        fill: '#000000',
-        draw: (_ctx, el) => {
-          seen.push(el.t)
-        },
+      h('canvas', { id: 'bar', width: '10', height: '10' }),
+      h('script', null, () => {
+        seen.push(performance.now() / 1000)
       }),
     )
     await renderLayer(root)
@@ -100,17 +94,13 @@ describe('renderFrames', () => {
       height: 8,
       fps: 10,
       durationInFrames: 6,
-      component: () =>
+      component: ({ frame, fps, t }) =>
         h(
           'layer',
           { width: '8', height: '8', background: '#000000' },
-          h('rect', {
-            width: '4',
-            height: '4',
-            fill: '#ffffff',
-            draw: (_ctx, el) => {
-              seen.push({ frame: el.frame, fps: el.fps, t: el.t })
-            },
+          h('rect', { width: '4', height: '4', fill: '#ffffff' }),
+          h('script', null, () => {
+            seen.push({ frame, fps, t, now: performance.now() })
           }),
         ),
     }
@@ -118,8 +108,8 @@ describe('renderFrames', () => {
     for await (const frame of renderFrames(comp, { from: 1, to: 4, step: 3, format: 'rgba' })) rendered.push(frame)
     expect(rendered.map((frame) => frame.frame)).toEqual([1, 4])
     expect(seen).toEqual([
-      { frame: 1, fps: 10, t: 0.1 },
-      { frame: 4, fps: 10, t: 0.4 },
+      { frame: 1, fps: 10, t: 0.1, now: 100 },
+      { frame: 4, fps: 10, t: 0.4, now: 400 },
     ])
     expect(rendered[0]!.width).toBe(8)
     expect(rendered[0]!.height).toBe(8)

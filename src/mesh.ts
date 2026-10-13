@@ -48,7 +48,7 @@ function paintable(node: LayoutNode): boolean {
   if (node.kind === 'mesh' || node.kind === 'ground') return false
   if (node.kind === 'layer' || node.kind === 'flex') {
     const chrome = (node.background != null && node.background !== 'transparent') || (node.border != null && node.border.width > 0)
-    return chrome || node.draw != null || node.children.some(paintable)
+    return chrome || node.children.some(paintable)
   }
   return node.width > 0 || node.height > 0
 }

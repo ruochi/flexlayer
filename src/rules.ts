@@ -194,8 +194,7 @@ function usesAttributes(node: LayerNode): boolean {
     isShapeTag(node.tag) ||
     isLineTag(node.tag) ||
     isMeshTag(node.tag) ||
-    isGroundTag(node.tag) ||
-    Boolean(node.draw)
+    isGroundTag(node.tag)
   )
 }
 
@@ -721,7 +720,7 @@ export function checkChildAttrs(node: LayerNode, parent: 'layer' | 'flex', path:
         'invalid-attr',
         path,
         'layer 不使用 background',
-        '色块用 <rect fill="...">、HTML 的 style="background:..."，或 <draw> 自己画。画布底色只写在根 <layer background>',
+        '色块用 <rect fill="...">、HTML 的 style="background:..."，或 <canvas> 自己画。画布底色只写在根 <layer background>',
       ),
     )
   }
@@ -869,7 +868,7 @@ export function checkChildAttrs(node: LayerNode, parent: 'layer' | 'flex', path:
         'invalid-attr',
         path,
         'layer 和图形不使用 style',
-        '把 width、opacity 写成属性。色块用 rect / HTML / <draw>',
+        '把 width、opacity 写成属性。色块用 rect、HTML 或 canvas',
       ),
     )
   }

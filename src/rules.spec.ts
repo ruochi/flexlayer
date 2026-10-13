@@ -152,9 +152,9 @@ describe('属性归属', () => {
     expect(hits.some((issue) => issue.message.includes('cx'))).toBe(false)
   })
 
-  it('带 draw 的 layer 写 anchor 不报形状不用 anchor', async () => {
+  it('带 canvas 的 layer 写 anchor 不报形状不用 anchor', async () => {
     const report = await issues(
-      `<layer width="80" height="80"><layer x="10" y="10" anchor="center"><draw>ctx.fillStyle = "#fff"</draw></layer></layer>`,
+      `<layer width="80" height="80"><layer x="10" y="10" anchor="center"><canvas id="bar" width="20" height="20"></canvas></layer></layer>`,
     )
     expect(report.issues.some((issue) => issue.message.includes('形状不用 anchor'))).toBe(false)
     const shape = await issues(`<layer width="80" height="80"><rect x="10" y="10" width="20" height="20" anchor="center" /></layer>`)

@@ -1,6 +1,6 @@
 {
   "name": "flexlayer",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "engines": {
     "node": ">=20"
   },
@@ -34,7 +34,7 @@
   ],
   "scripts": {
     "prepare": "npm run build",
-    "build": "tsc",
+    "build": "tsc && cp src/canvas-dom.mjs dist/canvas-dom.mjs",
     "test": "vitest run",
     "pythagoras": "tsx examples/render-pythagoras.ts",
     "bench": "node scripts/bench-mesh.mjs",

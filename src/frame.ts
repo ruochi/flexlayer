@@ -20,7 +20,7 @@ export type Composition = {
   component: (input: FrameInput) => LayerNode
 }
 
-export type RenderCompositionOptions = Pick<RenderOptions, 'scale' | 'baseDir' | 'fontsCacheDir' | 'debug' | 'meshSamples' | 'meshCache'>
+export type RenderCompositionOptions = Pick<RenderOptions, 'scale' | 'baseDir' | 'fontsCacheDir' | 'debug' | 'meshSamples' | 'meshCache' | 'noScript'>
 
 export type RenderFramesOptions = RenderCompositionOptions & {
   /** 含这一帧。缺省为 0。 */
@@ -373,6 +373,7 @@ export async function* renderFrames(
       fontsCacheDir: options.fontsCacheDir,
       meshSamples: options.meshSamples,
       meshCache: options.meshCache,
+      noScript: options.noScript,
     })
     const rendered: RenderedFrame = { frame, t, width: canvas.width, height: canvas.height, report }
     if (format === 'rgba') rendered.rgba = canvasRgba(canvas)

@@ -7,7 +7,8 @@
 | 标签 | 做什么 |
 | --- | --- |
 | `layer` | 根画布兼定位容器。根上写 `width` `height` `background`（画布底色，省略则 PNG 透明）`color` `safe`。定位用 `x` `y` `anchor`（默认左上角，没写是 0），还有 `opacity` `rotate` `rotateX` `rotateY` `z` `scale` `origin`。`view="x y w h"` 是镜头：这一层的宽高是屏幕上的取景窗，四个数是舞台上被取的矩形，窗口外裁掉。`camera` 是这一层的镜头（一个视距，或 `focal` / `fov` / `lens` / `parallel`，以及 `at` `orbit` `roll` `distance` `from` `vanish`；`aperture` `focus` `max` 是景深）。不写时，有网格、`ground` 或 `rotateX`、`rotateY`、`z` 的最外层用自己的 `height` 当视距。`camera="parallel"` 视线平行，没有近大远小。`preserve-3d` 让子元素进入外层镜头。可嵌套 |
-| `draw` | 子标签。正文是 JS（`ctx`、`el`），画在父元素内容之后 |
+| `canvas` | 位图。`width` `height` 是位图尺寸，也是默认布局尺寸，不写是 300×150。`style` 宽高只改布局。`x` `y` 定位 |
+| `script` | 排版之后执行。`document.querySelector`、`getContext('2d')`、`getComputedStyle`、`dataset`、`requestAnimationFrame`、`performance.now`。见 SPEC 第 12 章 |
 | `div` 写 `display:flex` | 排布。默认横向；竖排加 `flex-direction:column`。`gap` `row-gap` `column-gap` `align-items` `align-content` `justify-content` `flex-wrap` `padding` 都在 `style` 里。`align-items` 默认 `stretch`，和 CSS 一样：有确定尺寸的子项贴着交叉轴起点，要居中写 `align-items:center`。横排按文字基线对齐写 `align-items:baseline`，同一行被撑高后 `center` 和 `end` 按新的行盒再排，竖排写了仍按 `flex-start`。`letter-spacing` 可以写 `0.05em`。`align-content` 默认 `stretch`，管换行后的多行。`flex-shrink` 默认 `1`，最小尺寸是内容尺寸。`justify-content` 只管主轴，改不了这一层在父级交叉轴上的位置 |
 
 `shadows="none"` 写在开了镜头的 `layer` 上，关掉网格投到平面和地面上的硬边影子，深度遮挡还在。单只网格写 `cast-shadow="false"`，要保持干净的平面写 `receive-shadow="false"`。根上 `min-font="print"` 或 `min-font="16"` 放宽最小字号；不写是屏幕档 `min(宽, 高) / 1080 × 24`。同一张图里多处过小的字合并成一条 `min-font-size`。代码字体写 `font-family:JetBrainsMono`。属性逐条在 [attrs.json](attrs.json)。
@@ -73,10 +74,13 @@
     <line x1="160" y1="60" x2="184" y2="60" stroke="#f4f1ea" stroke-width="4" />
   </layer>
   <layer width="120" height="80" x="580" y="260">
-    <draw>
+    <canvas id="bar" width="120" height="80"></canvas>
+    <script>
+      const canvas = document.querySelector('#bar')
+      const ctx = canvas.getContext('2d')
       ctx.fillStyle = '#f5c16c'
-      ctx.fillRect(0, 0, el.w, el.h)
-    </draw>
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+    </script>
   </layer>
 </layer>
 ```
@@ -93,13 +97,13 @@
 </layer>
 ```
 
-结构化数据：`data={{ values: [1, 2] }}`，`.layer` 里 `data='{"values":[1,2]}'`。`draw` 读 `el.data`。别的属性不要传对象或数组。
+结构化数据：`data={{ values: [1, 2] }}`，`.layer` 里 `data='{"values":[1,2]}'`。脚本要字符串时用 `data-*`，读 `canvas.dataset`。
 
 故意越界或叠字：`expect="overflow-canvas: 出血图; text-overlap"`。对得上的问题降为 info。没出现报 `unused-expect`。镜头用 `view`，被取景窗裁掉的不报 `overflow-canvas`，裁开的文字边也不报 `outside-safe`。
 
 ## 帧
 
-`renderFrames(comp, { from, to, step, format: 'png' })` 逐帧产出，`to` 含端点。`format: 'rgba'` 是不预乘的原始像素。已经排好的一帧用 `renderLayer(node, { format: 'rgba' })`，同样给出 `rgba` 和画布宽高。`renderComposition` 仍一次返回全部 PNG 和联系表。`draw` 的 `ctx` 可以 `drawImage`。`el.t` 是秒，`el.frame` 和 `el.fps` 在单帧时是 0。
+`renderFrames(comp, { from, to, step, format: 'png' })` 逐帧产出，`to` 含端点。`format: 'rgba'` 是不预乘的原始像素。已经排好的一帧用 `renderLayer(node, { format: 'rgba' })`，同样给出 `rgba` 和画布宽高。`renderComposition` 仍一次返回全部 PNG 和联系表。脚本里的 `ctx` 可以 `drawImage`。`performance.now()` 是毫秒，单帧时是 0。
 
 `random(seed)` 固定在 `[0, 1)`。`noise(seed, x, y, z)` 在 `[-1, 1]`。`interpolate` 可以写多点区间，`easing` 用 `Easing.quad`、`Easing.out(Easing.quad)`、`Easing.bezier(x1, y1, x2, y2)`。只写两个点时和以前一样。
 

@@ -1,21 +1,19 @@
 import type { LayerNode } from './parse.js'
-import type { DrawFn } from './types.js'
 
 /** HTML 用 style；layer 和图形用属性。 */
 type LayerStyle = string | Record<string, string | number | undefined>
 
-type JsxChild = string | number | boolean | null | undefined | LayerNode | JsxChild[]
+type JsxChild = string | number | boolean | null | undefined | LayerNode | JsxChild[] | (() => void)
 
 /**
- * 不认识的属性名留给 draw，和 .layer 一样保留。
+ * 不认识的属性名和 .layer 一样保留。
  * 属性该写在哪由检查报 invalid-attr，不在这里再用类型禁一遍。
  */
-type JsxAttr = string | number | boolean | undefined | LayerStyle | DrawFn | JsxChild
+type JsxAttr = string | number | boolean | undefined | LayerStyle | JsxChild
 
 type LayerNodeBase = {
   id?: string
-  draw?: DrawFn
-  /** 结构化数据。`draw` 里读 `el.data`，不要把对象塞进别的属性。 */
+  /** 结构化数据。值是 JSON，不进普通属性。 */
   data?: unknown
   /** 预期中的问题码，例如 `overflow-canvas: 出血图`。 */
   expect?: string
@@ -200,8 +198,14 @@ export namespace JSX {
         border?: string
         'border-radius'?: string | number
       }
-    /** 子标签：正文 JS，可用 ctx、el；不参与布局 */
-    draw: LayerGraphic
+    /** 位图画布。width、height 属性是位图尺寸，也是默认布局尺寸。style 里的宽高只改布局。 */
+    canvas: LayerPositioned & {
+      width?: number | string
+      height?: number | string
+      style?: LayerStyle
+    }
+    /** 正文是 JavaScript。排版之后、绘制之前执行。 */
+    script: LayerGraphic
     symbol: LayerGraphic & { width?: number | string; height?: number | string }
     /**
      * 蒙版。只作为 layer 的直接子元素。
@@ -224,7 +228,7 @@ export namespace JSX {
       href?: string
       rotate?: number | string
       scale?: number | string
-      /** 忽略；色块用 rect / HTML / draw */
+      /** 忽略；色块用 rect、HTML 或 canvas */
       background?: string
     }
     rect: LayerShape

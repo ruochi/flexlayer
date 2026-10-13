@@ -13,7 +13,6 @@ import { fitImageRect } from './image.js'
 import { canvasPaint, isGradient } from './gradient.js'
 import { gradientStyle, isGradientPaint, type GradientBox } from './gradientField.js'
 import { apply, applyToBox, aroundPivot, IDENTITY, intersectBox, invert, multiply, originOffset, translated, type Matrix } from './matrix.js'
-import { invalidDrawIssue } from './draw-tag.js'
 import { openSvgPath } from './path.js'
 import { cameraItems, projectOnLayer } from './camera.js'
 import { ownsMeshScene, renderMeshLayer, type MeshFrame } from './mesh.js'
@@ -25,6 +24,7 @@ import { layoutScale, viewMatrix } from './view.js'
 import { unionBoxes, type AppliedFilter, type Box,
   GlassSpec,
   GlowSpec,
+  CanvasLayoutNode,
   ImageLayoutNode,
   InkStrokeSpec,
   LayerLayoutNode,
@@ -38,8 +38,6 @@ import { unionBoxes, type AppliedFilter, type Box,
   TextLayoutNode,
   type Issue,
 } from './types.js'
-import type { DrawElSnapshot } from './types.js'
-
 export type PaintOptions = {
   width: number
   height: number
@@ -49,7 +47,7 @@ export type PaintOptions = {
   t: number
   frame?: number
   fps?: number
-  /** 绘制时 `<draw>` 抛错写到这里，不中断其余内容。 */
+  /** 脚本问题写到这里，不中断其余内容。 */
   issues?: Issue[]
   /** 网格超采样。1、2 或 4，缺省 4。 */
   meshSamples?: 1 | 2 | 4
@@ -511,33 +509,15 @@ function drawDebugOverlay(ctx: CanvasRenderingContext2D, node: LayoutNode) {
   ctx.restore()
 }
 
-function buildDrawEl(node: LayoutNode, t: number, state: PaintState): DrawElSnapshot {
-  return {
-    tag: node.tag,
-    id: node.id,
-    text: node.text,
-    attr: node.attr,
-    style: node.style,
-    computed: node.computed,
-    w: node.width,
-    h: node.height,
-    data: node.data,
-    t,
-    frame: state.frame,
-    fps: state.fps,
-  }
-}
-
-function runElementDraw(ctx: PaintCtx, node: LayoutNode, t: number, state: PaintState) {
-  if (!node.draw) return
-  ctx.save()
-  ctx.translate(node.x, node.y)
-  try {
-    node.draw(ctx, buildDrawEl(node, t, state))
-  } catch (err) {
-    state.issues.push(invalidDrawIssue(node, err))
-  }
-  ctx.restore()
+function drawCanvasNode(ctx: PaintCtx, node: CanvasLayoutNode) {
+  const bitmap = node.bitmap
+  if (!bitmap || node.width <= 0 || node.height <= 0) return
+  const k = transformScale(ctx)
+  const sharp = Math.abs(bitmap.width - node.width * k) < 0.5 && Math.abs(bitmap.height - node.height * k) < 0.5
+  const smoothing = ctx.imageSmoothingEnabled
+  ctx.imageSmoothingEnabled = !sharp
+  ctx.drawImage(bitmap, node.x, node.y, node.width, node.height)
+  ctx.imageSmoothingEnabled = smoothing
 }
 
 /** 绕 origin 旋转、缩放。支点用当前坐标系里的绝对位置，子绘制仍使用 node.x/node.y。 */
@@ -711,6 +691,12 @@ function drawNodeInk(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: nu
   }
   if (node.kind === 'shape') {
     drawShapeSilhouette(ctx, node, spread, ink)
+    return
+  }
+  if (node.kind === 'canvas') {
+    const drawRaw = (target: PaintCtx) => drawCanvasNode(target, node)
+    if (Math.abs(spread) < 1e-3) drawRaw(ctx as PaintCtx)
+    else paintDilatedInk(ctx as PaintCtx, spread, ink, leafInkBounds(node), drawRaw)
     return
   }
   if (node.kind === 'text' || node.kind === 'image') {
@@ -2204,6 +2190,9 @@ function paintBody(ctx: PaintCtx, node: LayoutNode, debug: boolean, t: number, s
     drawLine(ctx, node)
   } else if (node.kind === 'custom') {
     drawBoxChrome(ctx, node)
+  } else if (node.kind === 'canvas') {
+    drawBoxChrome(ctx, node)
+    drawCanvasNode(ctx, node)
   } else if (node.kind === 'group') {
     ctx.save()
     ctx.transform(node.svg.a, node.svg.b, node.svg.c, node.svg.d, node.svg.e, node.svg.f)
@@ -2299,7 +2288,6 @@ function paintNodeEffectsAndBody(
   }
   if (node.overlay) paintOverlay(ctx, node, node.overlay, state)
   if (node.noise && !opts.skipNoise) paintNoise(ctx, node, node.noise)
-  runElementDraw(ctx, node, t, state)
 }
 
 /**

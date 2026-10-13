@@ -99,11 +99,11 @@ describe('网格场景缓存键', () => {
     expect(second).not.toBe(first)
   })
 
-  it('平面里有 draw 时不缓存', async () => {
+  it('平面里有 canvas 时不缓存', async () => {
     const source = `
       <layer width="80" height="80" background="#000" camera="300">
         <sphere cx="40" cy="40" r="16" fill="#fff" />
-        <layer x="4" y="4" width="20" height="20"><draw>ctx.fillRect(0,0,el.w,el.h)</draw></layer>
+        <layer x="4" y="4" width="20" height="20"><canvas id="bar" width="20" height="20"></canvas></layer>
       </layer>
     `
     expect(await keyOf(source)).toBeNull()

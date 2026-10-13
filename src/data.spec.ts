@@ -15,8 +15,7 @@ beforeAll(async () => {
 })
 
 describe('data', () => {
-  it('对象属性不变成字符串，data 在 draw 里保持结构，导出再解析后像素相同', async () => {
-    const seen: unknown[] = []
+  it('对象属性不变成字符串，data 导出再解析后仍是结构，脚本像素相同', async () => {
     const watched = h(
       'layer',
       { width: '40', height: '40', background: '#000000' },
@@ -28,21 +27,15 @@ describe('data', () => {
         fill: '#ffffff',
         values: [1, 2],
         data: { values: [3, 5, 8], label: "it's" },
-        draw: (_ctx, el) => {
-          seen.push(el.data)
-        },
       }),
     )
     const watchedRect = watched.children[0]
     expect(typeof watchedRect !== 'string' && watchedRect.attrs.values).toBeUndefined()
     expect(typeof watchedRect !== 'string' && watchedRect.badAttrs).toEqual(['values'])
     const watchedReport = await checkLayer(watched)
-    expect(seen).toEqual([])
     expect(watchedReport.issues).toContainEqual(
       expect.objectContaining({ code: 'invalid-attr', hint: '结构化数据放进 data', path: 'layer/rect[0]' }),
     )
-    await renderLayer(watched)
-    expect(seen[0]).toEqual({ values: [3, 5, 8], label: "it's" })
 
     const root = h(
       'layer',
@@ -54,12 +47,16 @@ describe('data', () => {
         height: '16',
         fill: '#ffffff',
         data: { values: [3, 5, 8], label: "it's" },
-        draw: (ctx, el) => {
-          const values = el.data.values
-          ctx.fillStyle = '#ff0000'
-          ctx.fillRect(0, 0, values[0], values[0])
-        },
       }),
+      h('canvas', { id: 'bar', x: '4', y: '4', width: '16', height: '16' }),
+      h(
+        'script',
+        null,
+        `const canvas = document.querySelector('#bar')
+        const ctx = canvas.getContext('2d')
+        ctx.fillStyle = '#ff0000'
+        ctx.fillRect(0, 0, 3, 3)`,
+      ),
     )
     const { png } = await renderLayer(root)
 

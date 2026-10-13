@@ -13,6 +13,8 @@ const KNOWN_TAGS = new Set([
   'g',
   'font',
   'draw',
+  'canvas',
+  'script',
   'symbol',
   'use',
   'mask',

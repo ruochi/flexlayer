@@ -1,7 +1,6 @@
 import { formatCamera } from './camera.js'
 import type { LayerNode } from './parse.js'
-import { readDrawFunction } from './syntax.js'
-import type { DrawFn, Issue } from './types.js'
+import type { Issue } from './types.js'
 
 export type EmitResult = {
   source: string
@@ -16,36 +15,15 @@ function escapeText(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;')
 }
 
-function drawIssue(path: string, message: string, hint: string): Issue {
-  return { level: 'warn', code: 'emit-draw', path, message, hint }
-}
-
-function emitDraw(fn: DrawFn, path: string, indent: string, issues: Issue[]): string {
-  const extracted = readDrawFunction(Function.prototype.toString.call(fn))
-  if (!extracted) {
-    issues.push(drawIssue(path, '读不出 draw 函数的源码，没有写回 <draw>', '把绘制写进只使用 ctx 和 el 的函数，或手写 <draw>'))
-    return ''
-  }
-  const free = extracted.free
-  if (free.length > 0) {
-    const listed = free.slice(0, 4).join('、')
-    issues.push(
-      drawIssue(
-        path,
-        `draw 引用了外部变量 ${listed}，没有写回 <draw>`,
-        'draw 里只用 ctx 和 el。颜色和尺寸写进 el.attr，或继续用 .tsx 渲染',
-      ),
-    )
-    return ''
-  }
-  const body = extracted.body.replace(/<\//g, '<\\/').replace(/^\n/, '').replace(/\s+$/, '')
-  if (!body.trim()) {
-    issues.push(drawIssue(path, 'draw 函数体是空的', '写入 canvas 绘制代码，例如 ctx.fillRect(0, 0, el.w, el.h)'))
-    return ''
-  }
-  const pad = `${indent}  `
-  const lines = body.split('\n').map((line) => (line.trim() ? `${pad}${line.trimEnd()}` : ''))
-  return `${indent}<draw>\n${lines.join('\n')}\n${indent}</draw>\n`
+function noteLegacyDraw(node: LayerNode, path: string, issues: Issue[]) {
+  if (!node.legacyDraw) return
+  issues.push({
+    level: 'warn',
+    code: 'emit-draw',
+    path,
+    message: '不再写出 draw',
+    hint: '改成 <canvas> 和 <script>。闭包留在 .tsx 里渲染',
+  })
 }
 
 function jsonReady(value: unknown, seen: WeakSet<object>): boolean {
@@ -110,6 +88,7 @@ function attrText(node: LayerNode, path: string, issues: Issue[]): string {
 
 /** 有文本子节点时按源码顺序拼回去，不在标签交界处另加空格或换行。 */
 function emitInline(node: LayerNode, path: string, issues: Issue[]): string {
+  noteLegacyDraw(node, path, issues)
   const attrs = attrText(node, path, issues)
   let elementIndex = 0
   let inner = ''
@@ -127,16 +106,26 @@ function emitInline(node: LayerNode, path: string, issues: Issue[]): string {
 
 function emitNode(node: LayerNode, indent: string, path: string, issues: Issue[]): string {
   const attrs = attrText(node, path, issues)
+  noteLegacyDraw(node, path, issues)
+  if (node.tag === 'script' && node.scriptFns?.length) {
+    issues.push({
+      level: 'warn',
+      code: 'emit-script',
+      path,
+      message: 'script 闭包写不回 .layer',
+      hint: '把脚本写成 <script> 里的文本，或继续用 .tsx 渲染',
+    })
+  }
   const hasText = node.children.some((child) => typeof child === 'string')
-  if (hasText && node.tag !== 'draw' && !node.draw) return `${indent}${emitInline(node, path, issues)}\n`
+  if (hasText && node.tag !== 'script' && node.tag !== 'draw') return `${indent}${emitInline(node, path, issues)}\n`
   const childIndent = `${indent}  `
   const parts: string[] = []
   let elementIndex = 0
   let textRun = ''
-  const rawDraw = node.tag === 'draw'
+  const rawScript = node.tag === 'script' || node.tag === 'draw'
   const flushText = () => {
     if (textRun.length === 0) return
-    const text = rawDraw ? textRun.replace(/<\//g, '<\\/') : escapeText(textRun)
+    const text = rawScript ? textRun.replace(/<\//g, '<\\/') : escapeText(textRun)
     parts.push(`${childIndent}${text}\n`)
     textRun = ''
   }
@@ -150,12 +139,11 @@ function emitNode(node: LayerNode, indent: string, path: string, issues: Issue[]
     elementIndex++
   }
   flushText()
-  if (node.draw) parts.push(emitDraw(node.draw, path, childIndent, issues))
   if (parts.length === 0) return `${indent}<${node.tag}${attrs} />\n`
   return `${indent}<${node.tag}${attrs}>\n${parts.join('')}${indent}</${node.tag}>\n`
 }
 
-/** 把节点树写回 `.layer` 文本。闭包里的 draw 会留下 warn，不把读不到的函数体写回去。 */
+/** 把节点树写回 `.layer` 文本。闭包里的 script 会留下 warn，不把函数体写回去。 */
 export function emitLayer(node: LayerNode): EmitResult {
   const issues: Issue[] = []
   const source = emitNode(node, '', 'layer', issues).replace(/\n$/, '')

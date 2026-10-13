@@ -32,8 +32,6 @@ export type {
   Issue,
   ElementReport,
   MaskReport,
-  DrawFn,
-  DrawElSnapshot,
   DrawComputedStyle,
   SKRSContext2D,
 } from './types.js'

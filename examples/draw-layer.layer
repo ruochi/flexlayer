@@ -1,91 +1,47 @@
 <layer width="720" height="480" background="#0f1115" color="#f4f1ea" x="0" y="0">
-  
-  
   <layer x="40" y="36">
-    
-    
-    <h1 style="font-size:42px">
-      layer + draw
-    </h1>
-    
-  
+    <h1 style="font-size:42px">layer + canvas</h1>
   </layer>
-  
-  
   <layer x="40" y="96">
-    
-    
-    <p style="font-size:22px; color:#9aa3b2">
-      嵌套 layer 不填背景，色块用 Rect 或 draw
-    </p>
-    
-  
+    <p style="font-size:22px; color:#9aa3b2">嵌套 layer 不填背景，色块用 rect 或 canvas</p>
   </layer>
-  
-
-  
   <rect width="200" height="120" rx="16" fill="#1c2430" x="48" y="168" />
-  
-  
   <layer x="48" y="200">
-    
-    
-    <p style="font-size:20px; color:#9aa3b2">
-      Rect fill
-    </p>
-    
-  
+    <p style="font-size:20px; color:#9aa3b2">Rect fill</p>
   </layer>
-  
-
-  
   <layer width="200" height="120" x="296" y="228">
-    
-    
-    <draw>
-      
-      const g = ctx.createLinearGradient(0, 0, el.w, el.h)
+    <canvas id="grad" width="200" height="120"></canvas>
+    <script>
+      const canvas = document.querySelector('#grad')
+      const ctx = canvas.getContext('2d')
+      const g = ctx.createLinearGradient(0, 0, canvas.width, canvas.height)
       g.addColorStop(0, '#3ecfc4')
       g.addColorStop(1, '#2a6cf0')
       ctx.fillStyle = g
       ctx.beginPath()
       const r = 16
       ctx.moveTo(r, 0)
-      ctx.arcTo(el.w, 0, el.w, el.h, r)
-      ctx.arcTo(el.w, el.h, 0, el.h, r)
-      ctx.arcTo(0, el.h, 0, 0, r)
-      ctx.arcTo(0, 0, el.w, 0, r)
+      ctx.arcTo(canvas.width, 0, canvas.width, canvas.height, r)
+      ctx.arcTo(canvas.width, canvas.height, 0, canvas.height, r)
+      ctx.arcTo(0, canvas.height, 0, 0, r)
+      ctx.arcTo(0, 0, canvas.width, 0, r)
       ctx.closePath()
       ctx.fill()
       ctx.fillStyle = '#0f1115'
       ctx.font = '20px sans-serif'
-      ctx.fillText('draw', 16, 36)
-    
-    </draw>
-    
-  
+      ctx.fillText('canvas', 16, 36)
+    </script>
   </layer>
-  
-  
   <layer x="296" y="200">
-    
-    
-    <p style="font-size:20px; color:#9aa3b2">
-      draw 渐变块
-    </p>
-    
-  
+    <p style="font-size:20px; color:#9aa3b2">canvas 渐变块</p>
   </layer>
-  
-
-  
   <layer width="160" height="160" x="536" y="208">
-    
-    
-    <draw>
-      
-      const cx = el.w / 2
-      const cy = el.h / 2
+    <canvas id="rays" width="160" height="160"></canvas>
+    <script>
+      const canvas = document.querySelector('#rays')
+      const ctx = canvas.getContext('2d')
+      const cx = canvas.width / 2
+      const cy = canvas.height / 2
       const rays = 16
       for (let i = 0; i < rays; i++) {
         const a0 = (i / rays) * Math.PI * 2
@@ -101,11 +57,6 @@
       ctx.arc(cx, cy, 28, 0, Math.PI * 2)
       ctx.fillStyle = '#0f1115'
       ctx.fill()
-    
-    </draw>
-    
-  
+    </script>
   </layer>
-  
-
 </layer>

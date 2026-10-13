@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+删掉 `<draw>` 和 `draw` 回调。自定义像素改成 `<canvas>` 和 `<script>`。
+
+`width`、`height` 是位图尺寸，也是默认布局尺寸，不写时是 300×150。`style` 里的宽高只改布局。脚本在排版之后、绘制之前执行，绘制顺序是文档顺序。`devicePixelRatio` 等于 `--scale`。每一帧都是新画布，只调用一轮 `requestAnimationFrame`。`performance.now()` 和 `Date.now()` 是这一帧的毫秒，`Math.random` 按帧播种。
+
+`.layer` 里的脚本文本在子进程里跑，文件和网络关掉。`.tsx` 的函数闭包留在本进程。`--no-script` 跳过脚本。子集以外的 DOM 报 `unsupported-dom`。写了 `<draw>` 报 `invalid-child`，写了 `draw` 回调报 `invalid-attr`。
+
 ## 0.4.3
 
 开了镜头的那一层可以写 `shadows="none"`，不再给平面和地面投主光的硬边影子，深度遮挡还在。网格、平面和 `ground` 还可以写 `cast-shadow="false"`、`receive-shadow="false"`。不写时和以前一样，不透明表面互相投影子。

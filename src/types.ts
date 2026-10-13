@@ -12,30 +12,6 @@ export type DrawComputedStyle = {
   opacity: number
 }
 
-export type DrawElSnapshot = {
-  tag: string
-  id?: string
-  text: string
-  attr: Record<string, string>
-  style: StyleMap
-  computed: DrawComputedStyle
-  w: number
-  h: number
-  /** `data` 属性。没有时是 undefined。 */
-  data?: unknown
-  /** 当前帧的时间，单位秒。单帧渲染缺省为 0。 */
-  t: number
-  /** 当前帧号。单帧渲染缺省为 0。 */
-  frame: number
-  /** 每秒帧数。单帧渲染缺省为 0。 */
-  fps: number
-}
-
-export type DrawFn = (ctx: SKRSContext2D, el: DrawElSnapshot) => void
-
-/** `draw` 的上下文要能贴图。缺了 `drawImage` 时这里过不了类型检查。 */
-type _DrawCtxHasDrawImage = Parameters<DrawFn>[0]['drawImage']
-
 export type Box = {
   x: number
   y: number
@@ -395,7 +371,6 @@ export type LayoutNodeBase = {
   border?: { width: number; color: string }
   borderRadius?: number
   padding: { top: number; right: number; bottom: number; left: number }
-  draw?: DrawFn
   /** `data` 属性。没有时是 undefined。 */
   data?: unknown
   attr: Record<string, string>
@@ -419,7 +394,7 @@ export type LayoutNodeBase = {
   gradeMask?: string
   /** grade、filter 以及 registerFilter 登记的滤镜。 */
   filters?: AppliedFilter[]
-  /** 报告里的源码位置。draw 运行出错时用它，优先于元素标签本身的位置。 */
+  /** 报告里的源码位置。脚本运行出错时用它。 */
   source?: string
   /** 子元素沿父链进入外层镜头。压平效果仍会把子树收成一张图。 */
   preserve3d?: boolean
@@ -524,6 +499,14 @@ export type CustomLayoutNode = LayoutNodeBase & {
   kind: 'custom'
 }
 
+/** `<canvas>`。`width`/`height` 是布局尺寸。脚本画完后 `bitmap` 才有像素。 */
+export type CanvasLayoutNode = LayoutNodeBase & {
+  kind: 'canvas'
+  bitmapWidth: number
+  bitmapHeight: number
+  bitmap: Canvas | null
+}
+
 /** 长方体 12 条棱。名字是两个面，不分先后；`top` 是画面上方。 */
 export type BoxEdge =
   | 'front-top'
@@ -590,6 +573,7 @@ export type LayoutNode =
   | ShapeLayoutNode
   | LineLayoutNode
   | CustomLayoutNode
+  | CanvasLayoutNode
   | MeshLayoutNode
   | GroundLayoutNode
 
@@ -598,6 +582,15 @@ export type ViewRect = { x: number; y: number; width: number; height: number }
 
 /** 根上的 `min-font`。`screen` 是 min(宽, 高) / 1080 × 24，`print` 是 × 12。 */
 export type MinFontSpec = { mode: 'screen' | 'print' | 'none' } | { mode: 'px'; px: number }
+
+export type LayerScript = {
+  path: string
+  source?: string
+  /** `.layer` 里的脚本文本。 */
+  body?: string
+  /** `.tsx` 里的闭包。不能跨进子进程。 */
+  fn?: () => void
+}
 
 export type LayerDocument = {
   width: number
@@ -610,6 +603,7 @@ export type LayerDocument = {
   safe: { top: number; right: number; bottom: number; left: number }
   root: LayerLayoutNode
   issues: Issue[]
+  scripts: LayerScript[]
   /** `<preview>`。正常渲染不画。 */
   previews?: PreviewSpec[]
   /** path → `file:line:column`。只有从 JSX 进来的树才有。 */
@@ -627,6 +621,8 @@ export type RenderOptions = {
   frame?: number
   /** 每秒帧数。缺省为 0。 */
   fps?: number
+  /** 跳过 `<script>`。画布保持透明。 */
+  noScript?: boolean
   /** 网格超采样。1、2 或 4，缺省 4。草稿可以传 1 或 2。 */
   meshSamples?: 1 | 2 | 4
   /**

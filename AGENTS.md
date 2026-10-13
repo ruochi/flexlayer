@@ -17,7 +17,7 @@
 | --- | --- | --- |
 | HTML 用 `style`，layer 和图形用属性 | `<p style="font-size:40px">`、`<circle fill="#fff">` | `invalid-attr` |
 | 标签一律小写 | `<circle>`、`<div style="display:flex">`。大写或 `fvg` 不渲染 | `unknown-tag` |
-| 嵌套 layer 不写 `background` | 色块用 `<rect fill>`、HTML `background` 或 `<draw>`。根节点的 `background` 才是画布底色 | `invalid-attr` |
+| 嵌套 layer 不写 `background` | 色块用 `<rect fill>`、HTML `background` 或 `<canvas>`。根节点的 `background` 才是画布底色 | `invalid-attr` |
 | 排布 | `<div style="display:flex; flex-direction:column">` | `unknown-tag` |
 | 线条 | `<layer><line x1 y1 x2 y2 /></layer>` | `invalid-child` |
 | 文字位置 | `<layer x="120" y="64"><h1>…</h1></layer>` | `invalid-attr` |

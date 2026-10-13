@@ -9,7 +9,6 @@ import {
   Wrap,
   type Node as YogaNode,
 } from 'yoga-layout/load'
-import { attachDrawTags } from './draw-tag.js'
 import { collectFilters, mergeFilters, type FilterIssue } from './filter.js'
 import { checkDerive, isDeriveKind } from './derive.js'
 import { imageInk, peekLayerImage, preloadLayerImageSync, preloadLayerImagesSync, parseObjectFit, parseObjectPosition } from './image.js'
@@ -70,8 +69,9 @@ import type {
   Anchor,
   AppliedFilter,
   Box,
-  CustomLayoutNode,
+  CanvasLayoutNode,
   DrawComputedStyle,
+  LayerScript,
   FlexLayoutNode,
   LayerDocument,
   MinFontSpec,
@@ -656,7 +656,10 @@ function computeDrawStyle(node: LayerNode, ctx: LayoutContext, style: Record<str
   const fontFamily = style['font-family']?.trim() || ctx.fontFamily
   const fromStyle = style.color?.trim()
   const color = fromStyle && !isGradient(fromStyle) ? fromStyle : isGradient(ctx.color) ? '#111111' : ctx.color
-  const opacity = isHtmlTag(node.tag) ? parseNumber(style.opacity) ?? 1 : parseNumber(node.attrs.opacity) ?? 1
+  const opacity =
+    node.tag === 'canvas' || isHtmlTag(node.tag)
+      ? parseNumber(style.opacity) ?? parseNumber(node.attrs.opacity) ?? 1
+      : parseNumber(node.attrs.opacity) ?? 1
   return { color, fontFamily, fontSize, fontWeight, opacity }
 }
 
@@ -694,9 +697,8 @@ function shadowToggles(node: LayerNode, ctx: LayoutContext): { castShadow?: fals
 
 function layoutDrawMeta(node: LayerNode, ctx: LayoutContext) {
   const style = parseStyle(node.attrs.style)
-  const loc = node.drawLoc ?? node.loc
+  const loc = node.loc
   return {
-    draw: node.draw,
     data: node.data,
     attr: { ...node.attrs },
     style,
@@ -707,40 +709,38 @@ function layoutDrawMeta(node: LayerNode, ctx: LayoutContext) {
   }
 }
 
-function layoutCustomDraw(node: LayerNode, ctx: LayoutContext): CustomLayoutNode | null {
-  if (!node.draw) return null
-  let x = 0
-  let y = 0
-  let w = parseNumber(node.attrs.width)
-  let h = parseNumber(node.attrs.height)
-  if (hasTwoPoint(node.attrs)) {
-    const x1 = parseNumber(node.attrs.x1) ?? 0
-    const y1 = parseNumber(node.attrs.y1) ?? 0
-    const x2 = parseNumber(node.attrs.x2) ?? 0
-    const y2 = parseNumber(node.attrs.y2) ?? 0
-    x = Math.min(x1, x2)
-    y = Math.min(y1, y2)
-    w = Math.abs(x2 - x1)
-    h = Math.abs(y2 - y1)
-  } else if (node.attrs.x != null || node.attrs.y != null) {
-    x = parseNumber(node.attrs.x) ?? 0
-    y = parseNumber(node.attrs.y) ?? 0
-  }
-  if (w == null || h == null) return null
+const CANVAS_WIDTH = 300
+const CANVAS_HEIGHT = 150
+
+function layoutCanvas(node: LayerNode, ctx: LayoutContext): CanvasLayoutNode {
+  const style = parseStyle(node.attrs.style)
+  const attrW = parseNumber(node.attrs.width)
+  const attrH = parseNumber(node.attrs.height)
+  const styleW = parsePx(style.width)
+  const styleH = parsePx(style.height)
+  const width = styleW ?? attrW ?? CANVAS_WIDTH
+  const height = styleH ?? attrH ?? CANVAS_HEIGHT
+  const bitmapWidth = Math.max(1, Math.round(attrW ?? CANVAS_WIDTH))
+  const bitmapHeight = Math.max(1, Math.round(attrH ?? CANVAS_HEIGHT))
   const appearance = readAttrAppearance(node.attrs)
+  const meta = layoutDrawMeta(node, ctx)
+  appearance.opacity = parseNumber(style.opacity) ?? appearance.opacity
   return {
-    kind: 'custom',
+    kind: 'canvas',
     path: ctx.pathPrefix,
     id: node.attrs.id,
-    tag: node.tag,
-    x,
-    y,
-    width: w,
-    height: h,
-    ink: { x: 0, y: 0, width: w, height: h },
+    tag: 'canvas',
+    x: 0,
+    y: 0,
+    width,
+    height,
+    ink: { x: 0, y: 0, width, height },
+    bitmapWidth,
+    bitmapHeight,
+    bitmap: null,
     ...appearance,
     ...readEffects(node.attrs, ctx, solidPaint(appearance.background, ctx.color), 'ink'),
-    ...layoutDrawMeta(node, ctx),
+    ...meta,
   }
 }
 
@@ -756,8 +756,6 @@ function layoutUnknownOrCustom(node: LayerNode, ctx: LayoutContext): LayoutNode 
     return null
   }
   warnNestedMasks(node, ctx)
-  const custom = layoutCustomDraw(node, ctx)
-  if (custom) return custom
   ctx.issues.push(unknownTagIssue(node.tag, ctx.pathPrefix))
   return null
 }
@@ -1991,7 +1989,7 @@ function prepareHtmlBox(node: LayerNode): LayerNode {
 
 function measureFlexChild(raw: LayerNode, ctx: LayoutContext, direction: 'row' | 'column', crossAlign?: string): FlexMeasure | null {
   const node = prepareHtmlBox(materialize(raw))
-  if (node.tag === 'symbol' || node.tag === 'draw' || node.tag === 'preview') {
+  if (node.tag === 'symbol' || node.tag === 'draw' || node.tag === 'script' || node.tag === 'preview') {
     if (node.tag === 'preview') {
       ctx.issues.push({
         level: 'warn',
@@ -2118,6 +2116,17 @@ function measureFlexChild(raw: LayerNode, ctx: LayoutContext, direction: 'row' |
       isText: false,
     }
   }
+  if (node.tag === 'canvas') {
+    const laid = layoutCanvas(node, ctx)
+    return {
+      node: laid,
+      minMain: direction === 'row' ? laid.width : laid.height,
+      minCross: direction === 'row' ? laid.height : laid.width,
+      preferredMain: direction === 'row' ? laid.width : laid.height,
+      preferredCross: direction === 'row' ? laid.height : laid.width,
+      isText: false,
+    }
+  }
   if (isShapeTag(node.tag)) {
     const s = layoutShape(node, ctx, ctx.color)
     return {
@@ -2148,17 +2157,6 @@ function measureFlexChild(raw: LayerNode, ctx: LayoutContext, direction: 'row' |
       minCross: direction === 'row' ? nested.height : nested.width,
       preferredMain: direction === 'row' ? nested.width : nested.height,
       preferredCross: direction === 'row' ? nested.height : nested.width,
-      isText: false,
-    }
-  }
-  const custom = layoutCustomDraw(node, ctx)
-  if (custom) {
-    return {
-      node: custom,
-      minMain: direction === 'row' ? custom.width : custom.height,
-      minCross: direction === 'row' ? custom.height : custom.width,
-      preferredMain: direction === 'row' ? custom.width : custom.height,
-      preferredCross: direction === 'row' ? custom.height : custom.width,
       isText: false,
     }
   }
@@ -2548,7 +2546,7 @@ function layoutUse(node: LayerNode, ctx: LayoutContext): LayerLayoutNode | null 
     { ...ctx, useStack: [...ctx.useStack, id] },
   )
   const appearance = readAttrAppearance(node.attrs)
-  // use 与 layer 一样不填背景；色块用 rect / HTML / <draw>
+  // use 与 layer 一样不填背景；色块用 rect、HTML 或 canvas
   appearance.background = undefined
   const effects = readEffects(node.attrs, ctx, solidPaint(appearance.border?.color, ctx.color), 'ink')
   const filters = mergeFilters(laid.filters, effects.filters)
@@ -3193,7 +3191,7 @@ function rawNeedsCamera(node: LayerNode): boolean {
   for (const child of node.children) {
     if (typeof child === 'string') continue
     const tag = child.tag.toLowerCase()
-    if (tag === 'mask' || tag === 'preview' || tag === 'symbol' || tag === 'draw' || tag === 'font') continue
+    if (tag === 'mask' || tag === 'preview' || tag === 'symbol' || tag === 'draw' || tag === 'script' || tag === 'font') continue
     if (isMeshTag(tag) || isGroundTag(tag) || nonzeroAttr(child.attrs.rotateX) || nonzeroAttr(child.attrs.rotateY) || nonzeroAttr(child.attrs.z)) return true
     if (tag === 'layer' && wroteCameraAttr(child)) continue
     if (rawNeedsCamera(child)) return true
@@ -3290,7 +3288,7 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
       notePreview(ch, ctx, nodePath(ctx.pathPrefix, ch.tag, i))
       continue
     }
-    if (ch.tag === 'symbol' || ch.tag === 'draw' || ch.tag === 'mask') {
+    if (ch.tag === 'symbol' || ch.tag === 'draw' || ch.tag === 'script' || ch.tag === 'mask') {
       if (ch.tag === 'symbol') track(ctx, nodePath(ctx.pathPrefix, ch.tag, i), ch)
       continue
     }
@@ -3316,6 +3314,7 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
     else if (isDisplayFlex(laidSource.attrs.style) && isTextBoxTag(laidSource.tag)) laid = layoutFlex(laidSource, subCtx)
     else if (isImageTag(laidSource.tag)) laid = layoutImage(laidSource, subCtx)
     else if (isTextBoxTag(laidSource.tag)) laid = layoutTextBox(laidSource, subCtx, textMax)
+    else if (laidSource.tag === 'canvas') laid = layoutCanvas(laidSource, subCtx)
     else if (isShapeTag(laidSource.tag)) laid = layoutShape(laidSource, subCtx, ctx.color)
     else if (isGroundTag(laidSource.tag)) laid = layoutGround(laidSource, subCtx)
     else if (isMeshTag(laidSource.tag)) laid = layoutMesh(laidSource, subCtx)
@@ -3622,13 +3621,67 @@ export type MeasureEnv = {
   maxContentWidth: number
 }
 
+function scriptSource(node: LayerNode): string | undefined {
+  return node.loc ? formatSourceLoc(node.loc) : undefined
+}
+
+/** 收集 `<script>`，并拒绝已经删掉的 `<draw>`。不改节点树，量尺寸和正式排版可以各走一遍。 */
+function collectScripts(node: LayerNode, path: string, issues: Issue[], scripts: LayerScript[]): void {
+  if (node.legacyDraw) {
+    issues.push({
+      level: 'error',
+      code: 'invalid-attr',
+      path,
+      message: '不再支持 draw 回调',
+      hint: '改成 <canvas> 和 <script>。脚本里用 canvas.getContext("2d")',
+      ...(scriptSource(node) ? { source: scriptSource(node) } : {}),
+    })
+  }
+  let index = 0
+  for (const child of node.children) {
+    if (typeof child === 'string') continue
+    const childPath = `${path}/${child.tag}[${index}]`
+    index += 1
+    if (child.tag === 'draw') {
+      issues.push({
+        level: 'error',
+        code: 'invalid-child',
+        path: childPath,
+        message: '不再有 <draw>',
+        hint: '改成 <canvas id="…"> 和 <script>。脚本里用 document.querySelector 找到画布',
+        ...(scriptSource(child) ? { source: scriptSource(child) } : {}),
+      })
+      continue
+    }
+    if (child.tag === 'script') {
+      const body = child.children.map((part) => (typeof part === 'string' ? part : '')).join('')
+      const source = scriptSource(child)
+      const fns = child.scriptFns ?? []
+      if (!body.trim() && fns.length === 0) {
+        issues.push({
+          level: 'warn',
+          code: 'invalid-script',
+          path: childPath,
+          message: '<script> 内容为空',
+          hint: '写入绘制代码，例如 const canvas = document.querySelector("#bar"); canvas.getContext("2d").fillRect(0, 0, canvas.width, canvas.height)',
+          ...(source ? { source } : {}),
+        })
+      }
+      if (body.trim()) scripts.push({ path: childPath, body, ...(source ? { source } : {}) })
+      for (const fn of fns) scripts.push({ path: childPath, fn, ...(source ? { source } : {}) })
+      continue
+    }
+    collectScripts(child, childPath, issues, scripts)
+  }
+}
+
 /** 同步量一个 layer。字体、图片和 Yoga 需要先准备好。 */
 export function measureLayer(node: LayerNode, env: MeasureEnv): { laid: LayerLayoutNode; issues: Issue[] } {
   const issues: Issue[] = []
   const symbols = new Map<string, LayerNode>()
   collectSymbols(node, symbols, issues, 'layer')
   noteAttrTypos(node, 'layer', issues)
-  attachDrawTags(node, issues, 'layer')
+  collectScripts(node, 'layer', issues, [])
   const ctx: LayoutContext = {
     color: env.color,
     fontFamily: env.fontFamily,
@@ -3742,7 +3795,7 @@ export function layoutSync(rootNode: LayerNode, assets: LayoutAssets): LayerDocu
       code: 'invalid-attr',
       path: 'layer',
       message: 'layer 和图形不使用 style',
-      hint: '把 width、opacity 写成属性。色块用 rect / HTML / <draw>',
+      hint: '把 width、opacity 写成属性。色块用 rect、HTML 或 canvas',
     })
   }
   if (rootNode.tag !== 'layer') {
@@ -3752,7 +3805,8 @@ export function layoutSync(rootNode: LayerNode, assets: LayoutAssets): LayerDocu
   noteStructuredData(rootNode, 'layer', issues)
   noteCameraPlacement(rootNode, 'layer', issues)
   issues.push(...legacyCenterIssues(rootNode, 'layer'))
-  attachDrawTags(rootNode, issues, 'layer')
+  const scripts: LayerScript[] = []
+  collectScripts(rootNode, 'layer', issues, scripts)
   const paintCtx: LayoutContext = {
     color,
     fontFamily,
@@ -3837,6 +3891,7 @@ export function layoutSync(rootNode: LayerNode, assets: LayoutAssets): LayerDocu
     safe,
     root,
     issues,
+    scripts,
     sources,
     ...(paintCtx.previews.length ? { previews: paintCtx.previews } : {}),
   }
