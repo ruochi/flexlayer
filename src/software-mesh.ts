@@ -122,6 +122,10 @@ type Batch = {
   edges: MeshEdge[]
   lines: LineStyle | null
   outline: SphereOutline | null
+  /** 线段下标对。和三角形分开，避免线框被当成面去填，也避免投出错误的影子三角。 */
+  segmentIndices?: Uint32Array | null
+  /** 屏幕像素。线段粗细，不写是 1。 */
+  linePx?: number
 }
 
 type Vert = {
@@ -203,6 +207,9 @@ type ModelPrim = {
   colors?: Float32Array
   map?: GlbPrimitive['map']
   emissive?: [number, number, number]
+  /** 下标是线段对，不光栅三角形。 */
+  lines?: boolean
+  linePx?: number
 }
 
 const geometryCache = new Map<string, MeshGeometry | null>()
@@ -1345,6 +1352,28 @@ function buildModelFresh(node: MeshLayoutNode): ModelPrim[] {
       positions[i + 2] = (src[i + 2]! - cz) * s
     }
     const count = Math.floor(positions.length / 3)
+    if (prim.lines) {
+      const pairs = prim.indices
+      if (!pairs || pairs.length < 2) continue
+      const ink = prim.color
+      out.push({
+        positions,
+        normals: new Float32Array(positions.length),
+        indices: pairs,
+        color: [
+          byte(ink[0] * 255),
+          byte(ink[1] * 255),
+          byte(ink[2] * 255),
+          byte(ink[3] * node.opacity * 255),
+        ],
+        roughness: 1,
+        metalness: 0,
+        doubleSided: true,
+        lines: true,
+        linePx: prim.linePx && prim.linePx > 0 ? prim.linePx : 1,
+      })
+      continue
+    }
     const indices = prim.indices ?? Uint32Array.from({ length: count - (count % 3) }, (_, i) => i)
     if (indices.length < 3) continue
     const normals = prim.normals && prim.normals.length === src.length ? prim.normals : smoothNormals(positions, indices)
@@ -1445,10 +1474,10 @@ export type MeshPrim = {
 /** 一只网格的图元。模型和几何体都从这里拿。投影用这些折点；窄圆角在绘制时另加。 */
 export function meshPrims(node: MeshLayoutNode): MeshPrim[] {
   if (node.mesh.type === 'model') {
-    return buildModel(node).map((prim) => ({
+      return buildModel(node).map((prim) => ({
       positions: prim.positions,
       normals: prim.normals,
-      indices: prim.indices,
+      indices: prim.lines ? new Uint32Array(0) : prim.indices,
       alpha: prim.color[3],
       doubleSided: prim.doubleSided,
     }))
@@ -2622,6 +2651,147 @@ function paintGrounds(
   }
 }
 
+/** 屏幕空间线段，和三角形共用深度。粗细是输出像素，超采样缓冲里按同样的倍数铺开。 */
+function drawModelLines(
+  color: Uint8ClampedArray,
+  depth: Float32Array,
+  owners: Int16Array,
+  pw: number,
+  ph: number,
+  verts: Vert[],
+  screen: Float32Array,
+  pairs: Uint32Array,
+  linePx: number,
+  pixelScale: number,
+  r: number,
+  g: number,
+  b: number,
+  a: number,
+  depthWrite: boolean,
+  owner: number,
+  writeOwner: boolean,
+  near: number,
+  perspective: Perspective,
+  vx: number,
+  vy: number,
+  originX: number,
+  originY: number,
+) {
+  const radius = Math.max(0.5, linePx * pixelScale * 0.5)
+  for (let i = 0; i + 1 < pairs.length; i += 2) {
+    const ia = pairs[i]!
+    const ib = pairs[i + 1]!
+    const va = verts[ia]
+    const vb = verts[ib]
+    if (!va || !vb) continue
+    const aIn = va.z < near
+    const bIn = vb.z < near
+    if (!aIn && !bIn) continue
+    let ax: number
+    let ay: number
+    let az: number
+    let bx: number
+    let by: number
+    let bz: number
+    if (aIn && bIn) {
+      const oa = ia * 3
+      const ob = ib * 3
+      if (screen[oa + 2] === 0 || screen[ob + 2] === 0) continue
+      ax = screen[oa]!
+      ay = screen[oa + 1]!
+      az = va.z
+      bx = screen[ob]!
+      by = screen[ob + 1]!
+      bz = vb.z
+    } else {
+      const dz = vb.z - va.z
+      if (Math.abs(dz) < 1e-8) continue
+      const zc = near - 1e-2
+      const t = (zc - va.z) / dz
+      const clipped = projectClipped(
+        { x: va.x + (vb.x - va.x) * t, y: va.y + (vb.y - va.y) * t, z: zc, nx: 0, ny: 0, nz: 1, u: 0, v: 0 },
+        perspective,
+        vx,
+        vy,
+        originX,
+        originY,
+        pixelScale,
+      )
+      if (aIn) {
+        const oa = ia * 3
+        if (screen[oa + 2] === 0) continue
+        ax = screen[oa]!
+        ay = screen[oa + 1]!
+        az = va.z
+        bx = clipped.sx
+        by = clipped.sy
+        bz = zc
+      } else {
+        const ob = ib * 3
+        if (screen[ob + 2] === 0) continue
+        ax = clipped.sx
+        ay = clipped.sy
+        az = zc
+        bx = screen[ob]!
+        by = screen[ob + 1]!
+        bz = vb.z
+      }
+    }
+    drawSegment(color, depth, owners, pw, ph, ax, ay, az, bx, by, bz, radius, r, g, b, a, depthWrite, owner, writeOwner)
+  }
+}
+
+function drawSegment(
+  color: Uint8ClampedArray,
+  depth: Float32Array,
+  owners: Int16Array,
+  pw: number,
+  ph: number,
+  x0: number,
+  y0: number,
+  z0: number,
+  x1: number,
+  y1: number,
+  z1: number,
+  radius: number,
+  r: number,
+  g: number,
+  b: number,
+  a: number,
+  depthWrite: boolean,
+  owner: number,
+  writeOwner: boolean,
+) {
+  const dx = x1 - x0
+  const dy = y1 - y0
+  const dz = z1 - z0
+  const steps = Math.max(Math.abs(dx), Math.abs(dy), 1)
+  const n = Math.ceil(steps)
+  const reach = Math.ceil(radius)
+  for (let i = 0; i <= n; i++) {
+    const t = i / n
+    const x = x0 + dx * t
+    const y = y0 + dy * t
+    const z = z0 + dz * t
+    const cx = Math.round(x)
+    const cy = Math.round(y)
+    for (let oy = -reach; oy <= reach; oy++) {
+      const iy = cy + oy
+      if (iy < 0 || iy >= ph) continue
+      for (let ox = -reach; ox <= reach; ox++) {
+        const ix = cx + ox
+        if (ix < 0 || ix >= pw) continue
+        if (Math.hypot(ix + 0.5 - x, iy + 0.5 - y) > radius) continue
+        const di = iy * pw + ix
+        if (z < depth[di]! - 1e-3) continue
+        blendOver(color, di, r, g, b, a)
+        if (depthWrite) depth[di] = z
+        if (writeOwner) owners[di] = owner
+      }
+    }
+  }
+}
+
 function rasterize(
   batches: Batch[],
   layer: LayerLayoutNode,
@@ -2646,6 +2816,7 @@ function rasterize(
     if (batch.lines) {
       margin = Math.max(margin, batch.lines.widths[0], batch.lines.widths[1], batch.lines.widths[2], batch.lines.halo)
     }
+    if (batch.segmentIndices) margin = Math.max(margin, batch.linePx ?? 1)
     const count = batch.positions.length / 3
     const verts: Vert[] = new Array(count)
     const proj = new Float32Array(count * 3)
@@ -2745,6 +2916,33 @@ function rasterize(
       glassCenter.x = sx / verts.length
       glassCenter.y = sy / verts.length
       glassCenter.z = sz / verts.length
+    }
+    if (batch.segmentIndices && batch.segmentIndices.length >= 2) {
+      drawModelLines(
+        color,
+        depth,
+        owners,
+        pw,
+        ph,
+        verts,
+        screen,
+        batch.segmentIndices,
+        batch.linePx ?? 1,
+        pixelScale,
+        batch.r,
+        batch.g,
+        batch.b,
+        batch.a,
+        batch.depthWrite,
+        batch.owner,
+        writeOwner,
+        near,
+        perspective,
+        px,
+        py,
+        originX,
+        originY,
+      )
     }
     const indices = batch.indices
     for (let i = 0; i < indices.length; i += 3) {
@@ -3915,6 +4113,38 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
     const opacity = (instance.opacity ?? 1) * node.opacity
     if (node.mesh.type === 'model') {
       for (const prim of buildModel(node)) {
+        if (prim.lines) {
+          batches.push({
+            positions: prim.positions,
+            normals: prim.normals,
+            uvs: null,
+            indices: new Uint32Array(0),
+            r: prim.color[0],
+            g: prim.color[1],
+            b: prim.color[2],
+            a: byte(prim.color[3] * (instance.opacity ?? 1)),
+            doubleSided: true,
+            shaded: false,
+            depthWrite: prim.color[3] >= 255,
+            castShadow: false,
+            receiveShadow: false,
+            material: 'lambert',
+            roughness: 1,
+            texture: null,
+            tw: 0,
+            th: 0,
+            toLayer: instance.toLayer,
+            originX: o.x,
+            originY: o.y,
+            owner,
+            edges: NO_EDGES,
+            lines: null,
+            outline: null,
+            segmentIndices: prim.indices,
+            linePx: prim.linePx ?? 1,
+          })
+          continue
+        }
         const painted = prim.map || prim.colors ? { positions: prim.positions, normals: prim.normals, indices: prim.indices } : paintGeometry(node, prim.positions, prim.normals, prim.indices)
         const authored = node.material
         const material = authored ? shadeMaterial(authored.kind) : prim.shade ? shadeMaterial(prim.shade) : prim.metalness >= 0.5 ? 'metal' : 'plastic'

@@ -9,6 +9,7 @@ import {
   Wrap,
   type Node as YogaNode,
 } from 'yoga-layout/load'
+import { ensureAuthorFeatures, installAuthorFeaturesSync } from './author-features.js'
 import { collectFilters, mergeFilters, type FilterIssue } from './filter.js'
 import { checkDerive, isDeriveKind } from './derive.js'
 import { imageInk, peekLayerImage, preloadLayerImageSync, preloadLayerImagesSync, parseObjectFit, parseObjectPosition } from './image.js'
@@ -63,7 +64,7 @@ import {
   layoutText,
 } from './text.js'
 import { applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset, translated } from './matrix.js'
-import { layoutMath } from './math/layout.js'
+import { layoutMath } from './math/load.js'
 import { asBlockFlow, checkChildAttrs, checkTextBoxChildren, haloAttrIssues, hasTwoPoint, hiddenAttrIssues, isDisplayFlex, isHtmlTag, legacyCenterIssues, materialAttrIssues, originValueIssues, rowColumnHint, styleIssues, typoAttrIssues } from './rules.js'
 import { fitViewAspect, parseView, viewExceeds } from './view.js'
 import { FONT_TAG, isGroundTag, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag, solidDepth, tagSpellingHint } from './tags.js'
@@ -1887,8 +1888,8 @@ function layoutMesh(node: LayerNode, ctx: LayoutContext): MeshLayoutNode {
           level: 'warn',
           code: 'missing-model',
           path: ctx.pathPrefix,
-          message: 'object 里没有三角形网格',
-          hint: '传入 Mesh，或带 Mesh 子节点的对象。线条、点、隐藏的节点不会画',
+          message: 'object 里没有三角形或线段',
+          hint: '传入 Mesh 或 Line，或带这些子节点的对象。点、隐藏的节点不会画',
         })
       }
       const span = primitiveSpan(prims) ?? undefined
@@ -3911,6 +3912,7 @@ function collectScripts(node: LayerNode, path: string, issues: Issue[], scripts:
 
 /** 同步量一个 layer。字体、图片和 Yoga 需要先准备好。 */
 export function measureLayer(node: LayerNode, env: MeasureEnv): { laid: LayerLayoutNode; issues: Issue[] } {
+  installAuthorFeaturesSync(node)
   const issues: Issue[] = []
   const symbols = new Map<string, LayerNode>()
   collectSymbols(node, symbols, issues, 'layer')
@@ -3976,6 +3978,7 @@ export function prepareAssetsSync(root: LayerNode | null, baseDir: string, optio
 
 /** 异步外壳。实际准备是同步的，同一进程里多帧接着用，不会重新开始。 */
 export async function prepareAssets(root: LayerNode | null, baseDir: string, options: PrepareOptions = {}): Promise<LayoutAssets> {
+  if (root) await ensureAuthorFeatures(root)
   return prepareAssetsSync(root, baseDir, options)
 }
 
@@ -4009,6 +4012,7 @@ export function readLayerRoot(source: string | LayerNode): { root: LayerNode; fo
 
 /** 同步排版。字体、图片和 Yoga 由 prepareAssetsSync 记住，多帧不会重新准备。 */
 export function layoutSync(rootNode: LayerNode, assets: LayoutAssets): LayerDocument {
+  installAuthorFeaturesSync(rootNode)
   const baseDir = assets.baseDir
   const attrs = rootNode.attrs
   const width = parseNumber(attrs.width) ?? 1080

@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
-import { lstatSync, readlinkSync, readdirSync, realpathSync } from 'node:fs'
+import { lstatSync, readlinkSync, readdirSync, realpathSync, statSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createCanvas } from '@napi-rs/canvas'
@@ -141,9 +141,18 @@ function isSymlink(target: string): boolean {
   }
 }
 
+/** 和 Node `WildcardIfDir` 一样：`stat` 跟着符号链接走，目录才算目录。 */
+function isDirectory(target: string): boolean {
+  try {
+    return statSync(target).isDirectory()
+  } catch {
+    return false
+  }
+}
+
 /** 顺着 Node `realpath` 的每一跳，把遇到的符号链接本身放进名单。一跳解析完再走下一截。 */
 function grantSymlinkHops(grants: Set<string>, target: string) {
-  if (!isAbsolute(target)) return
+  if (!isAbsolute(target) || target.includes('*')) return
   const parts = target.split('/').filter(Boolean)
   let resolved = '/'
   for (const part of parts) {
@@ -173,13 +182,29 @@ function grantSymlinkHops(grants: Set<string>, target: string) {
 }
 
 /**
+ * 交给 `--allow-fs-read` 的路径。空字符串和单独的 `*` 不能进名单。
+ * 已经存在的目录，Node 自己收成 `目录/*`；再写一条 `目录/*` 就是同一条前缀插第二次。
+ * `**` 不是递归通配，第二个 `*` 会把前一条再插一遍。
+ */
+function keepGrant(grant: string): boolean {
+  if (!isAbsolute(grant) || grant === '/') return false
+  if (grant === '*' || grant.includes('**')) return false
+  if (grant.endsWith('/*')) {
+    const dir = grant.slice(0, -2)
+    if (!dir || dir === '/' || dir.includes('*') || isDirectory(dir)) return false
+    return true
+  }
+  return !grant.includes('*')
+}
+
+/**
  * `realpathSync` 要先读到路径上的符号链接本身。只放行链接里面的文件时，
  * 这一跳仍会报 Access to this API has been restricted。
  * 链接必须排在穿过它的子路径前面，否则 Node 会把链接折成真实路径，名单里等于没有这条链接。
  */
 function orderedGrants(grants: Set<string>): string[] {
   for (const target of [...grants]) grantSymlinkHops(grants, target)
-  return [...grants].sort((a, b) => a.length - b.length || (a < b ? -1 : 1))
+  return [...grants].filter(keepGrant).sort((a, b) => a.length - b.length || (a < b ? -1 : 1))
 }
 
 /** 从脚本宿主往上，列出 node_modules 里这个包的逻辑路径。符号链接和真实目录都要。 */
@@ -208,6 +233,10 @@ export function scriptReadGrants(host: string): string[] {
   for (const dir of [canvasDir, nativeDir, ...logicalPackages(host, '@napi-rs/canvas'), ...logicalPackages(host, join('@napi-rs', basename(nativeDir)))]) {
     addGrant(grants, dir)
     addGrant(grants, join(dir, 'package.json'))
+    // 存在的目录 Node 会收成 `dir/*`，文件已经能读。再写 `dir/*` 或 `dir/**`，
+    // Node 20 把同一条前缀插第二次，空前缀打到叶子上，断言 !path_prefix.empty()。
+    // 目录还不存在时不会自动加通配，只补一条 `dir/*`。`**` 不是递归通配。
+    if (dir && dir !== '/' && !isDirectory(dir)) grants.add(`${dir}/*`)
   }
   addGrant(grants, nativeFile)
   return orderedGrants(grants)
@@ -224,13 +253,17 @@ function runChild(payload: unknown): Promise<{ issues: CanvasDomIssue[]; canvase
   const { nativeFile } = nativeBinding()
   const args = scriptChildArgs(host)
   return new Promise((resolve, reject) => {
+    const env: NodeJS.ProcessEnv = {
+      PATH: process.env.PATH ?? '',
+      NAPI_RS_NATIVE_LIBRARY_PATH: nativeFile,
+    }
+    // 不把整份环境交进去。HOME 只为了 os.homedir；不放行家目录的读权限。
+    if (process.env.HOME) env.HOME = process.env.HOME
+    if (process.env.USERPROFILE) env.USERPROFILE = process.env.USERPROFILE
     const child = spawn(process.execPath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       signal: AbortSignal.timeout(15_000),
-      env: {
-        PATH: process.env.PATH ?? '',
-        NAPI_RS_NATIVE_LIBRARY_PATH: nativeFile,
-      },
+      env,
     })
     const stdout: Buffer[] = []
     const stderr: Buffer[] = []

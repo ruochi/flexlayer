@@ -10,6 +10,7 @@ import type { GlbPrimitive } from './glb.js'
  * 其余按金属度：不小于 0.5 是金属，否则是塑料。粗糙度越低，环境越清楚。
  * 内存里的 map 按 uv 给底色染色，再走同一套明暗。顶点色乘上材质色。emissive 加在明暗之后。
  * ShaderMaterial 只从 uniforms 里取一个颜色当底色。
+ * Line、LineSegments、LineLoop 收成线段。材质 wireframe 为真时只留三角形的边。Points 跳过。
  */
 
 type Mat4 = number[]
@@ -19,6 +20,9 @@ type Obj = {
   children?: unknown
   visible?: boolean
   isMesh?: boolean
+  isLine?: boolean
+  isLineSegments?: boolean
+  isLineLoop?: boolean
   isInstancedMesh?: boolean
   isBufferGeometry?: boolean
   matrixWorld?: { elements?: ArrayLike<number> }
@@ -74,6 +78,9 @@ type Obj = {
   format?: number
   start?: number
   materialIndex?: number
+  wireframe?: boolean
+  wireframeLinewidth?: number
+  linewidth?: number
 }
 
 const IDENTITY: Mat4 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
@@ -127,6 +134,8 @@ export function modelRevision(prims: GlbPrimitive[]): string {
         word((pixels[i]! | (pixels[i + 1]! << 8) | (pixels[i + 2]! << 16) | ((pixels[i + 3] ?? 0) << 24)) >>> 0)
       }
     }
+    word(prim.lines ? 1 : 0)
+    word(Math.round((prim.linePx ?? 1) * 1000))
   }
   return `${(h1 >>> 0).toString(16).padStart(8, '0')}${(h2 >>> 0).toString(16).padStart(8, '0')}`
 }
@@ -165,6 +174,7 @@ function refreshWorld(node: Obj) {
 function walk(node: Obj, out: GlbPrimitive[]) {
   if (node.visible === false) return
   if (node.isMesh === true) emitMesh(node, out)
+  else if (node.isLine === true) emitLines(node, out)
   if (!Array.isArray(node.children)) return
   for (const child of node.children) {
     const next = asObj(child)
@@ -213,7 +223,15 @@ function emitMesh(mesh: Obj, out: GlbPrimitive[]) {
     }
     const mirrored = det3(world) < 0
     for (const range of ranges) {
-      const pbr = readPbr(materials[range.materialIndex] ?? materials[0])
+      const material = materials[range.materialIndex] ?? materials[0]
+      const pbr = readPbr(material)
+      if (asObj(material)?.wireframe === true) {
+        const pairs = triangleEdges(indexAttr, range.start, range.count, count)
+        if (pairs.length >= 2) {
+          out.push(linePrim(positions, pairs, pbr.color, linePx(material, true)))
+        }
+        continue
+      }
       const flip = mirrored !== pbr.back
       const indices = new Uint32Array(Math.floor(range.count / 3) * 3)
       let written = 0
@@ -253,6 +271,103 @@ function emitMesh(mesh: Obj, out: GlbPrimitive[]) {
       })
     }
   }
+}
+
+function emitLines(node: Obj, out: GlbPrimitive[]) {
+  const geometry = asObj(node.geometry)
+  if (!geometry || geometry.isBufferGeometry === false) return
+  const position = asObj(geometry.attributes?.position) ?? asObj(geometry.getAttribute?.('position'))
+  if (!position) return
+  const count = attrCount(position)
+  if (count < 2) return
+  const indexAttr = asObj(geometry.index)
+  const indexCount = indexAttr ? attrCount(indexAttr) : count
+  const drawStart = finite(geometry.drawRange?.start, 0)
+  const drawCount = finite(geometry.drawRange?.count, Number.POSITIVE_INFINITY)
+  const start = Math.max(0, drawStart)
+  const end = Math.min(indexCount, start + drawCount)
+  if (end - start < 2) return
+  const world = elementsOf(node.matrixWorld) ?? IDENTITY
+  const positions = new Float32Array(count * 3)
+  for (let i = 0; i < count; i++) {
+    const p = readVec3(position, i)
+    const w = applyPoint(world, p[0], p[1], p[2])
+    positions[i * 3] = w[0]
+    positions[i * 3 + 1] = w[1]
+    positions[i * 3 + 2] = w[2]
+  }
+  const pairs: number[] = []
+  const segments = node.isLineSegments === true
+  if (segments) {
+    for (let i = start; i + 1 < end; i += 2) {
+      const a = readIndex(indexAttr, i)
+      const b = readIndex(indexAttr, i + 1)
+      if (a < 0 || b < 0 || a >= count || b >= count || a === b) continue
+      pairs.push(a, b)
+    }
+  } else {
+    let prev = -1
+    for (let i = start; i < end; i++) {
+      const a = readIndex(indexAttr, i)
+      if (a < 0 || a >= count) {
+        prev = -1
+        continue
+      }
+      if (prev >= 0 && prev !== a) pairs.push(prev, a)
+      prev = a
+    }
+    if (node.isLineLoop === true && end - start >= 2) {
+      const first = readIndex(indexAttr, start)
+      const last = readIndex(indexAttr, end - 1)
+      if (first >= 0 && last >= 0 && first < count && last < count && first !== last) pairs.push(last, first)
+    }
+  }
+  if (pairs.length < 2) return
+  const pbr = readPbr(Array.isArray(node.material) ? node.material[0] : node.material)
+  out.push(linePrim(positions, Uint32Array.from(pairs), pbr.color, linePx(node.material, false)))
+}
+
+function linePrim(positions: Float32Array, indices: Uint32Array, color: [number, number, number, number], width: number): GlbPrimitive {
+  return {
+    positions,
+    indices,
+    color,
+    roughness: 1,
+    metalness: 0,
+    doubleSided: true,
+    lines: true,
+    linePx: width,
+  }
+}
+
+/** 屏幕像素。three 的 linewidth 在 WebGL 里常常被忽略，这里按作者写的值画，缺省 1。 */
+function linePx(material: unknown, wire: boolean): number {
+  const mat = asObj(material)
+  const raw = wire ? finite(mat?.wireframeLinewidth, finite(mat?.linewidth, 1)) : finite(mat?.linewidth, 1)
+  if (!(raw > 0) || raw > 32) return 1
+  return raw
+}
+
+function triangleEdges(index: Obj | null, start: number, count: number, vertexCount: number): Uint32Array {
+  const seen = new Set<string>()
+  const pairs: number[] = []
+  const end = start + count
+  const add = (a: number, b: number) => {
+    if (a < 0 || b < 0 || a >= vertexCount || b >= vertexCount || a === b) return
+    const key = a < b ? `${a}:${b}` : `${b}:${a}`
+    if (seen.has(key)) return
+    seen.add(key)
+    pairs.push(a, b)
+  }
+  for (let i = start; i + 2 < end; i += 3) {
+    const a = readIndex(index, i)
+    const b = readIndex(index, i + 1)
+    const c = readIndex(index, i + 2)
+    add(a, b)
+    add(b, c)
+    add(c, a)
+  }
+  return Uint32Array.from(pairs)
 }
 
 function rangesOf(geometry: Obj, indexCount: number): Array<{ start: number; count: number; materialIndex: number }> {

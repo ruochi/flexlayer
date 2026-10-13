@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { homedir, tmpdir } from 'node:os'
@@ -238,6 +238,25 @@ describe('canvas 和 script', () => {
     )
     await renderLayer(root)
     expect(seen).toEqual(['3,5'])
+  })
+
+  it('读权限不会在 Node 20 上把同一条前缀插两次', () => {
+    const host = fileURLToPath(new URL('./canvas-dom.mjs', import.meta.url))
+    const grants = scriptReadGrants(host)
+    expect(grants.length).toBeGreaterThan(0)
+    const inserted = grants.map((grant) => {
+      expect(grant.startsWith('/')).toBe(true)
+      expect(grant).not.toBe('/')
+      expect(grant.includes('**')).toBe(false)
+      expect(grant).not.toBe('*')
+      try {
+        if (statSync(grant).isDirectory()) return grant.endsWith('/') ? `${grant}*` : `${grant}/*`
+      } catch {
+        // 不存在的路径原样插入，Node 不会再加通配。
+      }
+      return grant
+    })
+    expect(new Set(inserted).size).toBe(inserted.length)
   })
 
   it('node_modules 是符号链接时仍能跑 .layer 脚本', () => {

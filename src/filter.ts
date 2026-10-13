@@ -1,9 +1,9 @@
-import { applyGrade, parseGrade } from './grade.js'
 import { isGradient, parseGradient } from './gradient.js'
 import { parseColor } from './gradientField.js'
+import { loadOptional, loadOptionalSync, optionalHref } from './optional.js'
 import { attrByName } from './schema.js'
 import { colorFilterToCss, parseColorFilter } from './style.js'
-import type { AppliedFilter, ColorFilterSpec, GradeSpec } from './types.js'
+import type { AppliedFilter, ColorFilterSpec } from './types.js'
 
 /** 滤镜看到的像素。data 是非预乘 RGBA，改它就是改画面。 */
 export type FilterPixels = {
@@ -240,24 +240,30 @@ export function collectFilters(
   return { applied, issues }
 }
 
-const GRADE_HINT = '写成 lomo 0.8, fade 0.1，或 shadows #2a6080, highlights #ffd8a8, contrast 1.1, vignette 0.4'
 const FILTER_HINT =
   '写成 brightness(1.1) contrast(1.2) saturate(0.8) grayscale(0.2) hue-rotate(15) sepia(0.1) invert(0)，不要写 blur/drop-shadow'
 
-registerFilter<GradeSpec>({
-  name: 'grade',
-  kind: 'pixel',
-  layerOnly: true,
-  maskAttr: 'grade-mask',
-  includeBackdrop: true,
-  hint: GRADE_HINT,
-  maskHint: '和 grade 一起写，例如 <layer grade="lomo" grade-mask="radial-gradient(#fff0 30%, #fff)">',
-  maskPaintHint: '写成 linear-gradient(to right, #fff, #fff0)、radial-gradient(#fff0 30%, #fff) 或 gradient(...)；alpha 是强度',
-  parse: parseGrade,
-  apply(pixels, spec) {
-    applyGrade(pixels.data, pixels.width, pixels.height, spec, pixels.frame)
-  },
-})
+const gradeHref = optionalHref('./grade.js', import.meta.url)
+let gradeLoading: Promise<void> | null = null
+
+export function gradeReady(): boolean {
+  return getFilter('grade') != null
+}
+
+/** 第一次见到 grade 再装调色。登记仍然写进这张滤镜表。 */
+export async function ensureGradeFilter(): Promise<void> {
+  if (gradeReady()) return
+  gradeLoading ??= loadOptional<typeof import('./grade.js')>(gradeHref).then((mod) => {
+    if (!mod.parseGrade || !getFilter('grade')) throw new Error('调色模块没有登记 grade')
+  })
+  await gradeLoading
+}
+
+export function ensureGradeFilterSync(): void {
+  if (gradeReady()) return
+  const mod = loadOptionalSync<typeof import('./grade.js')>(gradeHref)
+  if (!mod || !getFilter('grade')) throw new Error('调色模块还没加载')
+}
 
 registerFilter<ColorFilterSpec[]>({
   name: 'filter',

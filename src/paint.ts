@@ -55,7 +55,7 @@ export type PaintOptions = {
   meshCache?: number | false
 }
 
-type PaintState = {
+export type PaintState = {
   canvasWidth: number
   canvasHeight: number
   meshFrames?: Map<LayerLayoutNode, MeshFrame>
@@ -900,61 +900,19 @@ function paintOverlay(ctx: PaintCtx, node: LayoutNode, overlay: OverlaySpec, sta
   ctx.restore()
 }
 
+type NoisePaint = typeof import('./paint-noise.js').paintNoise
+let paintNoiseFn: NoisePaint | null = null
+
+async function ensureNoise(): Promise<void> {
+  if (paintNoiseFn) return
+  const mod = await import('./paint-noise.js')
+  mod.bindNoise({ transformScale, drawNodeInk })
+  paintNoiseFn = mod.paintNoise
+}
+
 function paintNoise(ctx: PaintCtx, node: LayoutNode, noise: NoiseSpec, composite: 'soft-light' | 'source-over' = 'soft-light') {
-  const w = Math.max(1, Math.ceil(node.width))
-  const h = Math.max(1, Math.ceil(node.height))
-  if (node.width <= 0 || node.height <= 0 || noise.amount <= 0) return
-  const k = transformScale(ctx)
-  const tw = Math.max(1, Math.ceil(w * k))
-  const th = Math.max(1, Math.ceil(h * k))
-  const off = createCanvas(tw, th)
-  const octx = off.getContext('2d') as PaintCtx
-  const img = octx.createImageData(tw, th)
-  const data = img.data
-  let colorR = 255
-  let colorG = 255
-  let colorB = 255
-  if (noise.color) {
-    const m = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(noise.color.trim())
-    if (m) {
-      const hex = m[1]!
-      if (hex.length === 3) {
-        colorR = Number.parseInt(hex[0]! + hex[0]!, 16)
-        colorG = Number.parseInt(hex[1]! + hex[1]!, 16)
-        colorB = Number.parseInt(hex[2]! + hex[2]!, 16)
-      } else {
-        colorR = Number.parseInt(hex.slice(0, 2), 16)
-        colorG = Number.parseInt(hex.slice(2, 4), 16)
-        colorB = Number.parseInt(hex.slice(4, 6), 16)
-      }
-    }
-  }
-  // 确定性噪点：同一输入同一纹理
-  let seed = (Math.floor(node.x) * 73856093) ^ (Math.floor(node.y) * 19349663) ^ (w * 83492791) ^ (h * 39916801)
-  const next = () => {
-    seed = (seed * 1664525 + 1013904223) >>> 0
-    return seed / 0xffffffff
-  }
-  for (let i = 0; i < data.length; i += 4) {
-    const n = next()
-    data[i] = Math.round(colorR * n)
-    data[i + 1] = Math.round(colorG * n)
-    data[i + 2] = Math.round(colorB * n)
-    data[i + 3] = Math.round(255 * noise.amount)
-  }
-  octx.putImageData(img, 0, 0)
-  // 按墨迹 alpha 裁切，文字不会整块铺噪点
-  const clip = createCanvas(tw, th)
-  const clipCtx = clip.getContext('2d') as PaintCtx
-  clipCtx.setTransform(k, 0, 0, k, 0, 0)
-  clipCtx.translate(-node.x, -node.y)
-  drawNodeInk(clipCtx, node, 0, '#ffffff')
-  octx.globalCompositeOperation = 'destination-in'
-  octx.drawImage(clip, 0, 0)
-  ctx.save()
-  ctx.globalCompositeOperation = composite
-  ctx.drawImage(off, node.x, node.y, node.width, node.height)
-  ctx.restore()
+  if (!paintNoiseFn) throw new Error('噪点模块还没加载')
+  paintNoiseFn(ctx, node, noise, composite)
 }
 
 function layerMaskOf(node: LayoutNode): LayoutNode[] | undefined {
@@ -1087,32 +1045,6 @@ function nodeDeviceBounds(ctx: PaintCtx, node: LayoutNode, padDevice: number) {
   return { matrix, minX, minY, maxX, maxY, sw: maxX - minX, sh: maxY - minY }
 }
 
-function sampleBilinear(
-  data: Uint8ClampedArray,
-  w: number,
-  h: number,
-  x: number,
-  y: number,
-): [number, number, number, number] {
-  const x0 = Math.max(0, Math.min(w - 1, Math.floor(x)))
-  const y0 = Math.max(0, Math.min(h - 1, Math.floor(y)))
-  const x1 = Math.min(w - 1, x0 + 1)
-  const y1 = Math.min(h - 1, y0 + 1)
-  const fx = x - Math.floor(x)
-  const fy = y - Math.floor(y)
-  const i00 = (y0 * w + x0) * 4
-  const i10 = (y0 * w + x1) * 4
-  const i01 = (y1 * w + x0) * 4
-  const i11 = (y1 * w + x1) * 4
-  const out: [number, number, number, number] = [0, 0, 0, 0]
-  for (let c = 0; c < 4; c++) {
-    const v0 = data[i00 + c]! * (1 - fx) + data[i10 + c]! * fx
-    const v1 = data[i01 + c]! * (1 - fx) + data[i11 + c]! * fx
-    out[c] = v0 * (1 - fy) + v1 * fy
-  }
-  return out
-}
-
 function paintBackdropBlur(ctx: PaintCtx, node: LayoutNode, radius: number) {
   if (radius <= 0 || node.width <= 0 || node.height <= 0) return
   const { matrix, minX, minY, sw, sh } = nodeDeviceBounds(ctx, node, 0)
@@ -1139,85 +1071,22 @@ function paintBackdropBlur(ctx: PaintCtx, node: LayoutNode, radius: number) {
   ctx.restore()
 }
 
-const EDT_INF = 1e20
+type DistanceModule = typeof import('./distance-field.js')
+let distanceApi: DistanceModule | null = null
 
-/** Felzenszwalb 一维平方距离变换。墨迹膨胀、描边和玻璃共用。 */
-function edt1d(f: Float64Array, n: number, d: Float64Array, v: Int32Array, z: Float64Array) {
-  let k = 0
-  v[0] = 0
-  z[0] = -EDT_INF
-  z[1] = EDT_INF
-  for (let q = 1; q < n; q++) {
-    let s = (f[q]! + q * q - (f[v[k]!]! + v[k]! * v[k]!)) / (2 * q - 2 * v[k]!)
-    while (s <= z[k]!) {
-      k--
-      s = (f[q]! + q * q - (f[v[k]!]! + v[k]! * v[k]!)) / (2 * q - 2 * v[k]!)
-    }
-    k++
-    v[k] = q
-    z[k] = s
-    z[k + 1] = EDT_INF
-  }
-  k = 0
-  for (let q = 0; q < n; q++) {
-    while (z[k + 1]! < q) k++
-    const dq = q - v[k]!
-    d[q] = dq * dq + f[v[k]!]!
-  }
+async function ensureDistanceField(): Promise<void> {
+  if (distanceApi) return
+  distanceApi = await import('./distance-field.js')
 }
 
-/** 种子为 0、其余为 EDT_INF 的网格，原地写成到最近种子的平方距离。 */
-function edt2d(grid: Float64Array, w: number, h: number) {
-  const n = Math.max(w, h)
-  const f = new Float64Array(n)
-  const d = new Float64Array(n)
-  const v = new Int32Array(n)
-  const z = new Float64Array(n + 1)
-  for (let x = 0; x < w; x++) {
-    for (let y = 0; y < h; y++) f[y] = grid[y * w + x]!
-    edt1d(f, h, d, v, z)
-    for (let y = 0; y < h; y++) grid[y * w + x] = d[y]!
-  }
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) f[x] = grid[y * w + x]!
-    edt1d(f, w, d, v, z)
-    for (let x = 0; x < w; x++) grid[y * w + x] = d[x]!
-  }
-}
-
-/**
- * 每个像素到最近种子的欧氏距离。
- * bias 从开方结果里减去：玻璃用 0.5，让距离落到像素边界而不是像素中心。
- */
 function distanceToSites(isSite: (index: number) => boolean, w: number, h: number, bias = 0): Float32Array {
-  const grid = new Float64Array(w * h)
-  for (let i = 0; i < w * h; i++) grid[i] = isSite(i) ? 0 : EDT_INF
-  edt2d(grid, w, h)
-  const out = new Float32Array(w * h)
-  for (let i = 0; i < w * h; i++) {
-    const g = grid[i]!
-    out[i] = g > 0 ? Math.max(0, Math.sqrt(g) - bias) : 0
-  }
-  return out
-}
-
-/** 墨迹内部每个像素到最近墨迹边缘的欧氏距离（设备像素） */
-function inkDistanceField(maskData: Uint8ClampedArray, w: number, h: number): Float32Array {
-  return distanceToSites((i) => maskData[i * 4 + 3]! < 128, w, h, 0.5)
+  if (!distanceApi) throw new Error('距离场还没加载')
+  return distanceApi.distanceToSites(isSite, w, h, bias)
 }
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
-  if (edge0 === edge1) return x >= edge1 ? 1 : 0
-  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)))
-  return t * t * (3 - 2 * t)
-}
-
-/** 描边环带。d 为到墨迹边界的距离；在 outer 处约 1px 做 smoothstep。 */
-function bandCoverage(d: number, inner: number, outer: number): number {
-  if (!(outer > inner) || d <= 0 || d >= outer + 0.5) return 0
-  const outerA = 1 - smoothstep(outer - 0.5, outer + 0.5, d)
-  const innerA = inner <= 0 ? 1 : smoothstep(inner - 0.5, inner + 0.5, d)
-  return outerA * innerA
+  if (!distanceApi) throw new Error('距离场还没加载')
+  return distanceApi.smoothstep(edge0, edge1, x)
 }
 
 const RASTER_MAX_SIDE = 8192
@@ -1553,59 +1422,24 @@ function drawEffectInk(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: 
   else drawNodeInk(ctx, node, spread + extra)
 }
 
-type StrokeBand = { inner: number; outer: number; color: string; side: 'out' | 'in' }
+type StrokePaint = typeof import('./paint-stroke.js').paintInkStrokes
+let paintInkStrokesFn: StrokePaint | null = null
 
-function collectStrokeBands(layers: InkStrokeSpec[], phase: 'outer' | 'inner'): StrokeBand[] {
-  const bands: StrokeBand[] = []
-  const take = (position: InkStrokeSpec['position'], side: 'out' | 'in', scale: number) => {
-    let prev = 0
-    for (const layer of layers) {
-      if (layer.position !== position) continue
-      bands.push({ inner: prev * scale, outer: layer.width * scale, color: layer.color, side })
-      prev = layer.width
-    }
-  }
-  if (phase === 'outer') {
-    take('outside', 'out', 1)
-    take('center', 'out', 0.5)
-  } else {
-    take('inside', 'in', 1)
-    take('center', 'in', 0.5)
-  }
-  bands.sort((a, b) => b.outer - a.outer)
-  return bands.filter((band) => band.outer > band.inner + 1e-3)
-}
-
-/** 把外侧描边的不透明度扩进墨迹，只盖住填充的抗锯齿边，不改外缘。 */
-function tuckStrokeUnderInk(alpha: Uint8ClampedArray, src: Uint8ClampedArray, w: number, h: number, radius: number) {
-  const tmp = new Uint8ClampedArray(w * h)
-  for (let y = 0; y < h; y++) {
-    const row = y * w
-    for (let x = 0; x < w; x++) {
-      let m = 0
-      const x0 = Math.max(0, x - radius)
-      const x1 = Math.min(w - 1, x + radius)
-      for (let xx = x0; xx <= x1; xx++) {
-        const v = alpha[row + xx]!
-        if (v > m) m = v
-      }
-      tmp[row + x] = m
-    }
-  }
-  for (let x = 0; x < w; x++) {
-    for (let y = 0; y < h; y++) {
-      const i = y * w + x
-      if (src[i * 4 + 3]! === 0) continue
-      let m = 0
-      const y0 = Math.max(0, y - radius)
-      const y1 = Math.min(h - 1, y + radius)
-      for (let yy = y0; yy <= y1; yy++) {
-        const v = tmp[yy * w + x]!
-        if (v > m) m = v
-      }
-      if (m > alpha[i]!) alpha[i] = m
-    }
-  }
+async function ensureInkStroke(): Promise<void> {
+  if (paintInkStrokesFn) return
+  const mod = await import('./paint-stroke.js')
+  mod.bindStroke({
+    drawInkMask,
+    drawNodeInk,
+    groupInkBounds,
+    leafInkBounds,
+    rasterizeUser,
+    rasterizeOnScreen,
+    blitCoverage,
+    transformTurns,
+    inkNeedsScreen,
+  })
+  paintInkStrokesFn = mod.paintInkStrokes
 }
 
 function paintInkStrokes(
@@ -1615,54 +1449,9 @@ function paintInkStrokes(
   source?: { bounds: Box; draw: (ctx: PaintCtx) => void },
   state?: PaintState,
 ) {
-  const layers = node.inkStroke
-  if (!layers?.length) return
-  const bands = collectStrokeBands(layers, phase)
-  if (bands.length === 0) return
-  const subtree = node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group'
-  const base = source?.bounds ?? (subtree ? groupInkBounds(node, state) : leafInkBounds(node))
-  if (!base || base.width <= 0 || base.height <= 0) return
-  const reach = phase === 'outer' ? outerInkStrokeReach(layers) : 2
-  const pad = Math.ceil(Math.max(reach, 2)) + 2
-  const user: Box = { x: base.x - pad, y: base.y - pad, width: base.width + pad * 2, height: base.height + pad * 2 }
-  const draw = (octx: PaintCtx) => {
-    if (source) source.draw(octx)
-    else if (subtree) drawInkMask(octx, node, true, state)
-    else drawNodeInk(octx, node, 0, '#ffffff')
-  }
-  const matrix = ctx.getTransform()
-  const turned = transformTurns(matrix) || inkNeedsScreen(node) ? rasterizeOnScreen(matrix, user, draw) : null
-  const axis = turned ? null : rasterizeUser(user, draw)
-  const raster = turned ?? (axis ? { canvas: axis.canvas, x: axis.x, y: axis.y, scale: 1 } : null)
-  if (!raster) return
-  const { canvas, x, y, scale } = raster
-  const w = canvas.width
-  const h = canvas.height
-  const src = (canvas.getContext('2d') as PaintCtx).getImageData(0, 0, w, h).data
-  const inkAt = (i: number) => src[i * 4 + 3]! >= 128
-  const outside = bands.some((band) => band.side === 'out') ? distanceToSites(inkAt, w, h, 0) : null
-  const inside = bands.some((band) => band.side === 'in') ? distanceToSites((i) => !inkAt(i), w, h, 0) : null
-  const box: Box = { x: node.x, y: node.y, width: node.width, height: node.height }
-  const screen = turned
-    ? { matrix, cover: user, sample: turned.sample, dw: turned.dw, dh: turned.dh }
-    : undefined
-  for (const band of bands) {
-    const field = band.side === 'out' ? outside : inside
-    if (!field) continue
-    const inner = band.inner * scale
-    const outer = band.outer * scale
-    const alpha = new Uint8ClampedArray(w * h)
-    for (let i = 0; i < w * h; i++) {
-      let cover = bandCoverage(field[i]!, inner, outer)
-      if (cover <= 0) continue
-      if (band.side === 'in') cover *= src[i * 4 + 3]! / 255
-      const a = Math.round(255 * cover)
-      if (a > 0) alpha[i] = a
-    }
-    // 填充的抗锯齿边要压在描边上。旋转后这条边不落在像素网格上，垫进大约 1 个屏幕像素，黑底才不会从缝里露出来。
-    if (turned && band.side === 'out') tuckStrokeUnderInk(alpha, src, w, h, Math.max(1, Math.round(turned.sample)))
-    blitCoverage(ctx, x, y, alpha, w, h, band.color, box, screen)
-  }
+  if (!node.inkStroke?.length) return
+  if (!paintInkStrokesFn) throw new Error('描边模块还没加载')
+  paintInkStrokesFn(ctx, node, phase, source, state)
 }
 
 /** 与 drawSubtreeInk 同一套坐标，把内侧描边从 overlay 蒙版里挖掉。 */
@@ -1689,179 +1478,19 @@ function eraseInnerStrokes(ctx: PaintCtx, node: LayoutNode, state?: PaintState) 
   ctx.restore()
 }
 
-/** 可分离盒式模糊，用来抹平二值距离场的台阶，让法线方向连续 */
-function boxBlurField(src: Float32Array, w: number, h: number, r: number): Float32Array {
-  if (r < 1) return src
-  const tmp = new Float32Array(w * h)
-  const out = new Float32Array(w * h)
-  const span = 2 * r + 1
-  for (let y = 0; y < h; y++) {
-    const row = y * w
-    let acc = 0
-    for (let i = -r; i <= r; i++) acc += src[row + Math.min(w - 1, Math.max(0, i))]!
-    for (let x = 0; x < w; x++) {
-      tmp[row + x] = acc / span
-      acc += src[row + Math.min(w - 1, x + r + 1)]! - src[row + Math.max(0, x - r)]!
-    }
-  }
-  for (let x = 0; x < w; x++) {
-    let acc = 0
-    for (let i = -r; i <= r; i++) acc += tmp[Math.min(h - 1, Math.max(0, i)) * w + x]!
-    for (let y = 0; y < h; y++) {
-      out[y * w + x] = acc / span
-      acc += tmp[Math.min(h - 1, y + r + 1) * w + x]! - tmp[Math.max(0, y - r) * w + x]!
-    }
-  }
-  return out
+type GlassPaint = typeof import('./paint-glass.js').paintGlass
+let paintGlassFn: GlassPaint | null = null
+
+async function ensureGlass(): Promise<void> {
+  if (paintGlassFn) return
+  const mod = await import('./paint-glass.js')
+  mod.bindGlass({ transformScale, nodeDeviceBounds, drawNodeInk })
+  paintGlassFn = mod.paintGlass
 }
 
-const GLASS_PROFILE_STEPS = 256
-
-/**
- * 边缘弧面的向内位移表：t∈[0,1]（0=边缘，1=弧面内沿）→ 位移（设备像素）。
- * shift = S·(1-t)²：内沿处位移与斜率都归零，和平坦中心无缝衔接；
- * S ≤ bezel/2 时 d + shift(d) 单调，背景在边缘被连续放大而不会翻折或拉成一条线。
- */
-function glassShiftTable(bezel: number, glass: GlassSpec): Float32Array {
-  const maxShift = bezel * 0.5 * Math.min(1, Math.max(0, glass.refraction))
-  const table = new Float32Array(GLASS_PROFILE_STEPS + 1)
-  for (let i = 0; i <= GLASS_PROFILE_STEPS; i++) {
-    const u = 1 - i / GLASS_PROFILE_STEPS
-    table[i] = maxShift * u * u
-  }
-  return table
-}
-
-/**
- * iOS Liquid Glass：墨迹距离场 → 边缘凸弧面 Snell 折射（中心平坦不变形）→ 色散 → 朝光边缘高光。
- * `blur` 为 0 时背景完全清晰，只有折射。
- * `drawShadow` 在取样之后、玻璃落版之前画，投影不会透过玻璃被看到。
- */
 function paintGlass(ctx: PaintCtx, node: LayoutNode, glass: GlassSpec, drawShadow?: () => void) {
-  if (node.width <= 0 || node.height <= 0) {
-    drawShadow?.()
-    return
-  }
-  const k = transformScale(ctx)
-  const samplePad = Math.ceil(glass.blur * 2 * k) + 2
-  const { matrix, minX, minY, sw, sh } = nodeDeviceBounds(ctx, node, samplePad)
-  if (sw <= 0 || sh <= 0) {
-    drawShadow?.()
-    return
-  }
-
-  const snapshot = ctx.getImageData(minX, minY, sw, sh)
-  let srcData = snapshot.data
-  if (glass.blur > 0) {
-    const src = createCanvas(sw, sh)
-    ;(src.getContext('2d') as PaintCtx).putImageData(snapshot, 0, 0)
-    const blurred = createCanvas(sw, sh)
-    const bctx = blurred.getContext('2d') as PaintCtx
-    bctx.filter = `blur(${glass.blur * k}px) saturate(1.15) brightness(1.04)`
-    bctx.drawImage(src, 0, 0)
-    bctx.filter = 'none'
-    srcData = bctx.getImageData(0, 0, sw, sh).data
-  }
-
-  const mask = createCanvas(sw, sh)
-  const mctx = mask.getContext('2d') as PaintCtx
-  mctx.setTransform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e - minX, matrix.f - minY)
-  drawNodeInk(mctx, node, 0, '#ffffff')
-  const maskData = mctx.getImageData(0, 0, sw, sh).data
-
-  const rawDist = inkDistanceField(maskData, sw, sh)
-  let inradius = 0
-  for (let i = 0; i < rawDist.length; i++) if (rawDist[i]! > inradius) inradius = rawDist[i]!
-  const dist = boxBlurField(rawDist, sw, sh, Math.max(1, Math.round(1.5 * k)))
-
-  const bezelLogic = Math.min(64, Math.max(3, Math.min(node.width, node.height) * glass.bezel))
-  const bezel = Math.max(1, Math.min(bezelLogic * k, inradius))
-  const shiftTable = glassShiftTable(bezel, glass)
-  if (process.env.GLASS_DEBUG) console.log({ sw, sh, inradius, bezel, k, mid: rawDist[Math.floor(sh / 2) * sw + Math.floor(sw / 2)], table: [shiftTable[0], shiftTable[64], shiftTable[128], shiftTable[192], shiftTable[256]] })
-  const disp = glass.dispersion
-  const lineWidth = Math.max(0.8, 1.1 * k)
-  const lightX = -0.55
-  const lightY = -0.835
-
-  const out = createCanvas(sw, sh)
-  const octx = out.getContext('2d') as PaintCtx
-  const outImg = octx.createImageData(sw, sh)
-  const outData = outImg.data
-
-  for (let y = 0; y < sh; y++) {
-    for (let x = 0; x < sw; x++) {
-      const i = y * sw + x
-      const mi = i * 4
-      const a = maskData[mi + 3]!
-      if (a < 1) continue
-      const d = rawDist[i]!
-      if (d >= bezel) {
-        outData[mi] = srcData[mi]!
-        outData[mi + 1] = srcData[mi + 1]!
-        outData[mi + 2] = srcData[mi + 2]!
-        outData[mi + 3] = (srcData[mi + 3]! * a) / 255
-        continue
-      }
-      const gx = dist[Math.min(sw - 1, x + 1) + y * sw]! - dist[Math.max(0, x - 1) + y * sw]!
-      const gy = dist[x + Math.min(sh - 1, y + 1) * sw]! - dist[x + Math.max(0, y - 1) * sw]!
-      const gl = Math.hypot(gx, gy)
-      const nx = gl > 1e-6 ? gx / gl : 0
-      const ny = gl > 1e-6 ? gy / gl : 0
-      const t = d / bezel
-      const shift = shiftTable[Math.min(GLASS_PROFILE_STEPS, Math.round(t * GLASS_PROFILE_STEPS))]!
-
-      let r: number
-      let g: number
-      let b: number
-      let sa: number
-      if (disp > 0) {
-        const sr = shift * (1 + disp)
-        const sb = shift * (1 - disp)
-        const cr = sampleBilinear(srcData, sw, sh, x + nx * sr, y + ny * sr)
-        const cg = sampleBilinear(srcData, sw, sh, x + nx * shift, y + ny * shift)
-        const cb = sampleBilinear(srcData, sw, sh, x + nx * sb, y + ny * sb)
-        r = cr[0]
-        g = cg[1]
-        b = cb[2]
-        sa = cg[3]
-      } else {
-        ;[r, g, b, sa] = sampleBilinear(srcData, sw, sh, x + nx * shift, y + ny * shift)
-      }
-
-      if (glass.specular > 0) {
-        // 外法线 = -梯度；朝光一侧亮，对侧有一道较弱的回光
-        const facing = -(nx * lightX + ny * lightY)
-        const lit = Math.pow(Math.max(0, facing), 1.3) + 0.45 * Math.pow(Math.max(0, -facing), 1.3) + 0.12
-        const u = 1 - t
-        const line = Math.exp(-d / lineWidth)
-        const hl = Math.min(1, (0.85 * line + 0.3 * u * u * u) * lit * glass.specular)
-        r += (255 - r) * hl
-        g += (255 - g) * hl
-        b += (255 - b) * hl
-        sa += (255 - sa) * hl
-      }
-      outData[mi] = r
-      outData[mi + 1] = g
-      outData[mi + 2] = b
-      outData[mi + 3] = (sa * a) / 255
-    }
-  }
-  octx.putImageData(outImg, 0, 0)
-
-  const tint = glass.tint ?? (glass.variant === 'thick' ? '#ffffff2a' : glass.variant === 'regular' ? '#ffffff14' : undefined)
-  if (tint) {
-    octx.save()
-    octx.globalCompositeOperation = 'source-atop'
-    octx.fillStyle = tint
-    octx.fillRect(0, 0, sw, sh)
-    octx.restore()
-  }
-
-  drawShadow?.()
-  ctx.save()
-  ctx.setTransform(1, 0, 0, 1, 0, 0)
-  ctx.drawImage(out, minX, minY)
-  ctx.restore()
+  if (!paintGlassFn) throw new Error('玻璃模块还没加载')
+  paintGlassFn(ctx, node, glass, drawShadow)
 }
 
 type BitmapCrop = { u: number; v: number; width: number; height: number; scaleX: number; scaleY: number }
@@ -2658,10 +2287,43 @@ export function paintLayerIsolated(node: LayerLayoutNode, masked: boolean): Canv
   return canvas
 }
 
+function paintFeatureNeeds(node: LayoutNode): { distance: boolean; stroke: boolean; glass: boolean; noise: boolean } {
+  const need = { distance: false, stroke: false, glass: false, noise: false }
+  const spread = (spec?: { spread: number }) => spec != null && Math.abs(spec.spread) > 1e-3
+  const walk = (current: LayoutNode) => {
+    if (current.inkStroke?.length) {
+      need.stroke = true
+      need.distance = true
+    }
+    if (current.glass) {
+      need.glass = true
+      need.distance = true
+    }
+    if (current.noise && current.noise.amount > 0) need.noise = true
+    if (spread(current.shadow) || spread(current.glow) || spread(current.innerShadow) || spread(current.innerGlow)) need.distance = true
+    if (current.kind === 'layer' || current.kind === 'flex' || current.kind === 'group') {
+      for (const child of current.children) walk(child)
+      if (current.kind === 'layer' && current.mask) for (const child of current.mask) walk(child)
+    }
+  }
+  walk(node)
+  return need
+}
+
+/** 开画之前装上这棵树用到的距离场、描边、玻璃和噪点。没写的不装。 */
+export async function ensurePaintFeatures(root: LayoutNode): Promise<void> {
+  const need = paintFeatureNeeds(root)
+  if (need.distance) await ensureDistanceField()
+  if (need.stroke) await ensureInkStroke()
+  if (need.glass) await ensureGlass()
+  if (need.noise) await ensureNoise()
+}
+
 export async function paintDocument(
   root: LayerLayoutNode,
   opts: PaintOptions,
 ): Promise<Canvas> {
+  await ensurePaintFeatures(root)
   const w = Math.round(opts.width * opts.scale)
   const h = Math.round(opts.height * opts.scale)
   const canvas = createCanvas(w, h)

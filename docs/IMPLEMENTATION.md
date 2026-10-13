@@ -2,9 +2,25 @@
 
 写法和规则以 [SPEC.md](../SPEC.md) 为准。本文只记效果和公式的实现在哪、为什么这样写。
 
+## 按需加载
+
+绘制和排版函数保持同步。模块在进这些函数之前装好，装过一次的进程里后面直接用。
+
+| 模块 | 什么时候装 | 入口 |
+| --- | --- | --- |
+| 公式 `math/layout.ts`、OpenType、STIX | 树上有公式标签，或源码里写了公式 | `author-features.ts`，在 `prepareAssets` 里。`layoutSync` / `canvas.create` 若还没装，再同步确认 |
+| 调色 `grade.ts` | 树上有 `grade` 或 `grade-mask` | 同上。登记仍进 `filter.ts` 的滤镜表 |
+| 距离场、沿墨迹描边、玻璃、噪点 | 排版结果里真有对应效果 | `paintDocument` 开头的 `ensurePaintFeatures` |
+| 图标码位 | 第一次把图标名换成码位 | `icons.ts` 读 `icon-codepoints.txt`。没有图标字体时不读、也不下载字体文件 |
+| esbuild、TypeScript | 源文件是 `.tsx` / `.ts` / `.jsx` / `.js` | `cli-main.ts` 再去加载。`.layer` 不走这条路 |
+| `frame.ts` | 源文件是 Composition，要渲染多帧或联系表 | 同上 |
+| esbuild 缓存 | 同一份源文件再次执行 | `~/.cache/flexlayer/code/<内容哈希>/entry.mjs`。入口、相对引用和当前 flexlayer 安装路径一起哈希，变了就重打 |
+
+`rules.ts` 只用 `math/rules.ts` 里的标签表，不拉公式排版。
+
 ## 效果
 
-归属：layer / 图形 / 线条写属性；文字 / flex HTML 写 `style`。`overlay`、`grade`、`grade-mask` 只允许写在 `layer` 上。`<mask>` 是标签，不是属性。绘制顺序见 SPEC 第 9 章开头。
+归属：layer / 图形 / 线条写属性；文字 / flex HTML 写 `style`。`overlay`、`grade`、`grade-mask` 只允许写在 `layer` 上。`<mask>` 是标签，不是属性。绘制顺序见 SPEC「效果」。
 
 ### 墨迹原则
 
@@ -88,7 +104,7 @@
 
 `pixel` 滤镜的 `apply` 拿到非预乘 RGBA，按满强度改像素，用 `frame` 知道盒子在缓冲里的位置。有遮罩时，引擎在 `apply` 之后用遮罩 alpha 和调用前的像素混合。`includeBackdrop: true` 时，写在根 layer 上会连画布底色一起处理。`canvas` 滤镜只返回一段 CSS filter 字符串。
 
-规范写法见 [SPEC.md 第 9.3 节](../SPEC.md)。
+规范写法见 [SPEC.md](../SPEC.md)「效果」。
 
 ### 实现触点
 
@@ -135,5 +151,6 @@
 - 不写 `material` 时按 three.js 的材质种类换算。`MeshLambertMaterial` 和 `MeshToonMaterial` 用 `matte`，只有明暗。`MeshPhongMaterial` 用 `plastic`，`roughness = clamp(1 - shininess / 100)`，`shininess` 100 是光滑，环境最清楚。`MeshPhysicalMaterial` 的 `transmission` 不小于 0.5 用 `glass`（假折射：方窗、轮廓光、一层折射）。其余金属度不小于 0.5 用 `metal`，否则 `plastic`，粗糙度来自图元，缺省 0.65。写了 `material` 则整只模型都用它。glb 没有种类标记，仍按金属度分。
 - `map` 的像素已经在内存里时，按 uv 取样，乘上材质色，再进同一套明暗。金属和塑料仍用工作室环境。网址还没解码的贴图当没有。顶点色乘上材质色后按顶点插值。`emissive` 乘上 `emissiveIntensity`，加在明暗之后，不照亮别的物体。`ShaderMaterial` 不执行，从 `color`、`uColor`、`diffuse` 这类 uniform 里取一个颜色当底色。
 - 内存网格的图元放在 `WeakMap` 里，规格上只留内容哈希。场景缓存按这个哈希失效，不把 Object3D 放进键。
-- `src/three.ts` 不 import `three`。类型看 `isMesh`。`flexlayer/three` 是同一份文件。裸包名从导入它的源文件往上找 `node_modules`，按 `package.json` 的 `import` 条件取文件，不走 `require.resolve`。
+- `src/three.ts` 不 import `three`。类型看 `isMesh` / `isLine`。`flexlayer/three` 是同一份文件。裸包名从导入它的源文件往上找 `node_modules`，按 `package.json` 的 `import` 条件取文件，不走 `require.resolve`。
+- 线段和图元走同一条投影。下标是成对的端点，不进三角形光栅，也不进阴影图。深度测试和实心网格共用，更靠近观众的盖住更远的。`wireframe` 只出边。线宽在超采样缓冲里按输出像素铺开，缩回去仍是大约 1 像素。
 

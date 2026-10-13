@@ -4,6 +4,7 @@ import { readFileSync, statSync } from 'node:fs'
 export type GlbPrimitive = {
   positions: Float32Array
   normals?: Float32Array
+  /** 三角形下标。`lines` 为真时改成线段两端的下标对。 */
   indices?: Uint32Array
   color: [number, number, number, number]
   roughness: number
@@ -30,6 +31,10 @@ export type GlbPrimitive = {
   }
   /** 自发光，0–1，已经乘过强度。加在明暗之后。 */
   emissive?: [number, number, number]
+  /** 线段，不填三角形。来自 three.js 的 Line 或 `wireframe: true`。 */
+  lines?: boolean
+  /** 屏幕像素。不写是 1。 */
+  linePx?: number
 }
 
 type Mat4 = number[]

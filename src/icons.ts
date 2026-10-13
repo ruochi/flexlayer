@@ -2,20 +2,34 @@
  * Material Symbols Outlined。
  * 写法与网页一致：`<span class="material-symbols-outlined">home</span>`。
  * 排版按码位拆开，连字留不住，所以这里把图标名换成一个码位再量、再画。
+ * 名字对照在第一次用到图标字体时才从文件读入。字体文件仍由字体目录按需下载。
  */
 
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { ICON_FONT_FAMILY } from './font-catalog.js'
 import { builtinFont } from './fonts.js'
-import { ICON_CODEPOINTS_TEXT } from './icon-codepoints.js'
 import type { TextRunStyle } from './types.js'
 
 export { ICON_FONT_FAMILY }
 
-const codepoints = new Map<string, number>()
-for (const line of ICON_CODEPOINTS_TEXT.split('\n')) {
-  const i = line.indexOf(' ')
-  if (i <= 0) continue
-  codepoints.set(line.slice(0, i), Number.parseInt(line.slice(i + 1), 16))
+let codepoints: Map<string, number> | null = null
+
+export function iconTableReady(): boolean {
+  return codepoints != null
+}
+
+function iconCodepoints(): Map<string, number> {
+  if (codepoints) return codepoints
+  const text = readFileSync(fileURLToPath(new URL('./icon-codepoints.txt', import.meta.url)), 'utf8')
+  const map = new Map<string, number>()
+  for (const line of text.split('\n')) {
+    const i = line.indexOf(' ')
+    if (i <= 0) continue
+    map.set(line.slice(0, i), Number.parseInt(line.slice(i + 1), 16))
+  }
+  codepoints = map
+  return map
 }
 
 const TOKEN = /[a-z0-9_]+/g
@@ -28,7 +42,7 @@ export type SymbolsNote = {
 }
 
 export function iconCodepoint(name: string): number | undefined {
-  return codepoints.get(name.trim())
+  return iconCodepoints().get(name.trim())
 }
 
 export function isSymbolsFamily(family: string): boolean {
@@ -81,8 +95,9 @@ export function applySymbolsClass(
 export function rewriteIconLigatures(text: string, family: string): { text: string; missing: string[] } {
   if (!isSymbolsFamily(family)) return { text, missing: [] }
   const missing: string[] = []
+  const table = iconCodepoints()
   const next = text.replace(TOKEN, (token) => {
-    const cp = codepoints.get(token)
+    const cp = table.get(token)
     if (cp == null) {
       missing.push(token)
       return token

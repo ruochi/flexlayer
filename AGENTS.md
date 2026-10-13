@@ -31,19 +31,19 @@
 | 故意出现的问题 | `expect="overflow-canvas: 出血图"`。写在根上覆盖整棵子树。没出现报 `unused-expect` | `unused-expect` |
 | 最小字号 | 根上 `min-font="print"` 或 `min-font="16"`。不写按屏幕 `min(宽, 高) / 1080 × 24`。多处过小合并成一条 | `min-font-size` |
 
-## 按主题去哪一章
+## 按主题去哪一节
 
 | 要写什么 | 看 |
 | --- | --- |
-| 蒙版、抠图、`preview`、`derive` | SPEC 第 4.1 节和第 6 章 |
-| 透视、镜头、实体 | SPEC 第 3 章 |
-| 公式 | SPEC 第 4.1 节 |
-| `canvas.create`、动画、`glyph` | SPEC 第 5.3 节、第 13 章、第 15 章 |
-| 问题码和报告字段 | SPEC 第 10 章 |
+| `layer` 怎么包、怎么定位 | SPEC「layer」 |
+| 支持哪些 HTML、SVG、颜料、效果 | SPEC「HTML 和 SVG」 |
+| 实体、镜头、地面 | SPEC「实体和镜头」 |
+| 蒙版、抠图、`glyph`、`canvas.create`、动画 | SPEC「蒙版和程序」 |
+| 问题码和报告字段 | SPEC「报告」 |
 | 某个属性怎么写 | [docs/attrs.json](docs/attrs.json)，按名字查 |
 | 按气质选字体 | [docs/RESOURCES.md](docs/RESOURCES.md) 的推荐字体。寒蝉端黑体是默认字体。其余名字自己带字体文件 |
 
-HTML 和 `display:flex` 按 CSS 渲染，默认值不在这里记。文字盒子里不能嵌套块级标签、图标写法在 SPEC 第 4、5 章。
+HTML 和 `display:flex` 按 CSS 渲染，默认值不在这里记。
 
 ## 仓库
 

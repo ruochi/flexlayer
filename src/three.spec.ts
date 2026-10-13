@@ -193,6 +193,45 @@ describe('fromThree', () => {
     expect(shader[0]!.shade).toBe('plastic')
     expect(shader[0]!.color[0]).toBeGreaterThan(shader[0]!.color[2]!)
   })
+
+  it('LineSegments 收成线段，wireframe 只留边，Points 跳过', () => {
+    const positions = new Float32Array([0, 0, 0, 2, 0, 0, 0, 2, 0])
+    const position = {
+      count: 3,
+      getX: (i: number) => positions[i * 3]!,
+      getY: (i: number) => positions[i * 3 + 1]!,
+      getZ: (i: number) => positions[i * 3 + 2]!,
+    }
+    const geometry = { isBufferGeometry: true, attributes: { position } }
+    const line = {
+      isLine: true,
+      isLineSegments: true,
+      geometry,
+      material: { color: { r: 1, g: 0, b: 0 }, linewidth: 2 },
+      matrixWorld: { elements: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 4, 0, 1] },
+    }
+    const segments = fromThree(line)
+    expect(segments).toHaveLength(1)
+    expect(segments[0]!.lines).toBe(true)
+    expect(segments[0]!.linePx).toBe(2)
+    expect(Array.from(segments[0]!.indices!)).toEqual([0, 1])
+    expect(segments[0]!.positions[1]).toBeCloseTo(4)
+    expect(segments[0]!.positions[3]).toBeCloseTo(2)
+
+    const wire = {
+      isMesh: true,
+      geometry: { ...geometry, index: { count: 3, getX: (i: number) => i } },
+      material: { color: { r: 0, g: 1, b: 0 }, wireframe: true },
+      matrixWorld: { elements: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] },
+    }
+    const edges = fromThree(wire)
+    expect(edges).toHaveLength(1)
+    expect(edges[0]!.lines).toBe(true)
+    expect(Array.from(edges[0]!.indices!).sort((a, b) => a - b)).toEqual([0, 0, 1, 1, 2, 2])
+
+    const points = { isPoints: true, geometry, material: { color: { r: 1, g: 1, b: 1 } }, matrixWorld: wire.matrixWorld }
+    expect(fromThree(points)).toEqual([])
+  })
 })
 
 describe('model object 和 unit', () => {
@@ -344,6 +383,50 @@ describe('model object 和 unit', () => {
     expect(text.issues.some((issue) => issue.message.includes('传入网格对象'))).toBe(true)
     expect(text.issues.some((issue) => issue.message.includes('unit 只写在 model'))).toBe(true)
   })
+
+  it('线框不填面，线段被更近的实体挡住', async () => {
+    const wire = new THREE.Mesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshBasicMaterial({ color: '#3ddc97', wireframe: true }),
+    )
+    const wireNode = h(
+      'layer',
+      { width: 120, height: 120, camera: 'parallel', background: '#000000' },
+      h('model', { object: wire, unit: 40 }),
+    )
+    const wireFrame = await renderLayer(wireNode)
+    const interior = await pixelAt(wireFrame.png, 48, 55)
+    const edge = await pixelAt(wireFrame.png, 60, 40)
+    expect(interior[0]! + interior[1]! + interior[2]!).toBeLessThan(30)
+    expect(edge[1]).toBeGreaterThan(80)
+
+    const solid = new THREE.Mesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshBasicMaterial({ color: '#3d6bdc', wireframe: false }),
+    )
+    const solidFrame = await renderLayer(
+      h('layer', { width: 120, height: 120, camera: 'parallel', background: '#000000' }, h('model', { object: solid, unit: 40 })),
+    )
+    const solidCenter = await pixelAt(solidFrame.png, 60, 60)
+    expect(solidCenter[2]).toBeGreaterThan(solidCenter[0]! + 20)
+
+    const line = new THREE.LineSegments(
+      new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-1.4, 0, 0), new THREE.Vector3(1.4, 0, 0)]),
+      new THREE.LineBasicMaterial({ color: '#ff3040' }),
+    )
+    const occluded = await renderLayer(
+      h(
+        'layer',
+        { width: 120, height: 120, camera: 'parallel', background: '#000000' },
+        h('model', { object: line, unit: 40 }),
+        h('model', { object: solid, unit: 40 }),
+      ),
+    )
+    const outside = await pixelAt(occluded.png, 12, 60)
+    const covered = await pixelAt(occluded.png, 60, 60)
+    expect(outside[0]).toBeGreaterThan(100)
+    expect(covered[2]).toBeGreaterThan(covered[0]! + 20)
+  }, 30000)
 })
 
 describe('three 的模块', () => {

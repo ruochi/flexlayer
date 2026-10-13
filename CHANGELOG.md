@@ -1,10 +1,28 @@
 # Changelog
 
-## 0.6.6
+## 0.6.10
 
 `<model object>` 把 three.js 的材质种类换进现有着色。Lambert 和 Toon 用磨砂。Phong 的 `shininess` 收成粗糙度，100 是光滑。透射不小于 0.5 用玻璃，玻璃仍是假折射。其余仍按金属度分金属和塑料。
 
 内存里的 `map` 按 uv 给底色染色，再走同一套明暗。顶点色乘上材质色。`emissive` 加在明暗之后，不照亮旁边的物体。`ShaderMaterial` 不执行，从 uniforms 里取一个颜色当底色。
+
+## 0.6.9
+
+`.layer` 的 `<script>` 子进程不再把已经存在的目录和 `目录/*`、`目录/**` 一起放进读权限。Node 会把存在的目录收成 `目录/*`，再写一遍同一条前缀时，Node 20 的权限树把空前缀插到叶子上，断言 `!path_prefix.empty()`，子进程直接退出，画布是空的。目录还不存在时仍只补一条 `目录/*`。`**` 不是递归通配。
+
+## 0.6.8
+
+three.js 的 `Line`、`LineSegments`、`LineLoop` 画进 `<model object>` 的同一深度缓冲。材质 `wireframe: true` 只画边，不再填成实心，也不再整段跳过。线用材质颜色，线宽是屏幕像素，不写是 1。`Points` 仍不画。
+
+`.layer` 的 `<script>` 子进程在 canvas 包目录之外，再放行目录里的文件。只给目录、不给通配时，有的 Node 会报 `Access to this API has been restricted`，画布是空的。
+
+## 0.6.7
+
+说明收成四块：`layer`、支持的 HTML 和 SVG、实体和镜头、蒙版和程序。通用的 CSS、SVG 和公式间距不再在正文里展开。问题码、蒙版、`glyph` 和 `canvas.create` 仍在 SPEC 里。写法没有删。
+
+## 0.6.6
+
+公式、调色、沿墨迹描边、玻璃、噪点和命令行工具链按用到再加载。绘制和排版仍是同步的。同一份 `.tsx` 的 esbuild 结果缓存在本机，并带上当前 flexlayer 的安装路径。
 
 ## 0.6.5
 
