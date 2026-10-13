@@ -143,7 +143,7 @@
 
 ## 行内绘制
 
-`translate`、`rotate`、`scale`、`opacity` 写在行内标签的 `style` 上时，不进 `measureText` 的前进宽度。`planLinePaint` 在排版后把字收成组：没写 `split="chars"` 时，同一 `paintGroup` 绕整段字心；写了就按码位拆开，每个字绕自己的字心。着墨用变换后的四边形，`flowInk` 留着没变换的行盒，报告里的 `box` 用后者。透明度低于 0.01 不并进着墨。
+`translate`、`rotate`、`scale`、`opacity` 写在行内标签的 `style` 上时，不进 `measureText` 的前进宽度。`planLinePaint` 在排版后把字收成组：没写 `split="chars"` 时，同一 `paintGroup` 绕整段字心；写了就按码位拆开，每个字绕自己的字心。着墨用变换后的四边形，`flowInk` 留着没变换的行盒，报告里的 `box` 用后者。透明度低于 0.01 不并进着墨。避头尾只看 owner 路径；`glueUnits` 拼段时还要求这四项相同，不同角度不会合成一次 `fillText`。
 
 文字盒子自己的 `rotate`、`scale`、`opacity` 仍转整块盒子。盒子上写了 `split="chars"` 时，这四项改记到每个字上，盒子的旋转、缩放和透明度收回 0 或 1。
 

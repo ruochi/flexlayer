@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.14
+
+主入口再导出 `loadImage` 和 `registerFontPath`。二者和 `createCanvas` 用的是排版那一份 `@napi-rs/canvas`。`registerFontPath(family, filePath)` 登记自定义字体文件；这个名字已经登记过就不再换文件。
+
+标点避头尾只看行内归属。`translate`、`rotate`、`scale`、`opacity` 不同时，逗号也不落到下一行行首。拼成同一段文字时仍要求这四项相同。没登记的字体名会抛错。透明度低于 0.01 的字不进着墨。`rotate` 仍是纯数字角度，例如 `12`。
+
 ## 0.6.13
 
 主入口导出 `createCanvas`、`initFonts`、`applyCanvasFont` 和 `DEFAULT_FONT_FAMILY`。这是排版用的那一份 `@napi-rs/canvas`。`initFonts()` 先准备默认字体，也可以带目录里的字体名。`applyCanvasFont` 把可变字重写进 `wght` 轴。
