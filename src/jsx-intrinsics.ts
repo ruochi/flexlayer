@@ -405,9 +405,13 @@ export namespace JSX {
         scale?: number | string
         opacity?: number | string
       }
-    /** 外部 glb。位置和宽高写在外包的 layer 上，src 只写在这里。面色来自文件。 */
+    /** 外部网格。`src` 是 .glb；tsx 里 `object` 是 three.js 的 Object3D。`unit` 保留原始坐标。位置和宽高写在外包的 layer 上。 */
     model: LayerGraphic & {
       src?: string
+      /** 1 个模型单位对应的像素。写了就不再 contain 居中 */
+      unit?: number | string
+      /** 内存中的网格，不进 .layer */
+      object?: object
       fill?: string
       stroke?: string
       'stroke-width'?: number | string

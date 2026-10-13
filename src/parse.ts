@@ -13,6 +13,8 @@ export type LayerNode = {
   data?: unknown
   /** `camera` 写成对象时挂在这里，不进 `attrs`。字符串仍在 `attrs.camera`。 */
   camera?: unknown
+  /** `<model object>` 的内存网格。不进 `attrs`，`.layer` 写不了。 */
+  modelObject?: unknown
   /** h() 收到对象或数组、却没有放进 data 的属性名。 */
   badAttrs?: string[]
   /** `.layer` 里 `data` 不是合法 JSON 时的原文。 */

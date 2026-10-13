@@ -36,6 +36,8 @@ export function h(tag: string, props: LayerProps | null, ...children: unknown[])
   let hasData = false
   let camera: unknown
   let hasCamera = false
+  let modelObject: unknown
+  let hasModelObject = false
   let draw = false
   const badAttrs: string[] = []
   const p = props ?? {}
@@ -55,6 +57,11 @@ export function h(tag: string, props: LayerProps | null, ...children: unknown[])
     if (key === 'camera' && isPlainData(value)) {
       camera = value
       hasCamera = true
+      continue
+    }
+    if (key === 'object' && isPlainData(value)) {
+      modelObject = value
+      hasModelObject = true
       continue
     }
     if (key === 'children' || key === 'key' || key === 'ref') continue
@@ -86,6 +93,7 @@ export function h(tag: string, props: LayerProps | null, ...children: unknown[])
   const node: LayerNode = { tag, attrs, children: kept }
   if (hasData) node.data = data
   if (hasCamera) node.camera = camera
+  if (hasModelObject) node.modelObject = modelObject
   if (badAttrs.length > 0) node.badAttrs = badAttrs
   if (scriptFns.length > 0) node.scriptFns = scriptFns
   if (draw) node.legacyDraw = true

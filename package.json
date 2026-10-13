@@ -1,6 +1,6 @@
 {
   "name": "flexlayer",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "engines": {
     "node": ">=20"
   },
@@ -20,6 +20,10 @@
     "./jsx-dev-runtime": {
       "types": "./dist/jsx-dev-runtime.d.ts",
       "import": "./dist/jsx-dev-runtime.js"
+    },
+    "./three": {
+      "types": "./dist/three.d.ts",
+      "import": "./dist/three.js"
     }
   },
   "bin": {
@@ -52,7 +56,17 @@
     "yoga-layout": "^3.2.1"
   },
   "devDependencies": {
+    "@types/three": "^0.170.0",
+    "three": "0.170.0",
     "tsx": "^4.19.2",
     "vitest": "^2.1.9"
+  },
+  "peerDependencies": {
+    "three": ">=0.160.0"
+  },
+  "peerDependenciesMeta": {
+    "three": {
+      "optional": true
+    }
   }
 }

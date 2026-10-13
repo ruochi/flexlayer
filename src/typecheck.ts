@@ -1,5 +1,6 @@
-import { existsSync } from 'node:fs'
+import { existsSync, mkdirSync, symlinkSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
 import { dirname, extname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
@@ -9,13 +10,25 @@ import type { Issue } from './types.js'
 const CODE_EXT = new Set(['.tsx', '.jsx', '.ts', '.js'])
 
 /** `@types/node` 装成依赖时经常被提升到上层，不能写死在本包的 node_modules 里。 */
-function nodeTypeRoot(pkgRoot: string): string {
+function nodeTypesDir(pkgRoot: string): string {
   const require = createRequire(import.meta.url)
   try {
-    return dirname(dirname(require.resolve('@types/node/package.json')))
+    return dirname(require.resolve('@types/node/package.json'))
   } catch {
-    return join(pkgRoot, 'node_modules/@types')
+    return join(pkgRoot, 'node_modules/@types/node')
   }
+}
+
+/**
+ * typeRoots 里若放进整个 `@types`，仓库外的文件也会认到本包装的 `@types/three`。
+ * 这里只留 `node`，其它包仍从源文件所在目录往上找。
+ */
+function nodeOnlyTypeRoot(pkgRoot: string): string {
+  const root = join(tmpdir(), 'flexlayer-type-roots')
+  const link = join(root, 'node')
+  mkdirSync(root, { recursive: true })
+  if (!existsSync(link)) symlinkSync(nodeTypesDir(pkgRoot), link, 'dir')
+  return root
 }
 
 function runtimePaths(): { baseUrl: string; paths: Record<string, string[]>; typeRoots: string[] } {
@@ -26,11 +39,12 @@ function runtimePaths(): { baseUrl: string; paths: Record<string, string[]>; typ
   const pkgRoot = dirname(here)
   return {
     baseUrl: pkgRoot,
-    typeRoots: [nodeTypeRoot(pkgRoot)],
+    typeRoots: [nodeOnlyTypeRoot(pkgRoot)],
     paths: {
-      'flexlayer': [`${dir}/index.${ext}`],
+      flexlayer: [`${dir}/index.${ext}`],
       'flexlayer/jsx-runtime': [`${dir}/jsx-runtime.${ext}`],
       'flexlayer/jsx-dev-runtime': [`${dir}/jsx-dev-runtime.${ext}`],
+      'flexlayer/three': [`${dir}/three.${ext}`],
     },
   }
 }
@@ -41,7 +55,8 @@ export function typecheckLayerFile(file: string): Issue[] {
   const { baseUrl, paths, typeRoots } = runtimePaths()
   // 直接传给 createProgram 的 lib 是文件名，不是 tsconfig 里的 "ES2022"。
   // 标准库跟着 typescript 走。@types/node 用 createRequire 解析，装成依赖被提升时也能找到。
-  // 不看 .tsx 旁边有没有 node_modules。
+  // 裸包名从这份源文件所在目录往上找 node_modules，和运行时解析的起点一致。
+  // typeRoots 只放 node，避免仓库外的文件认到本包装的其它 @types。
   const options: ts.CompilerOptions = {
     strict: true,
     noEmit: true,

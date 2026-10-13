@@ -9,6 +9,7 @@ import type { Composition } from './frame.js'
 import type { LayerNode } from './parse.js'
 import { setLayerBaseDir } from './canvas.js'
 import { formatSourceLoc } from './source-loc.js'
+import { resolveBare } from './resolve-bare.js'
 import { registerFontsFromDocument } from './fonts.js'
 import { nondeterministicCalls, staticLayerFonts } from './syntax.js'
 import type { Issue } from './types.js'
@@ -148,13 +149,19 @@ async function importCode(file: string): Promise<Record<string, unknown>> {
                 loader,
               }
             })
-            // 打包进临时文件后，裸包名从 /tmp 解析不到。改成绝对路径再标成外部依赖。
+            // 裸包名从导入它的文件往上找，并按 Node 的 import 条件取导出。
+            // require.resolve 会落到 CJS 构建，和 three/addons 里的 ESM 不是同一个模块。
             build.onResolve({ filter: /^[^./]/ }, (args) => {
               if (args.path === 'flexlayer' || args.path.startsWith('flexlayer/')) {
                 return null
               }
               if (args.path.startsWith('node:') || BUILTINS.has(args.path)) return { path: args.path, external: true }
-              return { path: require.resolve(args.path), external: true }
+              const parent = args.importer || file
+              try {
+                return { path: resolveBare(args.path, parent), external: true }
+              } catch {
+                return { errors: [{ text: `无法解析 ${args.path}` }] }
+              }
             })
           },
         },

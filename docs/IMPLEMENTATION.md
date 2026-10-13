@@ -120,3 +120,15 @@
 - 括号先按栈配对，每对按中间内容的高度伸长。这样 `f(x) = { …表格… }` 里的 `( )` 不会被大括号拉高。
 
 还没做：`menclose`、`mpadded`、`mmultiscripts`、`mfenced`、换行、`maligngroup`，以及 MATH 表里的数学字距（`MathKernInfo`）和重音锚点（`MathTopAccentAttachment`）。
+
+## 模型
+
+外部三角网格和 three.js 的 Object3D 收成同一份图元，后面的光栅、线稿、材质和影子不分支。
+
+- 坐标保持文件和 three 的 y 向上。作者空间 y 向下只发生在 `transformPoint` / `transformNormal`。这里再翻一次，绕序会翻两次，正面变成背面。
+- 负的线性行列式（镜像缩放）在 `fromThree` 里把三角形换回正面。glb 路径不改绕序。
+- `unit` 是 1 个模型单位对应的像素，不减包围盒中心。默认 origin 在盒子中心，所以模型原点落在外包 layer 的中心。多只 `<model>` 写同一个 `unit`，相对位置还在。
+- 不写 `material` 时，金属度不小于 0.5 用 `metal`，否则 `plastic`。粗糙度来自图元。写了 `material` 则整只模型都用它。磨砂会忽略粗糙度，所以不把电介质映射成 `matte`。
+- 内存网格的图元放在 `WeakMap` 里，规格上只留内容哈希。场景缓存按这个哈希失效，不把 Object3D 放进键。
+- `src/three.ts` 不 import `three`。类型看 `isMesh`。`flexlayer/three` 是同一份文件。裸包名从导入它的源文件往上找 `node_modules`，按 `package.json` 的 `import` 条件取文件，不走 `require.resolve`。
+

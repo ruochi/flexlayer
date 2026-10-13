@@ -58,7 +58,7 @@ function typeMessages(file: string): string[] {
 
 describe('JSX 类型', () => {
   it('examples 里的 .tsx 通过类型检查', () => {
-    for (const name of ['hello.tsx', 'slide.tsx', 'poster.tsx', 'html-layer.tsx']) {
+    for (const name of ['hello.tsx', 'slide.tsx', 'poster.tsx', 'html-layer.tsx', 'three-assembly.tsx']) {
       expect(typeMessages(join(pkgDir, 'examples', name)), name).toEqual([])
     }
   })

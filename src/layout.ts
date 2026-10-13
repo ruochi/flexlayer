@@ -20,7 +20,8 @@ import { materialize } from './components.js'
 import { catmullRomPath } from './curve.js'
 import { isGradient, parseGradient, solidPaint } from './gradient.js'
 import { isGradientPaint } from './gradientField.js'
-import { glbSpan, resolveModelFile } from './glb.js'
+import { glbBounds, glbSpan, primitiveBounds, primitiveSpan, resolveModelFile } from './glb.js'
+import { fromThree, holdModelPrims, modelRevision } from './three.js'
 import { readBoxFillet, readCylinderFillet } from './mesh-round.js'
 import { openSvgPath, translateSvgPath } from './path.js'
 import { cameraAuditIssues, defaultFocal, readPreserve, readSharp, resolveCamera } from './camera.js'
@@ -1337,6 +1338,23 @@ function pathBoundsOf(d: string, ctx: LayoutContext | undefined): Box {
   return { x: 0, y: 0, width: 0, height: 0 }
 }
 
+/** 不写就 contain。写了非正数则警告并退回 contain。 */
+function readModelUnit(raw: string | undefined, ctx: LayoutContext): number | undefined {
+  if (raw == null || raw.trim() === '') return undefined
+  const parsed = parseNumber(raw)
+  if (parsed == null || !(parsed > 0)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 unit: ${raw}`,
+      hint: 'unit 是 1 个模型单位对应的像素，例如 unit="40"',
+    })
+    return undefined
+  }
+  return parsed
+}
+
 function readPositiveAttr(
   raw: string | undefined,
   fallback: number,
@@ -1717,20 +1735,64 @@ function layoutMesh(node: LayerNode, ctx: LayoutContext): MeshLayoutNode {
     mesh = { type: 'tube', d: translateSvgPath(d, -box.x + radius, -box.y + radius), r: radius }
   } else {
     const src = node.attrs.src ?? ''
-    const resolved = resolveModelFile(src, ctx.baseDir)
-    if (resolved.reason !== 'ok') {
-      const message =
-        resolved.reason === 'empty' ? 'model 缺少 src' : resolved.reason === 'type' ? 'model 只接受 .glb' : `模型无法加载: ${src.trim()}`
+    const unit = readModelUnit(node.attrs.unit, ctx)
+    const memory = node.modelObject
+    if (memory != null && src.trim()) {
       ctx.issues.push({
         level: 'warn',
-        code: 'missing-model',
+        code: 'invalid-attr',
         path: ctx.pathPrefix,
-        message,
-        hint: 'src 相对 .layer 所在目录，例如 <model src="hero.glb" />',
+        message: 'model 同时写了 src 和 object，使用 object',
+        hint: '文件和内存网格二选一',
       })
     }
-    const span = resolved.file ? glbSpan(resolved.file) ?? undefined : undefined
-    mesh = { type: 'model', src, ...(resolved.file ? { file: resolved.file } : {}), ...(span ? { span } : {}) }
+    if (memory != null) {
+      const prims = fromThree(memory)
+      if (prims.length === 0) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'missing-model',
+          path: ctx.pathPrefix,
+          message: 'object 里没有三角形网格',
+          hint: '传入 Mesh，或带 Mesh 子节点的对象。线条、点、隐藏的节点不会画',
+        })
+      }
+      const span = primitiveSpan(prims) ?? undefined
+      const bounds = primitiveBounds(prims) ?? undefined
+      const revision = modelRevision(prims)
+      mesh = {
+        type: 'model',
+        src: '',
+        ...(span ? { span } : {}),
+        ...(unit != null ? { unit } : {}),
+        ...(unit != null && bounds ? { bounds } : {}),
+        revision,
+      }
+      holdModelPrims(mesh, prims)
+    } else {
+      const resolved = resolveModelFile(src, ctx.baseDir)
+      if (resolved.reason !== 'ok') {
+        const message =
+          resolved.reason === 'empty' ? 'model 缺少 src' : resolved.reason === 'type' ? 'model 只接受 .glb' : `模型无法加载: ${src.trim()}`
+        ctx.issues.push({
+          level: 'warn',
+          code: 'missing-model',
+          path: ctx.pathPrefix,
+          message,
+          hint: 'src 相对 .layer 所在目录，例如 <model src="hero.glb" />。tsx 里也可以写 object={mesh}',
+        })
+      }
+      const span = resolved.file ? glbSpan(resolved.file) ?? undefined : undefined
+      const bounds = unit != null && resolved.file ? glbBounds(resolved.file) ?? undefined : undefined
+      mesh = {
+        type: 'model',
+        src,
+        ...(resolved.file ? { file: resolved.file } : {}),
+        ...(span ? { span } : {}),
+        ...(unit != null ? { unit } : {}),
+        ...(bounds ? { bounds } : {}),
+      }
+    }
   }
   const effects = readEffects(node.attrs, ctx, solidPaint(fill, ctx.color), 'mesh')
   if (isGradient(node.attrs.fill)) {

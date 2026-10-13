@@ -48,6 +48,6 @@ HTML 和 `display:flex` 按 CSS 渲染，默认值不在这里记。文字盒子
 ## 仓库
 
 - 字体名用 [docs/RESOURCES.md](docs/RESOURCES.md) 里的，不要编造字体文件地址。
-- 实现备注在 [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md)。还没做的点选、作者灯光和 `Scene3D` 在 [docs/proposals/3D.md](docs/proposals/3D.md)。
+- 实现备注在 [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md)。还没做的点选和作者灯光在 [docs/proposals/3D.md](docs/proposals/3D.md)。three.js 的几何体走 `<model object>`。
 - 自动化：`npm test`，`npm run gallery`。
 - 合并进 `main` 时，把根 `package.json` 和 `package-lock.json` 的 `version` 补丁号加一。删掉还能用的旧写法时升次版本号。

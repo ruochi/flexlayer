@@ -594,6 +594,32 @@ export function checkChildAttrs(node: LayerNode, parent: 'layer' | 'flex', path:
     )
   }
 
+  const modelOnly = [present(attrs, 'unit') ? 'unit' : '', present(attrs, 'object') || node.modelObject !== undefined ? 'object' : ''].filter(
+    (name) => name,
+  )
+  if (node.tag !== 'model' && modelOnly.length > 0) {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        `${modelOnly.join('、')} 只写在 model 上`,
+        '例如 <model object={mesh} unit="40" />',
+      ),
+    )
+  }
+  if (node.tag === 'model' && present(attrs, 'object')) {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        'object 要在 tsx 里传入网格对象',
+        '例如 <model object={mesh} unit="40" />。.layer 里用 src',
+      ),
+    )
+  }
+
   if (parent === 'flex' && isMeshTag(node.tag)) {
     out.push(
       flagged(

@@ -682,6 +682,28 @@
     "misplacedHint": null
   },
   {
+    "name": "unit",
+    "group": "image",
+    "syntax": "px",
+    "default": null,
+    "example": "40",
+    "layerOnly": false,
+    "htmlUsesStyle": false,
+    "note": "只写在 model 上。1 个模型单位对应的像素。写了就保留原始坐标，原点落在外包 layer 的 origin（默认中心），不再 contain 居中",
+    "misplacedHint": null
+  },
+  {
+    "name": "object",
+    "group": "image",
+    "syntax": null,
+    "default": null,
+    "example": null,
+    "layerOnly": false,
+    "htmlUsesStyle": false,
+    "note": "只在 tsx 里写在 model 上，传入 three.js 的 Object3D。.layer 里写不了",
+    "misplacedHint": null
+  },
+  {
     "name": "data",
     "group": "data",
     "syntax": null,

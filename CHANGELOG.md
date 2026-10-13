@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.1
+
+`<model>` 在 tsx 里可以写 `object`，传入 three.js 的 Object3D。几何体进 Flex Layer 自己的场景，和文字、线稿、标注共用深度。`unit` 保留原始坐标，1 个模型单位等于这么多像素。不写 `material` 时，图元的金属度和粗糙度映射到 `metal` / `plastic`。
+
+`three` 是可选的 peer dependency。适配在 `flexlayer/three`，核心不 import 它。裸包名按 ESM 从源文件所在目录往上解析，和类型检查同一条路径。
+
 ## 0.6.0
 
 HTML 标签按 HTML 渲染，`style` 按 CSS。对齐、伸缩、间距、换行、继承、字号和盒子的初始值不再在规范里复述。

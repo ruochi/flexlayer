@@ -3,6 +3,7 @@ import { readFileSync, statSync } from 'node:fs'
 import { studioAt } from './env-map.js'
 import { solidPaint } from './gradient.js'
 import { parseGlb } from './glb.js'
+import { heldModelPrims } from './three.js'
 import { bevelFewFaces } from './mesh-bevel.js'
 import { originOffset } from './matrix.js'
 import type { MeshClip } from './mesh-cache.js'
@@ -22,7 +23,7 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
  * 正对镜头的面是 fill，侧面按内置主光和补光变暗。
  * 主光沿固定方向打一张正交深度图：不透明三角形互相挡住这盏光时，主光不计。
  * `shadows="none"` 不建这张图。`cast-shadow="false"` 的批次不写入，`receive-shadow="false"` 的表面不变暗。
- * glb 用文件里的底色乘这套明暗。
+ * glb 和内存网格用图元上的底色乘这套明暗。不写 material 时，金属度不小于 0.5 走 metal，否则走 plastic，粗糙度用图元自己的值。
  * 写了 stroke 时，在超采样缓冲上按屏幕像素描折棱和轮廓，再和填充一起平均缩回。
  * 两只都写了 stroke 的网格相互穿过时，交界线算折棱，颜色和宽度跟后写的那只。
  * hidden 只画被这只网格自己挡住的棱，虚线是 6 实 4 空。交界线被这两只中任意一只挡住时同样算隐藏线。
@@ -184,6 +185,8 @@ type ModelPrim = {
   normals: Float32Array
   indices: Uint32Array
   color: [number, number, number, number]
+  roughness: number
+  metalness: number
   doubleSided: boolean
 }
 
@@ -212,16 +215,21 @@ function geometryCacheKey(node: MeshLayoutNode): string | null {
 }
 
 function modelCacheKey(node: MeshLayoutNode): string | null {
-  if (node.mesh.type !== 'model' || !node.mesh.file) return null
+  if (node.mesh.type !== 'model') return null
+  const mesh = node.mesh
+  const bevel = node.stroke === 'none' ? '|b' : ''
+  const unit = mesh.unit != null && mesh.unit > 0 ? `|u${quantGeometry(mesh.unit)}` : ''
+  const tail = `${quantGeometry(node.width)}|${quantGeometry(node.height)}|${quantGeometry(node.opacity)}|${originKey(node)}${bevel}${unit}`
+  if (mesh.revision) return `mem|${mesh.revision}|${tail}`
+  if (!mesh.file) return null
   let stamp = 'missing'
   try {
-    const st = statSync(node.mesh.file)
+    const st = statSync(mesh.file)
     stamp = `${st.mtimeMs}:${st.size}`
   } catch {
     stamp = 'missing'
   }
-  const bevel = node.stroke === 'none' ? '|b' : ''
-  return `${node.mesh.file}|${stamp}|${quantGeometry(node.width)}|${quantGeometry(node.height)}|${quantGeometry(node.opacity)}|${originKey(node)}${bevel}`
+  return `${mesh.file}|${stamp}|${tail}`
 }
 
 function touchCache<T>(map: Map<string, T>, key: string, value: T, cap: number) {
@@ -1192,43 +1200,56 @@ function smoothNormals(positions: Float32Array, indices: Uint32Array) {
 }
 
 function buildModelFresh(node: MeshLayoutNode): ModelPrim[] {
-  if (node.mesh.type !== 'model' || !node.mesh.file) return []
-  let prims
-  try {
-    prims = parseGlb(readFileSync(node.mesh.file))
-  } catch {
-    return []
-  }
-  let minX = Infinity
-  let minY = Infinity
-  let minZ = Infinity
-  let maxX = -Infinity
-  let maxY = -Infinity
-  let maxZ = -Infinity
-  for (const prim of prims) {
-    const src = prim.positions
-    for (let i = 0; i < src.length; i += 3) {
-      minX = Math.min(minX, src[i]!)
-      minY = Math.min(minY, src[i + 1]!)
-      minZ = Math.min(minZ, src[i + 2]!)
-      maxX = Math.max(maxX, src[i]!)
-      maxY = Math.max(maxY, src[i + 1]!)
-      maxZ = Math.max(maxZ, src[i + 2]!)
+  if (node.mesh.type !== 'model') return []
+  const mesh = node.mesh
+  let prims = heldModelPrims(mesh)
+  if (!prims) {
+    if (!mesh.file) return []
+    try {
+      prims = parseGlb(readFileSync(mesh.file))
+    } catch {
+      return []
     }
   }
-  const sizeX = maxX - minX
-  const sizeY = maxY - minY
-  const sx = sizeX > 1e-6 ? node.width / sizeX : Infinity
-  const sy = sizeY > 1e-6 ? node.height / sizeY : Infinity
-  const s = Math.min(sx, sy)
-  if (!Number.isFinite(s) || s <= 0) return []
-  const cx = (minX + maxX) / 2
-  const cy = (minY + maxY) / 2
-  const cz = (minZ + maxZ) / 2
-  const o = originOffset(node.origin, node.width, node.height)
-  const shiftX = node.width / 2 - o.x
-  const shiftY = -(node.height / 2 - o.y)
-  const out: Array<{ positions: Float32Array; normals: Float32Array; indices: Uint32Array; color: [number, number, number, number]; doubleSided: boolean }> = []
+  const useUnit = mesh.unit != null && mesh.unit > 0
+  let cx = 0
+  let cy = 0
+  let cz = 0
+  let s = useUnit ? mesh.unit! : 1
+  let shiftX = 0
+  let shiftY = 0
+  if (!useUnit) {
+    let minX = Infinity
+    let minY = Infinity
+    let minZ = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    let maxZ = -Infinity
+    for (const prim of prims) {
+      const src = prim.positions
+      for (let i = 0; i < src.length; i += 3) {
+        minX = Math.min(minX, src[i]!)
+        minY = Math.min(minY, src[i + 1]!)
+        minZ = Math.min(minZ, src[i + 2]!)
+        maxX = Math.max(maxX, src[i]!)
+        maxY = Math.max(maxY, src[i + 1]!)
+        maxZ = Math.max(maxZ, src[i + 2]!)
+      }
+    }
+    const sizeX = maxX - minX
+    const sizeY = maxY - minY
+    const sx = sizeX > 1e-6 ? node.width / sizeX : Infinity
+    const sy = sizeY > 1e-6 ? node.height / sizeY : Infinity
+    s = Math.min(sx, sy)
+    if (!Number.isFinite(s) || s <= 0) return []
+    cx = (minX + maxX) / 2
+    cy = (minY + maxY) / 2
+    cz = (minZ + maxZ) / 2
+    const o = originOffset(node.origin, node.width, node.height)
+    shiftX = node.width / 2 - o.x
+    shiftY = -(node.height / 2 - o.y)
+  }
+  const out: ModelPrim[] = []
   for (const prim of prims) {
     const src = prim.positions
     const positions = new Float32Array(src.length)
@@ -1252,6 +1273,8 @@ function buildModelFresh(node: MeshLayoutNode): ModelPrim[] {
         byte(color[2] * 255),
         byte(color[3] * node.opacity * 255),
       ],
+      roughness: Math.min(1, Math.max(0, prim.roughness)),
+      metalness: Math.min(1, Math.max(0, prim.metalness)),
       doubleSided: prim.doubleSided,
     })
   }
@@ -3701,6 +3724,9 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
     if (node.mesh.type === 'model') {
       for (const prim of buildModel(node)) {
         const painted = paintGeometry(node, prim.positions, prim.normals, prim.indices)
+        const authored = node.material
+        const material = authored ? shadeMaterial(authored.kind) : prim.metalness >= 0.5 ? 'metal' : 'plastic'
+        const roughness = authored ? authored.roughness : prim.roughness
         batches.push({
           positions: painted.positions,
           normals: painted.normals,
@@ -3715,8 +3741,8 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
           depthWrite: node.material?.kind === 'glass' && prim.color[3] < 255 ? false : prim.color[3] >= 255,
           castShadow: node.castShadow !== false,
           receiveShadow: node.receiveShadow !== false,
-          material: shadeMaterial(node.material?.kind),
-          roughness: node.material?.roughness ?? 1,
+          material,
+          roughness,
           texture: null,
           tw: 0,
           th: 0,
