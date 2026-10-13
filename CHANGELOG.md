@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2
+
+HTML 标签按 HTML 渲染，`style` 按 CSS。对齐、伸缩、间距、换行和继承的初始值不再在规范里复述。规范只保留和 CSS 不一样的地方，以及画面字号：`h1` 88px、`h2` 64px、`h3` 48px、正文 40px。
+
 ## 0.5.1
 
 推荐字体按气质列在 `resources.recommendedFonts`，粗黑体在前。寒蝉端黑体仍是默认字体。其余名字只供选型，要自己带 `<font family src>`。

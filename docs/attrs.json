@@ -223,11 +223,11 @@
     "name": "flex-shrink",
     "group": "html",
     "syntax": null,
-    "default": "1",
-    "example": "0",
+    "default": null,
+    "example": null,
     "layerOnly": false,
     "htmlUsesStyle": true,
-    "note": "和 CSS 一样，默认 1。最小尺寸是内容尺寸：文字可以窄到最长的一个词，图片和形状不会比自身更小",
+    "note": null,
     "misplacedHint": null
   },
   {
@@ -277,23 +277,23 @@
   {
     "name": "align-items",
     "group": "html",
-    "syntax": "stretch | flex-start | center | flex-end | baseline",
-    "default": "stretch",
-    "example": "center",
+    "syntax": null,
+    "default": null,
+    "example": null,
     "layerOnly": false,
     "htmlUsesStyle": true,
-    "note": "和 CSS 一样，默认 stretch。有确定交叉尺寸的子项贴着起点；column 里的文字会被拉到这一列的宽度。要居中写 align-items:center",
+    "note": null,
     "misplacedHint": null
   },
   {
     "name": "align-content",
     "group": "html",
-    "syntax": "stretch | flex-start | center | flex-end | space-between | space-around | space-evenly",
-    "default": "stretch",
-    "example": "flex-start",
+    "syntax": null,
+    "default": null,
+    "example": null,
     "layerOnly": false,
     "htmlUsesStyle": true,
-    "note": "和 CSS 一样，默认 stretch。换行后的多行把多余的交叉空间分给每一行。要贴起点写 align-content:flex-start",
+    "note": null,
     "misplacedHint": null
   },
   {
