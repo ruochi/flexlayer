@@ -291,6 +291,20 @@ export type TextRunStyle = {
   background?: string
   /** 行内背景来自 background 还是 background-color。排版后去掉。 */
   backgroundProp?: 'background' | 'background-color'
+  /** 只影响绘制。1 是不透明。低于 0.01 不进着墨。 */
+  opacity?: number
+  /** 绘制时平移，像素。不改前进宽度。 */
+  translateX?: number
+  translateY?: number
+  /** 绘制时绕字心旋转，角度。 */
+  rotate?: number
+  /** 绘制时绕字心缩放。 */
+  scaleX?: number
+  scaleY?: number
+  /** 每个字单独绕自己的字心。 */
+  splitChars?: boolean
+  /** 不拆字时，同一组绕整段字心画一次。 */
+  paintGroup?: string
 }
 
 /** 带 id 的行内标签。最内层有 id 的那段拥有这些字；里面没写 id 的行内标签沿用外层。 */
@@ -310,14 +324,27 @@ export type TextSegment = {
   atom?: { width: number; height: number; key: number }
 }
 
+export type LaidTextSegment = {
+  text: string
+  style: TextRunStyle
+  x: number
+  width: number
+  owner?: InlineOwner
+  /** 变换后的着墨，坐标和这一行的 ink 相同。没变换时不写。透明度低于 0.01 时宽高为 0。 */
+  paintInk?: Box
+}
+
 export type LaidTextLine = {
-  segments: Array<{ text: string; style: TextRunStyle; x: number; width: number; owner?: InlineOwner }>
+  segments: LaidTextSegment[]
   width: number
   height: number
   /** 相对文字内容区顶部。竖排的字距加在行与行之间，不在 height 里。 */
   y: number
   baselineY: number
+  /** 变换后的着墨。没变换时就是字形本身。 */
   ink: Box
+  /** 没变换时的着墨。只在和 ink 不同时写上，行盒仍按这个排。 */
+  flowInk?: Box
   /** 这一行里的图片，坐标相对文字内容区左上角。 */
   atoms?: Array<{ x: number; y: number; width: number; height: number; key: number }>
 }

@@ -854,6 +854,12 @@ const STYLE_CHECKS: Record<string, (value: string) => StyleDiagnostic | null> = 
     if (parts.some((part) => parseNumber(part) == null)) return { hint: '写成 1.2 或 1.2 0.8' }
     return null
   },
+  translate: (value) => {
+    const parts = value.trim().split(/[\s,]+/).filter(Boolean)
+    if (parts.length === 0 || parts.length > 2) return { hint: '写成 0 -12 或 12 0' }
+    if (parts.some((part) => parsePx(part) == null)) return { hint: '写成 0 -12 或 12px 0' }
+    return null
+  },
   origin: (value) => (readOrigin(value).invalid ? { hint: '写成 center、top-left，或 120 80、30% 40%' } : null),
 }
 

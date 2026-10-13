@@ -8,6 +8,7 @@ import {
 /** 运行时就是这份上下文。标准 2D 类型没有 `drawImage`。 */
 type PaintCtx = SKRSContext2D
 import { applyCanvasFont } from './fonts.js'
+import { planLinePaint, runOpacity, segmentNeedsPaint } from './text.js'
 import { backdropFilters, filtersPad, getFilter, orderedFilters } from './filter.js'
 import { fitImageRect } from './image.js'
 import { canvasPaint, isGradient } from './gradient.js'
@@ -314,6 +315,30 @@ function fillTextPaint(
   }
 }
 
+function drawTextRun(
+  ctx: PaintCtx,
+  text: string,
+  x: number,
+  width: number,
+  baseline: number,
+  color: string,
+  box: PaintBox,
+  fontSize: number,
+  underline: boolean,
+  inkColor: string | undefined,
+) {
+  if (!text) return
+  fillTextPaint(ctx, text, x, baseline, color, box, fontSize)
+  if (!underline) return
+  const y = baseline + Math.max(1, fontSize * 0.12)
+  ctx.strokeStyle = !inkColor && isGradient(color) ? paintOf(ctx, color, box.x, box.y, Math.max(box.width, 1), Math.max(box.height, 1)) : color
+  ctx.lineWidth = Math.max(1, fontSize / 16)
+  ctx.beginPath()
+  ctx.moveTo(x, y)
+  ctx.lineTo(x + width, y)
+  ctx.stroke()
+}
+
 function drawTextNode(ctx: PaintCtx, node: TextLayoutNode, inkColor?: string) {
   const border = node.border?.width ?? 0
   const contentX = node.x + node.padding.left + border
@@ -324,7 +349,7 @@ function drawTextNode(ctx: PaintCtx, node: TextLayoutNode, inkColor?: string) {
     if (node.textAlign === 'center') offsetX = (innerW - line.width) / 2
     if (node.textAlign === 'right') offsetX = innerW - line.width
     const lineTop = contentY + line.y
-    for (let segIndex = 0; segIndex < line.segments.length; segIndex++) {
+    const drawPlain = (segIndex: number) => {
       const seg = line.segments[segIndex]!
       const x = contentX + offsetX + seg.x
       const glyphRun = runBox(line.segments, segIndex, (style) => style.fill?.trim() || style.color, contentX, offsetX, lineTop, line.height)
@@ -334,22 +359,45 @@ function drawTextNode(ctx: PaintCtx, node: TextLayoutNode, inkColor?: string) {
         ctx.fillStyle = paintOf(ctx, background, backgroundRun.x, backgroundRun.y, backgroundRun.width, backgroundRun.height)
         ctx.fillRect(x, lineTop, seg.width, line.height)
       }
-      if (!seg.text) continue
+      if (!seg.text) return
       applyCanvasFont(ctx, seg.style.fontFamily, seg.style.fontWeight, seg.style.fontSize, seg.style.fontStyle)
       ctx.letterSpacing = `${seg.style.letterSpacing}px`
       const color = inkColor ?? seg.style.fill ?? seg.style.color
       const box = inkColor ? glyphRun : textPaintBox(node, color, glyphRun)
-      fillTextPaint(ctx, seg.text, x, contentY + line.baselineY, color, box, seg.style.fontSize)
-      if (seg.style.underline) {
-        const y = contentY + line.baselineY + Math.max(1, seg.style.fontSize * 0.12)
-        ctx.strokeStyle =
-          !inkColor && isGradient(color) ? paintOf(ctx, color, box.x, box.y, Math.max(box.width, 1), Math.max(box.height, 1)) : color
-        ctx.lineWidth = Math.max(1, seg.style.fontSize / 16)
-        ctx.beginPath()
-        ctx.moveTo(x, y)
-        ctx.lineTo(x + seg.width, y)
-        ctx.stroke()
+      drawTextRun(ctx, seg.text, x, seg.width, contentY + line.baselineY, color, box, seg.style.fontSize, seg.style.underline === true, inkColor)
+    }
+    for (let segIndex = 0; segIndex < line.segments.length; ) {
+      if (!segmentNeedsPaint(line.segments[segIndex]!.style)) {
+        drawPlain(segIndex)
+        segIndex += 1
+        continue
       }
+      let end = segIndex + 1
+      while (end < line.segments.length && segmentNeedsPaint(line.segments[end]!.style)) end += 1
+      const ox = contentX + offsetX
+      const groups = planLinePaint(line.segments.slice(segIndex, end), line.baselineY, line.y, line.height)
+      for (const group of groups) {
+        ctx.save()
+        ctx.translate(ox, contentY)
+        if (group.moves) ctx.transform(group.matrix.a, group.matrix.b, group.matrix.c, group.matrix.d, group.matrix.e, group.matrix.f)
+        const opacity = runOpacity(group.style)
+        if (opacity !== 1) ctx.globalAlpha *= opacity
+        for (const piece of group.pieces) {
+          const background = piece.style.background
+          if (!inkColor && background && background !== 'transparent' && background !== 'none' && piece.width > 0 && line.height > 0) {
+            ctx.fillStyle = paintOf(ctx, background, piece.x, line.y, piece.width, line.height)
+            ctx.fillRect(piece.x, line.y, piece.width, line.height)
+          }
+          if (!piece.text.trim()) continue
+          applyCanvasFont(ctx, piece.style.fontFamily, piece.style.fontWeight, piece.style.fontSize, piece.style.fontStyle)
+          ctx.letterSpacing = `${piece.style.letterSpacing}px`
+          const color = inkColor ?? piece.style.fill ?? piece.style.color
+          const box = { x: piece.x, y: line.y, width: Math.max(piece.width, 1), height: Math.max(line.height, 1) }
+          drawTextRun(ctx, piece.text, piece.x, piece.width, line.baselineY, color, box, piece.style.fontSize, piece.style.underline === true, inkColor)
+        }
+        ctx.restore()
+      }
+      segIndex = end
     }
   }
   for (const image of node.inlines ?? []) {
@@ -2086,6 +2134,18 @@ function visibleBitmap(ctx: PaintCtx, full: Box, margin: number): Box | null {
   return { x: sx0, y: sy0, width: sx1 - sx0, height: sy1 - sy0 }
 }
 
+/** 布局盒子并上着墨。行内字转出盒子时，模糊和滤镜的离屏要盖住那一块。 */
+function coveredBounds(node: LayoutNode): Box {
+  const box = { x: node.x, y: node.y, width: Math.max(0, node.width), height: Math.max(0, node.height) }
+  if (node.ink.width <= 1e-3 || node.ink.height <= 1e-3) return box
+  return unionBoxes(box, {
+    x: node.x + node.ink.x,
+    y: node.y + node.ink.y,
+    width: node.ink.width,
+    height: node.ink.height,
+  })
+}
+
 function paintWithLayerFilter(ctx: PaintCtx, node: LayoutNode, debug: boolean, t: number, state: PaintState) {
   const blur = node.blur ?? 0
   const pixel = orderedFilters(node.filters, 'pixel')
@@ -2100,9 +2160,10 @@ function paintWithLayerFilter(ctx: PaintCtx, node: LayoutNode, debug: boolean, t
   let effectPad = Math.max(pad, Math.ceil(shadowPad), Math.ceil(glowPad), Math.ceil(strokeReach))
   if (masks && node.glass) effectPad = Math.max(effectPad, Math.ceil(node.glass.blur * 2 + 8))
   if (masks && node.backdropBlur) effectPad = Math.max(effectPad, Math.ceil(node.backdropBlur * 2 + 4))
-  const tw = Math.max(1, Math.ceil(node.width + effectPad * 2))
-  const th = Math.max(1, Math.ceil(node.height + effectPad * 2))
-  const full = { x: node.x - effectPad, y: node.y - effectPad, width: tw, height: th }
+  const cover = coveredBounds(node)
+  const tw = Math.max(1, Math.ceil(cover.width + effectPad * 2))
+  const th = Math.max(1, Math.ceil(cover.height + effectPad * 2))
+  const full = { x: cover.x - effectPad, y: cover.y - effectPad, width: tw, height: th }
   const feather = node.kind === 'layer' ? node.maskFeather ?? 0 : 0
   const crop = visibleBitmap(ctx, full, Math.max(effectPad, Math.ceil(blur * 3 + feather * 3 + 8)))
   if (!crop) return

@@ -1,3 +1,5 @@
+export { createCanvas } from '@napi-rs/canvas'
+export { applyCanvasFont, DEFAULT_FONT_FAMILY, initFonts } from './fonts.js'
 export { renderLayer, checkLayer, type RenderResult, type RgbaRenderResult } from './render.js'
 export { canvas, create, type CreatedLayer, type MeshEdgeKind, type MeshPoint, type MeshProjectedEdge, type PlacedChar, type PlacedElement, type PlacedLine, type PlacedMask, type PlacedText } from './canvas.js'
 export { registerComponent, arrowComponent, type ComponentFn, type ComponentProps } from './components.js'

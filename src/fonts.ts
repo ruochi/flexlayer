@@ -370,6 +370,21 @@ export function resolveOutlineFont(family: string | undefined, weight: number | 
   return { family: name, canvasFamily: name, weight: effectiveFontWeight(name, weight ?? 400) }
 }
 
+/**
+ * 准备默认字体，再按名字准备目录里的字体。
+ * 下载失败或名字不在目录里会抛出。测量和绘制要在这之后。
+ */
+export async function initFonts(families?: Iterable<string>): Promise<void> {
+  ensureDefaultFontSync()
+  if (!families) return
+  const names = [...families].map((family) => family.trim()).filter((family) => family.length > 0)
+  const missing = names.filter((family) => family !== DEFAULT_FONT_FAMILY && !builtinFont(family))
+  if (missing.length > 0) {
+    throw new Error(`字体未登记: ${missing.join('、')}。可用字体见 resources.fonts，默认字体是 ${DEFAULT_FONT_FAMILY}`)
+  }
+  ensureBuiltinFontsSync(names)
+}
+
 /** 测量用：若默认字体未注册则尝试读缓存路径（测试可预先放入字体） */
 export async function initFontsForMeasure(options?: { fontsCacheDir?: string }): Promise<boolean> {
   if (options?.fontsCacheDir) setFontsCacheDir(options.fontsCacheDir)

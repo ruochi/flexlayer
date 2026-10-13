@@ -172,6 +172,13 @@ export const ATTRS: AttrDef[] = [
   },
   { name: 'scale', warnOnHtmlAttr: true, docGroup: 'transform' },
   { name: 'origin', warnOnHtmlAttr: true, docGroup: 'transform' },
+  {
+    name: 'split',
+    syntax: 'chars',
+    example: 'chars',
+    note: '写在文字盒子或行内标签上。每个字单独做 translate、rotate、scale、opacity，行宽和折行不变。文字盒子因此不再整块转动、缩放或变透明',
+    misplacedHint: '写在 p、h1 或 span 上，例如 <p split="chars">',
+  },
   { name: 'background', warnOnHtmlAttr: true, docGroup: 'html' },
   { name: 'padding', warnOnHtmlAttr: true, docGroup: 'html' },
   { name: 'font-size', warnOnHtmlAttr: true, docGroup: 'html' },

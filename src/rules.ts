@@ -421,6 +421,28 @@ export function typoAttrIssues(node: LayerNode, path: string): Issue[] {
  * 样式表里不认识或写错的声明。布局仍按默认值排，这里只负责报出来。
  * 属性表已经规定「不能写进 style」的名字由归属检查报，这里不再报第二次。
  */
+/** `split="chars"` 只写在文字上。别的值不拆。 */
+export function splitAttrIssues(node: LayerNode, path: string): Issue[] {
+  if (!present(node.attrs, 'split')) return []
+  const raw = node.attrs.split ?? ''
+  const textual = isTextBoxTag(node.tag) || isInlineTag(node.tag)
+  if (!textual) {
+    return [
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        'split 只写在文字上',
+        '写在 p、h1 或 span 上，例如 <p split="chars">',
+      ),
+    ]
+  }
+  if (raw.trim().toLowerCase() !== 'chars') {
+    return [flagged('warn', 'invalid-attr', path, `无法解析 split: ${raw}`, '写成 split="chars"')]
+  }
+  return []
+}
+
 export function styleIssues(node: LayerNode, path: string): Issue[] {
   if (!present(node.attrs, 'style')) return []
   const style = parseStyle(node.attrs.style)

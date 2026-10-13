@@ -21,9 +21,10 @@ type LayerNodeBase = {
   [name: string]: JsxAttr | unknown
 }
 
-/** 文字和图片。视觉属性写 style。 */
+/** 文字和图片。视觉属性写 style。`split="chars"` 让每个字单独做 translate、rotate、scale、opacity。 */
 type LayerHtml = LayerNodeBase & {
   style?: LayerStyle
+  split?: 'chars' | string
 }
 
 type LayerGraphic = LayerNodeBase & {

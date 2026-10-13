@@ -396,22 +396,31 @@ function inlineElementReports(
   plane: PlaneSpace | undefined,
   planeRoot: boolean,
 ): ElementReport[] {
-  const grouped = new Map<string, { owner: InlineOwner; union: Box | null; lines: Array<{ text: string; box: Box }> }>()
+  const grouped = new Map<string, { owner: InlineOwner; layout: Box | null; painted: Box | null; lines: Array<{ text: string; box: Box }> }>()
   const order: string[] = []
   for (const line of node.textLayout.lines) {
     const shift = textAlignShift(node, line.width)
     const onLine = new Map<string, { text: string; box: Box }>()
+    const flow = line.flowInk ?? line.ink
     for (const seg of line.segments) {
       const owner = seg.owner
       if (!owner || !seg.text) continue
-      const piece: Box = { x: shift + seg.x, y: line.ink.y, width: seg.width, height: line.ink.height }
+      const piece: Box = { x: shift + seg.x, y: flow.y, width: seg.width, height: flow.height }
+      const painted: Box | null = seg.paintInk
+        ? { x: shift + seg.paintInk.x, y: seg.paintInk.y, width: seg.paintInk.width, height: seg.paintInk.height }
+        : null
       let acc = grouped.get(owner.path)
       if (!acc) {
-        acc = { owner, union: null, lines: [] }
+        acc = { owner, layout: null, painted: null, lines: [] }
         grouped.set(owner.path, acc)
         order.push(owner.path)
       }
-      acc.union = acc.union ? unionBoxes(acc.union, piece) : piece
+      acc.layout = acc.layout ? unionBoxes(acc.layout, piece) : piece
+      if (painted && painted.width > 1e-3 && painted.height > 1e-3) {
+        acc.painted = acc.painted ? unionBoxes(acc.painted, painted) : painted
+      } else if (painted) {
+        acc.painted = acc.painted ?? { x: painted.x, y: painted.y, width: 0, height: 0 }
+      }
       const part = onLine.get(owner.path)
       if (!part) onLine.set(owner.path, { text: seg.text, box: piece })
       else {
@@ -425,14 +434,15 @@ function inlineElementReports(
   const out: ElementReport[] = []
   for (const path of order) {
     const acc = grouped.get(path)!
-    if (!acc.union) continue
-    const ink = mapTextContentBox(node, acc.union, matrix, clip, plane, planeRoot)
+    if (!acc.layout) continue
+    const layout = mapTextContentBox(node, acc.layout, matrix, clip, plane, planeRoot)
+    const ink = mapTextContentBox(node, acc.painted ?? acc.layout, matrix, clip, plane, planeRoot)
     out.push({
       path: acc.owner.path,
       id: acc.owner.id,
       tag: acc.owner.tag,
       inline: true,
-      box: boxToRect(ink),
+      box: boxToRect(layout),
       ink: boxToRect(ink),
       opacity,
       lines: acc.lines.map((line) => ({

@@ -141,6 +141,14 @@
 
 还没做：`menclose`、`mpadded`、`mmultiscripts`、`mfenced`、换行、`maligngroup`，以及 MATH 表里的数学字距（`MathKernInfo`）和重音锚点（`MathTopAccentAttachment`）。
 
+## 行内绘制
+
+`translate`、`rotate`、`scale`、`opacity` 写在行内标签的 `style` 上时，不进 `measureText` 的前进宽度。`planLinePaint` 在排版后把字收成组：没写 `split="chars"` 时，同一 `paintGroup` 绕整段字心；写了就按码位拆开，每个字绕自己的字心。着墨用变换后的四边形，`flowInk` 留着没变换的行盒，报告里的 `box` 用后者。透明度低于 0.01 不并进着墨。
+
+文字盒子自己的 `rotate`、`scale`、`opacity` 仍转整块盒子。盒子上写了 `split="chars"` 时，这四项改记到每个字上，盒子的旋转、缩放和透明度收回 0 或 1。
+
+发光、描边走 `drawTextNode`，所以跟画出的像素。带 `blur` 或像素滤镜时，离屏范围是布局盒子并上着墨，转出盒子的字不会被裁掉。
+
 ## 模型
 
 外部三角网格和 three.js 的 Object3D 收成同一份图元，后面的光栅、线稿、材质和影子不分支。

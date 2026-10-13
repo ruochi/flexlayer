@@ -3,8 +3,9 @@ import type { LayerChild, LayerNode } from './parse.js'
 import { applyCanvasFont } from './fonts.js'
 import { applySymbolsClass, classAttr, rewriteIconLigatures, symbolsClassNotes, type SymbolsNote } from './icons.js'
 import { getMeasureCtx } from './measureCtx.js'
-import { parseFontWeight, parseLetterSpacing, parsePx } from './style.js'
-import { emptyBox, translateBox, unionBoxes, type Box, type InlineOwner, type TextLayoutResult, type TextRunStyle, type TextSegment } from './types.js'
+import { applyToBox, aroundPivot, multiply, translated, type Matrix } from './matrix.js'
+import { parseFontWeight, parseLetterSpacing, parseNumber, parsePx, parseScale } from './style.js'
+import { emptyBox, translateBox, unionBoxes, type Box, type InlineOwner, type LaidTextSegment, type TextLayoutResult, type TextRunStyle, type TextSegment } from './types.js'
 
 const require = createRequire(import.meta.url)
 const LineBreaker = require('linebreak') as new (text: string) => {
@@ -64,7 +65,29 @@ export function defaultFontWeightForTag(tag: string): number {
   return tag === 'h1' || tag === 'h2' || tag === 'h3' ? 700 : 400
 }
 
-function mergeStyle(base: TextRunStyle, styleMap: Record<string, string>, inline: boolean): TextRunStyle {
+const PAINT_KEYS = ['opacity', 'rotate', 'scale', 'translate'] as const
+
+function declaresRunPaint(styleMap: Record<string, string>): boolean {
+  return PAINT_KEYS.some((key) => (styleMap[key] ?? '').trim() !== '')
+}
+
+function readTranslate(raw: string): { x: number; y: number } | undefined {
+  const parts = raw.trim().split(/[\s,]+/).filter(Boolean)
+  if (parts.length === 0 || parts.length > 2) return undefined
+  const nums = parts.map((part) => parsePx(part))
+  if (nums.some((n) => n == null)) return undefined
+  return { x: nums[0]!, y: nums[1] ?? 0 }
+}
+
+function readScale(raw: string): { x: number; y: number } | undefined {
+  const parts = raw.trim().split(/[\s,]+/).filter(Boolean)
+  if (parts.length === 0 || parts.length > 2) return undefined
+  if (parts.some((part) => parseNumber(part) == null)) return undefined
+  return parseScale(raw)
+}
+
+/** 行内绘制变换。不改前进宽度。`paint` 为 false 时整段盒子自己的 rotate、scale、opacity 留在盒子上。 */
+function mergeStyle(base: TextRunStyle, styleMap: Record<string, string>, inline: boolean, paint: boolean): TextRunStyle {
   const next = { ...base }
   const fs = parsePx(styleMap['font-size'])
   if (fs != null) next.fontSize = fs
@@ -84,6 +107,47 @@ function mergeStyle(base: TextRunStyle, styleMap: Record<string, string>, inline
       next.backgroundProp = 'background-color'
     }
   }
+  if (paint) {
+    if (styleMap.opacity != null) {
+      const opacity = parseNumber(styleMap.opacity)
+      if (opacity != null) next.opacity = opacity
+    }
+    if (styleMap.rotate != null) {
+      const rotate = parseNumber(styleMap.rotate)
+      if (rotate != null) next.rotate = rotate
+    }
+    if (styleMap.scale != null) {
+      const scale = readScale(styleMap.scale)
+      if (scale) {
+        next.scaleX = scale.x
+        next.scaleY = scale.y
+      }
+    }
+    if (styleMap.translate != null) {
+      const translate = readTranslate(styleMap.translate)
+      if (translate) {
+        next.translateX = translate.x
+        next.translateY = translate.y
+      }
+    }
+  }
+  return next
+}
+
+function splitCharsAttr(attrs: Record<string, string> | undefined): boolean {
+  return attrs?.split?.trim().toLowerCase() === 'chars'
+}
+
+function withRunPaint(style: TextRunStyle, declared: Record<string, string>, path: string, attrs: Record<string, string>): TextRunStyle {
+  let next = mergeStyle(style, declared, true, true)
+  if (splitCharsAttr(attrs)) next = { ...next, splitChars: true }
+  if (next.splitChars) {
+    if (!next.paintGroup) return next
+    next = { ...next }
+    delete next.paintGroup
+    return next
+  }
+  if (declaresRunPaint(declared)) return { ...next, paintGroup: path }
   return next
 }
 
@@ -189,7 +253,7 @@ function walkInline(
     if (tag === 'em' || tag === 'i') segStyle = { ...segStyle, fontStyle: 'italic' }
     if (tag === 'u') segStyle = { ...segStyle, underline: true }
     const declared = parseStyleAttr(child.attrs.style)
-    segStyle = mergeStyle(segStyle, declared, true)
+    segStyle = withRunPaint(segStyle, declared, path, child.attrs)
     segStyle = applySymbolsClass(segStyle, classAttr(child.attrs), {
       family: Boolean(declared['font-family']),
       spacing: declared['letter-spacing'] != null,
@@ -219,7 +283,12 @@ export function extractTextSegments(
   }
   const tag = node.tag.toLowerCase()
   const declared = parseStyleAttr(node.attrs.style)
-  let style = mergeStyle(base, declared, false)
+  const splitChars = splitCharsAttr(node.attrs)
+  let style = mergeStyle(base, declared, false, splitChars)
+  if (splitChars) {
+    style = { ...style, splitChars: true }
+    delete style.paintGroup
+  }
   if (tag === 'strong' || tag === 'b') style = { ...style, fontWeight: 700 }
   if (tag === 'em' || tag === 'i') style = { ...style, fontStyle: 'italic' }
   if (tag === 'u') style = { ...style, underline: true }
@@ -249,6 +318,24 @@ type Unit = {
 
 function sameOwner(a: InlineOwner | undefined, b: InlineOwner | undefined): boolean {
   return a?.path === b?.path
+}
+
+function sameRunPaint(a: TextRunStyle, b: TextRunStyle): boolean {
+  return (
+    (a.opacity ?? 1) === (b.opacity ?? 1) &&
+    (a.translateX ?? 0) === (b.translateX ?? 0) &&
+    (a.translateY ?? 0) === (b.translateY ?? 0) &&
+    (a.rotate ?? 0) === (b.rotate ?? 0) &&
+    (a.scaleX ?? 1) === (b.scaleX ?? 1) &&
+    (a.scaleY ?? 1) === (b.scaleY ?? 1) &&
+    a.splitChars === b.splitChars &&
+    a.paintGroup === b.paintGroup
+  )
+}
+
+/** 标点只和同一段、同一绘制变换的字粘在一起。 */
+function sameGlue(a: Unit, b: Unit): boolean {
+  return sameOwner(a.owner, b.owner) && sameRunPaint(a.style, b.style)
 }
 
 function measureTextWidth(text: string, style: TextRunStyle): number {
@@ -322,6 +409,151 @@ function glyphInk(x: number, baselineY: number, m: InkMetrics): Box {
 function addInk(union: Box | null, box: Box): Box | null {
   if (box.width <= 1e-3 || box.height <= 1e-3) return union
   return union ? unionBoxes(union, box) : box
+}
+
+const PAINT_VISIBLE = 0.01
+
+export function runOpacity(style: TextRunStyle): number {
+  return style.opacity ?? 1
+}
+
+/** 平移、旋转或缩放。单纯改透明度不算。 */
+export function runPaintMoves(style: TextRunStyle): boolean {
+  return (
+    (style.translateX ?? 0) !== 0 ||
+    (style.translateY ?? 0) !== 0 ||
+    (style.rotate ?? 0) !== 0 ||
+    (style.scaleX ?? 1) !== 1 ||
+    (style.scaleY ?? 1) !== 1
+  )
+}
+
+export function segmentNeedsPaint(style: TextRunStyle): boolean {
+  return runPaintMoves(style) || runOpacity(style) !== 1
+}
+
+function paintMatrix(style: TextRunStyle, cx: number, cy: number): Matrix {
+  return multiply(
+    translated(style.translateX ?? 0, style.translateY ?? 0),
+    aroundPivot(cx, cy, style.rotate ?? 0, style.scaleX ?? 1, style.scaleY ?? 1),
+  )
+}
+
+function canJoinPaint(a: TextRunStyle, b: TextRunStyle): boolean {
+  if (a.splitChars || b.splitChars) return false
+  if (!a.paintGroup || a.paintGroup !== b.paintGroup) return false
+  return sameRunPaint(a, b)
+}
+
+export type PaintPiece = {
+  index: number
+  text: string
+  x: number
+  width: number
+  style: TextRunStyle
+  /** 没变换的字形着墨。 */
+  localInk: Box
+  /** 变换后的着墨。透明度低于 0.01 时为空。 */
+  paintInk: Box
+}
+
+export type PaintGroup = {
+  style: TextRunStyle
+  cx: number
+  cy: number
+  matrix: Matrix
+  moves: boolean
+  pieces: PaintPiece[]
+}
+
+function hasRunBackground(style: TextRunStyle): boolean {
+  const background = style.background
+  return background != null && background !== 'transparent' && background !== 'none'
+}
+
+/**
+ * 把一行里的片段收成绘制组。
+ * 坐标：x 从这一行的左边起算，y 从文字内容区顶部起算。
+ * `splitChars` 时每个字绕自己的字心；否则同一 paintGroup 绕整段字心。
+ */
+export function planLinePaint(
+  segments: Array<{ text: string; style: TextRunStyle; x: number; width: number }>,
+  baselineY: number,
+  lineTop: number,
+  lineHeight: number,
+): PaintGroup[] {
+  type Expanded = {
+    index: number
+    text: string
+    x: number
+    width: number
+    style: TextRunStyle
+    localInk: Box
+    background: Box | null
+  }
+  const expanded: Expanded[] = []
+  segments.forEach((segment, index) => {
+    if (!segment.text) return
+    const chunks = segment.style.splitChars
+      ? splitAdvances(segment.text, segment.style, segment.width)
+      : [{ text: segment.text, width: segment.width }]
+    let x = segment.x
+    for (const chunk of chunks) {
+      if (!chunk.text) {
+        x += chunk.width
+        continue
+      }
+      const metrics = measureInk(chunk.text, segment.style)
+      const localInk = glyphInk(x, baselineY, metrics)
+      const background =
+        runPaintMoves(segment.style) && hasRunBackground(segment.style) && chunk.width > 0 && lineHeight > 0
+          ? { x, y: lineTop, width: chunk.width, height: lineHeight }
+          : null
+      expanded.push({ index, text: chunk.text, x, width: chunk.width, style: segment.style, localInk, background })
+      x += chunk.width
+    }
+  })
+
+  const groups: PaintGroup[] = []
+  let current: Expanded[] = []
+  const flush = () => {
+    if (current.length === 0) return
+    const style = current[0]!.style
+    let union: Box | null = null
+    for (const piece of current) union = addInk(union, piece.localInk)
+    const anchor = union ?? current[0]!.localInk
+    const cx = anchor.x + anchor.width / 2
+    const cy = anchor.y + anchor.height / 2
+    const moves = runPaintMoves(style)
+    const matrix = paintMatrix(style, cx, cy)
+    const visible = runOpacity(style) >= PAINT_VISIBLE
+    const pieces: PaintPiece[] = current.map((piece) => {
+      const glyph = !visible ? emptyBox() : moves ? applyToBox(matrix, piece.localInk) : piece.localInk
+      const back = piece.background == null || !visible ? null : moves ? applyToBox(matrix, piece.background) : piece.background
+      return {
+        index: piece.index,
+        text: piece.text,
+        x: piece.x,
+        width: piece.width,
+        style: piece.style,
+        localInk: piece.localInk,
+        paintInk: back ? unionBoxes(glyph.width > 0 ? glyph : back, back) : glyph,
+      }
+    })
+    groups.push({ style, cx, cy, matrix, moves, pieces })
+    current = []
+  }
+  for (const piece of expanded) {
+    const prev = current[current.length - 1]
+    if (prev && !canJoinPaint(prev.style, piece.style)) flush()
+    current.push(piece)
+  }
+  flush()
+  return groups
+}
+
+function sameBox(a: Box, b: Box): boolean {
+  return Math.abs(a.x - b.x) < 1e-3 && Math.abs(a.y - b.y) < 1e-3 && Math.abs(a.width - b.width) < 1e-3 && Math.abs(a.height - b.height) < 1e-3
 }
 
 export function alignLineOffset(align: string, innerWidth: number, lineWidth: number): number {
@@ -440,14 +672,14 @@ function glueUnits(lineUnits: Unit[]): Unit[] {
     let style = u.style
     if (!u.atom && i + 1 < end) {
       const next = lineUnits[i + 1]!
-      if (!next.atom && LINE_TAIL_FORBIDDEN.has(u.text.slice(-1)!) && !next.isSpace && sameOwner(u.owner, next.owner)) {
+      if (!next.atom && LINE_TAIL_FORBIDDEN.has(u.text.slice(-1)!) && !next.isSpace && sameGlue(u, next)) {
         text += next.text
         i++
       }
     }
     if (!u.atom && out.length > 0) {
       const prev = out[out.length - 1]!
-      if (!prev.atom && LINE_HEAD_FORBIDDEN.has(text[0]!) && !prev.isSpace && sameOwner(prev.owner, u.owner)) {
+      if (!prev.atom && LINE_HEAD_FORBIDDEN.has(text[0]!) && !prev.isSpace && sameGlue(prev, u)) {
         out[out.length - 1] = {
           ...prev,
           text: prev.text + text,
@@ -497,8 +729,8 @@ function markOpportunities(units: Unit[]): void {
     const head = unit.text[0] ?? ''
     const tail = prev.text.slice(-1)
     const sticks =
-      (LINE_HEAD_FORBIDDEN.has(head) && !prev.isSpace && sameOwner(prev.owner, unit.owner)) ||
-      (LINE_TAIL_FORBIDDEN.has(tail) && !unit.isSpace && !prev.isSpace && sameOwner(prev.owner, unit.owner))
+      (LINE_HEAD_FORBIDDEN.has(head) && !prev.isSpace && sameGlue(prev, unit)) ||
+      (LINE_TAIL_FORBIDDEN.has(tail) && !unit.isSpace && !prev.isSpace && sameGlue(prev, unit))
     unit.canBreakBefore = !sticks && (opportunity.has(start) || prev.isSpace || Boolean(unit.atom) || Boolean(prev.atom))
   }
 }
@@ -683,17 +915,37 @@ function layoutVertical(opts: LayoutTextOptions): TextLayoutResult {
       if (glyphIndex > 0) y += glyph.letterSpacing
       const baselineY = y + glyph.ascent + (lineH - (glyph.ascent + glyph.descent)) / 2
       const glyphX = x0 + (columnWidth - glyph.width) / 2
-      const lineInk = /\s/.test(glyph.text)
+      const flow = /\s/.test(glyph.text)
         ? { x: glyphX, y: baselineY, width: 0, height: 0 }
         : glyphInk(glyphX, baselineY, glyph)
+      const segment: LaidTextSegment = { text: glyph.text, style: glyph.drawStyle, x: glyphX, width: glyph.width, owner: glyph.owner }
+      let lineInk = flow
+      let flowInk: Box | undefined
+      if (segment.text.trim() !== '' && segmentNeedsPaint(segment.style)) {
+        const groups = planLinePaint([segment], baselineY, y, lineH)
+        let painted: Box | null = null
+        for (const group of groups) {
+          for (const piece of group.pieces) {
+            painted = addInk(painted, piece.paintInk)
+            if (runOpacity(segment.style) < PAINT_VISIBLE) segment.paintInk = { x: segment.x, y: baselineY, width: 0, height: 0 }
+            else if (runPaintMoves(segment.style) && piece.paintInk.width > 1e-3) {
+              segment.paintInk =
+                segment.paintInk && segment.paintInk.width > 1e-3 ? unionBoxes(segment.paintInk, piece.paintInk) : piece.paintInk
+            }
+          }
+        }
+        lineInk = painted ?? { x: glyphX, y: baselineY, width: 0, height: 0 }
+        if (!sameBox(flow, lineInk)) flowInk = flow
+      }
       ink = addInk(ink, lineInk)
       laidLines.push({
-        segments: [{ text: glyph.text, style: glyph.drawStyle, x: glyphX, width: glyph.width, owner: glyph.owner }],
+        segments: [segment],
         width: contentWidth,
         height: lineH,
         y,
         baselineY,
         ink: lineInk,
+        ...(flowInk ? { flowInk } : {}),
       })
       y += lineH
     })
@@ -806,6 +1058,37 @@ export function layoutText(opts: LayoutTextOptions): TextLayoutResult {
       if (item.unit.isSpace || item.unit.text === '\uFFFC') continue
       lineInk = addInk(lineInk, glyphInk(item.x, baselineY, item.metrics))
     }
+    const flowInk = lineInk
+    if (segOut.some((seg) => seg.text !== '\uFFFC' && segmentNeedsPaint(seg.style))) {
+      const source = segOut
+        .map((seg, index) => ({ seg, index }))
+        .filter(({ seg }) => seg.text !== '\uFFFC' && seg.text.trim() !== '')
+      const groups = planLinePaint(
+        source.map(({ seg }) => ({ text: seg.text, style: seg.style, x: seg.x, width: seg.width })),
+        baselineY,
+        y,
+        lineH,
+      )
+      let painted: Box | null = null
+      for (const item of measured) {
+        if (!item.unit.atom) continue
+        const top = baselineY - item.unit.atom.height
+        painted = addInk(painted, { x: item.x, y: top, width: item.unit.atom.width, height: item.unit.atom.height })
+      }
+      for (const group of groups) {
+        for (const piece of group.pieces) {
+          const seg = source[piece.index]?.seg
+          if (!seg) continue
+          painted = addInk(painted, piece.paintInk)
+          if (runOpacity(seg.style) < PAINT_VISIBLE) {
+            seg.paintInk = { x: seg.x, y: baselineY, width: 0, height: 0 }
+          } else if (runPaintMoves(seg.style) && piece.paintInk.width > 1e-3) {
+            seg.paintInk = seg.paintInk && seg.paintInk.width > 1e-3 ? unionBoxes(seg.paintInk, piece.paintInk) : piece.paintInk
+          }
+        }
+      }
+      lineInk = painted
+    }
     const resolvedInk = lineInk ?? { x: 0, y: baselineY, width: 0, height: 0 }
     ink = addInk(ink, resolvedInk)
     laidLines.push({
@@ -815,6 +1098,7 @@ export function layoutText(opts: LayoutTextOptions): TextLayoutResult {
       y,
       baselineY,
       ink: resolvedInk,
+      ...(flowInk && (lineInk == null || !sameBox(flowInk, resolvedInk)) ? { flowInk } : {}),
       ...(atoms.length ? { atoms } : {}),
     })
     contentWidth = Math.max(contentWidth, lineW)
