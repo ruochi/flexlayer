@@ -1,11 +1,15 @@
+import { spawnSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { createCanvas, loadImage } from '@napi-rs/canvas'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { homedir, tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { h } from './h.js'
 import { initFontsForMeasure } from './fonts.js'
 import { renderLayer } from './render.js'
 import { emitLayer } from './emit.js'
+import { scriptChildArgs, scriptReadGrants } from './run-scripts.js'
 
 beforeAll(async () => {
   for (const dir of [join(homedir(), '.cache', 'flexlayer', 'fonts'), '/tmp/flexlayer-test']) {
@@ -234,6 +238,49 @@ describe('canvas 和 script', () => {
     )
     await renderLayer(root)
     expect(seen).toEqual(['3,5'])
+  })
+
+  it('node_modules 是符号链接时仍能跑 .layer 脚本', () => {
+    const root = mkdtempSync(join(tmpdir(), 'flexlayer-link-'))
+    try {
+      const store = join(root, 'store')
+      const app = join(root, 'app')
+      mkdirSync(join(app, 'src'), { recursive: true })
+      mkdirSync(join(app, 'node_modules', '@napi-rs'), { recursive: true })
+      mkdirSync(store, { recursive: true })
+      const realRoot = join(dirname(fileURLToPath(import.meta.url)), '..', 'node_modules', '@napi-rs')
+      symlinkSync(join(realRoot, 'canvas'), join(store, 'canvas'))
+      symlinkSync(join(store, 'canvas'), join(app, 'node_modules', '@napi-rs', 'canvas'))
+      const host = join(app, 'src', 'canvas-dom.mjs')
+      writeFileSync(host, readFileSync(new URL('./canvas-dom.mjs', import.meta.url)))
+      const grants = scriptReadGrants(host)
+      expect(grants).toContain(join(app, 'node_modules', '@napi-rs', 'canvas', 'package.json'))
+      expect(grants).toContain(join(realRoot, 'canvas', 'package.json'))
+      const nativeFile = grants.find((grant) => grant.endsWith('.node'))
+      expect(nativeFile).toBeTruthy()
+      const payload = JSON.stringify({
+        canvases: [{ path: 'layer/canvas[0]', id: 'bar', width: 4, height: 4, bitmapWidth: 4, bitmapHeight: 4, x: 0, y: 0, style: {}, computed: {}, text: '', attrs: {} }],
+        scripts: [{ path: 'layer/script[0]', body: 'const c=document.querySelector("#bar"); const x=c.getContext("2d"); x.fillStyle="#ff0000"; x.fillRect(0,0,4,4)' }],
+        timeMs: 0,
+        fps: 0,
+        frame: 0,
+        dpr: 1,
+        seed: 1,
+        sources: {},
+      })
+      const result = spawnSync(process.execPath, scriptChildArgs(host), {
+        input: payload,
+        encoding: 'utf8',
+        env: { PATH: process.env.PATH ?? '', NAPI_RS_NATIVE_LIBRARY_PATH: nativeFile },
+      })
+      expect(result.stderr).not.toContain('Access to this API has been restricted')
+      expect(result.status).toBe(0)
+      const out = JSON.parse(result.stdout) as { issues: unknown[]; canvases: Array<{ rgba: string }> }
+      expect(out.issues).toEqual([])
+      expect(Buffer.from(out.canvases[0]!.rgba, 'base64')[0]).toBe(255)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })
 
