@@ -831,6 +831,59 @@ describe('网格绘制', () => {
     }
   })
 
+  it('圆柱只在侧面和底面的折棱上收圆角，侧面竖缝保持原样', () => {
+    const radius = 40
+    const half = 50
+    const segments = 48
+    const positions: number[] = []
+    const indices: number[] = []
+    const ring: number[] = []
+    for (let iy = 0; iy < 2; iy++) {
+      const y = iy === 0 ? half : -half
+      for (let ix = 0; ix < segments; ix++) {
+        const theta = (ix / segments) * Math.PI * 2
+        ring.push(positions.length / 3)
+        positions.push(radius * Math.cos(theta), y, radius * Math.sin(theta))
+      }
+    }
+    for (let ix = 0; ix < segments; ix++) {
+      const a = ring[ix]!
+      const a2 = ring[(ix + 1) % segments]!
+      const b = ring[segments + ix]!
+      const b2 = ring[segments + ((ix + 1) % segments)]!
+      indices.push(a, a2, b, a2, b2, b)
+    }
+    const cap = (y: number, up: boolean) => {
+      const center = positions.length / 3
+      positions.push(0, y, 0)
+      const base = up ? 0 : segments
+      for (let ix = 0; ix < segments; ix++) {
+        const a = ring[base + ix]!
+        const b = ring[base + ((ix + 1) % segments)]!
+        if (up) indices.push(center, b, a)
+        else indices.push(center, a, b)
+      }
+    }
+    cap(half, true)
+    cap(-half, false)
+    const built = bevelFewFaces(Float32Array.from(positions), Uint32Array.from(indices))
+    expect(built).toBeTruthy()
+    let capInset = 0
+    let sideInset = 0
+    for (let i = 0; i < built!.positions.length; i += 3) {
+      const x = built!.positions[i]!
+      const y = built!.positions[i + 1]!
+      const z = built!.positions[i + 2]!
+      const radial = Math.hypot(x, z)
+      expect(radial).toBeLessThanOrEqual(radius + 0.2)
+      expect(Math.abs(y)).toBeLessThanOrEqual(half + 0.2)
+      if (Math.abs(y) > half - 0.5 && radial < radius - BEVEL_RADIUS * 0.6) capInset++
+      if (radial > radius - 0.5 && Math.abs(y) < half - BEVEL_RADIUS * 0.6) sideInset++
+    }
+    expect(capInset).toBeGreaterThan(8)
+    expect(sideInset).toBeGreaterThan(8)
+  })
+
   it('box 圆角：z 向棱挖掉正面角，沿宽的棱和正面四棱仍是直角轮廓', async () => {
     const shot = async (round?: string) => {
       const attr = round ? ` round="${round}"` : ''

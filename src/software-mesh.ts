@@ -1272,6 +1272,8 @@ function geometryOfFresh(node: MeshLayoutNode): MeshGeometry | null {
 /** 窄圆角只进光栅。投影仍用原来的折点，避免圆角把正面的角标成挡住。 */
 function paintGeometry(node: MeshLayoutNode, positions: Float32Array, normals: Float32Array, indices: Uint32Array) {
   if (node.stroke !== 'none') return { positions, normals, indices }
+  const mesh = node.mesh
+  if ((mesh.type === 'box' || mesh.type === 'cylinder') && mesh.rx > 0) return { positions, normals, indices }
   return bevelFewFaces(positions, indices) ?? { positions, normals, indices }
 }
 
