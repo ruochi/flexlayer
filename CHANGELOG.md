@@ -1,12 +1,16 @@
 # Changelog
 
-## 0.6.1
+## 0.6.2
 
 形状写了正的 `depth` 就沿 z 挤出：`rect` 是盒子，`circle` 是轴沿 z 的圆柱，`ellipse`、`polygon`、`path` 按轮廓挤出。洞用 `fill-rule`，默认 `nonzero`。`sphere`、`torus`、`tube`、`model`、`ground` 仍是单独的标签。`box`、`cylinder`、`extrude` 照旧绘制，报 `non-canonical`。
 
 SVG 元素可以写 `transform="rotateX() rotateY() rotateZ() translateZ()"`。二维的 `translate`、`rotate`、`scale`、`matrix` 仍写在 `<g>` 上。
 
 影子只落在 `ground` 上。`shadows="none"` 关掉，`cast-shadow="false"` 这只实体不投，`receive-shadow` 只写在 `ground` 上。
+
+## 0.6.1
+
+`.ttc`、`.otc` 可以用 `#` 选择字形。`src="SourceHanSans.ttc#2"` 是第 2 套，从 0 数。以前 `#2` 被当成路径，报「字体文件不存在」，于是用了集合里的第 0 套。思源和 Noto CJK 的第 0 套是日文，简体的「复」会不对。
 
 ## 0.6.0
 
