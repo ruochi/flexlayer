@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.6
+
+`<model object>` 把 three.js 的材质种类换进现有着色。Lambert 和 Toon 用磨砂。Phong 的 `shininess` 收成粗糙度，100 是光滑。透射不小于 0.5 用玻璃，玻璃仍是假折射。其余仍按金属度分金属和塑料。
+
 ## 0.6.5
 
 `<model>` 在 tsx 里可以写 `object`，传入 three.js 的 Object3D。几何体进 Flex Layer 自己的场景，和文字、线稿、标注共用深度。`unit` 保留原始坐标，1 个模型单位等于这么多像素。不写 `material` 时，图元的金属度和粗糙度映射到 `metal` / `plastic`。

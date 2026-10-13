@@ -188,6 +188,7 @@ type ModelPrim = {
   roughness: number
   metalness: number
   doubleSided: boolean
+  shade?: 'matte' | 'plastic' | 'metal' | 'glass'
 }
 
 const geometryCache = new Map<string, MeshGeometry | null>()
@@ -1342,6 +1343,7 @@ function buildModelFresh(node: MeshLayoutNode): ModelPrim[] {
       roughness: Math.min(1, Math.max(0, prim.roughness)),
       metalness: Math.min(1, Math.max(0, prim.metalness)),
       doubleSided: prim.doubleSided,
+      shade: prim.shade,
     })
   }
   return out
@@ -3809,8 +3811,9 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
       for (const prim of buildModel(node)) {
         const painted = paintGeometry(node, prim.positions, prim.normals, prim.indices)
         const authored = node.material
-        const material = authored ? shadeMaterial(authored.kind) : prim.metalness >= 0.5 ? 'metal' : 'plastic'
+        const material = authored ? shadeMaterial(authored.kind) : prim.shade ? shadeMaterial(prim.shade) : prim.metalness >= 0.5 ? 'metal' : 'plastic'
         const roughness = authored ? authored.roughness : prim.roughness
+        const glass = (authored?.kind ?? prim.shade) === 'glass'
         batches.push({
           positions: painted.positions,
           normals: painted.normals,
@@ -3822,7 +3825,7 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
           a: byte(prim.color[3] * (instance.opacity ?? 1)),
           doubleSided: prim.doubleSided,
           shaded: true,
-          depthWrite: node.material?.kind === 'glass' && prim.color[3] < 255 ? false : prim.color[3] >= 255,
+          depthWrite: glass && prim.color[3] < 255 ? false : prim.color[3] >= 255,
           castShadow: node.castShadow !== false,
           receiveShadow: false,
           material,

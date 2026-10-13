@@ -9,6 +9,8 @@ export type GlbPrimitive = {
   roughness: number
   metalness: number
   doubleSided: boolean
+  /** three.js 材质换算。glb 不写，仍按金属度分 metal / plastic。 */
+  shade?: 'matte' | 'plastic' | 'metal' | 'glass'
 }
 
 type Mat4 = number[]

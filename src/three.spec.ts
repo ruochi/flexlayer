@@ -71,6 +71,7 @@ describe('fromThree', () => {
     expect(prims[0]!.positions[4]).toBeCloseTo(2)
     expect(prims[0]!.metalness).toBeCloseTo(0.8)
     expect(prims[0]!.roughness).toBeCloseTo(0.2)
+    expect(prims[0]!.shade).toBe('metal')
     expect(prims[0]!.doubleSided).toBe(true)
     expect(Array.from(prims[0]!.indices!)).toEqual([0, 1, 2])
     expect(mesh instanceof THREE.Mesh).toBe(false)
@@ -124,6 +125,31 @@ describe('fromThree', () => {
     expect(copies).toHaveLength(2)
     expect(copies[1]!.positions[0]! - copies[0]!.positions[0]!).toBeCloseTo(2)
   })
+
+  it('Lambert 和 Toon 是磨砂，Phong 的光泽收成粗糙度，透射过半是玻璃', () => {
+    const lambert = fromThree(new THREE.Mesh(triangleGeometry(), new THREE.MeshLambertMaterial({ color: '#888888' })))
+    const toon = fromThree(new THREE.Mesh(triangleGeometry(), new THREE.MeshToonMaterial({ color: '#888888' })))
+    expect(lambert[0]!.shade).toBe('matte')
+    expect(toon[0]!.shade).toBe('matte')
+
+    const dull = fromThree(new THREE.Mesh(triangleGeometry(), new THREE.MeshPhongMaterial({ shininess: 0 })))
+    const shiny = fromThree(new THREE.Mesh(triangleGeometry(), new THREE.MeshPhongMaterial({ shininess: 100 })))
+    expect(dull[0]!.shade).toBe('plastic')
+    expect(dull[0]!.roughness).toBeCloseTo(1)
+    expect(shiny[0]!.shade).toBe('plastic')
+    expect(shiny[0]!.roughness).toBeCloseTo(0)
+
+    const glass = fromThree(
+      new THREE.Mesh(triangleGeometry(), new THREE.MeshPhysicalMaterial({ transmission: 1, roughness: 0.15, metalness: 0 })),
+    )
+    const faint = fromThree(
+      new THREE.Mesh(triangleGeometry(), new THREE.MeshPhysicalMaterial({ transmission: 0.2, roughness: 0.4, metalness: 0 })),
+    )
+    expect(glass[0]!.shade).toBe('glass')
+    expect(glass[0]!.roughness).toBeCloseTo(0.15)
+    expect(faint[0]!.shade).toBe('plastic')
+    expect(faint[0]!.roughness).toBeCloseTo(0.4)
+  })
 })
 
 describe('model object 和 unit', () => {
@@ -169,6 +195,24 @@ describe('model object 和 unit', () => {
     const metal = await shade(1, 0.15)
     const diff = Math.abs(plastic[0]! - metal[0]!) + Math.abs(plastic[1]! - metal[1]!) + Math.abs(plastic[2]! - metal[2]!)
     expect(diff).toBeGreaterThan(8)
+
+    async function face(material: THREE.Material) {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material)
+      const shaded = h(
+        'layer',
+        { width: 80, height: 80, camera: 'parallel', background: '#000000' },
+        h('model', { object: mesh, unit: 40 }),
+      )
+      const frame = await renderLayer(shaded)
+      return pixelAt(frame.png, 40, 40)
+    }
+    const matte = await face(new THREE.MeshLambertMaterial({ color: '#c8c8c8' }))
+    const glossy = await face(new THREE.MeshPhongMaterial({ color: '#c8c8c8', shininess: 100 }))
+    const pane = await face(new THREE.MeshPhysicalMaterial({ color: '#c8c8c8', transmission: 1, roughness: 0.05 }))
+    const matteGap = Math.abs(matte[0]! - glossy[0]!) + Math.abs(matte[1]! - glossy[1]!) + Math.abs(matte[2]! - glossy[2]!)
+    const glassGap = Math.abs(matte[0]! - pane[0]!) + Math.abs(matte[1]! - pane[1]!) + Math.abs(matte[2]! - pane[2]!)
+    expect(matteGap).toBeGreaterThan(8)
+    expect(glassGap).toBeGreaterThan(8)
   }, 30000)
 
   it('glb 写了 unit 就不再撑满盒子', async () => {

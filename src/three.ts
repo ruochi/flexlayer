@@ -6,6 +6,8 @@ import type { GlbPrimitive } from './glb.js'
  * 坐标保持 three 的 y 向上。翻到作者空间的 y 向下发生在投影，这里再翻会把绕序翻两次。
  * 负行列式（镜像缩放）会把三角形绕序翻一次，这里换回正面。
  * 不读着色器、灯光、贴图、顶点色和骨骼；SkinnedMesh 只用绑定姿态。
+ * Lambert、Toon 走磨砂。Phong 的 shininess 收成粗糙度，100 是光滑。透射不小于 0.5 走玻璃。
+ * 其余按金属度：不小于 0.5 是金属，否则是塑料。粗糙度越低，环境越清楚。
  */
 
 type Mat4 = number[]
@@ -39,7 +41,13 @@ type Obj = {
   opacity?: number
   roughness?: number
   metalness?: number
+  shininess?: number
+  transmission?: number
   side?: number
+  isMeshLambertMaterial?: boolean
+  isMeshToonMaterial?: boolean
+  isMeshPhongMaterial?: boolean
+  isMeshPhysicalMaterial?: boolean
   start?: number
   materialIndex?: number
 }
@@ -76,6 +84,7 @@ export function modelRevision(prims: GlbPrimitive[]): string {
     word(Math.round(prim.roughness * 1000))
     word(Math.round(prim.metalness * 1000))
     word(prim.doubleSided ? 1 : 0)
+    word(prim.shade === 'matte' ? 1 : prim.shade === 'plastic' ? 2 : prim.shade === 'metal' ? 3 : prim.shade === 'glass' ? 4 : 0)
   }
   return `${(h1 >>> 0).toString(16).padStart(8, '0')}${(h2 >>> 0).toString(16).padStart(8, '0')}`
 }
@@ -181,6 +190,7 @@ function emitMesh(mesh: Obj, out: GlbPrimitive[]) {
         roughness: pbr.roughness,
         metalness: pbr.metalness,
         doubleSided: pbr.doubleSided,
+        shade: pbr.shade,
       })
     }
   }
@@ -230,6 +240,7 @@ function readPbr(material: unknown): {
   metalness: number
   doubleSided: boolean
   back: boolean
+  shade: 'matte' | 'plastic' | 'metal' | 'glass'
 } {
   const mat = asObj(material)
   const color = mat?.color
@@ -243,13 +254,31 @@ function readPbr(material: unknown): {
     b = linearToSrgb(finite(color.b, 0))
   }
   const side = finite(mat?.side, 0)
+  const metalness = clamp01(finite(mat?.metalness, 0))
+  const classified = classifyShade(mat, metalness)
   return {
     color: [r, g, b, opacity],
-    roughness: clamp01(finite(mat?.roughness, 0.65)),
-    metalness: clamp01(finite(mat?.metalness, 0)),
+    roughness: classified.roughness,
+    metalness,
     doubleSided: side === 2,
     back: side === 1,
+    shade: classified.shade,
   }
+}
+
+/** Lambert / Toon 只有明暗。Phong 的 shininess 100 收成粗糙度 0，环境最清楚。透射过半才用假玻璃。 */
+function classifyShade(mat: Obj | null, metalness: number): { shade: 'matte' | 'plastic' | 'metal' | 'glass'; roughness: number } {
+  if (mat?.isMeshLambertMaterial === true || mat?.isMeshToonMaterial === true) {
+    return { shade: 'matte', roughness: 1 }
+  }
+  if (mat?.isMeshPhongMaterial === true) {
+    return { shade: 'plastic', roughness: clamp01(1 - finite(mat.shininess, 30) / 100) }
+  }
+  const roughness = clamp01(finite(mat?.roughness, 0.65))
+  if (mat?.isMeshPhysicalMaterial === true && finite(mat.transmission, 0) >= 0.5) {
+    return { shade: 'glass', roughness }
+  }
+  return { shade: metalness >= 0.5 ? 'metal' : 'plastic', roughness }
 }
 
 /** three 默认把作者写的 sRGB 存成线性值。图元颜色按显示用的 sRGB 字节走。 */

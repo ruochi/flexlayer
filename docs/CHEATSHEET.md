@@ -51,7 +51,7 @@
 
 透视：`<layer camera="700"><rect rotateY="28" z="40" /></layer>`。`z` 越大越靠近观众。平行投影写 `<layer camera="parallel">`。没有实体时，直接子元素按中心深度从远到近画。有实体或 `ground` 时用深度缓冲。没落到镜头里报 `flatten-3d`。
 
-实体就是 SVG 形状加 `depth`：`<rect width="150" height="100" depth="60" rx="8" />` 是圆棱盒子，`<circle r="40" depth="80" />` 是轴沿 z 的圆柱，`<path d="…" depth="18" />` 按 `fill-rule` 挤出。另有 `sphere`、`torus`、`tube`、`model`。tsx 里 `model` 写 `object` 传入网格，`unit` 保留原始坐标。`material` 是 `matte`、`plastic`、`metal`、`glass`。`stroke` 描棱线，`hidden` 是隐藏线的颜色。影子只落在 `ground` 上。`box`、`cylinder`、`extrude` 是别名。
+实体就是 SVG 形状加 `depth`：`<rect width="150" height="100" depth="60" rx="8" />` 是圆棱盒子，`<circle r="40" depth="80" />` 是轴沿 z 的圆柱，`<path d="…" depth="18" />` 按 `fill-rule` 挤出。另有 `sphere`、`torus`、`tube`、`model`。tsx 里 `model` 写 `object` 传入网格，`unit` 保留原始坐标。Lambert 和 Toon 用 `matte`，Phong 的 `shininess` 收成粗糙度后用 `plastic`，透射不小于 0.5 用 `glass`，其余按金属度分 `metal` / `plastic`。`material` 写在标签上时覆盖整只模型。`stroke` 描棱线，`hidden` 是隐藏线的颜色。影子只落在 `ground` 上。`box`、`cylinder`、`extrude` 是别名。
 
 竖排：`style="writing-mode:vertical-rl"`。字体名见 [docs/RESOURCES.md](RESOURCES.md)，直接写 `font-family`，不用自带字体文件。自带的 `.ttc` 要选字形就写 `src="字体.ttc#2"`，从 0 数；不写序号用第 0 套。
 
