@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0
+
+HTML 标签按 HTML 渲染，`style` 按 CSS。对齐、伸缩、间距、换行、继承、字号和盒子的初始值不再在规范里复述。
+
+初始字号是 16px。`h1` 是 2em，`h2` 是 1.5em，`h3` 是 1.17em，字重是 bold。`width` 和 `height` 是内容盒，padding 和 border 加在外面。`flex` 用 CSS 简写，`flex:1` 是 `1 1 0`。
+
 ## 0.5.2
 
 `.layer` 里的 `<script>` 在子进程里跑。`node_modules` 是符号链接时，权限名单以前只放真实目录，加载器读的却是链接上的 `package.json`，于是报 `Access to this API has been restricted`，canvas 是空的。现在链接和真实路径都放行。脚本出错时不再先打出渲染成功。

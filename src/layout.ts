@@ -40,6 +40,7 @@ import {
   parseLetterSpacing,
   parseNumber,
   parseOverlay,
+  readFlexFactors,
   parsePx,
   parseOrigin,
   parseScale,
@@ -53,6 +54,7 @@ import {
 import {
   alignLineOffset,
   alignedTextInk,
+  MEDIUM_FONT_SIZE,
   defaultFontSizeForTag,
   defaultFontWeightForTag,
   extractTextSegments,
@@ -604,7 +606,7 @@ function textAlignOf(raw: string | undefined, fallback: 'left' | 'center' | 'rig
   return fallback
 }
 
-/** 容器上写了的文字样式传给子元素。标题自己的默认字号和字重不往下盖。 */
+/** 容器上写了的文字样式传给子元素。标题字号是父级的 em，字重是 bold。 */
 function inheritTextContext(ctx: LayoutContext, tag: string, style: Record<string, string>): LayoutContext {
   const next: LayoutContext = { ...ctx }
   const family = style['font-family']?.trim()
@@ -613,11 +615,11 @@ function inheritTextContext(ctx: LayoutContext, tag: string, style: Record<strin
   if (color) next.color = color
   const fontSize = parsePx(style['font-size'])
   if (fontSize != null) next.fontSize = fontSize
-  else if (isHeadingTag(tag)) next.fontSize = defaultFontSizeForTag(tag)
+  else if (isHeadingTag(tag)) next.fontSize = defaultFontSizeForTag(tag, ctx.fontSize)
   const fontWeight = parseFontWeight(style['font-weight'])
   if (fontWeight != null) next.fontWeight = fontWeight
   else if (isHeadingTag(tag)) next.fontWeight = defaultFontWeightForTag(tag)
-  const letterSpacing = parseLetterSpacing(style['letter-spacing'], next.fontSize ?? 40)
+  const letterSpacing = parseLetterSpacing(style['letter-spacing'], next.fontSize ?? MEDIUM_FONT_SIZE)
   if (letterSpacing != null) next.letterSpacing = letterSpacing
   if (style['text-align']) next.textAlign = textAlignOf(style['text-align'], ctx.textAlign ?? 'left')
   const lineHeight = parseLineHeight(style['line-height'])
@@ -636,7 +638,7 @@ function withLayerText(ctx: LayoutContext, node: LayerNode): LayoutContext {
   if (fontSize != null) next.fontSize = fontSize
   const fontWeight = parseFontWeight(node.attrs['font-weight'])
   if (fontWeight != null) next.fontWeight = fontWeight
-  const letterSpacing = parseLetterSpacing(node.attrs['letter-spacing'], next.fontSize ?? 40)
+  const letterSpacing = parseLetterSpacing(node.attrs['letter-spacing'], next.fontSize ?? MEDIUM_FONT_SIZE)
   if (letterSpacing != null) next.letterSpacing = letterSpacing
   const lineHeight = parseLineHeight(node.attrs['line-height'])
   if (lineHeight) next.lineHeight = lineHeight
@@ -645,9 +647,7 @@ function withLayerText(ctx: LayoutContext, node: LayerNode): LayoutContext {
 
 function computeDrawStyle(node: LayerNode, ctx: LayoutContext, style: Record<string, string>): DrawComputedStyle {
   const tag = node.tag.toLowerCase()
-  const fontSize =
-    parsePx(style['font-size']) ??
-    (isHeadingTag(tag) ? defaultFontSizeForTag(tag) : ctx.fontSize ?? (isTextBoxTag(node.tag) ? defaultFontSizeForTag(tag) : 40))
+  const fontSize = parsePx(style['font-size']) ?? defaultFontSizeForTag(tag, ctx.fontSize)
   const fontWeight =
     parseFontWeight(style['font-weight']) ??
     (isHeadingTag(tag) || tag === 'strong' || tag === 'b'
@@ -852,12 +852,12 @@ function mapAlignContent(v: string | undefined): Align {
   }
 }
 
-function parseFlexGrowShrink(style: Record<string, string>): { grow: number; shrink: number } {
-  const flex = style.flex?.trim()
-  if (flex === '1') return { grow: 1, shrink: 1 }
-  const grow = parseNumber(style['flex-grow']) ?? 0
-  const shrink = parseNumber(style['flex-shrink']) ?? 1
-  return { grow, shrink }
+function chromeX(padding: Edges, borderWidth: number | undefined): number {
+  return padding.left + padding.right + (borderWidth ?? 0) * 2
+}
+
+function chromeY(padding: Edges, borderWidth: number | undefined): number {
+  return padding.top + padding.bottom + (borderWidth ?? 0) * 2
 }
 
 /** 纯几何范围，不含描边。水平或垂直线的高或宽可以是 0。 */
@@ -982,8 +982,7 @@ function layoutTextBox(node: LayerNode, ctx: LayoutContext, contentWidthLimit?: 
   const style = parseStyle(node.attrs.style)
   const tag = node.tag.toLowerCase()
   const symbols = symbolsClassOf(classAttr(node.attrs))
-  const fontSize =
-    parsePx(style['font-size']) ?? (isHeadingTag(tag) ? defaultFontSizeForTag(tag) : ctx.fontSize ?? defaultFontSizeForTag(tag))
+  const fontSize = parsePx(style['font-size']) ?? defaultFontSizeForTag(tag, ctx.fontSize)
   const fontWeight =
     parseFontWeight(style['font-weight']) ??
     (isHeadingTag(tag) || tag === 'strong' || tag === 'b' ? 700 : ctx.fontWeight ?? defaultFontWeightForTag(tag))
@@ -1038,13 +1037,11 @@ function layoutTextBox(node: LayerNode, ctx: LayoutContext, contentWidthLimit?: 
 
   const appearance = readHtmlAppearance(style)
   applyCssBackground(appearance, style, ctx)
-  const innerPadX = appearance.padding.left + appearance.padding.right + (appearance.border?.width ?? 0) * 2
-  const innerPadY = appearance.padding.top + appearance.padding.bottom + (appearance.border?.width ?? 0) * 2
 
   const textLayout = layoutText({
     segments: paintedSegments,
-    fixedWidth: fixedW != null ? Math.max(0, fixedW - innerPadX) : undefined,
-    fixedHeight: fixedH != null ? Math.max(0, fixedH - innerPadY) : undefined,
+    fixedWidth: fixedW,
+    fixedHeight: fixedH,
     maxWidth: vertical ? undefined : maxW,
     maxHeight: maxH,
     nowrap: vertical ? false : nowrap,
@@ -1057,13 +1054,12 @@ function layoutTextBox(node: LayerNode, ctx: LayoutContext, contentWidthLimit?: 
 
   let contentW = textLayout.contentWidth
   let contentH = textLayout.contentHeight
-  if (fixedW != null) contentW = Math.max(contentW, fixedW - appearance.padding.left - appearance.padding.right - (appearance.border?.width ?? 0) * 2)
-  if (fixedH != null) contentH = Math.max(contentH, fixedH - appearance.padding.top - appearance.padding.bottom - (appearance.border?.width ?? 0) * 2)
+  if (fixedW != null) contentW = Math.max(contentW, fixedW)
+  if (fixedH != null) contentH = Math.max(contentH, fixedH)
 
   const outer = outerFromContent(contentW, contentH, appearance.padding, appearance.border)
   const textAlign = textAlignOf(style['text-align'], ctx.textAlign ?? 'left')
-  const boxW = fixedW ?? outer.width
-  const innerW = boxW - appearance.padding.left - appearance.padding.right - (appearance.border?.width ?? 0) * 2
+  const innerW = contentW
   for (const line of textLayout.lines) {
     const shift = alignLineOffset(textAlign, innerW, line.width)
     for (const atom of line.atoms ?? []) {
@@ -1100,8 +1096,8 @@ function layoutTextBox(node: LayerNode, ctx: LayoutContext, contentWidthLimit?: 
     tag: node.tag,
     x: 0,
     y: 0,
-    width: fixedW ?? outer.width,
-    height: fixedH ?? outer.height,
+    width: outer.width,
+    height: outer.height,
     ink,
     ...appearance,
     textLayout,
@@ -1202,19 +1198,16 @@ function layoutImage(node: LayerNode, ctx: LayoutContext): ImageLayoutNode {
   const natH = bitmap?.height ?? 0
   const fixedW = parsePx(style.width)
   const fixedH = parsePx(style.height)
-  const bw = appearance.border?.width ?? 0
-  const padX = appearance.padding.left + appearance.padding.right + bw * 2
-  const padY = appearance.padding.top + appearance.padding.bottom + bw * 2
   let contentW: number
   let contentH: number
   if (fixedW != null && fixedH != null) {
-    contentW = Math.max(0, fixedW - padX)
-    contentH = Math.max(0, fixedH - padY)
+    contentW = Math.max(0, fixedW)
+    contentH = Math.max(0, fixedH)
   } else if (fixedW != null) {
-    contentW = Math.max(0, fixedW - padX)
+    contentW = Math.max(0, fixedW)
     contentH = natW > 0 ? (contentW * natH) / natW : 0
   } else if (fixedH != null) {
-    contentH = Math.max(0, fixedH - padY)
+    contentH = Math.max(0, fixedH)
     contentW = natH > 0 ? (contentH * natW) / natH : 0
   } else {
     contentW = natW
@@ -1229,8 +1222,8 @@ function layoutImage(node: LayerNode, ctx: LayoutContext): ImageLayoutNode {
       tag: node.tag,
       x: 0,
       y: 0,
-      width: fixedW ?? outer.width,
-      height: fixedH ?? outer.height,
+      width: outer.width,
+      height: outer.height,
       ink: { x: 0, y: 0, width: 0, height: 0 },
       bitmap,
       objectFit,
@@ -1242,8 +1235,8 @@ function layoutImage(node: LayerNode, ctx: LayoutContext): ImageLayoutNode {
     },
     0,
     0,
-    fixedW ?? outer.width,
-    fixedH ?? outer.height,
+    outer.width,
+    outer.height,
   )
   return laid
 }
@@ -2316,10 +2309,10 @@ function layoutFlex(node: LayerNode, ctx: LayoutContext): FlexLayoutNode {
   let crossAvailable =
     direction === 'row'
       ? fixedH != null
-        ? fixedH - appearance.padding.top - appearance.padding.bottom - (appearance.border?.width ?? 0) * 2
+        ? fixedH
         : Math.max(0, ...measures.map((m) => m.preferredCross))
       : fixedW != null
-        ? fixedW - appearance.padding.left - appearance.padding.right - (appearance.border?.width ?? 0) * 2
+        ? fixedW
         : Math.min(
             ctx.maxContentWidth,
             Math.max(0, ...measures.map((m) => (Number.isFinite(m.preferredCross) ? m.preferredCross : 0))),
@@ -2342,7 +2335,7 @@ function layoutFlex(node: LayerNode, ctx: LayoutContext): FlexLayoutNode {
   const mainAvailable =
     direction === 'row'
       ? fixedW != null
-        ? fixedW - appearance.padding.left - appearance.padding.right - (appearance.border?.width ?? 0) * 2
+        ? fixedW
         : ctx.maxContentWidth
       : fixedH ?? 1e6
 
@@ -2360,16 +2353,18 @@ function layoutFlex(node: LayerNode, ctx: LayoutContext): FlexLayoutNode {
     const m = measures[i]!
     const childFvg = m.source ?? childNodes[i]!
     const chParsed = parseStyle(childFvg.attrs.style)
-    const { grow, shrink } = parseFlexGrowShrink(chParsed)
+    const flexFactors = readFlexFactors(childFvg.attrs.style)
     const yn = Yoga.Node.createWithConfig(config)
-    yn.setFlexGrow(grow)
-    yn.setFlexShrink(shrink)
-    yn.setFlexBasisAuto()
+    yn.setFlexGrow(flexFactors.grow)
+    yn.setFlexShrink(flexFactors.shrink)
+    if (flexFactors.basis === 'auto') yn.setFlexBasisAuto()
+    else yn.setFlexBasis(flexFactors.basis)
     yn.setAlignSelf(mapAlign(m.crossAlign ?? 'stretch'))
     const textSource = m.source
     const columnText = direction === 'column' && m.isText && textSource != null && m.node.kind === 'text'
     if (columnText) {
-      const padX = m.node.padding.left + m.node.padding.right + (m.node.border?.width ?? 0) * 2
+      const padX = chromeX(m.node.padding, m.node.border?.width)
+      const padY = chromeY(m.node.padding, m.node.border?.width)
       const explicitW = parsePx(chParsed.width)
       const explicitH = parsePx(chParsed.height)
       const textPath = m.node.path
@@ -2378,11 +2373,11 @@ function layoutFlex(node: LayerNode, ctx: LayoutContext): FlexLayoutNode {
         const laid = layoutTextBox(textSource, { ...childCtx, pathPrefix: textPath, issues: [] }, limit)
         return {
           width: widthMode === MeasureMode.Exactly ? width : laid.width,
-          height: explicitH ?? laid.height,
+          height: explicitH != null ? explicitH + padY : laid.height,
         }
       })
-      if (explicitW != null) yn.setWidth(explicitW)
-      if (explicitH != null) yn.setHeight(explicitH)
+      if (explicitW != null) yn.setWidth(explicitW + padX)
+      if (explicitH != null) yn.setHeight(explicitH + padY)
     } else if (direction === 'row') {
       yn.setWidth(m.preferredMain)
       yn.setHeight(m.preferredCross === Infinity ? m.preferredCross : m.preferredCross)
@@ -2460,9 +2455,8 @@ function layoutFlex(node: LayerNode, ctx: LayoutContext): FlexLayoutNode {
   }
 
   const outer = outerFromContent(contentW, contentH, appearance.padding, appearance.border)
-  const borderW = (appearance.border?.width ?? 0) * 2
-  const innerW = fixedW != null ? fixedW - appearance.padding.left - appearance.padding.right - borderW : undefined
-  const innerH = fixedH != null ? fixedH - appearance.padding.top - appearance.padding.bottom - borderW : undefined
+  const innerW = fixedW
+  const innerH = fixedH
   if (innerW != null && (minX < -1e-3 || contentW > innerW + 1e-3)) {
     ctx.issues.push({ level: 'warn', code: 'flex-overflow', path: ctx.pathPrefix, message: 'flex 内容超出写死的 width' })
   }
@@ -2488,8 +2482,8 @@ function layoutFlex(node: LayerNode, ctx: LayoutContext): FlexLayoutNode {
     tag: node.tag,
     x: 0,
     y: 0,
-    width: fixedW ?? outer.width,
-    height: fixedH ?? outer.height,
+    width: fixedW != null ? fixedW + chromeX(appearance.padding, appearance.border?.width) : outer.width,
+    height: fixedH != null ? fixedH + chromeY(appearance.padding, appearance.border?.width) : outer.height,
     ink: { x: appearance.padding.left, y: appearance.padding.top, width: contentW, height: contentH },
     ...appearance,
     ...sharpOf(node.attrs, ctx),

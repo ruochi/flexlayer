@@ -41,6 +41,107 @@ export function parseNumber(value: string | undefined): number | undefined {
   return Number.isFinite(n) ? n : undefined
 }
 
+export type FlexFactors = { grow: number; shrink: number; basis: number | 'auto' }
+
+function unitlessNumber(token: string): number | null {
+  if (!/^-?(?:\d+|\d*\.\d+)$/.test(token)) return null
+  const n = Number(token)
+  return Number.isFinite(n) ? n : null
+}
+
+/** `auto` 或像素。单位为 0 的数字只在简写的基线位接受。 */
+export function parseFlexBasis(value: string): number | 'auto' | null {
+  const token = value.trim().toLowerCase()
+  if (token === 'auto') return 'auto'
+  if (!/px$/i.test(token)) return null
+  return parsePx(token) ?? null
+}
+
+/**
+ * CSS `flex` 简写。一个数字是 grow（shrink 1、basis 0）。
+ * `auto` 是 1 1 auto，`none` 是 0 0 auto，`initial` 是 0 1 auto。
+ */
+export function parseFlexShorthand(value: string): FlexFactors | null {
+  const text = value.trim().toLowerCase()
+  if (text === 'initial') return { grow: 0, shrink: 1, basis: 'auto' }
+  if (text === 'auto') return { grow: 1, shrink: 1, basis: 'auto' }
+  if (text === 'none') return { grow: 0, shrink: 0, basis: 'auto' }
+  const parts = text.split(/\s+/)
+  const tokens = parts.map((part) => {
+    if (part === 'auto') return { kind: 'auto' as const }
+    const n = unitlessNumber(part)
+    if (n != null) return { kind: 'num' as const, n }
+    if (/px$/i.test(part)) {
+      const len = parsePx(part)
+      if (len != null) return { kind: 'len' as const, n: len }
+    }
+    return null
+  })
+  if (tokens.some((token) => token == null)) return null
+  const parsed = tokens as Array<{ kind: 'auto' } | { kind: 'num' | 'len'; n: number }>
+  const basisOf = (token: (typeof parsed)[number]): number | 'auto' | null => {
+    if (token.kind === 'auto') return 'auto'
+    if (token.kind === 'len') return token.n
+    if (token.kind === 'num' && token.n === 0) return 0
+    return null
+  }
+  if (parsed.length === 1) {
+    const one = parsed[0]!
+    if (one.kind === 'auto') return { grow: 1, shrink: 1, basis: 'auto' }
+    if (one.kind === 'num') return { grow: one.n, shrink: 1, basis: 0 }
+    return { grow: 1, shrink: 1, basis: one.n }
+  }
+  if (parsed.length === 2) {
+    const [a, b] = parsed
+    if (a!.kind === 'num' && b!.kind === 'num') return { grow: a!.n, shrink: b!.n, basis: 0 }
+    const basis = basisOf(b!)
+    if (a!.kind === 'num' && basis != null && b!.kind !== 'num') return { grow: a!.n, shrink: 1, basis }
+    const lead = basisOf(a!)
+    if (lead != null && a!.kind !== 'num' && b!.kind === 'num') return { grow: b!.n, shrink: 1, basis: lead }
+    return null
+  }
+  if (parsed.length === 3) {
+    const [a, b, c] = parsed
+    const basis = basisOf(c!)
+    if (a!.kind !== 'num' || b!.kind !== 'num' || basis == null) return null
+    return { grow: a!.n, shrink: b!.n, basis }
+  }
+  return null
+}
+
+/** 按声明顺序读 flex。简写会重置 grow、shrink、basis，后面的长写再盖回去。 */
+export function readFlexFactors(rawStyle: string | undefined): FlexFactors {
+  let grow = 0
+  let shrink = 1
+  let basis: number | 'auto' = 'auto'
+  if (!rawStyle) return { grow, shrink, basis }
+  for (const decl of rawStyle.split(';')) {
+    const i = decl.indexOf(':')
+    if (i < 0) continue
+    const key = decl.slice(0, i).trim().toLowerCase()
+    const value = decl.slice(i + 1).trim()
+    if (!value) continue
+    if (key === 'flex-grow') {
+      const n = parseNumber(value)
+      if (n != null) grow = n
+    } else if (key === 'flex-shrink') {
+      const n = parseNumber(value)
+      if (n != null) shrink = n
+    } else if (key === 'flex-basis') {
+      const next = parseFlexBasis(value)
+      if (next != null) basis = next
+    } else if (key === 'flex') {
+      const next = parseFlexShorthand(value)
+      if (next) {
+        grow = next.grow
+        shrink = next.shrink
+        basis = next.basis
+      }
+    }
+  }
+  return { grow, shrink, basis }
+}
+
 const CENTER_ORIGIN: Origin = {
   x: { unit: 'percent', value: 50 },
   y: { unit: 'percent', value: 50 },
@@ -730,9 +831,10 @@ const STYLE_CHECKS: Record<string, (value: string) => StyleDiagnostic | null> = 
       '写成 flex-start、center、flex-end 或 space-between',
     ),
   'flex-wrap': (value) => keywordHint(value, ['nowrap', 'wrap', 'wrap-reverse'], '写成 nowrap、wrap 或 wrap-reverse'),
-  flex: (value) => (value.trim() === '1' ? null : { hint: '写成 flex:1。需要分开控制时用 flex-grow 和 flex-shrink' }),
+  flex: (value) => (parseFlexShorthand(value) == null ? { hint: '写成 flex:1、flex:auto、flex:none，或 1 1 40px' } : null),
   'flex-grow': (value) => numberHint(value, '写成数字，例如 1'),
   'flex-shrink': (value) => numberHint(value, '写成数字，例如 1'),
+  'flex-basis': (value) => (parseFlexBasis(value) == null ? { hint: '写成 auto、0 或 40px' } : null),
   gap: (value) => lengthHint(value, '写成 16 或 16px'),
   'row-gap': (value) => lengthHint(value, '写成 16 或 16px'),
   'column-gap': (value) => lengthHint(value, '写成 16 或 16px'),

@@ -19,19 +19,19 @@
   </layer>
   <layer x="576" y="100">
     <div style="display:flex; flex-wrap:wrap; width:456px; column-gap:16px; row-gap:16px; align-items:stretch">
-      <div style="display:flex; flex-direction:column; width:220px; padding:18px; background:#1c2430; border-radius:16px; align-items:flex-start">
+      <div style="display:flex; flex-direction:column; width:184px; padding:18px; background:#1c2430; border-radius:16px; align-items:flex-start">
         <p style="font-size:28px">春分</p>
         <p style="font-size:24px; color:#d5d0c6">昼夜均分</p>
       </div>
-      <div style="display:flex; flex-direction:column; width:220px; padding:18px; background:#1c2430; border-radius:16px; align-items:flex-start">
+      <div style="display:flex; flex-direction:column; width:184px; padding:18px; background:#1c2430; border-radius:16px; align-items:flex-start">
         <p style="font-size:28px">清明</p>
         <p style="font-size:24px; color:#d5d0c6">桐始华</p>
       </div>
-      <div style="display:flex; flex-direction:column; width:220px; padding:18px; background:#1c2430; border-radius:16px; align-items:flex-start">
+      <div style="display:flex; flex-direction:column; width:184px; padding:18px; background:#1c2430; border-radius:16px; align-items:flex-start">
         <p style="font-size:28px">谷雨</p>
         <p style="font-size:24px; color:#d5d0c6">萍始生</p>
       </div>
-      <div style="display:flex; flex-direction:column; width:220px; padding:18px; background:#1c2430; border-radius:16px; align-items:flex-start">
+      <div style="display:flex; flex-direction:column; width:184px; padding:18px; background:#1c2430; border-radius:16px; align-items:flex-start">
         <p style="font-size:28px">立夏</p>
         <p style="font-size:24px; color:#d5d0c6">蝼蝈鸣</p>
       </div>
