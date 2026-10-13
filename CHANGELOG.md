@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.9
+
+Skill 改成项目介绍、仓库和文档地址，以及超出 HTML 截图的能力。属性、命令和例子留在 SPEC，不再写进技能。
+
 ## 0.6.8
 
 three.js 的 `Line`、`LineSegments`、`LineLoop` 画进 `<model object>` 的同一深度缓冲。材质 `wireframe: true` 只画边，不再填成实心，也不再整段跳过。线用材质颜色，线宽是屏幕像素，不写是 1。`Points` 仍不画。
