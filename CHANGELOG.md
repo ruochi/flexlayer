@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.7
+
+three.js 的 `Line`、`LineSegments`、`LineLoop` 画进 `<model object>` 的同一深度缓冲。材质 `wireframe: true` 只画边，不再填成实心，也不再整段跳过。线用材质颜色，线宽是屏幕像素，不写是 1。`Points` 仍不画。
+
+`.layer` 的 `<script>` 子进程在 canvas 包目录之外，再放行目录里的文件。只给目录、不给通配时，有的 Node 会报 `Access to this API has been restricted`，画布是空的。
+
 ## 0.6.6
 
 公式、调色、沿墨迹描边、玻璃、噪点和命令行工具链按用到再加载。绘制和排版仍是同步的。同一份 `.tsx` 的 esbuild 结果缓存在本机，并带上当前 flexlayer 的安装路径。

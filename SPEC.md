@@ -88,7 +88,7 @@ Flex Layer 用标签描述**一帧画面**。`div`、`p`、`h1`–`h3`、`span`�
 
 形状写了正的 `depth` 就沿 z 挤出，厚度以所在平面为中心，布局只看宽高。`rect` 是盒子，`rx` 是圆棱。`circle` 是圆柱，轴沿 z。`ellipse`、`polygon`、`path` 按轮廓挤出，洞用 `fill-rule`（默认 `nonzero`，也可 `evenodd`）。没写 `depth` 就是平面。开口的线写 `depth` 报 `invalid-attr`。`box`、`cylinder`、`extrude` 仍可用，报 `non-canonical`。
 
-挤出做不到的用 `sphere`（`cx` `cy` `r`）、`torus`（`cx` `cy` `r` `tube`，环躺在平面里）、`tube`（`d` 是中心线，`r` 是管半径）、`model`（`src` 指向 `.glb`，或在 tsx 里写 `object` 传入网格，放进有宽高的 layer。不写 `unit` 时 contain 居中；写了 `unit` 就按这个像素保留原始坐标。不写 `material` 时，金属度不小于 0.5 用 `metal`，否则用 `plastic`）。同一层里出现这些实体、`ground`，或 `rotateX`、`rotateY`、`z`，就开镜头。不写 `camera` 时视距等于这一层的 `height`。`fill` 只收纯色，渐变用第一个颜色。`material` 是 `matte`、`plastic`、`metal`、`glass`，可跟粗糙度，不写是磨砂。实体上的 `stroke` 描棱线，`hidden` 是隐藏线的颜色。SVG 元素可以写 `transform="rotateX(40) translateZ(20)"`，和 `rotateX`、`z` 是同一套姿态。
+挤出做不到的用 `sphere`（`cx` `cy` `r`）、`torus`（`cx` `cy` `r` `tube`，环躺在平面里）、`tube`（`d` 是中心线，`r` 是管半径）、`model`（`src` 指向 `.glb`，或在 tsx 里写 `object` 传入网格，放进有宽高的 layer。不写 `unit` 时 contain 居中；写了 `unit` 就按这个像素保留原始坐标。不写 `material` 时，金属度不小于 0.5 用 `metal`，否则用 `plastic`）。`Line`、`LineSegments`、`LineLoop` 按线段画进同一深度缓冲；材质 `wireframe` 为真时只画三角形的边，不填面。线用材质颜色，不吃 three.js 的灯光，线宽是屏幕像素，不写是 1。`Points` 不画。同一层里出现这些实体、`ground`，或 `rotateX`、`rotateY`、`z`，就开镜头。不写 `camera` 时视距等于这一层的 `height`。`fill` 只收纯色，渐变用第一个颜色。`material` 是 `matte`、`plastic`、`metal`、`glass`，可跟粗糙度，不写是磨砂。实体上的 `stroke` 描棱线，`hidden` 是隐藏线的颜色。SVG 元素可以写 `transform="rotateX(40) translateZ(20)"`，和 `rotateX`、`z` 是同一套姿态。
 
 `shadows` 写在开了镜头的那一层。不写时，实体把影子投到 `ground` 上。`shadows="none"` 关掉，深度遮挡还在。`cast-shadow="false"` 这只实体不投。`receive-shadow` 只写在 `ground` 上，`false` 就不接。写在别处，或 `shadows` 不是 `auto` / `none`，或写在没开镜头的层上，报 `invalid-attr`。
 
@@ -805,7 +805,7 @@ registerFilter({
 | `invalid-script` | error / warn / info | `<script>` 语法错误或运行出错（error），内容为空（warn），或 `--no-script` 跳过（info）。运行出错带上源码位置，其余内容照常绘制 |
 | `missing-image` | warn | `img` 的 `src` 读不到 |
 | `missing-icon` | warn | `class="material-symbols-outlined"`（或 `font-family` 指到 `Symbols`）里的名字不是 Material Symbols 的图标名 |
-| `missing-model` | warn | `model` 的 `src` 缺失、不是 `.glb`、文件读不到，或 `object` 里没有三角形网格；没有可放入的宽高时也是这个码 |
+| `missing-model` | warn | `model` 的 `src` 缺失、不是 `.glb`、文件读不到，或 `object` 里没有三角形或线段；没有可放入的宽高时也是这个码 |
 | `missing-symbol` | warn | `use` 的 `href` 没有对应的 `symbol` |
 | `symbol-cycle` | warn | `symbol` 通过 `use` 引用了自己 |
 | `open-curve-fill` | warn | 开口的 `curve` 写了 `fill`，没有填充 |
