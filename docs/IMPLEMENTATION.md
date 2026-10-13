@@ -2,6 +2,22 @@
 
 写法和规则以 [SPEC.md](../SPEC.md) 为准。本文只记效果和公式的实现在哪、为什么这样写。
 
+## 按需加载
+
+绘制和排版函数保持同步。模块在进这些函数之前装好，装过一次的进程里后面直接用。
+
+| 模块 | 什么时候装 | 入口 |
+| --- | --- | --- |
+| 公式 `math/layout.ts`、OpenType、STIX | 树上有公式标签，或源码里写了公式 | `author-features.ts`，在 `prepareAssets` 里。`layoutSync` / `canvas.create` 若还没装，再同步确认 |
+| 调色 `grade.ts` | 树上有 `grade` 或 `grade-mask` | 同上。登记仍进 `filter.ts` 的滤镜表 |
+| 距离场、沿墨迹描边、玻璃、噪点 | 排版结果里真有对应效果 | `paintDocument` 开头的 `ensurePaintFeatures` |
+| 图标码位 | 第一次把图标名换成码位 | `icons.ts` 读 `icon-codepoints.txt`。没有图标字体时不读、也不下载字体文件 |
+| esbuild、TypeScript | 源文件是 `.tsx` / `.ts` / `.jsx` / `.js` | `cli-main.ts` 再去加载。`.layer` 不走这条路 |
+| `frame.ts` | 源文件是 Composition，要渲染多帧或联系表 | 同上 |
+| esbuild 缓存 | 同一份源文件再次执行 | `~/.cache/flexlayer/code/<内容哈希>/entry.mjs`。入口、相对引用和当前 flexlayer 安装路径一起哈希，变了就重打 |
+
+`rules.ts` 只用 `math/rules.ts` 里的标签表，不拉公式排版。
+
 ## 效果
 
 归属：layer / 图形 / 线条写属性；文字 / flex HTML 写 `style`。`overlay`、`grade`、`grade-mask` 只允许写在 `layer` 上。`<mask>` 是标签，不是属性。绘制顺序见 SPEC「效果」。

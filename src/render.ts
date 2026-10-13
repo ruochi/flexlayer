@@ -1,6 +1,6 @@
 import type { Canvas } from '@napi-rs/canvas'
 import { layoutSync, prepareAssets, readLayerRoot } from './layout.js'
-import { paintDocument } from './paint.js'
+import { ensurePaintFeatures, paintDocument } from './paint.js'
 import { applyCanvasScripts } from './run-scripts.js'
 import { renderPreviewSheet } from './preview.js'
 import { buildReport } from './report.js'
@@ -80,6 +80,7 @@ export async function renderPreview(source: string | LayerNode, options: RenderO
   const opened = readLayerRoot(source)
   const assets = await prepareAssets(opened.root, baseDir, { fonts: opened.fonts })
   const doc = layoutSync(opened.root, assets)
+  await ensurePaintFeatures(doc.root)
   const sheet = renderPreviewSheet(doc)
   return sheet ? sheet.toBuffer('image/png') : null
 }
