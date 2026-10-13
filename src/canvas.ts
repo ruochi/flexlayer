@@ -30,8 +30,9 @@ function fileFromStack(line: string): string | null {
   return file
 }
 
-/** 打包器写在系统临时目录里的 `flexlayer-随机/entry.mjs`。用户目录名叫 flexlayer- 时不能当成这一份。 */
+/** 打包器写在系统临时目录里的 `flexlayer-随机/entry.mjs`，或代码缓存里的 `entry.mjs`。用户目录名叫 flexlayer- 时不能当成这一份。 */
 function isBundledEntry(file: string): boolean {
+  if (/[/\\]\.cache[/\\]flexlayer[/\\]code[/\\][^/\\]+[/\\]entry\.mjs$/.test(file)) return true
   const root = tmpdir().replace(/[/\\]+$/, '')
   if (file !== root && !file.startsWith(`${root}/`) && !file.startsWith(`${root}\\`)) return false
   return /[/\\]flexlayer-[^/\\]+[/\\]entry\.mjs$/.test(file)

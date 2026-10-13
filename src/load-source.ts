@@ -1,10 +1,12 @@
-import { existsSync } from 'node:fs'
-import { mkdtemp, rm, readFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { existsSync, readFileSync, statSync } from 'node:fs'
+import { mkdir, readFile, rm } from 'node:fs/promises'
 import { builtinModules, createRequire } from 'node:module'
-import { tmpdir } from 'node:os'
+import { homedir } from 'node:os'
 import { dirname, extname, join, relative, isAbsolute, resolve, sep } from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import * as esbuild from 'esbuild'
+import { ensureAuthorSource } from './author-features.js'
 import type { Composition } from './frame.js'
 import type { LayerNode } from './parse.js'
 import { setLayerBaseDir } from './canvas.js'
@@ -12,6 +14,10 @@ import { formatSourceLoc } from './source-loc.js'
 import { registerFontsFromDocument } from './fonts.js'
 import { nondeterministicCalls, staticLayerFonts } from './syntax.js'
 import type { Issue } from './types.js'
+
+/** 打包参数变了就加一，旧缓存作废。 */
+const CODE_CACHE_REV = '2'
+const CODE_EXTS = ['.tsx', '.ts', '.jsx', '.js', '.mjs']
 
 const CODE_EXT = new Set(['.tsx', '.jsx', '.ts', '.js'])
 const require = createRequire(import.meta.url)
@@ -111,9 +117,86 @@ async function importBundled(outfile: string): Promise<Record<string, unknown>> 
   return (await import(pathToFileURL(outfile).href)) as Record<string, unknown>
 }
 
+function resolveCodeImport(fromFile: string, spec: string): string | null {
+  if (!spec.startsWith('.')) return null
+  const base = resolve(dirname(fromFile), spec)
+  const candidates = [base, ...CODE_EXTS.map((ext) => base + ext), ...CODE_EXTS.map((ext) => join(base, `index${ext}`))]
+  for (const candidate of candidates) {
+    try {
+      if (statSync(candidate).isFile()) return candidate
+    } catch {
+      // 还没写出来
+    }
+  }
+  return null
+}
+
+function localImportSpecs(source: string): string[] {
+  const specs: string[] = []
+  const re = /(?:from|import)\s*(?:\(\s*)?['"](\.[^'"]+)['"]/g
+  for (const match of source.matchAll(re)) specs.push(match[1]!)
+  return specs
+}
+
+/** 外部依赖被打成绝对路径。换一次安装位置就要换一个缓存，避免指向上次已删的目录。 */
+function runtimeIdentity(): string {
+  const parts = [
+    flexlayerEntry('flexlayer'),
+    flexlayerEntry('flexlayer/jsx-runtime'),
+    flexlayerEntry('flexlayer/jsx-dev-runtime'),
+  ]
+  try {
+    parts.push(require.resolve('@napi-rs/canvas'))
+  } catch {
+    // 没装上时打包自己会失败
+  }
+  return parts.join('\0')
+}
+
+function isMissingModule(err: unknown): boolean {
+  return (err as { code?: string }).code === 'ERR_MODULE_NOT_FOUND'
+}
+
+/** 入口、相对引用和当前 flexlayer 安装路径一起哈希。内容不变就复用上次打好的包。 */
+function codeHash(file: string): string {
+  const hash = createHash('sha256')
+  hash.update(CODE_CACHE_REV)
+  hash.update('\0runtime\0')
+  hash.update(runtimeIdentity())
+  const seen = new Set<string>()
+  const walk = (current: string) => {
+    const abs = resolve(current)
+    if (seen.has(abs)) return
+    seen.add(abs)
+    let text = ''
+    try {
+      text = readFileSync(abs, 'utf8')
+    } catch {
+      return
+    }
+    hash.update('\0')
+    hash.update(text)
+    for (const spec of localImportSpecs(text)) {
+      const next = resolveCodeImport(abs, spec)
+      if (next) walk(next)
+    }
+  }
+  walk(file)
+  return hash.digest('hex').slice(0, 32)
+}
+
 async function importCode(file: string): Promise<Record<string, unknown>> {
-  const dir = await mkdtemp(join(tmpdir(), 'flexlayer-'))
+  const dir = join(homedir(), '.cache', 'flexlayer', 'code', codeHash(file))
   const outfile = join(dir, 'entry.mjs')
+  if (existsSync(outfile)) {
+    try {
+      return await importBundled(outfile)
+    } catch (err) {
+      if (!isMissingModule(err)) throw err
+      await rm(dir, { recursive: true, force: true })
+    }
+  }
+  await mkdir(dir, { recursive: true })
   try {
     await esbuild.build({
       absWorkingDir: dirname(file),
@@ -126,7 +209,7 @@ async function importCode(file: string): Promise<Record<string, unknown>> {
       jsx: 'automatic',
       jsxDev: true,
       jsxImportSource: 'flexlayer',
-      // 打包后 import.meta.url 落在临时目录，图片解码线程要从这里找到 canvas。
+      // 打包后 import.meta.url 落在缓存目录，图片解码线程要从这里找到 canvas。
       banner: { js: `globalThis.__flexlayerCanvasEntry = ${JSON.stringify(require.resolve('@napi-rs/canvas'))}` },
       plugins: [
         {
@@ -162,6 +245,7 @@ async function importCode(file: string): Promise<Record<string, unknown>> {
     })
     return await importBundled(outfile)
   } catch (err) {
+    await rm(dir, { recursive: true, force: true })
     const failure = err as { errors?: Array<{ text?: string; location?: { file?: string; line?: number; column?: number } }> }
     const first = failure.errors?.[0]
     if (first?.text) {
@@ -170,8 +254,6 @@ async function importCode(file: string): Promise<Record<string, unknown>> {
       throw new Error(`${displayFile(locatedFile(raw, dirname(file)))}${at} ${first.text}`)
     }
     throw err
-  } finally {
-    await rm(dir, { recursive: true, force: true })
   }
 }
 
@@ -202,6 +284,7 @@ export async function loadLayerFile(file: string): Promise<LoadedLayer> {
   const fonts = staticLayerFonts(source, file)
   if (fonts.length > 0) await registerFontsFromDocument(fonts, dirname(file))
   setLayerBaseDir(dirname(file))
+  await ensureAuthorSource(source)
   const loaded = withAbsoluteLocs(resolveExport(await importCode(file), file), file)
   const issues = nondeterministicIssues(source, file)
   return { ...loaded, issues }

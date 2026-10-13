@@ -1,4 +1,4 @@
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { resolveLayerBaseDir } from './canvas.js'
@@ -16,6 +16,12 @@ describe('resolveLayerBaseDir', () => {
 
   it('打包器写在临时目录里的 entry 用钉住的源目录', () => {
     const entry = join(tmpdir(), 'flexlayer-Ab12', 'entry.mjs')
+    const stack = `Error\n    at ${entry}:1:1\n    at run (/workspace/src/canvas.ts:10:1)`
+    expect(resolveLayerBaseDir(stack, '/src/poster', '/cwd')).toBe('/src/poster')
+  })
+
+  it('代码缓存里的 entry 也用钉住的源目录', () => {
+    const entry = join(homedir(), '.cache', 'flexlayer', 'code', 'abc', 'entry.mjs')
     const stack = `Error\n    at ${entry}:1:1\n    at run (/workspace/src/canvas.ts:10:1)`
     expect(resolveLayerBaseDir(stack, '/src/poster', '/cwd')).toBe('/src/poster')
   })

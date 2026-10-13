@@ -1,8 +1,3 @@
-/**
- * Material Symbols Outlined 的图标名和码位。
- * 优先用官方 codepoints；这套字体把名字放在别的码位上时，用字体里实际画这个名字的码位。
- */
-export const ICON_CODEPOINTS_TEXT = `
 10k e951
 10mp e952
 11mp e953
@@ -3621,4 +3616,3 @@ zoom_in e8ff
 zoom_in_map eb2d
 zoom_out e900
 zoom_out_map e56b
-`

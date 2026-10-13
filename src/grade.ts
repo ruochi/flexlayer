@@ -1,3 +1,4 @@
+import { registerFilter } from './filter.js'
 import { oklabToSrgb, parseColor, rgbToOklab } from './gradientField.js'
 import { splitCssTokens } from './style.js'
 import type { GradePresetName, GradeSpec, GradeTone } from './types.js'
@@ -231,3 +232,20 @@ export function applyGrade(
     }
   }
 }
+
+const GRADE_HINT = '写成 lomo 0.8, fade 0.1，或 shadows #2a6080, highlights #ffd8a8, contrast 1.1, vignette 0.4'
+
+registerFilter<GradeSpec>({
+  name: 'grade',
+  kind: 'pixel',
+  layerOnly: true,
+  maskAttr: 'grade-mask',
+  includeBackdrop: true,
+  hint: GRADE_HINT,
+  maskHint: '和 grade 一起写，例如 <layer grade="lomo" grade-mask="radial-gradient(#fff0 30%, #fff)">',
+  maskPaintHint: '写成 linear-gradient(to right, #fff, #fff0)、radial-gradient(#fff0 30%, #fff) 或 gradient(...)；alpha 是强度',
+  parse: parseGrade,
+  apply(pixels, spec) {
+    applyGrade(pixels.data, pixels.width, pixels.height, spec, pixels.frame)
+  },
+})

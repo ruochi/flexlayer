@@ -1,6 +1,7 @@
 import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  ensureGradeFilter,
   filtersPad,
   getFilter,
   listFilters,
@@ -38,7 +39,8 @@ function wash(pixelsIn: FilterPixels, amount: number) {
 }
 
 describe('滤镜接口', () => {
-  it('内置 grade 和 filter 登记在同一张表上', () => {
+  it('内置 grade 和 filter 登记在同一张表上', async () => {
+    await ensureGradeFilter()
     const names = listFilters().map((item) => item.name)
     expect(names).toContain('grade')
     expect(names).toContain('filter')

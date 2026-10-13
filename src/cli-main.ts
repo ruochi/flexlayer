@@ -1,16 +1,14 @@
 import { createWriteStream, readFileSync, statSync, watch, type FSWatcher } from 'node:fs'
-import { mkdir, writeFile } from 'node:fs/promises'
-import { basename, dirname, join, resolve } from 'node:path'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { basename, dirname, extname, join, resolve } from 'node:path'
 import { stdout } from 'node:process'
 import type { Writable } from 'node:stream'
 import { mergeFrameIssues, sampleFrames, type SampleSpec } from './check-frames.js'
 import { emitLayer } from './emit.js'
 import type { Composition, FrameInput } from './frame.js'
-import { createContactSheet, renderFrames } from './frame.js'
-import { loadLayerFile, type LoadedLayer } from './load-source.js'
+import type { LoadedLayer } from './load-source.js'
 import { formatIssueLine } from './report.js'
 import { checkLayer, renderLayer, renderPreview } from './render.js'
-import { typecheckLayerFile } from './typecheck.js'
 import type { LayerNode } from './parse.js'
 import type { LayerReport, Issue } from './types.js'
 
@@ -284,11 +282,21 @@ export async function main() {
   await new Promise(() => {})
 }
 
+const CODE_EXT = new Set(['.tsx', '.jsx', '.ts', '.js'])
+
 async function run(args: ReturnType<typeof parseArgs>) {
   const abs = resolve(args.file)
-  const loaded: LoadedLayer = await loadLayerFile(abs)
+  const ext = extname(abs).toLowerCase()
+  let loaded: LoadedLayer
+  let typeIssues: Issue[] = []
+  if (CODE_EXT.has(ext)) {
+    const [{ loadLayerFile }, { typecheckLayerFile }] = await Promise.all([import('./load-source.js'), import('./typecheck.js')])
+    loaded = await loadLayerFile(abs)
+    typeIssues = typecheckLayerFile(abs)
+  } else {
+    loaded = { kind: 'markup', source: await readFile(abs, 'utf8') }
+  }
   const baseDir = dirname(abs)
-  const typeIssues = typecheckLayerFile(abs)
 
   if (args.preview && loaded.kind === 'composition') throw new Error('--preview 只用于单帧 .layer 或 .tsx')
   if (args.frame != null && loaded.kind !== 'composition') usage()
@@ -337,6 +345,7 @@ async function run(args: ReturnType<typeof parseArgs>) {
   }
 
   if (loaded.kind === 'composition') {
+    const { createContactSheet, renderFrames } = await import('./frame.js')
     const comp: Composition = loaded.composition
     if (args.frame != null) {
       if (args.frame >= comp.durationInFrames) {
