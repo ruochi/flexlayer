@@ -44,6 +44,7 @@ describe('属性注册表', () => {
       'flex',
       'flex-grow',
       'flex-shrink',
+      'flex-basis',
       'gap',
       'border',
       'border-radius',

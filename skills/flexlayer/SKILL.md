@@ -9,7 +9,7 @@ metadata:
 
 # Flex Layer
 
-用标签描述一帧画面，渲染成 PNG。图形用 SVG 的写法，文字用 HTML 的写法，布局用 CSS flexbox。有数据、循环或动画时写 `.tsx`；静态单帧可以手写 `.layer`。
+用标签描述一帧画面，渲染成 PNG。图形用 SVG 的写法。文字和排布是 HTML，按 HTML 渲染，`style` 的初始值就是 CSS 的。有数据、循环或动画时写 `.tsx`；静态单帧可以手写 `.layer`。
 
 若当前工作区就是 flexlayer 仓库，以根目录的 `AGENTS.md` 为准，命令用 `npx tsx src/cli.ts`，规范是仓库里的 `SPEC.md`。下面是给别的项目用的。
 

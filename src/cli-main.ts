@@ -359,9 +359,9 @@ async function run(args: ReturnType<typeof parseArgs>) {
       const outPath = outPng(abs, args.out)
       await writeFile(outPath, png)
       printIssues(report)
-      say(`✓ ${outPath}  ${report.width}×${report.height}  第 ${args.frame} 帧`)
       if (args.report) await writeFile(args.report, JSON.stringify(report, null, 2))
       failIfErrors(report)
+      say(`✓ ${outPath}  ${report.width}×${report.height}  第 ${args.frame} 帧`)
       return
     }
 
@@ -430,15 +430,15 @@ async function run(args: ReturnType<typeof parseArgs>) {
       await emitNode(comp.component(frameInput(emitFrame, comp.fps)), args.emit, report)
     }
     printIssues(report)
-    if (args.framesArg) say(`✓ ${args.framesArg}  ${count} 帧`)
-    if (args.rgba && !rgbaToStdout) say(`✓ ${args.rgba}  ${count} 帧原始像素`)
     if (sheet) {
       const outPath = outPng(abs, args.out)
       await writeFile(outPath, sheet.toPng())
-      say(`✓ ${outPath}  联系表  ${count} 帧`)
     }
     if (args.report) await writeFile(args.report, JSON.stringify(report, null, 2))
     failIfErrors(report)
+    if (args.framesArg) say(`✓ ${args.framesArg}  ${count} 帧`)
+    if (args.rgba && !rgbaToStdout) say(`✓ ${args.rgba}  ${count} 帧原始像素`)
+    if (sheet) say(`✓ ${outPng(abs, args.out)}  联系表  ${count} 帧`)
     return
   }
 
@@ -453,10 +453,10 @@ async function run(args: ReturnType<typeof parseArgs>) {
     if (!sheet) throw new Error('没有 <preview>。写成 <preview of="#id" show="overlay checker black white edges" />')
     await mkdir(dirname(resolve(args.preview)), { recursive: true })
     await writeFile(args.preview, sheet)
-    say(`✓ ${args.preview}  选区预览`)
   }
   printIssues(report)
-  say(`✓ ${outPath}  ${report.width}×${report.height}  ${report.elements.length} 个元素`)
   if (args.report) await writeFile(args.report, JSON.stringify(report, null, 2))
   failIfErrors(report)
+  if (args.preview) say(`✓ ${args.preview}  选区预览`)
+  say(`✓ ${outPath}  ${report.width}×${report.height}  ${report.elements.length} 个元素`)
 }

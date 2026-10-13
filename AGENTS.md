@@ -22,7 +22,6 @@
 | 线条 | `<layer><line x1 y1 x2 y2 /></layer>` | `invalid-child` |
 | 文字位置 | `<layer x="120" y="64"><h1>…</h1></layer>` | `invalid-attr` |
 | 位置 | `layer`、`use`、`rect` 用 `x` `y`。圆、椭圆、球用 `cx` `cy` | `invalid-attr` |
-| 竖排对齐 | `align-items` 默认 `stretch`，和 CSS 一样。要居中写 `align-items:center` | |
 | 渐变 | 字形 `style="fill:linear-gradient(...)"`。`color` 只写纯色 | `invalid-attr` |
 | 描边 | 只写 `stroke`。形状可加 `stroke-width`；沿墨迹写 `stroke="6 #000 outside"` | `invalid-attr` |
 | 整棵子树的效果 | `<layer grade="lomo" overlay="#00000066">` | `invalid-attr` |
@@ -39,12 +38,12 @@
 | 蒙版、抠图、`preview`、`derive` | SPEC 第 4.1 节和第 6 章 |
 | 透视、镜头、实体 | SPEC 第 3 章 |
 | 公式 | SPEC 第 4.1 节 |
-| `canvas.create`、动画、`glyph` | SPEC 第 5.4 节、第 13 章、第 15 章 |
+| `canvas.create`、动画、`glyph` | SPEC 第 5.3 节、第 13 章、第 15 章 |
 | 问题码和报告字段 | SPEC 第 10 章 |
 | 某个属性怎么写 | [docs/attrs.json](docs/attrs.json)，按名字查 |
 | 按气质选字体 | [docs/RESOURCES.md](docs/RESOURCES.md) 的推荐字体。寒蝉端黑体是默认字体。其余名字自己带字体文件 |
 
-flex 的默认值、文字盒子里不能嵌套块级标签、图标写法，都在 SPEC 第 4、5 章，不要在这里再记一份。
+HTML 和 `display:flex` 按 CSS 渲染，默认值不在这里记。文字盒子里不能嵌套块级标签、图标写法在 SPEC 第 4、5 章。
 
 ## 仓库
 

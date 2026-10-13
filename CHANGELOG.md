@@ -1,12 +1,22 @@
 # Changelog
 
-## 0.5.2
+## 0.6.1
 
 形状写了正的 `depth` 就沿 z 挤出：`rect` 是盒子，`circle` 是轴沿 z 的圆柱，`ellipse`、`polygon`、`path` 按轮廓挤出。洞用 `fill-rule`，默认 `nonzero`。`sphere`、`torus`、`tube`、`model`、`ground` 仍是单独的标签。`box`、`cylinder`、`extrude` 照旧绘制，报 `non-canonical`。
 
 SVG 元素可以写 `transform="rotateX() rotateY() rotateZ() translateZ()"`。二维的 `translate`、`rotate`、`scale`、`matrix` 仍写在 `<g>` 上。
 
 影子只落在 `ground` 上。`shadows="none"` 关掉，`cast-shadow="false"` 这只实体不投，`receive-shadow` 只写在 `ground` 上。
+
+## 0.6.0
+
+HTML 标签按 HTML 渲染，`style` 按 CSS。对齐、伸缩、间距、换行、继承、字号和盒子的初始值不再在规范里复述。
+
+初始字号是 16px。`h1` 是 2em，`h2` 是 1.5em，`h3` 是 1.17em，字重是 bold。`width` 和 `height` 是内容盒，padding 和 border 加在外面。`flex` 用 CSS 简写，`flex:1` 是 `1 1 0`。
+
+## 0.5.2
+
+`.layer` 里的 `<script>` 在子进程里跑。`node_modules` 是符号链接时，权限名单以前只放真实目录，加载器读的却是链接上的 `package.json`，于是报 `Access to this API has been restricted`，canvas 是空的。现在链接和真实路径都放行。脚本出错时不再先打出渲染成功。
 
 ## 0.5.1
 

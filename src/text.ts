@@ -42,16 +42,21 @@ export type TextBoxDefaults = {
   lineHeightRatio: number
 }
 
-export function defaultFontSizeForTag(tag: string): number {
+/** 浏览器初始字号 `medium`。 */
+export const MEDIUM_FONT_SIZE = 16
+
+/** 标题字号跟用户代理样式表：`h1` 2em、`h2` 1.5em、`h3` 1.17em，相对父级字号。 */
+export function defaultFontSizeForTag(tag: string, parentSize?: number): number {
+  const base = parentSize ?? MEDIUM_FONT_SIZE
   switch (tag) {
     case 'h1':
-      return 88
+      return base * 2
     case 'h2':
-      return 64
+      return base * 1.5
     case 'h3':
-      return 48
+      return base * 1.17
     default:
-      return 40
+      return base
   }
 }
 

@@ -111,7 +111,7 @@ describe('layoutSource', () => {
     expect(column.children.map((child) => child.textLayout.fontSize)).toEqual([32, 32])
   })
 
-  it('div 上的字号和颜色传给 p，标题仍用自己的字号', async () => {
+  it('div 上的字号和颜色传给 p，标题是父级的 em', async () => {
     const doc = await layoutSource(
       `<layer width="800" height="400" color="#111111"><div style="font-size:22px; color:#abcdef; font-family:Kai"><p>甲</p><h3>标题</h3></div></layer>`,
       process.cwd(),
@@ -125,9 +125,29 @@ describe('layoutSource', () => {
     expect(paragraph?.textLayout.lines[0]?.segments[0]?.style.color).toBe('#abcdef')
     expect(paragraph?.textLayout.lines[0]?.segments[0]?.style.fontFamily).toBe('Kai')
     expect(heading?.tag).toBe('h3')
-    expect(heading?.textLayout.fontSize).toBe(48)
+    expect(heading?.textLayout.fontSize).toBeCloseTo(22 * 1.17, 5)
     expect(heading?.textLayout.lines[0]?.segments[0]?.style.color).toBe('#abcdef')
     expect(heading?.textLayout.lines[0]?.segments[0]?.style.fontFamily).toBe('Kai')
+  })
+
+  it('没写字号时正文是 16px，h1 是 32px', async () => {
+    const doc = await layoutSource(
+      `<layer width="800" height="400"><p>甲</p><h1>标题</h1></layer>`,
+      process.cwd(),
+    )
+    const [paragraph, heading] = doc.root.children as Array<{ textLayout: { fontSize: number } }>
+    expect(paragraph?.textLayout.fontSize).toBe(16)
+    expect(heading?.textLayout.fontSize).toBe(32)
+  })
+
+  it('width 是内容盒，padding 加在外面', async () => {
+    const doc = await layoutSource(
+      `<layer width="400" height="200" safe="0"><div style="width:100px; padding:10px"><p style="font-size:16px">甲</p></div></layer>`,
+      process.cwd(),
+    )
+    const column = doc.root.children[0] as { width: number; children: Array<{ width: number }> }
+    expect(column.width).toBeCloseTo(120, 0)
+    expect(column.children[0]?.width).toBeCloseTo(100, 0)
   })
 
   it('写了宽度的 div 里，段落拉满后 text-align 才能居中', async () => {

@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
-import { readdirSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { readlinkSync, readdirSync, realpathSync } from 'node:fs'
+import { basename, dirname, isAbsolute, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createCanvas } from '@napi-rs/canvas'
 import { createCanvasSession, type CanvasDomIssue, type CanvasDomSpec } from './canvas-dom.mjs'
@@ -111,19 +111,68 @@ function assignLive(nodes: CanvasLayoutNode[], live: Array<{ path: string; canva
   }
 }
 
-function runChild(payload: unknown): Promise<{ issues: CanvasDomIssue[]; canvases: ExportedCanvas[] }> {
-  const host = fileURLToPath(new URL('./canvas-dom.mjs', import.meta.url))
+function addGrant(grants: Set<string>, target: string) {
+  // realpath 只给最终目录。加载器会对链上每一跳做 realpathSync，中间那一跳没放行也会被拒。
+  let current = target
+  const seen = new Set<string>()
+  while (current && !seen.has(current)) {
+    seen.add(current)
+    grants.add(current)
+    let link: string
+    try {
+      link = readlinkSync(current)
+    } catch {
+      break
+    }
+    current = isAbsolute(link) ? link : join(dirname(current), link)
+  }
+  try {
+    grants.add(realpathSync(target))
+  } catch {
+    // 逻辑路径可以还不存在。权限检查用的是解析前的那条，不能只留 realpath。
+  }
+}
+
+/** 从脚本宿主往上，列出 node_modules 里这个包的逻辑路径。符号链接和真实目录都要。 */
+function logicalPackages(host: string, name: string): string[] {
+  const found: string[] = []
+  let dir = dirname(host)
+  while (true) {
+    found.push(join(dir, 'node_modules', name))
+    const parent = dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  return found
+}
+
+/**
+ * 子进程要读到的路径。`require.resolve` 给的是真实目录，ESM 加载器读的是
+ * `node_modules` 上的符号链接。只放行一边时，读 `package.json` 会报
+ * Access to this API has been restricted。
+ */
+export function scriptReadGrants(host: string): string[] {
   const { canvasDir, nativeDir, nativeFile } = nativeBinding()
+  const grants = new Set<string>()
+  addGrant(grants, host)
+  for (const dir of [canvasDir, nativeDir, ...logicalPackages(host, '@napi-rs/canvas'), ...logicalPackages(host, join('@napi-rs', basename(nativeDir)))]) {
+    addGrant(grants, dir)
+    addGrant(grants, join(dir, 'package.json'))
+  }
+  addGrant(grants, nativeFile)
+  return [...grants]
+}
+
+export function scriptChildArgs(host: string): string[] {
   const major = Number(process.versions.node.split('.')[0])
   const permission = major >= 22 ? '--permission' : '--experimental-permission'
-  const args = [
-    permission,
-    '--allow-addons',
-    `--allow-fs-read=${host}`,
-    `--allow-fs-read=${canvasDir}`,
-    `--allow-fs-read=${nativeDir}`,
-    host,
-  ]
+  return [permission, '--allow-addons', ...scriptReadGrants(host).map((grant) => `--allow-fs-read=${grant}`), host]
+}
+
+function runChild(payload: unknown): Promise<{ issues: CanvasDomIssue[]; canvases: ExportedCanvas[] }> {
+  const host = fileURLToPath(new URL('./canvas-dom.mjs', import.meta.url))
+  const { nativeFile } = nativeBinding()
+  const args = scriptChildArgs(host)
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
