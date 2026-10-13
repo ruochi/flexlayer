@@ -1,9 +1,9 @@
-import { createCanvas as rawCreateCanvas } from '@napi-rs/canvas'
+import { createCanvas as rawCreateCanvas, loadImage as rawLoadImage } from '@napi-rs/canvas'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { initFontsForMeasure } from './fonts.js'
-import { applyCanvasFont, createCanvas, DEFAULT_FONT_FAMILY, initFonts } from './index.js'
+import { applyCanvasFont, createCanvas, DEFAULT_FONT_FAMILY, initFonts, loadImage, registerFontPath } from './index.js'
 import { layoutSource } from './layout.js'
 import { checkLayer, renderLayer } from './render.js'
 import type { TextLayoutNode } from './types.js'
@@ -29,8 +29,9 @@ const page = (body: string, attrs = 'width="320" height="160" safe="0"') =>
   `<layer ${attrs} background="#fff">${body}</layer>`
 
 describe('字体导出', () => {
-  it('createCanvas 是排版用的那一份', () => {
+  it('createCanvas 和 loadImage 是排版用的那一份', () => {
     expect(createCanvas).toBe(rawCreateCanvas)
+    expect(loadImage).toBe(rawLoadImage)
     expect(DEFAULT_FONT_FAMILY).toBe('ChillDuanSans')
   })
 
@@ -41,6 +42,7 @@ describe('字体导出', () => {
     applyCanvasFont(ctx, DEFAULT_FONT_FAMILY, 450, 32)
     expect(ctx.fontVariationSettings).toContain('450')
     await expect(initFonts(['没有这款字体'])).rejects.toThrow(/未登记/)
+    expect(() => registerFontPath(DEFAULT_FONT_FAMILY, '/no/such/font.ttf')).not.toThrow()
   })
 })
 
@@ -102,6 +104,49 @@ describe('行内绘制变换', () => {
     )
     const texts = node.textLayout.lines.flatMap((line) => line.segments.map((seg) => seg.text))
     expect(texts.some((text) => text.includes('字') && text.includes('，'))).toBe(false)
+  })
+
+  it('角度不同的逗号也不落到下一行行首', async () => {
+    if (!hasFont) return
+    const stuck = textNode(
+      await layoutSource(
+        page('<p style="font-size:40px; width:46px"><span style="rotate:12">字</span><span style="rotate:40">，</span>后</p>'),
+        process.cwd(),
+      ),
+    )
+    const stuckLines = stuck.textLayout.lines.map((line) => line.segments.map((seg) => seg.text).join(''))
+    expect(stuckLines.length).toBeGreaterThan(1)
+    expect(stuckLines[0]).toContain('字')
+    expect(stuckLines[0]).toContain('，')
+    expect(stuckLines.some((line) => line.replace(/^\s+/, '').startsWith('，'))).toBe(false)
+    const texts = stuck.textLayout.lines.flatMap((line) => line.segments.map((seg) => seg.text))
+    expect(texts.some((text) => text.includes('字') && text.includes('，'))).toBe(false)
+
+    const withImage = textNode(
+      await layoutSource(
+        page('<p style="font-size:40px; width:50px"><img src="x.png" style="width:40px; height:40px" /><span style="rotate:40">，</span>后</p>'),
+        process.cwd(),
+      ),
+    )
+    const imageLines = withImage.textLayout.lines
+    expect(imageLines[0]!.width).toBeGreaterThan(70)
+    expect(imageLines[0]!.segments.map((seg) => seg.text).join('')).toContain('，')
+    expect(imageLines.slice(1).some((line) => line.segments.map((seg) => seg.text).join('').startsWith('，'))).toBe(false)
+  })
+
+  it('另一处归属的逗号可以落到下一行行首', async () => {
+    if (!hasFont) return
+    const node = textNode(
+      await layoutSource(
+        page(
+          '<p style="font-size:40px; width:50px"><img src="x.png" style="width:40px; height:40px" /><span id="c" style="rotate:40">，</span>后</p>',
+        ),
+        process.cwd(),
+      ),
+    )
+    const lines = node.textLayout.lines
+    expect(lines[0]!.segments.map((seg) => seg.text).join('')).not.toContain('，')
+    expect(lines.slice(1).some((line) => line.segments.map((seg) => seg.text).join('').startsWith('，'))).toBe(true)
   })
 
   it('报告里的盒子留在原位，着墨框跟着转', async () => {

@@ -120,7 +120,7 @@ const root = h(
 await renderLayer(root)
 ```
 
-离屏量字用主入口的 `createCanvas` 和 `applyCanvasFont`，先 `await initFonts()`。这是排版那一份画布，可变字重写在 `wght` 轴上。
+离屏量字用主入口的 `createCanvas`、`loadImage` 和 `applyCanvasFont`，先 `await initFonts()`。自定义字体文件用 `registerFontPath(family, filePath)`，同名已经登记过就不再换文件。这是排版那一份画布，可变字重写在 `wght` 轴上。没登记的字体名会抛错。
 
 分析一张抠图结果：留下多少、碎成几块、有几个洞、边有多软，并描出轮廓 `d`。坐标是图片像素：
 

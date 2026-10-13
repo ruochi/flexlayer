@@ -333,7 +333,7 @@ function sameRunPaint(a: TextRunStyle, b: TextRunStyle): boolean {
   )
 }
 
-/** 标点只和同一段、同一绘制变换的字粘在一起。 */
+/** 拼进同一段时，标点还要和相邻字的绘制变换相同。 */
 function sameGlue(a: Unit, b: Unit): boolean {
   return sameOwner(a.owner, b.owner) && sameRunPaint(a.style, b.style)
 }
@@ -697,6 +697,7 @@ function glueUnits(lineUnits: Unit[]): Unit[] {
 /**
  * 单元边界上的断行机会。
  * `linebreak` 给出 Unicode 换行点；规范里的避头尾即使库允许，也不放到行首或行尾。
+ * 避头尾只看行内归属，不看 translate、rotate、scale、opacity。
  */
 function markOpportunities(units: Unit[]): void {
   let text = ''
@@ -728,9 +729,10 @@ function markOpportunities(units: Unit[]): void {
     const prev = units[i - 1]!
     const head = unit.text[0] ?? ''
     const tail = prev.text.slice(-1)
+    const sameLine = sameOwner(prev.owner, unit.owner)
     const sticks =
-      (LINE_HEAD_FORBIDDEN.has(head) && !prev.isSpace && sameGlue(prev, unit)) ||
-      (LINE_TAIL_FORBIDDEN.has(tail) && !unit.isSpace && !prev.isSpace && sameGlue(prev, unit))
+      (LINE_HEAD_FORBIDDEN.has(head) && !prev.isSpace && sameLine) ||
+      (LINE_TAIL_FORBIDDEN.has(tail) && !unit.isSpace && !prev.isSpace && sameLine)
     unit.canBreakBefore = !sticks && (opportunity.has(start) || prev.isSpace || Boolean(unit.atom) || Boolean(prev.atom))
   }
 }

@@ -102,7 +102,7 @@ Flex Layer 用标签描述**一帧画面**。结构标签只有 `layer`。`div`�
 - `ChillDuanSans` 按可变字重绘制，字重轴约 300 到 800。登记了多档的取最近一档。只登记了一档的，请求别的字重仍用这一档。
 - `letter-spacing` 可以写 `0`、`2px` 或 `0.05em`。`em` 按写这条声明的元素自己的字号换算。
 - `text-align` 是 `left`、`center`、`right`。
-- 行内标签的 `translate`、`rotate`、`scale`、`opacity` 只改绘制。`translate` 写成 `0 -12` 或 `12 0`，`scale` 写成 `1.2` 或 `1.2 0.8`，`rotate` 是角度。行宽、行高和折行按没变换的前进宽度，布局盒留在原位。同一行内标签里的字绕整段字心；`split="chars"` 时每个字绕自己的字心。文字盒子上的 `rotate`、`scale`、`opacity` 仍作用在整块盒子上。文字盒子写了 `split="chars"` 时，这四项改到每个字上，盒子不再整块转动、缩放或变透明。转完的四边形并进这一行和文字盒子的着墨框。透明度低于 0.01 的字不占着墨。竖排时每个字独占一行，变换绕这个字的字心。
+- 行内标签的 `translate`、`rotate`、`scale`、`opacity` 只改绘制。`translate` 写成 `0 -12` 或 `12 0`，`scale` 写成 `1.2` 或 `1.2 0.8`，`rotate` 是纯数字角度，例如 `12`。行宽、行高和折行按没变换的前进宽度，布局盒留在原位。同一行内标签里的字绕整段字心；`split="chars"` 时每个字绕自己的字心。文字盒子上的 `rotate`、`scale`、`opacity` 仍作用在整块盒子上。文字盒子写了 `split="chars"` 时，这四项改到每个字上，盒子不再整块转动、缩放或变透明。转完的四边形并进这一行和文字盒子的着墨框。透明度低于 0.01 的字占位，但不进着墨。竖排时每个字独占一行，变换绕这个字的字心。行首行尾的标点跟着同一处行内归属：最内层写了 `id` 的行内标签，没写 `id` 的算同一处。`translate`、`rotate`、`scale`、`opacity` 不同，逗号也不落到下一行行首。拼成同一段再绘制时，这四项必须相同。
 
 图标写 `<span class="material-symbols-outlined">home</span>`。字号和颜色跟周围的文字，字重写 `font-weight`，按 100 到 700 的整百取最近一档，两边一样近时用较轻的。`font-family` 写成 `Symbols`、`图标` 或 `material-symbols-outlined` 同样换。`material-symbols-rounded` 和 `material-symbols-sharp` 仍用这一套，并报 `invalid-attr`。对不上的名字报 `missing-icon`。
 
@@ -227,7 +227,7 @@ npx flexlayer-select mask photo.jpg --point 820,640 --omit 900,1100 --refine
 
 摆回排版位置：`x` 用 `canvas.create` 返回的 `chars` 里的 `x`，`y` 用 `line.baseline - glyph.baseline`。
 
-`createCanvas`、`initFonts`、`applyCanvasFont`、`DEFAULT_FONT_FAMILY` 从主入口导出，用的是排版那一份 `@napi-rs/canvas`。`initFonts()` 准备默认字体。`initFonts(['Kai'])` 再按目录里的名字准备，没登记的名字会抛错。`applyCanvasFont(ctx, family, weight, size)` 把可变字重写进 `wght` 轴，测量和绘制共用。只写 `ctx.font` 时，`450` 会被当成字号。
+`createCanvas`、`loadImage`、`initFonts`、`applyCanvasFont`、`registerFontPath`、`DEFAULT_FONT_FAMILY` 从主入口导出，用的是排版那一份 `@napi-rs/canvas`。`initFonts()` 准备默认字体。`initFonts(['Kai'])` 再按目录里的名字准备，没登记的名字会抛错。`registerFontPath(family, filePath)` 登记一份自定义字体文件；这个名字已经登记过就不再换文件。`applyCanvasFont(ctx, family, weight, size)` 把可变字重写进 `wght` 轴，测量和绘制共用。只写 `ctx.font` 时，`450` 会被当成字号。
 
 ### canvas 和 script
 
