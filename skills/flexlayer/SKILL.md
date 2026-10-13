@@ -1,6 +1,6 @@
 ---
 name: flexlayer
-description: "用 Flex Layer 把一帧画面排成 PNG。用户要海报、封面、幻灯、信息图、示意图、社媒图，或提到 flexlayer、.layer、canvas.create、flex 排版出图时使用。Lay out one frame with flexbox, HTML text, and SVG-style shapes, then check and render to PNG."
+description: "用 Flex Layer 把一帧画面排成 PNG。用户要海报、封面、幻灯、信息图、示意图、社媒图，或提到 flexlayer、.layer 时使用。技能只介绍项目、仓库、文档地址，以及超出 HTML 截图的能力。属性、命令和例子读当前版本的文档。"
 license: MIT
 compatibility: Node.js 20 或更高。目录里的字体第一次用到时需要联网，下载到 ~/.cache/flexlayer/fonts。
 metadata:
@@ -9,65 +9,63 @@ metadata:
 
 # Flex Layer
 
-用标签描述一帧画面，渲染成 PNG。图形用 SVG 的写法。文字和排布是 HTML，按 HTML 渲染，`style` 的初始值就是 CSS 的。有数据、循环或动画时写 `.tsx`；静态单帧可以手写 `.layer`。
+Flex Layer 用标签描述一帧画面，渲染成 PNG，并写出布局报告。文字和排布是 HTML，按 HTML 渲染。图形用 SVG 的写法。生成和渲染分开，中间交接 `.layer` 文本。有数据、循环或动画时写 `.tsx`，执行后得到同一棵树。不接 Vue 或 React。
 
-若当前工作区就是 flexlayer 仓库，以根目录的 `AGENTS.md` 为准，命令用 `npx tsx src/cli.ts`，规范是仓库里的 `SPEC.md`。下面是给别的项目用的。
+仓库：https://github.com/ruochi/flexlayer
 
-## 安装并出图
+本技能不记属性、标签、命令参数和例子。那些随版本改。动笔前读和当前渲染器同一份的文档。写错时以报告里的 `path`、`hint` 为准。
+
+## 特色
+
+画面是一帧，根节点就是画布。校验只出报告，渲染出 PNG。报告里每个节点有路径、布局盒和着墨，从 `.tsx` 来的还有源码位置。间距和越界按报告改。
+
+字体、图片和配色在资源文档里。用文档里的名字，不要编造字体名或字体文件地址。
+
+## 超出 HTML 截图的能力
+
+HTML 截图把浏览器里的网页画下来。Flex Layer 的文字排布走同一套 CSS。下面这些能力要打开文档再写：
+
+- **先量再摆。** 量完一块再放下一块，按实际布局盒，以及转完或投影后的着墨对齐。
+- **图形和文字在同一棵树。** 矩形、圆、线、路径、箭头用图形属性画在 layer 里。
+- **实体和镜头。** 形状可以沿厚度挤出，另有球、环、管、地面和影子。three.js 的几何体可以和文字、线稿放进同一深度。
+- **蒙版、抠图、字形轮廓。** 遮罩裁合成后的一层。主体遮罩和单个字的轮廓可以量完再摆回画面。
+- **整层效果和自绘像素。** 调色、玻璃、噪点作用整棵子树。像素可以交给画布脚本。
+- **帧。** 每个时刻仍是一棵 Flex Layer。随机和时钟按帧固定，同一输入得到同一张图。
+
+## 文档
+
+先找和正在用的那一版相同的文件。仓库的 main 可能比已安装的包新；已经安装时，以包里的文件为准。
+
+当前工作区就是 flexlayer 仓库（有 `src/cli.ts`）时，读仓库里的这些文件，命令用 `npx tsx src/cli.ts`：
+
+| 文件 | 内容 |
+| --- | --- |
+| `AGENTS.md` | 入口、工作流、硬性约定 |
+| `SPEC.md` | 标签、属性、问题码 |
+| `docs/CHEATSHEET.md` | 一页写法 |
+| `docs/RESOURCES.md` | 字体、图片、配色 |
+| `docs/GALLERY.md` | 效果图 |
+| `docs/attrs.json` | 按属性名查 |
+
+装在别的项目里时，读 `node_modules/flexlayer/` 下的 `SPEC.md`、`docs/CHEATSHEET.md`、`docs/RESOURCES.md`、`docs/GALLERY.md`、`docs/attrs.json`，命令用 `npx flexlayer`。`AGENTS.md` 不随安装包发布，入口约定在仓库的 `AGENTS.md` 和 SPEC 里。
+
+同一批文档的地址：
+
+- https://github.com/ruochi/flexlayer/blob/main/AGENTS.md
+- https://github.com/ruochi/flexlayer/blob/main/SPEC.md
+- https://github.com/ruochi/flexlayer/blob/main/docs/CHEATSHEET.md
+- https://github.com/ruochi/flexlayer/blob/main/docs/RESOURCES.md
+- https://github.com/ruochi/flexlayer/blob/main/docs/GALLERY.md
+- https://github.com/ruochi/flexlayer/blob/main/docs/attrs.json
+
+## 开始
+
+需要 Node.js 20 或更高。
 
 ```bash
 npm install github:ruochi/flexlayer
 npx flexlayer check scene.tsx
-npx flexlayer render scene.tsx -o scene.png --report scene.json
+npx flexlayer render scene.tsx -o scene.png
 ```
 
-有 **error** 时进程退出码为 1，必须按报告里的 `path`、`hint` 改对应节点，再跑 check。通过或只剩 warn 之后，间距不对就 `npx flexlayer render scene.tsx -o scene.png --debug --report scene.json`，看 `box` 和 `ink`。满意后再出最终 PNG。
-
-动画：
-
-```bash
-npx flexlayer check scene.tsx --frames 0-12 --step 3
-npx flexlayer render scene.tsx --frames out/ --from 0 --to 90
-```
-
-不写 `--frames` 时，check 只抽第 0 帧、中间一帧和最后一帧。
-
-## 先量再摆
-
-文件头写 `/** @jsxImportSource flexlayer */`。`canvas.create` 的参数必须是 `<layer>`。返回的 `left` `top` `right` `bottom` 是没转之前的布局盒；接着摆下一块用 `rotatedBox.bottom`。
-
-```tsx
-/** @jsxImportSource flexlayer */
-import { canvas } from 'flexlayer'
-
-const page = { width: 720, height: 540 }
-
-const title = canvas.create(
-  <layer x={48} y={48} width={page.width - 96} color="#f4ecdf" font-family="Kai">
-    <h1 style="font-size:96px; white-space:nowrap">春眠不觉晓</h1>
-  </layer>,
-)
-
-export default canvas.create(
-  <layer width={page.width} height={page.height} background="#0c1424" color="#f4ecdf" font-family="Kai">
-    {title}
-  </layer>,
-)
-```
-
-底色写在根节点的 `background` 上。嵌套 `layer` 不写 `background`，色块用 `<rect fill>`。
-
-## 选字体
-
-中文画面按气质从 `docs/RESOURCES.md` 的推荐字体里挑，粗黑体在前。没写字体时用 `ChillDuanSans`。其余推荐名要自己带 `<font family src>`。不要编造字体名，也不要编造字体文件地址。`.ttc` 要选字形就在路径后写 `#` 和从 0 开始的序号，例如 `src="SourceHanSans.ttc#2"`。不写时用第 0 套，思源和 Noto CJK 的第 0 套是日文。
-
-## 规范在哪
-
-不要在对话里复述规范。写法、问题码和效果以安装包里的文件为准：
-
-- `node_modules/flexlayer/SPEC.md`
-- `node_modules/flexlayer/docs/CHEATSHEET.md`
-- `node_modules/flexlayer/docs/RESOURCES.md`
-- `node_modules/flexlayer/docs/attrs.json` 逐个属性，按名字查
-
-同一份也在 https://github.com/ruochi/flexlayer 的 `SPEC.md`。写错时以报告里的问题码和 `hint` 为准。
+先 `check`。有 error 时退出码为 1，按报告改完再查。通过后再 `render`。其余参数写在 SPEC 和安装包的 README 里。
