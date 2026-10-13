@@ -2523,11 +2523,13 @@ function layoutFlex(node: LayerNode, ctx: LayoutContext): FlexLayoutNode {
     yn.setAlignSelf(mapAlign(m.crossAlign ?? 'stretch'))
     const textSource = m.source
     const columnText = direction === 'column' && m.isText && textSource != null && m.node.kind === 'text'
+    const padX = chromeX(m.node.padding, m.node.border?.width)
+    const padY = chromeY(m.node.padding, m.node.border?.width)
+    const explicitW = parsePx(chParsed.width)
+    const explicitH = parsePx(chParsed.height)
+    // 交叉轴没写尺寸时留给 stretch。写死内容高度的话，Yoga 不会再撑满容器。
+    const stretchCross = (m.crossAlign ?? 'stretch').trim().toLowerCase() === 'stretch'
     if (columnText) {
-      const padX = chromeX(m.node.padding, m.node.border?.width)
-      const padY = chromeY(m.node.padding, m.node.border?.width)
-      const explicitW = parsePx(chParsed.width)
-      const explicitH = parsePx(chParsed.height)
       const textPath = m.node.path
       yn.setMeasureFunc((width, widthMode) => {
         const limit = widthMode === MeasureMode.Undefined ? childCtx.maxContentWidth : Math.max(0, width - padX)
@@ -2538,16 +2540,21 @@ function layoutFlex(node: LayerNode, ctx: LayoutContext): FlexLayoutNode {
         }
       })
       if (explicitW != null) yn.setWidth(explicitW + padX)
+      else if (!stretchCross && Number.isFinite(m.preferredCross)) yn.setWidth(m.preferredCross)
       if (explicitH != null) yn.setHeight(explicitH + padY)
     } else if (direction === 'row') {
       yn.setWidth(m.preferredMain)
-      yn.setHeight(m.preferredCross === Infinity ? m.preferredCross : m.preferredCross)
+      if (explicitH != null) yn.setHeight(explicitH + padY)
+      else if (!stretchCross && Number.isFinite(m.preferredCross)) yn.setHeight(m.preferredCross)
+      else if (stretchCross && Number.isFinite(m.minCross)) yn.setMinHeight(Math.max(0, m.minCross))
       yn.setMinWidth(m.minMain)
     } else {
-      yn.setWidth(m.preferredCross === Infinity ? crossAvailable : m.preferredCross)
+      if (explicitW != null) yn.setWidth(explicitW + padX)
+      else if (!stretchCross && Number.isFinite(m.preferredCross)) yn.setWidth(m.preferredCross)
+      else if (stretchCross && Number.isFinite(m.minCross)) yn.setMinWidth(Math.max(0, m.minCross))
       yn.setHeight(m.preferredMain)
       yn.setMinHeight(m.minMain)
-      yn.setMinWidth(m.isText ? m.minMain : 0)
+      if (m.isText && !stretchCross) yn.setMinWidth(m.minMain)
     }
     yogaChildren.push(yn)
     root.insertChild(yn, yogaChildren.length - 1)

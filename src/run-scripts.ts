@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
-import { readlinkSync, readdirSync, realpathSync } from 'node:fs'
+import { lstatSync, readlinkSync, readdirSync, realpathSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createCanvas } from '@napi-rs/canvas'
@@ -133,6 +133,55 @@ function addGrant(grants: Set<string>, target: string) {
   }
 }
 
+function isSymlink(target: string): boolean {
+  try {
+    return lstatSync(target).isSymbolicLink()
+  } catch {
+    return false
+  }
+}
+
+/** 顺着 Node `realpath` 的每一跳，把遇到的符号链接本身放进名单。一跳解析完再走下一截。 */
+function grantSymlinkHops(grants: Set<string>, target: string) {
+  if (!isAbsolute(target)) return
+  const parts = target.split('/').filter(Boolean)
+  let resolved = '/'
+  for (const part of parts) {
+    const through = join(resolved, part)
+    if (!isSymlink(through)) {
+      resolved = through
+      continue
+    }
+    grants.add(through)
+    // 目录符号链接会被收成 `链接/*`，realpath 打在链接自己身上时对不上，得放行它的父目录。
+    const parent = dirname(through)
+    if (parent !== '/' && parent !== through) grants.add(parent)
+    let link = readlinkSync(through)
+    if (!isAbsolute(link)) link = join(dirname(through), link)
+    resolved = link
+    const seen = new Set<string>()
+    while (isSymlink(resolved) && !seen.has(resolved)) {
+      seen.add(resolved)
+      grants.add(resolved)
+      const linkParent = dirname(resolved)
+      if (linkParent !== '/' && linkParent !== resolved) grants.add(linkParent)
+      let next = readlinkSync(resolved)
+      if (!isAbsolute(next)) next = join(dirname(resolved), next)
+      resolved = next
+    }
+  }
+}
+
+/**
+ * `realpathSync` 要先读到路径上的符号链接本身。只放行链接里面的文件时，
+ * 这一跳仍会报 Access to this API has been restricted。
+ * 链接必须排在穿过它的子路径前面，否则 Node 会把链接折成真实路径，名单里等于没有这条链接。
+ */
+function orderedGrants(grants: Set<string>): string[] {
+  for (const target of [...grants]) grantSymlinkHops(grants, target)
+  return [...grants].sort((a, b) => a.length - b.length || (a < b ? -1 : 1))
+}
+
 /** 从脚本宿主往上，列出 node_modules 里这个包的逻辑路径。符号链接和真实目录都要。 */
 function logicalPackages(host: string, name: string): string[] {
   const found: string[] = []
@@ -149,7 +198,8 @@ function logicalPackages(host: string, name: string): string[] {
 /**
  * 子进程要读到的路径。`require.resolve` 给的是真实目录，ESM 加载器读的是
  * `node_modules` 上的符号链接。只放行一边时，读 `package.json` 会报
- * Access to this API has been restricted。
+ * Access to this API has been restricted。链接的父目录如果自己也是符号链接，
+ * `realpathSync` 同样要先读到那一跳。
  */
 export function scriptReadGrants(host: string): string[] {
   const { canvasDir, nativeDir, nativeFile } = nativeBinding()
@@ -160,7 +210,7 @@ export function scriptReadGrants(host: string): string[] {
     addGrant(grants, join(dir, 'package.json'))
   }
   addGrant(grants, nativeFile)
-  return [...grants]
+  return orderedGrants(grants)
 }
 
 export function scriptChildArgs(host: string): string[] {
