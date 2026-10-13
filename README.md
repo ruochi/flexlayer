@@ -120,6 +120,8 @@ const root = h(
 await renderLayer(root)
 ```
 
+离屏量字用主入口的 `createCanvas` 和 `applyCanvasFont`，先 `await initFonts()`。这是排版那一份画布，可变字重写在 `wght` 轴上。
+
 分析一张抠图结果：留下多少、碎成几块、有几个洞、边有多软，并描出轮廓 `d`。坐标是图片像素：
 
 ```ts

@@ -154,6 +154,17 @@
     "misplacedHint": null
   },
   {
+    "name": "split",
+    "group": null,
+    "syntax": "chars",
+    "default": null,
+    "example": "chars",
+    "layerOnly": false,
+    "htmlUsesStyle": false,
+    "note": "写在文字盒子或行内标签上。每个字单独做 translate、rotate、scale、opacity，行宽和折行不变。文字盒子因此不再整块转动、缩放或变透明",
+    "misplacedHint": "写在 p、h1 或 span 上，例如 <p split=\"chars\">"
+  },
+  {
     "name": "background",
     "group": "html",
     "syntax": null,

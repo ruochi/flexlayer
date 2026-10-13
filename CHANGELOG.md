@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.13
+
+主入口导出 `createCanvas`、`initFonts`、`applyCanvasFont` 和 `DEFAULT_FONT_FAMILY`。这是排版用的那一份 `@napi-rs/canvas`。`initFonts()` 先准备默认字体，也可以带目录里的字体名。`applyCanvasFont` 把可变字重写进 `wght` 轴。
+
+行内标签的 `translate`、`rotate`、`scale`、`opacity` 只改绘制。行宽、行高和折行仍按原来的前进宽度，布局盒留在原位。转完的范围并进这一行和文字盒子的着墨框。`split="chars"` 让每个字绕自己的字心。文字盒子写了它时，这四项不再转动整块盒子。
+
 ## 0.6.12
 
 Skill 的特色补上同一深度里的几件事：线框遇空白不断、文字按墨迹分层、景深按物体糊、描边绕墨迹、半透明玻璃不挡后面的棱。

@@ -73,6 +73,13 @@ const title = canvas.create(
 
 `data={{ values: [1, 2] }}`。故意出现的问题写 `expect="overflow-canvas: 出血图"`。
 
+```html
+<p style="font-size:64px">
+  <span style="translate: 0 -8; rotate: 8">逐</span><span style="opacity: 0.35">字</span>
+</p>
+<p split="chars" style="font-size:64px; rotate: 6">波浪</p>
+```
+
 ```bash
 flexlayer render scene.tsx -o scene.png
 flexlayer check scene.tsx

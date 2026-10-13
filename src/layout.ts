@@ -65,7 +65,7 @@ import {
 } from './text.js'
 import { applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset, translated } from './matrix.js'
 import { layoutMath } from './math/load.js'
-import { asBlockFlow, checkChildAttrs, checkTextBoxChildren, haloAttrIssues, hasTwoPoint, hiddenAttrIssues, isDisplayFlex, isHtmlTag, legacyCenterIssues, materialAttrIssues, originValueIssues, rowColumnHint, styleIssues, typoAttrIssues } from './rules.js'
+import { asBlockFlow, checkChildAttrs, checkTextBoxChildren, haloAttrIssues, hasTwoPoint, hiddenAttrIssues, isDisplayFlex, isHtmlTag, legacyCenterIssues, materialAttrIssues, originValueIssues, rowColumnHint, splitAttrIssues, styleIssues, typoAttrIssues } from './rules.js'
 import { fitViewAspect, parseView, viewExceeds } from './view.js'
 import { FONT_TAG, isGroundTag, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag, solidDepth, tagSpellingHint } from './tags.js'
 import { boundsOf, parseSvgTransform, poseMoves } from './svg-transform.js'
@@ -1052,6 +1052,13 @@ function layoutTextBox(node: LayerNode, ctx: LayoutContext, contentWidthLimit?: 
 
   const appearance = readHtmlAppearance(style)
   applyCssBackground(appearance, style, ctx)
+  // split="chars" 把 translate、rotate、scale、opacity 挪到每个字上，整块盒子留在原位。
+  if (node.attrs.split?.trim().toLowerCase() === 'chars') {
+    appearance.opacity = 1
+    appearance.rotate = 0
+    appearance.scaleX = 1
+    appearance.scaleY = 1
+  }
 
   const textLayout = layoutText({
     segments: paintedSegments,
@@ -3744,6 +3751,7 @@ function noteAttrTypos(node: LayerNode, path: string, issues: Issue[]) {
   issues.push(...haloAttrIssues(concrete, path))
   issues.push(...materialAttrIssues(concrete, path))
   if (isHtmlTag(concrete.tag) || isTextBoxTag(concrete.tag)) issues.push(...styleIssues(concrete, path))
+  issues.push(...splitAttrIssues(concrete, path))
   let index = 0
   for (const child of concrete.children) {
     if (typeof child === 'string') continue
