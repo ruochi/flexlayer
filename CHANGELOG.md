@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.3
+
+`.layer` 里的 `<script>` 在子进程里读 `@napi-rs/canvas`。`node_modules` 整目录、pnpm 虚拟目录这种符号链接，`realpath` 还要读链接自己和它的父目录，以前名单里没有，于是报 `Access to this API has been restricted`，画布是空的。
+
+横排 flex 没写 `height` 的子项按 `align-items:stretch` 撑满容器高度。空的 `flex:1` 也占满这一行。写了高度，或 `align-items` 不是 `stretch`，仍用内容高度。
+
 ## 0.6.2
 
 形状写了正的 `depth` 就沿 z 挤出：`rect` 是盒子，`circle` 是轴沿 z 的圆柱，`ellipse`、`polygon`、`path` 按轮廓挤出。洞用 `fill-rule`，默认 `nonzero`。`sphere`、`torus`、`tube`、`model`、`ground` 仍是单独的标签。`box`、`cylinder`、`extrude` 照旧绘制，报 `non-canonical`。

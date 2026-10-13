@@ -282,6 +282,66 @@ describe('canvas 和 script', () => {
       rmSync(root, { recursive: true, force: true })
     }
   })
+
+  it('node_modules 整目录或 pnpm 虚拟目录是符号链接时脚本仍能画', () => {
+    const root = mkdtempSync(join(tmpdir(), 'flexlayer-link-'))
+    const realRoot = join(dirname(fileURLToPath(import.meta.url)), '..', 'node_modules', '@napi-rs')
+    const hostSrc = readFileSync(new URL('./canvas-dom.mjs', import.meta.url))
+    const payload = JSON.stringify({
+      canvases: [{ path: 'layer/canvas[0]', id: 'bar', width: 4, height: 4, bitmapWidth: 4, bitmapHeight: 4, x: 0, y: 0, style: {}, computed: {}, text: '', attrs: {} }],
+      scripts: [{ path: 'layer/script[0]', body: 'const c=document.querySelector("#bar"); const x=c.getContext("2d"); x.fillStyle="#ff0000"; x.fillRect(0,0,4,4)' }],
+      timeMs: 0,
+      fps: 0,
+      frame: 0,
+      dpr: 1,
+      seed: 1,
+      sources: {},
+    })
+    const paint = (host: string) => {
+      const grants = scriptReadGrants(host)
+      const nativeFile = grants.find((grant) => grant.endsWith('.node'))
+      return spawnSync(process.execPath, scriptChildArgs(host), {
+        input: payload,
+        encoding: 'utf8',
+        env: { PATH: process.env.PATH ?? '', NAPI_RS_NATIVE_LIBRARY_PATH: nativeFile },
+      })
+    }
+    try {
+      const store = join(root, 'store')
+      const app = join(root, 'whole')
+      mkdirSync(join(store, '@napi-rs'), { recursive: true })
+      mkdirSync(join(app, 'src'), { recursive: true })
+      symlinkSync(join(realRoot, 'canvas'), join(store, '@napi-rs', 'canvas'))
+      symlinkSync(join(realRoot, 'canvas-linux-x64-gnu'), join(store, '@napi-rs', 'canvas-linux-x64-gnu'))
+      symlinkSync(store, join(app, 'node_modules'))
+      const host = join(app, 'src', 'canvas-dom.mjs')
+      writeFileSync(host, hostSrc)
+      const whole = paint(host)
+      expect(whole.stderr).not.toContain('Access to this API has been restricted')
+      expect(whole.status).toBe(0)
+
+      const pnpm = join(root, 'pnpm', 'node_modules', '.pnpm')
+      const canvasVirt = join(pnpm, '@napi-rs+canvas@1.0.9', 'node_modules', '@napi-rs')
+      const nativeVirt = join(pnpm, '@napi-rs+canvas-linux-x64-gnu@1.0.9', 'node_modules', '@napi-rs')
+      const pnpmApp = join(root, 'pnpm')
+      mkdirSync(canvasVirt, { recursive: true })
+      mkdirSync(nativeVirt, { recursive: true })
+      mkdirSync(join(pnpmApp, 'node_modules', '@napi-rs'), { recursive: true })
+      mkdirSync(join(pnpmApp, 'src'), { recursive: true })
+      symlinkSync(join(realRoot, 'canvas'), join(canvasVirt, 'canvas'))
+      symlinkSync(join(realRoot, 'canvas-linux-x64-gnu'), join(nativeVirt, 'canvas-linux-x64-gnu'))
+      symlinkSync(join(canvasVirt, 'canvas'), join(pnpmApp, 'node_modules', '@napi-rs', 'canvas'))
+      symlinkSync(join(nativeVirt, 'canvas-linux-x64-gnu'), join(pnpmApp, 'node_modules', '@napi-rs', 'canvas-linux-x64-gnu'))
+      symlinkSync(join(nativeVirt, 'canvas-linux-x64-gnu'), join(canvasVirt, 'canvas-linux-x64-gnu'))
+      const pnpmHost = join(pnpmApp, 'src', 'canvas-dom.mjs')
+      writeFileSync(pnpmHost, hostSrc)
+      const nested = paint(pnpmHost)
+      expect(nested.stderr).not.toContain('Access to this API has been restricted')
+      expect(nested.status).toBe(0)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
 })
 
 declare const document: { querySelector(selector: string): unknown }
