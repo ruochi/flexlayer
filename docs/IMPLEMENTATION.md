@@ -150,5 +150,6 @@
 - `unit` 是 1 个模型单位对应的像素，不减包围盒中心。默认 origin 在盒子中心，所以模型原点落在外包 layer 的中心。多只 `<model>` 写同一个 `unit`，相对位置还在。
 - 不写 `material` 时，金属度不小于 0.5 用 `metal`，否则 `plastic`。粗糙度来自图元。写了 `material` 则整只模型都用它。磨砂会忽略粗糙度，所以不把电介质映射成 `matte`。
 - 内存网格的图元放在 `WeakMap` 里，规格上只留内容哈希。场景缓存按这个哈希失效，不把 Object3D 放进键。
-- `src/three.ts` 不 import `three`。类型看 `isMesh`。`flexlayer/three` 是同一份文件。裸包名从导入它的源文件往上找 `node_modules`，按 `package.json` 的 `import` 条件取文件，不走 `require.resolve`。
+- `src/three.ts` 不 import `three`。类型看 `isMesh` / `isLine`。`flexlayer/three` 是同一份文件。裸包名从导入它的源文件往上找 `node_modules`，按 `package.json` 的 `import` 条件取文件，不走 `require.resolve`。
+- 线段和图元走同一条投影。下标是成对的端点，不进三角形光栅，也不进阴影图。深度测试和实心网格共用，更靠近观众的盖住更远的。`wireframe` 只出边。线宽在超采样缓冲里按输出像素铺开，缩回去仍是大约 1 像素。
 

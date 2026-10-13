@@ -175,7 +175,7 @@ gradient( [映射 ,] 颜色行 [ / 颜色行 ]* )
 | `sphere` | `cx` `cy` `r`。布局盒子是边长 `2r` 的正方形 |
 | `torus` | `cx` `cy` `r` `tube`。环躺在平面里 |
 | `tube` | `d` 是中心线，`r` 是管半径。`Z` 闭合成环 |
-| `model` | `src` 指向 `.glb`，或在 tsx 里写 `object` 传入网格。放进有宽高的 layer。不写 `unit` 时 contain 居中。`unit` 是 1 个模型单位对应的像素，原点落在外包 layer 的 `origin`。坐标保持 y 向上。`object` 读几何体、世界矩阵、颜色、粗糙度和金属度，不读相机。不写 `material` 时，金属度不小于 0.5 用 `metal`，否则用 `plastic` |
+| `model` | `src` 指向 `.glb`，或在 tsx 里写 `object` 传入网格。放进有宽高的 layer。不写 `unit` 时 contain 居中。`unit` 是 1 个模型单位对应的像素，原点落在外包 layer 的 `origin`。坐标保持 y 向上。`object` 读几何体、世界矩阵、颜色、粗糙度和金属度，不读相机。不写 `material` 时，金属度不小于 0.5 用 `metal`，否则用 `plastic`。`Line`、`LineSegments`、`LineLoop` 按线段画进同一深度缓冲；`wireframe` 为真时只画边。线用材质颜色，线宽是屏幕像素，不写是 1。`Points` 不画 |
 | `ground` | 没有宽高。`x` `y` `z` 是平面上的一点。正的 `rotateX` 让上边远离观众，`rotateX="90"` 放成水平地面。不写旋转时平面正对镜头。不写 `fill` 时透明，只接影子。`shadow-blur` 默认 0，`shadow-opacity` 默认 0.4，`shadow-color` 默认 `#000000` |
 
 `fill` 只收纯色，渐变用第一个颜色并报 `invalid-attr`。`material` 是 `matte`、`plastic`、`metal`、`glass`，可跟粗糙度，不写是磨砂。实体上的 `stroke` 描棱线，`hidden` 是隐藏线的颜色。`shadow` 和 `glow` 写在实体上报 `invalid-attr`。

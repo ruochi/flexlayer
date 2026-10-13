@@ -1888,8 +1888,8 @@ function layoutMesh(node: LayerNode, ctx: LayoutContext): MeshLayoutNode {
           level: 'warn',
           code: 'missing-model',
           path: ctx.pathPrefix,
-          message: 'object 里没有三角形网格',
-          hint: '传入 Mesh，或带 Mesh 子节点的对象。线条、点、隐藏的节点不会画',
+          message: 'object 里没有三角形或线段',
+          hint: '传入 Mesh 或 Line，或带这些子节点的对象。点、隐藏的节点不会画',
         })
       }
       const span = primitiveSpan(prims) ?? undefined

@@ -208,6 +208,11 @@ export function scriptReadGrants(host: string): string[] {
   for (const dir of [canvasDir, nativeDir, ...logicalPackages(host, '@napi-rs/canvas'), ...logicalPackages(host, join('@napi-rs', basename(nativeDir)))]) {
     addGrant(grants, dir)
     addGrant(grants, join(dir, 'package.json'))
+    // 有的 Node 版本只放行目录本身，不放行里面的文件。通配和目录一起给。
+    if (dir && dir !== '/') {
+      grants.add(`${dir}/*`)
+      grants.add(`${dir}/**`)
+    }
   }
   addGrant(grants, nativeFile)
   return orderedGrants(grants)
@@ -224,13 +229,17 @@ function runChild(payload: unknown): Promise<{ issues: CanvasDomIssue[]; canvase
   const { nativeFile } = nativeBinding()
   const args = scriptChildArgs(host)
   return new Promise((resolve, reject) => {
+    const env: NodeJS.ProcessEnv = {
+      PATH: process.env.PATH ?? '',
+      NAPI_RS_NATIVE_LIBRARY_PATH: nativeFile,
+    }
+    // 不把整份环境交进去。HOME 只为了 os.homedir；不放行家目录的读权限。
+    if (process.env.HOME) env.HOME = process.env.HOME
+    if (process.env.USERPROFILE) env.USERPROFILE = process.env.USERPROFILE
     const child = spawn(process.execPath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       signal: AbortSignal.timeout(15_000),
-      env: {
-        PATH: process.env.PATH ?? '',
-        NAPI_RS_NATIVE_LIBRARY_PATH: nativeFile,
-      },
+      env,
     })
     const stdout: Buffer[] = []
     const stderr: Buffer[] = []
