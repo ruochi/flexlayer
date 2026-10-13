@@ -63,8 +63,8 @@ import { applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset
 import { layoutMath } from './math/layout.js'
 import { asBlockFlow, checkChildAttrs, checkTextBoxChildren, haloAttrIssues, hasTwoPoint, hiddenAttrIssues, isDisplayFlex, isHtmlTag, legacyCenterIssues, materialAttrIssues, originValueIssues, rowColumnHint, styleIssues, typoAttrIssues } from './rules.js'
 import { fitViewAspect, parseView, viewExceeds } from './view.js'
-import { FONT_TAG, isGroundTag, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag, tagSpellingHint } from './tags.js'
-import { boundsOf, parseSvgTransform } from './svg-transform.js'
+import { FONT_TAG, isGroundTag, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag, solidDepth, tagSpellingHint } from './tags.js'
+import { boundsOf, parseSvgTransform, poseMoves } from './svg-transform.js'
 import type {
   Anchor,
   AppliedFilter,
@@ -548,16 +548,17 @@ function readHtmlAppearance(style: Record<string, string>) {
 }
 
 function readAttrAppearance(attrs: Record<string, string>) {
+  const pose = parseSvgTransform(attrs.transform).pose
   return {
     padding: ZERO_EDGES,
     border: parseBorder(attrs.border),
     borderRadius: parsePx(attrs['border-radius']) ?? 0,
     background: attrs.background as string | undefined,
     opacity: parseNumber(attrs.opacity) ?? 1,
-    rotate: parseNumber(attrs.rotate) ?? 0,
-    rotateX: parseNumber(attrs.rotateX) ?? 0,
-    rotateY: parseNumber(attrs.rotateY) ?? 0,
-    z: parseNumber(attrs.z) ?? 0,
+    rotate: (parseNumber(attrs.rotate) ?? 0) + pose.rotateZ,
+    rotateX: (parseNumber(attrs.rotateX) ?? 0) + pose.rotateX,
+    rotateY: (parseNumber(attrs.rotateY) ?? 0) + pose.rotateY,
+    z: (parseNumber(attrs.z) ?? 0) + pose.z,
     ...scalePair(attrs.scale),
     origin: parseOrigin(attrs.origin),
   }
@@ -671,7 +672,7 @@ function readOnOff(raw: string | undefined): { off: boolean; invalid: boolean } 
   return { off: false, invalid: true }
 }
 
-/** 不写时既投影子也接影子。只有写成 false 才记下来。 */
+/** 不写时会把影子投到 ground 上。只有写成 false 才记下来。 */
 function shadowToggles(node: LayerNode, ctx: LayoutContext): { castShadow?: false; receiveShadow?: false } {
   const out: { castShadow?: false; receiveShadow?: false } = {}
   const pairs = [
@@ -680,6 +681,15 @@ function shadowToggles(node: LayerNode, ctx: LayoutContext): { castShadow?: fals
   ] as const
   for (const [key, field] of pairs) {
     const raw = node.attrs[key]
+    if (key === 'receive-shadow' && raw != null && raw.trim() !== '' && !isGroundTag(node.tag)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'receive-shadow 只写在 ground 上',
+        hint: '影子只落在 ground 上。不接就在 ground 上写 receive-shadow="false"',
+      })
+    }
     const read = readOnOff(raw)
     if (read.invalid) {
       ctx.issues.push({
@@ -687,10 +697,12 @@ function shadowToggles(node: LayerNode, ctx: LayoutContext): { castShadow?: fals
         code: 'invalid-attr',
         path: ctx.pathPrefix,
         message: `无法解析 ${key}: ${raw}`,
-        hint: '写成 true 或 false。不写时这只网格或平面既投影子，也接影子',
+        hint: key === 'receive-shadow'
+          ? '写成 true 或 false，只写在 ground 上'
+          : '写成 true 或 false。不写时这只实体会把影子投到 ground 上',
       })
     }
-    if (read.off) out[field] = false
+    if (read.off && (key !== 'receive-shadow' || isGroundTag(node.tag))) out[field] = false
   }
   return out
 }
@@ -894,6 +906,7 @@ function usesOwnCoords(node: LayerNode, kind: LayoutNode['kind']): boolean {
   if (kind === 'line' || kind === 'group') return true
   if (node.tag === 'circle' || node.tag === 'ellipse' || node.tag === 'sphere' || node.tag === 'cylinder' || node.tag === 'torus') return true
   if (node.tag === 'rect') return true
+  if ((node.tag === 'path' || node.tag === 'polygon') && kind === 'mesh') return true
   return kind === 'custom' && hasTwoPoint(node.attrs)
 }
 
@@ -1262,6 +1275,7 @@ function warnNestedMasks(node: LayerNode, ctx: LayoutContext) {
 }
 
 function layoutShape(node: LayerNode, ctx: LayoutContext, _defaultStroke: string): ShapeLayoutNode {
+  noteStrayDepth(node, ctx)
   warnNestedMasks(node, ctx)
   const appearance = readAttrAppearance(node.attrs)
   let x = 0
@@ -1552,8 +1566,57 @@ function readMeshMaterial(raw: string | undefined, ctx: LayoutContext, tag: stri
   return { kind, roughness }
 }
 
+function readFillRule(raw: string | undefined, ctx: LayoutContext): 'nonzero' | 'evenodd' {
+  const text = raw?.trim() ?? ''
+  if (text === '' || text === 'nonzero') return 'nonzero'
+  if (text === 'evenodd') return 'evenodd'
+  ctx.issues.push({
+    level: 'warn',
+    code: 'invalid-attr',
+    path: ctx.pathPrefix,
+    message: `无法解析 fill-rule: ${raw}`,
+    hint: '写成 nonzero 或 evenodd。不写是 nonzero',
+  })
+  return 'nonzero'
+}
+
+function ellipseOutline(rx: number, ry: number): string {
+  return `M ${-rx} 0 A ${rx} ${ry} 0 1 0 ${rx} 0 A ${rx} ${ry} 0 1 0 ${-rx} 0 Z`
+}
+
+function polygonOutline(points: string): string {
+  const pairs = points
+    .trim()
+    .split(/\s+/)
+    .map((pair) => pair.split(','))
+    .filter((pair) => pair.length >= 2 && Number.isFinite(Number(pair[0])) && Number.isFinite(Number(pair[1])))
+  if (pairs.length < 3) return ''
+  const [first, ...rest] = pairs
+  return `M ${first![0]} ${first![1]} ${rest.map((pair) => `L ${pair[0]} ${pair[1]}`).join(' ')} Z`
+}
+
+function noteMeshAlias(node: LayerNode, ctx: LayoutContext) {
+  const hint =
+    node.tag === 'box'
+      ? '改成 <rect width="…" height="…" depth="…" />。rx 是圆棱'
+      : node.tag === 'cylinder'
+        ? '改成 <circle r="…" depth="…" />。轴沿 z，要竖着放写 rotateX="90"'
+        : node.tag === 'extrude'
+          ? '改成 <path d="…" depth="…" />。洞用 fill-rule'
+          : ''
+  if (!hint) return
+  ctx.issues.push({
+    level: 'info',
+    code: 'non-canonical',
+    path: ctx.pathPrefix,
+    message: `${node.tag} 是别名`,
+    hint,
+  })
+}
+
 function layoutMesh(node: LayerNode, ctx: LayoutContext): MeshLayoutNode {
   warnNestedMasks(node, ctx)
+  noteMeshAlias(node, ctx)
   const appearance = readAttrAppearance(node.attrs)
   const fill = readPaint(node.attrs.fill ?? '#000000', '#000000', ctx, 'fill')
   let x = 0
@@ -1579,7 +1642,7 @@ function layoutMesh(node: LayerNode, ctx: LayoutContext): MeshLayoutNode {
     x = cx - radius
     y = cy - radius
     mesh = { type: 'sphere', r: radius }
-  } else if (node.tag === 'box') {
+  } else if (node.tag === 'box' || node.tag === 'rect') {
     width = parseNumber(node.attrs.width) ?? 0
     height = parseNumber(node.attrs.height) ?? 0
     if (!(width > 0) || !(height > 0)) {
@@ -1587,11 +1650,14 @@ function layoutMesh(node: LayerNode, ctx: LayoutContext): MeshLayoutNode {
         level: 'warn',
         code: 'invalid-attr',
         path: ctx.pathPrefix,
-        message: 'box 需要正的 width 和 height',
-        hint: '例如 <box x="355" y="350" width="150" height="100" depth="60" />',
+        message: `${node.tag} 需要正的 width 和 height`,
+        hint: '例如 <rect x="40" y="30" width="150" height="100" depth="60" />',
       })
     }
-    const depth = readDepth(node.attrs.depth, Math.min(width, height), ctx, 'box')
+    const depth =
+      node.tag === 'rect'
+        ? Math.max(0, parseNumber(node.attrs.depth) ?? 0)
+        : readDepth(node.attrs.depth, Math.min(width, height), ctx, 'box')
     const fillet = readBoxFillet(node.attrs.rx, node.attrs.round, width, height, depth)
     for (const issue of fillet.issues) {
       ctx.issues.push({
@@ -1603,22 +1669,90 @@ function layoutMesh(node: LayerNode, ctx: LayoutContext): MeshLayoutNode {
       })
     }
     mesh = { type: 'box', depth, rx: fillet.rx, edges: fillet.edges }
-  } else if (node.tag === 'extrude') {
-    const d = node.attrs.d ?? ''
-    if (!d.trim()) {
+    if (node.tag === 'rect') {
+      x = parseNumber(node.attrs.x) ?? 0
+      y = parseNumber(node.attrs.y) ?? 0
+    }
+  } else if (node.tag === 'extrude' || node.tag === 'path' || node.tag === 'polygon' || node.tag === 'ellipse') {
+    let d = node.attrs.d ?? ''
+    if (node.tag === 'ellipse') {
+      const rx = Math.max(0, parseNumber(node.attrs.rx) ?? 0)
+      const ry = Math.max(0, parseNumber(node.attrs.ry) ?? 0)
+      d = rx > 0 && ry > 0 ? ellipseOutline(rx, ry) : ''
+      if (!d) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: ctx.pathPrefix,
+          message: 'ellipse 需要正的 rx 和 ry',
+          hint: '例如 <ellipse cx="80" cy="60" rx="40" ry="24" depth="16" />',
+        })
+      }
+    } else if (node.tag === 'polygon') {
+      d = polygonOutline(node.attrs.points ?? '')
+      if (!d) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: ctx.pathPrefix,
+          message: 'polygon 至少要三个点',
+          hint: 'points="x,y x,y x,y"，写了 depth 就沿 z 挤出',
+        })
+      }
+    } else if (!d.trim()) {
       ctx.issues.push({
         level: 'warn',
         code: 'invalid-attr',
         path: ctx.pathPrefix,
-        message: 'extrude 缺少 d',
-        hint: 'd 和 path 一样，是 y 向下的 SVG 路径',
+        message: `${node.tag} 缺少 d`,
+        hint: 'd 是 y 向下的 SVG 路径。写了 depth 就沿 z 挤出',
+      })
+    } else if (!/[zZ]/.test(d)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${node.tag} 写了 depth，但路径没有闭合`,
+        hint: '子路径用 Z 闭合。开口的线不要写 depth',
       })
     }
     const box = pathBoundsOf(d, ctx)
     width = box.width
     height = box.height
-    const depth = readDepth(node.attrs.depth, Math.min(width, height), ctx, 'extrude')
-    mesh = { type: 'extrude', d: translateSvgPath(d, -box.x, -box.y), depth }
+    const depth =
+      node.tag === 'extrude'
+        ? readDepth(node.attrs.depth, Math.min(width, height), ctx, 'extrude')
+        : Math.max(0, parseNumber(node.attrs.depth) ?? 0)
+    const fillRule = readFillRule(node.attrs['fill-rule'], ctx)
+    mesh = { type: 'extrude', d: translateSvgPath(d, -box.x, -box.y), depth, fillRule }
+    if (node.tag === 'path' || node.tag === 'polygon') {
+      x = box.x + (parseNumber(node.attrs.x) ?? 0)
+      y = box.y + (parseNumber(node.attrs.y) ?? 0)
+    } else if (node.tag === 'ellipse') {
+      const cx = parseNumber(node.attrs.cx) ?? 0
+      const cy = parseNumber(node.attrs.cy) ?? 0
+      x = cx + box.x
+      y = cy + box.y
+    }
+  } else if (node.tag === 'circle') {
+    const r = parseNumber(node.attrs.r) ?? 0
+    if (!(r > 0)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'circle 需要正的 r',
+        hint: '例如 <circle cx="80" cy="60" r="30" depth="20" />',
+      })
+    }
+    const radius = Math.max(0, r)
+    const depth = Math.max(0, parseNumber(node.attrs.depth) ?? 0)
+    const cx = parseNumber(node.attrs.cx) ?? 0
+    const cy = parseNumber(node.attrs.cy) ?? 0
+    width = height = radius * 2
+    x = cx - radius
+    y = cy - radius
+    mesh = { type: 'cylinder', r: radius, height: depth, rx: 0, rims: [], axis: 'z' }
   } else if (node.tag === 'cylinder') {
     const r = parseNumber(node.attrs.r) ?? 0
     if (!(r > 0)) {
@@ -1879,7 +2013,22 @@ function readUnitInterval(raw: string | undefined, fallback: number, ctx: Layout
   return Math.min(1, Math.max(0, value))
 }
 
+function noteStrayDepth(node: LayerNode, ctx: LayoutContext) {
+  const raw = node.attrs.depth
+  if (raw == null || raw.trim() === '') return
+  if (solidDepth(node.tag, raw)) return
+  const open = node.tag === 'line' || node.tag === 'polyline' || node.tag === 'curve'
+  ctx.issues.push({
+    level: 'warn',
+    code: 'invalid-attr',
+    path: ctx.pathPrefix,
+    message: open ? `${node.tag} 不能写 depth` : `无法解析 depth: ${raw}`,
+    hint: open ? 'depth 写在 rect、circle、ellipse、polygon、path 上，沿 z 挤出' : '写成正的像素厚度，例如 depth="40"。不写就是平面',
+  })
+}
+
 function layoutLineNode(node: LayerNode, ctx: LayoutContext, defaultStroke: string): LineLayoutNode {
+  noteStrayDepth(node, ctx)
   warnNestedMasks(node, ctx)
   let geom: LineGeometry
   if (node.tag === 'line') {
@@ -2038,7 +2187,19 @@ function measureFlexChild(raw: LayerNode, ctx: LayoutContext, direction: 'row' |
       isText: false,
     }
   }
+  if (solidDepth(node.tag, node.attrs.depth)) {
+    const laid = layoutMesh(node, ctx)
+    return {
+      node: laid,
+      minMain: direction === 'row' ? laid.width : laid.height,
+      minCross: direction === 'row' ? laid.height : laid.width,
+      preferredMain: direction === 'row' ? laid.width : laid.height,
+      preferredCross: direction === 'row' ? laid.height : laid.width,
+      isText: false,
+    }
+  }
   if (isLineTag(node.tag)) {
+    noteStrayDepth(node, ctx)
     ctx.issues.push({
       level: 'warn',
       code: 'invalid-child',
@@ -2128,7 +2289,7 @@ function measureFlexChild(raw: LayerNode, ctx: LayoutContext, direction: 'row' |
     }
   }
   if (isShapeTag(node.tag)) {
-    const s = layoutShape(node, ctx, ctx.color)
+    const s = solidDepth(node.tag, node.attrs.depth) ? layoutMesh(node, ctx) : layoutShape(node, ctx, ctx.color)
     return {
       node: s,
       minMain: direction === 'row' ? s.width : s.height,
@@ -2963,9 +3124,11 @@ function layoutGroup(node: LayerNode, ctx: LayoutContext): GroupLayoutNode {
     const laid =
       concrete.tag === 'g'
         ? layoutGroup(concrete, sub)
-        : isLineTag(concrete.tag)
-          ? layoutLineNode(concrete, sub, ctx.color)
-          : layoutShape(concrete, sub, ctx.color)
+        : solidDepth(concrete.tag, concrete.attrs.depth)
+          ? layoutMesh(concrete, sub)
+          : isLineTag(concrete.tag)
+            ? layoutLineNode(concrete, sub, ctx.color)
+            : layoutShape(concrete, sub, ctx.color)
     children.push(laid)
   }
   let box = { x: 0, y: 0, width: 0, height: 0 }
@@ -3192,7 +3355,15 @@ function rawNeedsCamera(node: LayerNode): boolean {
     if (typeof child === 'string') continue
     const tag = child.tag.toLowerCase()
     if (tag === 'mask' || tag === 'preview' || tag === 'symbol' || tag === 'draw' || tag === 'script' || tag === 'font') continue
-    if (isMeshTag(tag) || isGroundTag(tag) || nonzeroAttr(child.attrs.rotateX) || nonzeroAttr(child.attrs.rotateY) || nonzeroAttr(child.attrs.z)) return true
+    if (
+      isMeshTag(tag) ||
+      isGroundTag(tag) ||
+      solidDepth(tag, child.attrs.depth) ||
+      nonzeroAttr(child.attrs.rotateX) ||
+      nonzeroAttr(child.attrs.rotateY) ||
+      nonzeroAttr(child.attrs.z) ||
+      poseMoves(parseSvgTransform(child.attrs.transform).pose)
+    ) return true
     if (tag === 'layer' && wroteCameraAttr(child)) continue
     if (rawNeedsCamera(child)) return true
   }
@@ -3310,6 +3481,7 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
     let laid: LayoutNode | null = null
     if (laidSource.tag === 'use') laid = layoutUse(laidSource, subCtx)
     else if (laidSource.tag === 'g') laid = layoutGroup(laidSource, subCtx)
+    else if (solidDepth(laidSource.tag, laidSource.attrs.depth) || isMeshTag(laidSource.tag)) laid = layoutMesh(laidSource, subCtx)
     else if (isLineTag(laidSource.tag)) laid = layoutLineNode(laidSource, subCtx, ctx.color)
     else if (isDisplayFlex(laidSource.attrs.style) && isTextBoxTag(laidSource.tag)) laid = layoutFlex(laidSource, subCtx)
     else if (isImageTag(laidSource.tag)) laid = layoutImage(laidSource, subCtx)
@@ -3317,7 +3489,6 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
     else if (laidSource.tag === 'canvas') laid = layoutCanvas(laidSource, subCtx)
     else if (isShapeTag(laidSource.tag)) laid = layoutShape(laidSource, subCtx, ctx.color)
     else if (isGroundTag(laidSource.tag)) laid = layoutGround(laidSource, subCtx)
-    else if (isMeshTag(laidSource.tag)) laid = layoutMesh(laidSource, subCtx)
     else if (laidSource.tag === 'layer') laid = layoutLayer(laidSource, subCtx)
     else if (laidSource.tag === 'math') laid = layoutMath(laidSource, subCtx)
     else {

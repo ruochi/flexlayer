@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.2
+
+形状写了正的 `depth` 就沿 z 挤出：`rect` 是盒子，`circle` 是轴沿 z 的圆柱，`ellipse`、`polygon`、`path` 按轮廓挤出。洞用 `fill-rule`，默认 `nonzero`。`sphere`、`torus`、`tube`、`model`、`ground` 仍是单独的标签。`box`、`cylinder`、`extrude` 照旧绘制，报 `non-canonical`。
+
+SVG 元素可以写 `transform="rotateX() rotateY() rotateZ() translateZ()"`。二维的 `translate`、`rotate`、`scale`、`matrix` 仍写在 `<g>` 上。
+
+影子只落在 `ground` 上。`shadows="none"` 关掉，`cast-shadow="false"` 这只实体不投，`receive-shadow` 只写在 `ground` 上。
+
 ## 0.5.1
 
 推荐字体按气质列在 `resources.recommendedFonts`，粗黑体在前。寒蝉端黑体仍是默认字体。其余名字只供选型，要自己带 `<font family src>`。

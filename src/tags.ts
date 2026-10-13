@@ -65,6 +65,8 @@ export const ROOT_TAGS = new Set(['layer'])
 export const SHAPE_TAGS = new Set(['rect', 'circle', 'ellipse'])
 export const LINE_TAGS = new Set(['line', 'polyline', 'polygon', 'path', 'curve'])
 export const MESH_TAGS = new Set(['sphere', 'box', 'cylinder', 'torus', 'tube', 'extrude', 'model'])
+/** 写了正的 depth 就沿 z 挤出。box、cylinder、extrude 是这些标签的别名。 */
+export const DEPTH_SOLID_TAGS = new Set(['rect', 'circle', 'ellipse', 'polygon', 'path'])
 export const GROUND_TAG = 'ground'
 export const FONT_TAG = 'font'
 
@@ -102,6 +104,14 @@ export function isShapeTag(tag: string): boolean {
 
 export function isMeshTag(tag: string): boolean {
   return MESH_TAGS.has(canonicalTag(tag))
+}
+
+/** 正的 depth 把 SVG 形状挤成实体。别名标签不走这里。 */
+export function solidDepth(tag: string, raw: string | undefined): boolean {
+  if (!DEPTH_SOLID_TAGS.has(canonicalTag(tag))) return false
+  if (raw == null || raw.trim() === '') return false
+  const n = Number(raw.trim().replace(/px$/, ''))
+  return Number.isFinite(n) && n > 0
 }
 
 export function isGroundTag(tag: string): boolean {
