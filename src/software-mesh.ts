@@ -207,8 +207,8 @@ function geometryCacheKey(node: MeshLayoutNode): string | null {
   const head = `${mesh.type}|${quantGeometry(node.width)}|${quantGeometry(node.height)}|${originKey(node)}${bevel}`
   if (mesh.type === 'sphere') return `${head}|${quantGeometry(mesh.r)}`
   if (mesh.type === 'box') return `${head}|${quantGeometry(mesh.depth)}|${quantGeometry(mesh.rx)}|${mesh.edges.join(',')}`
-  if (mesh.type === 'extrude') return `${head}|${quantGeometry(mesh.depth)}|${mesh.d}`
-  if (mesh.type === 'cylinder') return `${head}|${quantGeometry(mesh.r)}|${quantGeometry(mesh.height)}|${quantGeometry(mesh.rx)}|${mesh.rims.join(',')}`
+  if (mesh.type === 'extrude') return `${head}|${quantGeometry(mesh.depth)}|${mesh.fillRule}|${mesh.d}`
+  if (mesh.type === 'cylinder') return `${head}|${mesh.axis ?? 'y'}|${quantGeometry(mesh.r)}|${quantGeometry(mesh.height)}|${quantGeometry(mesh.rx)}|${mesh.rims.join(',')}`
   if (mesh.type === 'torus') return `${head}|${quantGeometry(mesh.r)}|${quantGeometry(mesh.tube)}`
   if (mesh.type === 'tube') return `${head}|${quantGeometry(mesh.r)}|${mesh.d}`
   return null
@@ -883,9 +883,51 @@ function addDisk(positions: number[], normals: number[], indices: number[], cent
   }
 }
 
+/** 圆在所在平面里，厚度沿 z。正对镜头看见圆盘。 */
+function buildZCylinder(node: MeshLayoutNode) {
+  if (node.mesh.type !== 'cylinder') return null
+  const radius = node.mesh.r
+  const half = node.mesh.height / 2
+  if (!(radius > 0) || !(half > 0)) return null
+  const segments = 48
+  const positions: number[] = []
+  const normals: number[] = []
+  const indices: number[] = []
+  for (let iz = 0; iz <= 1; iz++) {
+    const z = iz === 0 ? half : -half
+    for (let ix = 0; ix <= segments; ix++) {
+      const theta = (ix / segments) * Math.PI * 2
+      const nx = Math.cos(theta)
+      const ny = Math.sin(theta)
+      positions.push(radius * nx, radius * ny, z)
+      normals.push(nx, ny, 0)
+    }
+  }
+  const cols = segments + 1
+  for (let ix = 0; ix < segments; ix++) {
+    const a = ix
+    const b = ix + cols
+    indices.push(a, a + 1, b, a + 1, b + 1, b)
+  }
+  const front: Vec3[] = []
+  const back: Vec3[] = []
+  for (let ix = 0; ix <= segments; ix++) {
+    const theta = (ix / segments) * Math.PI * 2
+    const x = radius * Math.cos(theta)
+    const y = radius * Math.sin(theta)
+    front.push(vec3(x, y, half))
+    back.push(vec3(x, y, -half))
+  }
+  addDisk(positions, normals, indices, vec3(0, 0, half), front, vec3(0, 0, 1), true)
+  addDisk(positions, normals, indices, vec3(0, 0, -half), back, vec3(0, 0, -1), false)
+  centerMesh(node, positions)
+  return { positions: Float32Array.from(positions), normals: Float32Array.from(normals), indices: Uint32Array.from(indices) }
+}
+
 /** 轴沿画面竖直方向。圆截面在 xz，朝镜头的一侧法线是 +z。 */
 function buildCylinder(node: MeshLayoutNode) {
   if (node.mesh.type !== 'cylinder') return null
+  if (node.mesh.axis === 'z') return buildZCylinder(node)
   const radius = node.mesh.r
   const half = node.mesh.height / 2
   if (!(radius > 0) || !(half > 0)) return null
@@ -1097,7 +1139,7 @@ function buildExtrude(node: MeshLayoutNode) {
     }
     items[i]!.parent = best
   }
-  const depthOf = (index: number) => {
+  const nestDepth = (index: number) => {
     let depth = 0
     let parent = items[index]!.parent
     const seen = new Set<number>()
@@ -1108,22 +1150,46 @@ function buildExtrude(node: MeshLayoutNode) {
     }
     return depth
   }
+  const windOf = items.map((item) => (signedArea(item.points) >= 0 ? 1 : -1))
+  const outsideWinding = (index: number) => {
+    let winding = 0
+    let parent = items[index]!.parent
+    const seen = new Set<number>()
+    while (parent >= 0 && !seen.has(parent)) {
+      seen.add(parent)
+      winding += windOf[parent]!
+      parent = items[parent]!.parent
+    }
+    return winding
+  }
+  const rule = node.mesh.fillRule
+  const roleOf = (index: number): 'solid' | 'hole' | 'skip' => {
+    if (rule === 'evenodd') return nestDepth(index) % 2 === 0 ? 'solid' : 'hole'
+    const outside = outsideWinding(index)
+    const inside = outside + windOf[index]!
+    if (outside === 0 && inside !== 0) return 'solid'
+    if (outside !== 0 && inside === 0) return 'hole'
+    return 'skip'
+  }
+  const solidAncestor = (index: number) => {
+    let parent = items[index]!.parent
+    const seen = new Set<number>()
+    while (parent >= 0 && !seen.has(parent)) {
+      seen.add(parent)
+      if (roleOf(parent) === 'solid') return parent
+      parent = items[parent]!.parent
+    }
+    return -1
+  }
   const positions: number[] = []
   const normals: number[] = []
   const indices: number[] = []
   const half = node.mesh.depth / 2
   for (let i = 0; i < items.length; i++) {
-    if (depthOf(i) % 2 !== 0) continue
+    if (roleOf(i) !== 'solid') continue
     const holes: Pt[][] = []
     for (let h = 0; h < items.length; h++) {
-      if (depthOf(h) % 2 !== 1) continue
-      let parent = items[h]!.parent
-      const seen = new Set<number>()
-      while (parent >= 0 && !seen.has(parent) && depthOf(parent) % 2 !== 0) {
-        seen.add(parent)
-        parent = items[parent]!.parent
-      }
-      if (parent === i) holes.push(items[h]!.points)
+      if (roleOf(h) === 'hole' && solidAncestor(h) === i) holes.push(items[h]!.points)
     }
     const outer = orient(items[i]!.points, true)
     const holeRings = holes.map((ring) => orient(ring, false))
@@ -3609,7 +3675,7 @@ function planeBatch(plane: SoftwareMeshInput['planes'][number], raster: Software
     shaded: false,
     depthWrite: true,
     castShadow: plane.node.castShadow !== false,
-    receiveShadow: plane.node.receiveShadow !== false,
+    receiveShadow: false,
     material: 'lambert',
     roughness: 1,
     texture: solid ? null : pixels.data,
@@ -3740,7 +3806,7 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
           shaded: true,
           depthWrite: node.material?.kind === 'glass' && prim.color[3] < 255 ? false : prim.color[3] >= 255,
           castShadow: node.castShadow !== false,
-          receiveShadow: node.receiveShadow !== false,
+          receiveShadow: false,
           material,
           roughness,
           texture: null,
@@ -3774,7 +3840,7 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
       shaded: !fillNone,
       depthWrite: glass && a < 255 ? false : fillNone || a >= 255,
       castShadow: node.castShadow !== false,
-      receiveShadow: node.receiveShadow !== false,
+      receiveShadow: false,
       material: shadeMaterial(node.material?.kind),
       roughness: node.material?.roughness ?? 1,
       texture: null,

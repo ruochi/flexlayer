@@ -303,7 +303,7 @@ describe('网格绘制', () => {
     const { png } = await renderLayer(`
       <layer width="220" height="120" background="#101010" camera="800">
         <extrude x="10" y="46" d="M0 0 H28 V28 H0 Z M52 0 H80 V28 H52 Z" depth="12" fill="#f2f2f2" />
-        <extrude x="128" y="28" d="M0 0 H64 V64 H0 Z M18 18 H46 V46 H18 Z" depth="12" fill="#f2f2f2" />
+        <extrude x="128" y="28" d="M0 0 H64 V64 H0 Z M18 18 V46 H46 V18 Z" depth="12" fill="#f2f2f2" />
       </layer>
     `)
     const left = await pixelAt(png, 28, 60)
@@ -316,6 +316,51 @@ describe('网格绘制', () => {
     expect(gap[0]).toBeLessThan(40)
     expect(ring[0]).toBeGreaterThan(180)
     expect(hole[0]).toBeLessThan(40)
+  }, 30000)
+
+  it('rect 加 depth 和 box 画出同一只盒子，box 报别名', async () => {
+    const source = (tag: string) =>
+      `<layer width="180" height="140" background="#010203" camera="500"><${tag} x="40" y="30" width="80" height="60" depth="36" fill="#ff2244" rotateY="-32" /></layer>`
+    const box = await renderLayer(source('box'))
+    const rect = await renderLayer(source('rect'))
+    const report = await checkLayer(source('box'))
+    expect(report.issues.some((issue) => issue.code === 'non-canonical' && issue.message.includes('box'))).toBe(true)
+    for (const [x, y] of [[70, 60], [50, 48], [110, 70]] as const) {
+      const a = await pixelAt(box.png, x, y)
+      const b = await pixelAt(rect.png, x, y)
+      expect([b[0], b[1], b[2], b[3]]).toEqual([a[0], a[1], a[2], a[3]])
+    }
+  }, 30000)
+
+  it('circle 加 depth 是朝向镜头的圆柱', async () => {
+    const { png } = await renderLayer(
+      `<layer width="120" height="120" background="#010203" camera="parallel"><circle cx="60" cy="60" r="28" depth="40" fill="#ff2244" /></layer>`,
+    )
+    const center = await pixelAt(png, 60, 60)
+    const outside = await pixelAt(png, 60, 16)
+    expect(center[0]).toBeGreaterThan(140)
+    expect(outside[0]).toBeLessThan(20)
+  }, 30000)
+
+  it('path 加 depth 按 fill-rule 留洞', async () => {
+    const scene = (rule: string) =>
+      `<layer width="120" height="120" background="#101010" camera="parallel"><path d="M16 16 H96 V96 H16 Z M32 32 H80 V80 H32 Z" depth="12" fill="#f2f2f2" fill-rule="${rule}" /></layer>`
+    const nonzero = await pixelAt((await renderLayer(scene('nonzero'))).png, 56, 56)
+    const even = await pixelAt((await renderLayer(scene('evenodd'))).png, 56, 56)
+    expect(nonzero[0]).toBeGreaterThan(180)
+    expect(even[0]).toBeLessThan(40)
+  }, 30000)
+
+  it('transform 的 rotateX 和属性是同一套姿态', async () => {
+    const attr = await renderLayer(
+      `<layer width="160" height="120" background="#010203" camera="400"><rect x="30" y="24" width="90" height="60" depth="28" fill="#44aaff" rotateX="48" /></layer>`,
+    )
+    const fn = await renderLayer(
+      `<layer width="160" height="120" background="#010203" camera="400"><rect x="30" y="24" width="90" height="60" depth="28" fill="#44aaff" transform="rotateX(48)" /></layer>`,
+    )
+    const a = await pixelAt(attr.png, 75, 54)
+    const b = await pixelAt(fn.png, 75, 54)
+    expect([b[0], b[1], b[2]]).toEqual([a[0], a[1], a[2]])
   }, 30000)
 
   it('搭在另一笔上的形状仍是实体，不会被挖成洞', async () => {
@@ -371,7 +416,7 @@ describe('网格绘制', () => {
     const messages = report.issues.filter((issue) => issue.code === 'invalid-attr').map((issue) => issue.message)
     expect(messages.some((message) => message.includes('hidden 要和 stroke'))).toBe(true)
     expect(messages.some((message) => message.includes('stroke-width 要和 stroke'))).toBe(true)
-    expect(messages.some((message) => message.includes('hidden 只写在网格上'))).toBe(true)
+    expect(messages.some((message) => message.includes('hidden 只写在实体上'))).toBe(true)
   })
 
   it('matte 是默认磨砂，和没写 material 是同一张图', async () => {
@@ -588,7 +633,7 @@ describe('网格绘制', () => {
     const messages = report.issues.filter((issue) => issue.code === 'invalid-attr').map((issue) => issue.message)
     expect(messages.some((message) => message.includes('不认识的 material'))).toBe(true)
     expect(messages.some((message) => message.includes('粗糙度'))).toBe(true)
-    expect(messages.some((message) => message.includes('material 只写在网格上'))).toBe(true)
+    expect(messages.some((message) => message.includes('material 只写在实体上'))).toBe(true)
     const ok = await checkLayer(
       `<layer width="120" height="120" camera="400"><sphere cx="60" cy="60" r="20" fill="#fff" material="metal, rough 0.35" /></layer>`,
     )

@@ -100,6 +100,10 @@
 - `src/rules.ts` / `src/jsx-intrinsics.ts` — 归属
 - `src/report.ts` — 报告与 `effect-clipped`
 
+## 字体集合
+
+`registerFromPath` 不能指定集合里的哪一套，不写序号时画布用第 0 套。`src` 末尾的 `#` 加十进制序号先从路径上拆下来，再检查文件在不在。选中的那一套按表拆成独立 sfnt，写进字体缓存后照常注册。表偏移在集合里相对文件开头，共享的表会各抄一份。
+
 ## 公式
 
 绘制和报告不认识公式。`src/math/` 把 MathML 排成普通的 `flex`、`text`、`shape`（分数线、横线）和 `line`（伸长的字形路径）节点。

@@ -117,6 +117,16 @@ type LayerShape = LayerPositioned &
     width?: number | string
     height?: number | string
     fill?: string
+    /** 正数时沿 z 挤出。rect 的 rx 是圆棱 */
+    depth?: number | string
+    /** nonzero | evenodd。挤出时判断洞，不写是 nonzero */
+    'fill-rule'?: string
+    /** 被挡住的棱。要和 stroke 一起写 */
+    hidden?: string
+    /** matte、plastic、metal、glass。不写是磨砂 */
+    material?: string
+    /** rotateX()、rotateY()、translateZ()，和同名属性同一套姿态 */
+    transform?: string
     stroke?: string
     strokeWidth?: number | string
     'stroke-width'?: number | string
@@ -257,8 +267,8 @@ export namespace JSX {
         head?: number | string
       }
     polyline: LayerGraphic & LayerLinePaint & { points?: string }
-    polygon: LayerGraphic & LayerLinePaint & { points?: string }
-    path: LayerGraphic & LayerLinePaint & { d?: string }
+    polygon: LayerGraphic & LayerLinePaint & { points?: string; depth?: number | string; 'fill-rule'?: string; hidden?: string; material?: string; transform?: string }
+    path: LayerGraphic & LayerLinePaint & { d?: string; depth?: number | string; 'fill-rule'?: string; hidden?: string; material?: string; transform?: string }
     sphere: LayerPositioned &
       LayerCenter &
       LayerEffects & {

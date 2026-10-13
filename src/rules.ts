@@ -5,7 +5,8 @@ import { cssPropertyNames, diagnoseStyle, parseNumber, parseStyle, readOrigin } 
 import { MATH_TAGS } from './math/rules.js'
 import { isInlineTag, isTextBoxTag } from './text.js'
 import type { Issue, IssueLevel } from './types.js'
-import { isGroundTag, isImageTag, isLineTag, isMeshTag, isShapeTag } from './tags.js'
+import { isGroundTag, isImageTag, isLineTag, isMeshTag, isShapeTag, solidDepth } from './tags.js'
+import { parseSvgTransform } from './svg-transform.js'
 
 const BLOCK_IN_TEXT = new Set(['h1', 'h2', 'h3', 'p', 'div'])
 
@@ -335,17 +336,21 @@ export function suggestAttrs(raw: string, node?: LayerNode): string[] {
   return suggestNames(raw, node ? attrCandidates(node) : KNOWN_ATTRS)
 }
 
-/** `material` 是网格的磨砂、塑料、金属或玻璃，不写在平面上。层上的 `glass` 仍是透镜。 */
+function meshSurface(node: LayerNode): boolean {
+  return isMeshTag(node.tag) || solidDepth(node.tag, node.attrs.depth)
+}
+
+/** `material` 是实体在固定灯光下的表面，不写在平面上。层上的 `glass` 仍是透镜。 */
 export function materialAttrIssues(node: LayerNode, path: string): Issue[] {
   if (!present(node.attrs, 'material')) return []
-  if (isMeshTag(node.tag)) return []
+  if (meshSurface(node)) return []
   return [
     flagged(
       'warn',
       'invalid-attr',
       path,
-      'material 只写在网格上',
-      '网格用 matte、plastic、metal 或 glass。不写是磨砂，例如 material="metal 0.35"',
+      'material 只写在实体上',
+      'matte、plastic、metal 或 glass。不写是磨砂，例如 material="metal 0.35"',
     ),
   ]
 }
@@ -353,13 +358,13 @@ export function materialAttrIssues(node: LayerNode, path: string): Issue[] {
 /** `halo` 是网格可见线在交叉处留出的断开，不写在平面、线条或文字上。 */
 export function haloAttrIssues(node: LayerNode, path: string): Issue[] {
   if (!present(node.attrs, 'halo')) return []
-  if (isMeshTag(node.tag)) return []
+  if (meshSurface(node)) return []
   return [
     flagged(
       'warn',
       'invalid-attr',
       path,
-      'halo 只写在网格上',
+      'halo 只写在实体上',
       '可见线会在交叉处把更远的线断开，例如 halo="3"',
     ),
   ]
@@ -368,14 +373,14 @@ export function haloAttrIssues(node: LayerNode, path: string): Issue[] {
 /** `hidden` 是网格被挡住的棱，不写在平面、线条或文字上。 */
 export function hiddenAttrIssues(node: LayerNode, path: string): Issue[] {
   if (!present(node.attrs, 'hidden')) return []
-  if (isMeshTag(node.tag)) return []
+  if (meshSurface(node)) return []
   return [
     flagged(
       'warn',
       'invalid-attr',
       path,
-      'hidden 只写在网格上',
-      'sphere、box、cylinder、torus、tube、extrude、model 用它表示被挡住的棱，例如 hidden="#8a8175"',
+      'hidden 只写在实体上',
+      '和 stroke 一起写。不写就不画隐藏线，例如 hidden="#8a8175"',
     ),
   ]
 }
@@ -716,15 +721,29 @@ export function checkChildAttrs(node: LayerNode, parent: 'layer' | 'flex', path:
   }
 
   if (present(attrs, 'transform') && node.tag !== 'g') {
-    out.push(
-      flagged(
-        'warn',
-        'invalid-attr',
-        path,
-        'transform 只写在 g 上',
-        '分组用 <g transform="translate(12,8)">',
-      ),
-    )
+    const parsed = parseSvgTransform(attrs.transform)
+    const graphic = isShapeTag(node.tag) || isLineTag(node.tag) || isMeshTag(node.tag) || isGroundTag(node.tag)
+    if (parsed.error || !graphic) {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-attr',
+          path,
+          parsed.error ? `无法解析 transform: ${attrs.transform}` : 'transform 的二维函数只写在 g 上',
+          '二维用 <g transform="translate(12,8)">。rotateX、rotateY、translateZ 可以写在形状上',
+        ),
+      )
+    } else if (parsed.saw2d) {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-attr',
+          path,
+          'transform 里的平移、旋转、缩放只写在 g 上',
+          '二维用 <g transform="translate(12,8)">。这个元素上留 rotateX、rotateY、translateZ',
+        ),
+      )
+    }
   }
 
   if (attrs.bleed != null) {

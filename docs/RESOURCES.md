@@ -6,7 +6,9 @@
 
 写 `font-family="Song"` 或 `style="font-family:Inter"`。没写是 `ChillDuanSans`。第一次用到某个名字时，字体文件下载到 `~/.cache/flexlayer/fonts`。
 
-`<font src>` 要的是字体文件（ttf、otf、woff）。`fonts.googleapis.com` 的 CSS 地址不是字体文件，写进去会下载失败。目录里的 Google 字体已经换成 jsDelivr 上的文件，直接写名字即可。
+`<font src>` 要的是字体文件（ttf、otf、woff、ttc、otc）。`fonts.googleapis.com` 的 CSS 地址不是字体文件，写进去会下载失败。目录里的 Google 字体已经换成 jsDelivr 上的文件，直接写名字即可。
+
+`.ttc`、`.otc` 是字体集合，里面有多套字形。不写序号时用第 0 套。思源、Noto CJK 的第 0 套是日文，「复」这类简繁日不同的字会不对。简体写 `src="SourceHanSans.ttc#2"`，`#` 后面是从 0 开始的序号，不是文件名。
 
 多档字体在 400 和 700 里取最近的一档。只登记了一档的，标题的 bold 仍用这一档。`Symbols` 是图标字体，按 100 到 700 的整百取最近一档。写成 `<span class="material-symbols-outlined">home</span>`，字重用 `font-weight`。`ChillDuanSans` 是可变字体，字重轴约 300 到 800；轮廓只有默认字重 300。
 

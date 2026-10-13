@@ -21,12 +21,12 @@
 | 排布 | `<div style="display:flex; flex-direction:column">` | `unknown-tag` |
 | 线条 | `<layer><line x1 y1 x2 y2 /></layer>` | `invalid-child` |
 | 文字位置 | `<layer x="120" y="64"><h1>…</h1></layer>` | `invalid-attr` |
-| 位置 | `layer`、`use`、`rect`、`box` 用 `x` `y`。圆、椭圆、球用 `cx` `cy` | `invalid-attr` |
+| 位置 | `layer`、`use`、`rect` 用 `x` `y`。圆、椭圆、球用 `cx` `cy` | `invalid-attr` |
 | 渐变 | 字形 `style="fill:linear-gradient(...)"`。`color` 只写纯色 | `invalid-attr` |
 | 描边 | 只写 `stroke`。形状可加 `stroke-width`；沿墨迹写 `stroke="6 #000 outside"` | `invalid-attr` |
 | 整棵子树的效果 | `<layer grade="lomo" overlay="#00000066">` | `invalid-attr` |
-| 网格 | `<layer><sphere cx="80" cy="80" r="40" /></layer>`。不写 `camera` 时视距等于 height。不要硬边影子时，取景层写 `shadows="none"`，或网格 `cast-shadow="false"`、平面 `receive-shadow="false"` | `flatten-3d` |
-| 地面 | `<ground y="520" rotateX="70" shadow-blur="16" />`。旋转和 `box` 一样。不写 `fill` 时只有影子 | `invalid-attr` |
+| 实体 | 形状写 `depth` 就沿 z 挤出。`rect` 是盒子（`rx` 是圆棱），`circle` 是圆柱，`path` 按 `fill-rule` 留洞。另有 `sphere`、`torus`、`tube`、`model` | `flatten-3d` |
+| 地面 | `<ground y="520" rotateX="70" />` 接影子。`shadows="none"` 关掉。不写 `fill` 时只有影子 | `invalid-attr` |
 | 结构化数据 | `data={{ values: [1, 2] }}`。`.layer` 写 `data='{"values":[1,2]}'` | `invalid-attr` |
 | 故意出现的问题 | `expect="overflow-canvas: 出血图"`。写在根上覆盖整棵子树。没出现报 `unused-expect` | `unused-expect` |
 | 最小字号 | 根上 `min-font="print"` 或 `min-font="16"`。不写按屏幕 `min(宽, 高) / 1080 × 24`。多处过小合并成一条 | `min-font-size` |
@@ -36,7 +36,7 @@
 | 要写什么 | 看 |
 | --- | --- |
 | 蒙版、抠图、`preview`、`derive` | SPEC 第 4.1 节和第 6 章 |
-| 透视、镜头、景深、`preserve-3d`、网格 | SPEC 第 3 章 |
+| 透视、镜头、实体 | SPEC 第 3 章 |
 | 公式 | SPEC 第 4.1 节 |
 | `canvas.create`、动画、`glyph` | SPEC 第 5.3 节、第 13 章、第 15 章 |
 | 问题码和报告字段 | SPEC 第 10 章 |

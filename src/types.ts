@@ -527,8 +527,8 @@ export type CylinderRim = 'top' | 'bottom'
 export type MeshSpec =
   | { type: 'sphere'; r: number }
   | { type: 'box'; depth: number; rx: number; edges: readonly BoxEdge[] }
-  | { type: 'extrude'; d: string; depth: number }
-  | { type: 'cylinder'; r: number; height: number; rx: number; rims: readonly CylinderRim[] }
+  | { type: 'extrude'; d: string; depth: number; fillRule: 'nonzero' | 'evenodd' }
+  | { type: 'cylinder'; r: number; height: number; rx: number; rims: readonly CylinderRim[]; axis?: 'z' }
   | { type: 'torus'; r: number; tube: number }
   | { type: 'tube'; d: string; r: number }
   | {

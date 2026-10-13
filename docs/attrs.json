@@ -95,7 +95,7 @@
     "example": "none",
     "layerOnly": true,
     "htmlUsesStyle": false,
-    "note": "写在开了镜头的 layer 上。none 不建主光阴影图，深度遮挡还在。单只网格用 cast-shadow，平面用 receive-shadow",
+    "note": "写在开了镜头的 layer 上。none 关掉投到 ground 上的影子，深度遮挡还在",
     "misplacedHint": "写在取景的 layer 上，例如 <layer camera=\"900\" shadows=\"none\">"
   },
   {
@@ -129,7 +129,7 @@
     "layerOnly": false,
     "htmlUsesStyle": false,
     "note": null,
-    "misplacedHint": "写在要保持清楚的 layer、flex、形状或网格上"
+    "misplacedHint": "写在要保持清楚的 layer、flex、形状或实体上"
   },
   {
     "name": "scale",
@@ -519,12 +519,23 @@
   {
     "name": "depth",
     "group": "graphic",
-    "syntax": null,
+    "syntax": "px",
     "default": null,
-    "example": null,
+    "example": "40",
     "layerOnly": false,
     "htmlUsesStyle": false,
-    "note": null,
+    "note": "写在 rect、circle、ellipse、polygon、path 上就沿 z 挤出，厚度以平面为中心，布局不计。不写就是平面",
+    "misplacedHint": null
+  },
+  {
+    "name": "fill-rule",
+    "group": "graphic",
+    "syntax": "nonzero | evenodd",
+    "default": "nonzero",
+    "example": "evenodd",
+    "layerOnly": false,
+    "htmlUsesStyle": false,
+    "note": "挤出时判断洞。nonzero 要内圈反绕向；evenodd 按嵌套奇偶",
     "misplacedHint": null
   },
   {
@@ -612,7 +623,7 @@
     "example": "false",
     "layerOnly": false,
     "htmlUsesStyle": false,
-    "note": "网格、平面和 ground 都能写。false 时不写入这台场景的主光阴影图。玻璃本来就不投这张影子",
+    "note": "false 时这只实体不把影子投到 ground 上。玻璃本来就不投",
     "misplacedHint": null
   },
   {
@@ -623,7 +634,7 @@
     "example": "false",
     "layerOnly": false,
     "htmlUsesStyle": false,
-    "note": "false 时主光被挡住也不变暗。半透明平面要保持干净时写在这张平面上",
+    "note": "只写在 ground 上。false 时地面不接影子",
     "misplacedHint": null
   },
   {

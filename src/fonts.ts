@@ -1,11 +1,12 @@
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { GlobalFonts } from '@napi-rs/canvas'
 import { DEFAULT_FONT, REGISTERED_FONTS } from './font-catalog.js'
+import { extractCollectionFace } from './ttc.js'
 
 export const DEFAULT_FONT_FAMILY = DEFAULT_FONT.family
 const DEFAULT_FONT_URL = DEFAULT_FONT.faces[0]!.url
@@ -65,23 +66,81 @@ export async function ensureDefaultFont(): Promise<string> {
 
 export function registerFontPath(family: string, filePath: string): void {
   if (registered.has(family)) return
-  GlobalFonts.registerFromPath(filePath, family)
+  const key = GlobalFonts.registerFromPath(filePath, family)
+  if (!key) throw new Error(`字体注册失败: ${filePath}`)
   registered.add(family)
   freshFontLoads += 1
 }
 
-export function resolveFontSrcSync(src: string, baseDir: string): string {
-  const trimmed = src.trim()
-  if (/^https?:\/\//i.test(trimmed)) {
-    const hash = createHash('sha256').update(trimmed).digest('hex').slice(0, 16)
-    const ext = trimmed.match(/\.(ttf|otf|woff2?)(\?|$)/i)?.[1] ?? 'ttf'
+/** `字体.ttc#2` 的 `#2` 是从 0 开始的字形序号，不是文件名。 */
+function splitFaceIndex(src: string): { href: string; index: number | null } {
+  const match = /#(\d+)$/.exec(src)
+  if (!match || match.index == null) return { href: src, index: null }
+  return { href: src.slice(0, match.index).trim(), index: Number(match[1]) }
+}
+
+function resolveFontFileSync(src: string, baseDir: string): string {
+  if (/^https?:\/\//i.test(src)) {
+    const hash = createHash('sha256').update(src).digest('hex').slice(0, 16)
+    const ext = src.match(/\.(ttf|otf|woff2?|ttc|otc)(\?|$)/i)?.[1] ?? 'ttf'
     const dest = join(getFontsCacheDir(), `${hash}.${ext}`)
-    if (!existsSync(dest)) downloadSync(trimmed, dest)
+    if (!existsSync(dest)) downloadSync(src, dest)
     return dest
   }
-  const local = isAbsolute(trimmed) ? trimmed : resolve(baseDir, trimmed)
+  const local = isAbsolute(src) ? src : resolve(baseDir, src)
   if (!existsSync(local)) throw new Error(`字体文件不存在: ${local}`)
   return local
+}
+
+function materializeCollectionFace(file: string, index: number): string {
+  const data = readFileSync(file)
+  if (data.length < 4 || data.toString('ascii', 0, 4) !== 'ttcf') {
+    if (index === 0) return file
+    throw new Error(`这不是字体集合，不能写 #${index}: ${file}`)
+  }
+  const st = statSync(file)
+  const key = createHash('sha256')
+    .update(file)
+    .update('\0')
+    .update(String(st.size))
+    .update('\0')
+    .update(String(st.mtimeMs))
+    .update('\0')
+    .update(String(index))
+    .digest('hex')
+    .slice(0, 16)
+  const dest = join(getFontsCacheDir(), `${key}.ttf`)
+  if (existsSync(dest)) return dest
+  let face: Buffer
+  try {
+    face = extractCollectionFace(data, index)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    throw new Error(`${message}: ${file}`)
+  }
+  mkdirSync(dirname(dest), { recursive: true })
+  const tmp = `${dest}.${process.pid}.tmp`
+  try {
+    writeFileSync(tmp, face)
+    renameSync(tmp, dest)
+  } catch (err) {
+    try {
+      unlinkSync(tmp)
+    } catch {
+      // 临时文件可能还没写出来。
+    }
+    throw err
+  }
+  return dest
+}
+
+export function resolveFontSrcSync(src: string, baseDir: string): string {
+  const trimmed = src.trim()
+  const { href, index } = splitFaceIndex(trimmed)
+  if (!href) throw new Error(`字体文件不存在: ${trimmed}`)
+  const file = resolveFontFileSync(href, baseDir)
+  if (index == null) return file
+  return materializeCollectionFace(file, index)
 }
 
 export async function resolveFontSrc(src: string, baseDir: string): Promise<string> {

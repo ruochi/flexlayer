@@ -558,6 +558,28 @@ describe('layoutSource', () => {
     expect(centered[1]! - centered[0]!).toBeCloseTo(40)
   })
 
+  it('没写交叉轴尺寸时 stretch 撑满容器，空的 flex:1 也有高度', async () => {
+    const doc = await layoutSource(
+      `<layer width="400" height="240" safe="0"><div style="display:flex; width:300px; height:180px"><div style="flex:1; background:#e8b04a"></div><p style="font-size:16px">甲</p></div></layer>`,
+      process.cwd(),
+    )
+    const row = doc.root.children[0] as { height: number; children: Array<{ width: number; height: number }> }
+    expect(row.height).toBeCloseTo(180)
+    expect(row.children[0]!.width).toBeGreaterThan(200)
+    expect(row.children[0]!.height).toBeCloseTo(180)
+    expect(row.children[1]!.height).toBeCloseTo(180)
+  })
+
+  it('align-items:flex-start 时子项保持内容高度', async () => {
+    const doc = await layoutSource(
+      `<layer width="400" height="240" safe="0"><div style="display:flex; width:300px; height:180px; align-items:flex-start"><div style="flex:1; background:#e8b04a"></div><p style="font-size:16px">甲</p></div></layer>`,
+      process.cwd(),
+    )
+    const row = doc.root.children[0] as { children: Array<{ height: number }> }
+    expect(row.children[0]!.height).toBeLessThan(40)
+    expect(row.children[1]!.height).toBeLessThan(40)
+  })
+
   it('align-items 缺省是 stretch，较窄的子项贴着起点', async () => {
     const doc = await layoutSource(
       `<layer width="400" height="240" safe="0"><div style="display:flex; width:200px; height:200px"><div style="width:40px; height:40px; background:#fff"></div><div style="width:40px; height:80px; background:#fff"></div></div></layer>`,
