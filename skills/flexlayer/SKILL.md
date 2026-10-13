@@ -59,7 +59,7 @@ export default canvas.create(
 
 ## 选字体
 
-中文画面按气质从 `docs/RESOURCES.md` 的推荐字体里挑，粗黑体在前。没写字体时用 `ChillDuanSans`。其余推荐名要自己带 `<font family src>`。不要编造字体名，也不要编造字体文件地址。
+中文画面按气质从 `docs/RESOURCES.md` 的推荐字体里挑，粗黑体在前。没写字体时用 `ChillDuanSans`。其余推荐名要自己带 `<font family src>`。不要编造字体名，也不要编造字体文件地址。`.ttc` 要选字形就在路径后写 `#` 和从 0 开始的序号，例如 `src="SourceHanSans.ttc#2"`。不写时用第 0 套，思源和 Noto CJK 的第 0 套是日文。
 
 ## 规范在哪
 

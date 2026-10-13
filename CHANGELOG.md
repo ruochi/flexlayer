@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.3
+
+`.ttc`、`.otc` 可以用 `#` 选择字形。`src="SourceHanSans.ttc#2"` 是第 2 套，从 0 数。以前 `#2` 被当成路径，报「字体文件不存在」，于是用了集合里的第 0 套。思源和 Noto CJK 的第 0 套是日文，简体的「复」会不对。
+
 ## 0.5.2
 
 `.layer` 里的 `<script>` 在子进程里跑。`node_modules` 是符号链接时，权限名单以前只放真实目录，加载器读的却是链接上的 `package.json`，于是报 `Access to this API has been restricted`，canvas 是空的。现在链接和真实路径都放行。脚本出错时不再先打出渲染成功。
