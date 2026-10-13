@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.6.6
+
+公式、调色、沿墨迹描边、玻璃、噪点和命令行工具链按用到再加载。绘制和排版仍是同步的。同一份 `.tsx` 的 esbuild 结果缓存在本机，并带上当前 flexlayer 的安装路径。
+
+## 0.6.5
+
+`<model>` 在 tsx 里可以写 `object`，传入 three.js 的 Object3D。几何体进 Flex Layer 自己的场景，和文字、线稿、标注共用深度。`unit` 保留原始坐标，1 个模型单位等于这么多像素。不写 `material` 时，图元的金属度和粗糙度映射到 `metal` / `plastic`。
+
+`three` 是可选的 peer dependency。适配在 `flexlayer/three`，核心不 import 它。裸包名按 ESM 从源文件所在目录往上解析，和类型检查同一条路径。
+
+## 0.6.4
+
+挤出的棱按厚度的 1/40 收一条小圆角。盒子和路径用 `depth`，圆柱用轴向长度。五星这种凹轮廓，以及带洞的字形，也收。写了 `rx` 或描了 `stroke` 的保持原来的棱。
+
+## 0.6.3
+
+`.layer` 里的 `<script>` 在子进程里读 `@napi-rs/canvas`。`node_modules` 整目录、pnpm 虚拟目录这种符号链接，`realpath` 还要读链接自己和它的父目录，以前名单里没有，于是报 `Access to this API has been restricted`，画布是空的。
+
+横排 flex 没写 `height` 的子项按 `align-items:stretch` 撑满容器高度。空的 `flex:1` 也占满这一行。写了高度，或 `align-items` 不是 `stretch`，仍用内容高度。
+
+## 0.6.2
+
+形状写了正的 `depth` 就沿 z 挤出：`rect` 是盒子，`circle` 是轴沿 z 的圆柱，`ellipse`、`polygon`、`path` 按轮廓挤出。洞用 `fill-rule`，默认 `nonzero`。`sphere`、`torus`、`tube`、`model`、`ground` 仍是单独的标签。`box`、`cylinder`、`extrude` 照旧绘制，报 `non-canonical`。
+
+SVG 元素可以写 `transform="rotateX() rotateY() rotateZ() translateZ()"`。二维的 `translate`、`rotate`、`scale`、`matrix` 仍写在 `<g>` 上。
+
+影子只落在 `ground` 上。`shadows="none"` 关掉，`cast-shadow="false"` 这只实体不投，`receive-shadow` 只写在 `ground` 上。
+
+## 0.6.1
+
+`.ttc`、`.otc` 可以用 `#` 选择字形。`src="SourceHanSans.ttc#2"` 是第 2 套，从 0 数。以前 `#2` 被当成路径，报「字体文件不存在」，于是用了集合里的第 0 套。思源和 Noto CJK 的第 0 套是日文，简体的「复」会不对。
+
 ## 0.6.0
 
 HTML 标签按 HTML 渲染，`style` 按 CSS。对齐、伸缩、间距、换行、继承、字号和盒子的初始值不再在规范里复述。

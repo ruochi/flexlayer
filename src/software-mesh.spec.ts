@@ -104,74 +104,61 @@ describe('软件光栅', () => {
     expect([right[0], right[1], right[2]]).toEqual([0xa9, 0xdc, 0xff])
   })
 
-  it('shadows、cast-shadow、receive-shadow 可以关掉平面上的硬边影子', async () => {
+  it('shadows、cast-shadow、receive-shadow 可以关掉 ground 上的影子', async () => {
     const scene = (extra: string) => `
       <layer width="240" height="240" background="#ffffff" camera="800" ${extra.includes('shadows') ? extra : ''}>
-        <rect x="10" y="100" width="220" height="120" fill="#ffffff" ${extra.includes('receive-shadow') ? extra : ''} />
         <sphere cx="70" cy="70" r="24" z="70" fill="#ff2244" ${extra.includes('cast-shadow') ? extra : ''} />
+        <ground x="120" y="180" rotateX="90" shadow-opacity="0.9" shadow-blur="0" ${extra.includes('receive-shadow') ? extra : ''} />
       </layer>`
     const lit = await render(scene(''))
-    const dark = await pixelAt(lit.png, 112, 130)
-    expect(dark[0]).toBeLessThan(180)
+    let darkest = 255
+    for (let y = 140; y < 230; y += 4) {
+      for (let x = 40; x < 200; x += 4) {
+        darkest = Math.min(darkest, (await pixelAt(lit.png, x, y))[0]!)
+      }
+    }
+    expect(darkest).toBeLessThan(180)
     for (const extra of ['shadows="none"', 'cast-shadow="false"', 'receive-shadow="false"']) {
       const { png } = await render(scene(extra))
-      const shade = await pixelAt(png, 112, 130)
-      const open = await pixelAt(png, 210, 200)
-      expect(shade[0], extra).toBeGreaterThan(245)
-      expect(shade[1], extra).toBeGreaterThan(245)
-      expect(shade[2], extra).toBeGreaterThan(245)
-      expect(open[0], extra).toBeGreaterThan(245)
+      let dim = 255
+      for (let y = 140; y < 230; y += 4) {
+        for (let x = 40; x < 200; x += 4) {
+          dim = Math.min(dim, (await pixelAt(png, x, y))[0]!)
+        }
+      }
+      expect(dim, extra).toBeGreaterThan(245)
     }
   })
 
-  it('球体沿主光在平面上投下影子，没挡住的地方仍是 fill', async () => {
+  it('平面和实体不接影子', async () => {
     const { png } = await render(`
       <layer width="240" height="240" background="#ffffff" camera="800">
         <rect x="10" y="100" width="220" height="120" fill="#ffffff" />
         <sphere cx="70" cy="70" r="24" z="70" fill="#ff2244" />
       </layer>
     `)
-    const shade = await pixelAt(png, 112, 130)
-    const open = await pixelAt(png, 210, 200)
+    const floor = await pixelAt(png, 112, 130)
     const sphere = await pixelAt(png, 65, 65)
-    expect(shade[0]).toBeLessThan(180)
-    expect(Math.abs(shade[0] - shade[1])).toBeLessThan(12)
-    expect(Math.abs(shade[1] - shade[2])).toBeLessThan(12)
-    expect(open[0]).toBeGreaterThan(245)
-    expect(open[1]).toBeGreaterThan(245)
-    expect(open[2]).toBeGreaterThan(245)
+    expect(floor[0]).toBeGreaterThan(245)
+    expect(floor[1]).toBeGreaterThan(245)
+    expect(floor[2]).toBeGreaterThan(245)
     expect(sphere[0]).toBeGreaterThan(sphere[1] + 30)
     expect(sphere[0]).toBeGreaterThan(140)
   })
 
-  it('球体的影子落在长方体正面，没挡住的正面仍是 fill', async () => {
+  it('长方体正面不接另一只实体的影子', async () => {
     const { png } = await render(`
       <layer width="420" height="360" background="#d9d3c7" camera="800">
         <box x="150" y="115" width="160" height="150" depth="20" fill="#f4f1ea" />
         <sphere cx="130" cy="110" r="28" z="48" fill="#e23d3d" />
       </layer>
     `)
-    const shade = await pixelAt(png, 168, 158)
+    const face = await pixelAt(png, 168, 158)
     const open = await pixelAt(png, 280, 240)
-    expect(shade[0]).toBeLessThan(open[0] - 40)
-    expect(Math.abs(shade[0] - shade[1])).toBeLessThan(12)
     expect([open[0], open[1], open[2]]).toEqual([0xf4, 0xf1, 0xea])
-  })
-
-  it('更靠近主光的长方体挡住后面的平面', async () => {
-    const { png } = await render(`
-      <layer width="240" height="240" background="#ffffff" camera="800">
-        <rect x="50" y="80" width="180" height="140" fill="#ffffff" />
-        <box x="52" y="45" width="36" height="70" depth="36" z="48" fill="#3355aa" />
-      </layer>
-    `)
-    const shade = await pixelAt(png, 102, 128)
-    const open = await pixelAt(png, 210, 200)
-    expect(shade[0]).toBeLessThan(180)
-    expect(Math.abs(shade[0] - shade[1])).toBeLessThan(12)
-    expect(open[0]).toBeGreaterThan(245)
-    expect(open[1]).toBeGreaterThan(245)
-    expect(open[2]).toBeGreaterThan(245)
+    expect(Math.abs(face[0]! - open[0]!)).toBeLessThan(8)
+    expect(Math.abs(face[1]! - open[1]!)).toBeLessThan(8)
+    expect(Math.abs(face[2]! - open[2]!)).toBeLessThan(8)
   })
 
   it('三维场景里的平面颜色保持原色阶', async () => {
@@ -189,7 +176,7 @@ describe('软件光栅', () => {
     const { png } = await render(`
       <layer width="220" height="120" background="#101010" camera="800">
         <extrude x="10" y="46" d="M0 0 H28 V28 H0 Z M52 0 H80 V28 H52 Z" depth="12" fill="#f2f2f2" />
-        <extrude x="128" y="28" d="M0 0 H64 V64 H0 Z M18 18 H46 V46 H18 Z" depth="12" fill="#f2f2f2" />
+        <extrude x="128" y="28" d="M0 0 H64 V64 H0 Z M18 18 V46 H46 V18 Z" depth="12" fill="#f2f2f2" />
       </layer>
     `)
     const left = await pixelAt(png, 28, 60)
@@ -701,7 +688,7 @@ describe('软件光栅', () => {
     `)
     const messages = report.issues.filter((issue) => issue.code === 'invalid-attr').map((issue) => issue.message)
     expect(messages.some((message) => message.includes('halo 要和 stroke'))).toBe(true)
-    expect(messages.some((message) => message.includes('halo 只写在网格上'))).toBe(true)
+    expect(messages.some((message) => message.includes('halo 只写在实体上'))).toBe(true)
     expect(messages.some((message) => message.includes('最多三个数'))).toBe(true)
   })
 

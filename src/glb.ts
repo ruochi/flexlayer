@@ -254,29 +254,47 @@ function pad4(buf: Buffer, fill: number): Buffer {
   return Buffer.concat([buf, Buffer.alloc(extra, fill)])
 }
 
+/** 图元在模型空间里的包围盒。y 向上，拟合前的原始坐标。 */
+export function primitiveBounds(prims: GlbPrimitive[]): { minX: number; minY: number; minZ: number; maxX: number; maxY: number; maxZ: number } | null {
+  let minX = Infinity
+  let minY = Infinity
+  let minZ = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  let maxZ = -Infinity
+  for (const prim of prims) {
+    const src = prim.positions
+    for (let i = 0; i < src.length; i += 3) {
+      minX = Math.min(minX, src[i]!)
+      minY = Math.min(minY, src[i + 1]!)
+      minZ = Math.min(minZ, src[i + 2]!)
+      maxX = Math.max(maxX, src[i]!)
+      maxY = Math.max(maxY, src[i + 1]!)
+      maxZ = Math.max(maxZ, src[i + 2]!)
+    }
+  }
+  if (!Number.isFinite(minX)) return null
+  return { minX, minY, minZ, maxX, maxY, maxZ }
+}
+
+/** 图元在模型空间里的包围盒尺寸。拟合前的原始跨度，y 向上。 */
+export function primitiveSpan(prims: GlbPrimitive[]): { x: number; y: number; z: number } | null {
+  const bounds = primitiveBounds(prims)
+  if (!bounds) return null
+  return { x: bounds.maxX - bounds.minX, y: bounds.maxY - bounds.minY, z: bounds.maxZ - bounds.minZ }
+}
+
 /** 模型在 glTF 空间里的包围盒尺寸。拟合前的原始跨度。 */
 export function glbSpan(file: string): { x: number; y: number; z: number } | null {
+  const bounds = glbBounds(file)
+  if (!bounds) return null
+  return { x: bounds.maxX - bounds.minX, y: bounds.maxY - bounds.minY, z: bounds.maxZ - bounds.minZ }
+}
+
+/** 模型在 glTF 空间里的包围盒。读失败时是 null。 */
+export function glbBounds(file: string): { minX: number; minY: number; minZ: number; maxX: number; maxY: number; maxZ: number } | null {
   try {
-    const prims = parseGlb(readFileSync(file))
-    let minX = Infinity
-    let minY = Infinity
-    let minZ = Infinity
-    let maxX = -Infinity
-    let maxY = -Infinity
-    let maxZ = -Infinity
-    for (const prim of prims) {
-      const src = prim.positions
-      for (let i = 0; i < src.length; i += 3) {
-        minX = Math.min(minX, src[i]!)
-        minY = Math.min(minY, src[i + 1]!)
-        minZ = Math.min(minZ, src[i + 2]!)
-        maxX = Math.max(maxX, src[i]!)
-        maxY = Math.max(maxY, src[i + 1]!)
-        maxZ = Math.max(maxZ, src[i + 2]!)
-      }
-    }
-    if (!Number.isFinite(minX)) return null
-    return { x: maxX - minX, y: maxY - minY, z: maxZ - minZ }
+    return primitiveBounds(parseGlb(readFileSync(file)))
   } catch {
     return null
   }

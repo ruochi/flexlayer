@@ -3,7 +3,8 @@ import { readFileSync, statSync } from 'node:fs'
 import { studioAt } from './env-map.js'
 import { solidPaint } from './gradient.js'
 import { parseGlb } from './glb.js'
-import { bevelFewFaces } from './mesh-bevel.js'
+import { heldModelPrims } from './three.js'
+import { bevelFewFaces, bevelRadius } from './mesh-bevel.js'
 import { originOffset } from './matrix.js'
 import type { MeshClip } from './mesh-cache.js'
 import { applyDepthOfField } from './dof.js'
@@ -22,7 +23,7 @@ type MeshFrame = { canvas: Canvas; x: number; y: number; width: number; height: 
  * 正对镜头的面是 fill，侧面按内置主光和补光变暗。
  * 主光沿固定方向打一张正交深度图：不透明三角形互相挡住这盏光时，主光不计。
  * `shadows="none"` 不建这张图。`cast-shadow="false"` 的批次不写入，`receive-shadow="false"` 的表面不变暗。
- * glb 用文件里的底色乘这套明暗。
+ * glb 和内存网格用图元上的底色乘这套明暗。不写 material 时，金属度不小于 0.5 走 metal，否则走 plastic，粗糙度用图元自己的值。
  * 写了 stroke 时，在超采样缓冲上按屏幕像素描折棱和轮廓，再和填充一起平均缩回。
  * 两只都写了 stroke 的网格相互穿过时，交界线算折棱，颜色和宽度跟后写的那只。
  * hidden 只画被这只网格自己挡住的棱，虚线是 6 实 4 空。交界线被这两只中任意一只挡住时同样算隐藏线。
@@ -184,6 +185,8 @@ type ModelPrim = {
   normals: Float32Array
   indices: Uint32Array
   color: [number, number, number, number]
+  roughness: number
+  metalness: number
   doubleSided: boolean
 }
 
@@ -204,24 +207,29 @@ function geometryCacheKey(node: MeshLayoutNode): string | null {
   const head = `${mesh.type}|${quantGeometry(node.width)}|${quantGeometry(node.height)}|${originKey(node)}${bevel}`
   if (mesh.type === 'sphere') return `${head}|${quantGeometry(mesh.r)}`
   if (mesh.type === 'box') return `${head}|${quantGeometry(mesh.depth)}|${quantGeometry(mesh.rx)}|${mesh.edges.join(',')}`
-  if (mesh.type === 'extrude') return `${head}|${quantGeometry(mesh.depth)}|${mesh.d}`
-  if (mesh.type === 'cylinder') return `${head}|${quantGeometry(mesh.r)}|${quantGeometry(mesh.height)}|${quantGeometry(mesh.rx)}|${mesh.rims.join(',')}`
+  if (mesh.type === 'extrude') return `${head}|${quantGeometry(mesh.depth)}|${mesh.fillRule}|${mesh.d}`
+  if (mesh.type === 'cylinder') return `${head}|${mesh.axis ?? 'y'}|${quantGeometry(mesh.r)}|${quantGeometry(mesh.height)}|${quantGeometry(mesh.rx)}|${mesh.rims.join(',')}`
   if (mesh.type === 'torus') return `${head}|${quantGeometry(mesh.r)}|${quantGeometry(mesh.tube)}`
   if (mesh.type === 'tube') return `${head}|${quantGeometry(mesh.r)}|${mesh.d}`
   return null
 }
 
 function modelCacheKey(node: MeshLayoutNode): string | null {
-  if (node.mesh.type !== 'model' || !node.mesh.file) return null
+  if (node.mesh.type !== 'model') return null
+  const mesh = node.mesh
+  const bevel = node.stroke === 'none' ? '|b' : ''
+  const unit = mesh.unit != null && mesh.unit > 0 ? `|u${quantGeometry(mesh.unit)}` : ''
+  const tail = `${quantGeometry(node.width)}|${quantGeometry(node.height)}|${quantGeometry(node.opacity)}|${originKey(node)}${bevel}${unit}`
+  if (mesh.revision) return `mem|${mesh.revision}|${tail}`
+  if (!mesh.file) return null
   let stamp = 'missing'
   try {
-    const st = statSync(node.mesh.file)
+    const st = statSync(mesh.file)
     stamp = `${st.mtimeMs}:${st.size}`
   } catch {
     stamp = 'missing'
   }
-  const bevel = node.stroke === 'none' ? '|b' : ''
-  return `${node.mesh.file}|${stamp}|${quantGeometry(node.width)}|${quantGeometry(node.height)}|${quantGeometry(node.opacity)}|${originKey(node)}${bevel}`
+  return `${mesh.file}|${stamp}|${tail}`
 }
 
 function touchCache<T>(map: Map<string, T>, key: string, value: T, cap: number) {
@@ -875,9 +883,51 @@ function addDisk(positions: number[], normals: number[], indices: number[], cent
   }
 }
 
+/** 圆在所在平面里，厚度沿 z。正对镜头看见圆盘。 */
+function buildZCylinder(node: MeshLayoutNode) {
+  if (node.mesh.type !== 'cylinder') return null
+  const radius = node.mesh.r
+  const half = node.mesh.height / 2
+  if (!(radius > 0) || !(half > 0)) return null
+  const segments = 48
+  const positions: number[] = []
+  const normals: number[] = []
+  const indices: number[] = []
+  for (let iz = 0; iz <= 1; iz++) {
+    const z = iz === 0 ? half : -half
+    for (let ix = 0; ix <= segments; ix++) {
+      const theta = (ix / segments) * Math.PI * 2
+      const nx = Math.cos(theta)
+      const ny = Math.sin(theta)
+      positions.push(radius * nx, radius * ny, z)
+      normals.push(nx, ny, 0)
+    }
+  }
+  const cols = segments + 1
+  for (let ix = 0; ix < segments; ix++) {
+    const a = ix
+    const b = ix + cols
+    indices.push(a, a + 1, b, a + 1, b + 1, b)
+  }
+  const front: Vec3[] = []
+  const back: Vec3[] = []
+  for (let ix = 0; ix <= segments; ix++) {
+    const theta = (ix / segments) * Math.PI * 2
+    const x = radius * Math.cos(theta)
+    const y = radius * Math.sin(theta)
+    front.push(vec3(x, y, half))
+    back.push(vec3(x, y, -half))
+  }
+  addDisk(positions, normals, indices, vec3(0, 0, half), front, vec3(0, 0, 1), true)
+  addDisk(positions, normals, indices, vec3(0, 0, -half), back, vec3(0, 0, -1), false)
+  centerMesh(node, positions)
+  return { positions: Float32Array.from(positions), normals: Float32Array.from(normals), indices: Uint32Array.from(indices) }
+}
+
 /** 轴沿画面竖直方向。圆截面在 xz，朝镜头的一侧法线是 +z。 */
 function buildCylinder(node: MeshLayoutNode) {
   if (node.mesh.type !== 'cylinder') return null
+  if (node.mesh.axis === 'z') return buildZCylinder(node)
   const radius = node.mesh.r
   const half = node.mesh.height / 2
   if (!(radius > 0) || !(half > 0)) return null
@@ -1089,7 +1139,7 @@ function buildExtrude(node: MeshLayoutNode) {
     }
     items[i]!.parent = best
   }
-  const depthOf = (index: number) => {
+  const nestDepth = (index: number) => {
     let depth = 0
     let parent = items[index]!.parent
     const seen = new Set<number>()
@@ -1100,22 +1150,46 @@ function buildExtrude(node: MeshLayoutNode) {
     }
     return depth
   }
+  const windOf = items.map((item) => (signedArea(item.points) >= 0 ? 1 : -1))
+  const outsideWinding = (index: number) => {
+    let winding = 0
+    let parent = items[index]!.parent
+    const seen = new Set<number>()
+    while (parent >= 0 && !seen.has(parent)) {
+      seen.add(parent)
+      winding += windOf[parent]!
+      parent = items[parent]!.parent
+    }
+    return winding
+  }
+  const rule = node.mesh.fillRule
+  const roleOf = (index: number): 'solid' | 'hole' | 'skip' => {
+    if (rule === 'evenodd') return nestDepth(index) % 2 === 0 ? 'solid' : 'hole'
+    const outside = outsideWinding(index)
+    const inside = outside + windOf[index]!
+    if (outside === 0 && inside !== 0) return 'solid'
+    if (outside !== 0 && inside === 0) return 'hole'
+    return 'skip'
+  }
+  const solidAncestor = (index: number) => {
+    let parent = items[index]!.parent
+    const seen = new Set<number>()
+    while (parent >= 0 && !seen.has(parent)) {
+      seen.add(parent)
+      if (roleOf(parent) === 'solid') return parent
+      parent = items[parent]!.parent
+    }
+    return -1
+  }
   const positions: number[] = []
   const normals: number[] = []
   const indices: number[] = []
   const half = node.mesh.depth / 2
   for (let i = 0; i < items.length; i++) {
-    if (depthOf(i) % 2 !== 0) continue
+    if (roleOf(i) !== 'solid') continue
     const holes: Pt[][] = []
     for (let h = 0; h < items.length; h++) {
-      if (depthOf(h) % 2 !== 1) continue
-      let parent = items[h]!.parent
-      const seen = new Set<number>()
-      while (parent >= 0 && !seen.has(parent) && depthOf(parent) % 2 !== 0) {
-        seen.add(parent)
-        parent = items[parent]!.parent
-      }
-      if (parent === i) holes.push(items[h]!.points)
+      if (roleOf(h) === 'hole' && solidAncestor(h) === i) holes.push(items[h]!.points)
     }
     const outer = orient(items[i]!.points, true)
     const holeRings = holes.map((ring) => orient(ring, false))
@@ -1192,43 +1266,56 @@ function smoothNormals(positions: Float32Array, indices: Uint32Array) {
 }
 
 function buildModelFresh(node: MeshLayoutNode): ModelPrim[] {
-  if (node.mesh.type !== 'model' || !node.mesh.file) return []
-  let prims
-  try {
-    prims = parseGlb(readFileSync(node.mesh.file))
-  } catch {
-    return []
-  }
-  let minX = Infinity
-  let minY = Infinity
-  let minZ = Infinity
-  let maxX = -Infinity
-  let maxY = -Infinity
-  let maxZ = -Infinity
-  for (const prim of prims) {
-    const src = prim.positions
-    for (let i = 0; i < src.length; i += 3) {
-      minX = Math.min(minX, src[i]!)
-      minY = Math.min(minY, src[i + 1]!)
-      minZ = Math.min(minZ, src[i + 2]!)
-      maxX = Math.max(maxX, src[i]!)
-      maxY = Math.max(maxY, src[i + 1]!)
-      maxZ = Math.max(maxZ, src[i + 2]!)
+  if (node.mesh.type !== 'model') return []
+  const mesh = node.mesh
+  let prims = heldModelPrims(mesh)
+  if (!prims) {
+    if (!mesh.file) return []
+    try {
+      prims = parseGlb(readFileSync(mesh.file))
+    } catch {
+      return []
     }
   }
-  const sizeX = maxX - minX
-  const sizeY = maxY - minY
-  const sx = sizeX > 1e-6 ? node.width / sizeX : Infinity
-  const sy = sizeY > 1e-6 ? node.height / sizeY : Infinity
-  const s = Math.min(sx, sy)
-  if (!Number.isFinite(s) || s <= 0) return []
-  const cx = (minX + maxX) / 2
-  const cy = (minY + maxY) / 2
-  const cz = (minZ + maxZ) / 2
-  const o = originOffset(node.origin, node.width, node.height)
-  const shiftX = node.width / 2 - o.x
-  const shiftY = -(node.height / 2 - o.y)
-  const out: Array<{ positions: Float32Array; normals: Float32Array; indices: Uint32Array; color: [number, number, number, number]; doubleSided: boolean }> = []
+  const useUnit = mesh.unit != null && mesh.unit > 0
+  let cx = 0
+  let cy = 0
+  let cz = 0
+  let s = useUnit ? mesh.unit! : 1
+  let shiftX = 0
+  let shiftY = 0
+  if (!useUnit) {
+    let minX = Infinity
+    let minY = Infinity
+    let minZ = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    let maxZ = -Infinity
+    for (const prim of prims) {
+      const src = prim.positions
+      for (let i = 0; i < src.length; i += 3) {
+        minX = Math.min(minX, src[i]!)
+        minY = Math.min(minY, src[i + 1]!)
+        minZ = Math.min(minZ, src[i + 2]!)
+        maxX = Math.max(maxX, src[i]!)
+        maxY = Math.max(maxY, src[i + 1]!)
+        maxZ = Math.max(maxZ, src[i + 2]!)
+      }
+    }
+    const sizeX = maxX - minX
+    const sizeY = maxY - minY
+    const sx = sizeX > 1e-6 ? node.width / sizeX : Infinity
+    const sy = sizeY > 1e-6 ? node.height / sizeY : Infinity
+    s = Math.min(sx, sy)
+    if (!Number.isFinite(s) || s <= 0) return []
+    cx = (minX + maxX) / 2
+    cy = (minY + maxY) / 2
+    cz = (minZ + maxZ) / 2
+    const o = originOffset(node.origin, node.width, node.height)
+    shiftX = node.width / 2 - o.x
+    shiftY = -(node.height / 2 - o.y)
+  }
+  const out: ModelPrim[] = []
   for (const prim of prims) {
     const src = prim.positions
     const positions = new Float32Array(src.length)
@@ -1252,6 +1339,8 @@ function buildModelFresh(node: MeshLayoutNode): ModelPrim[] {
         byte(color[2] * 255),
         byte(color[3] * node.opacity * 255),
       ],
+      roughness: Math.min(1, Math.max(0, prim.roughness)),
+      metalness: Math.min(1, Math.max(0, prim.metalness)),
       doubleSided: prim.doubleSided,
     })
   }
@@ -1269,12 +1358,30 @@ function geometryOfFresh(node: MeshLayoutNode): MeshGeometry | null {
   return geo
 }
 
+/** 沿厚度收棱。盒子和挤出用 depth，圆柱用轴向长度，其余用 z 向跨度。 */
+function bevelDepth(node: MeshLayoutNode, positions: Float32Array): number {
+  const mesh = node.mesh
+  if (mesh.type === 'box' || mesh.type === 'extrude') return mesh.depth
+  if (mesh.type === 'cylinder') return mesh.height
+  if (mesh.type === 'sphere') return mesh.r * 2
+  if (mesh.type === 'torus') return mesh.tube * 2
+  if (mesh.type === 'tube') return mesh.r * 2
+  let min = Infinity
+  let max = -Infinity
+  for (let i = 2; i < positions.length; i += 3) {
+    const z = positions[i]!
+    if (z < min) min = z
+    if (z > max) max = z
+  }
+  return Number.isFinite(min) ? max - min : 0
+}
+
 /** 窄圆角只进光栅。投影仍用原来的折点，避免圆角把正面的角标成挡住。 */
 function paintGeometry(node: MeshLayoutNode, positions: Float32Array, normals: Float32Array, indices: Uint32Array) {
   if (node.stroke !== 'none') return { positions, normals, indices }
   const mesh = node.mesh
   if ((mesh.type === 'box' || mesh.type === 'cylinder') && mesh.rx > 0) return { positions, normals, indices }
-  return bevelFewFaces(positions, indices) ?? { positions, normals, indices }
+  return bevelFewFaces(positions, indices, bevelRadius(bevelDepth(node, positions))) ?? { positions, normals, indices }
 }
 
 function geometryOf(node: MeshLayoutNode): MeshGeometry | null {
@@ -3586,7 +3693,7 @@ function planeBatch(plane: SoftwareMeshInput['planes'][number], raster: Software
     shaded: false,
     depthWrite: true,
     castShadow: plane.node.castShadow !== false,
-    receiveShadow: plane.node.receiveShadow !== false,
+    receiveShadow: false,
     material: 'lambert',
     roughness: 1,
     texture: solid ? null : pixels.data,
@@ -3701,6 +3808,9 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
     if (node.mesh.type === 'model') {
       for (const prim of buildModel(node)) {
         const painted = paintGeometry(node, prim.positions, prim.normals, prim.indices)
+        const authored = node.material
+        const material = authored ? shadeMaterial(authored.kind) : prim.metalness >= 0.5 ? 'metal' : 'plastic'
+        const roughness = authored ? authored.roughness : prim.roughness
         batches.push({
           positions: painted.positions,
           normals: painted.normals,
@@ -3714,9 +3824,9 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
           shaded: true,
           depthWrite: node.material?.kind === 'glass' && prim.color[3] < 255 ? false : prim.color[3] >= 255,
           castShadow: node.castShadow !== false,
-          receiveShadow: node.receiveShadow !== false,
-          material: shadeMaterial(node.material?.kind),
-          roughness: node.material?.roughness ?? 1,
+          receiveShadow: false,
+          material,
+          roughness,
           texture: null,
           tw: 0,
           th: 0,
@@ -3748,7 +3858,7 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
       shaded: !fillNone,
       depthWrite: glass && a < 255 ? false : fillNone || a >= 255,
       castShadow: node.castShadow !== false,
-      receiveShadow: node.receiveShadow !== false,
+      receiveShadow: false,
       material: shadeMaterial(node.material?.kind),
       roughness: node.material?.roughness ?? 1,
       texture: null,

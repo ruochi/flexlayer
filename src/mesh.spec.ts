@@ -5,7 +5,7 @@ import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { describe, expect, it } from 'vitest'
 import { parseGlb, solidBoxGlb } from './glb.js'
 import { BOX_EDGES, roundedBoxGeometry } from './mesh-round.js'
-import { BEVEL_RADIUS, bevelFewFaces } from './mesh-bevel.js'
+import { bevelFewFaces, bevelRadius } from './mesh-bevel.js'
 import { checkLayer, renderLayer } from './render.js'
 import { tessellateSvgPath } from './path.js'
 
@@ -303,7 +303,7 @@ describe('网格绘制', () => {
     const { png } = await renderLayer(`
       <layer width="220" height="120" background="#101010" camera="800">
         <extrude x="10" y="46" d="M0 0 H28 V28 H0 Z M52 0 H80 V28 H52 Z" depth="12" fill="#f2f2f2" />
-        <extrude x="128" y="28" d="M0 0 H64 V64 H0 Z M18 18 H46 V46 H18 Z" depth="12" fill="#f2f2f2" />
+        <extrude x="128" y="28" d="M0 0 H64 V64 H0 Z M18 18 V46 H46 V18 Z" depth="12" fill="#f2f2f2" />
       </layer>
     `)
     const left = await pixelAt(png, 28, 60)
@@ -316,6 +316,51 @@ describe('网格绘制', () => {
     expect(gap[0]).toBeLessThan(40)
     expect(ring[0]).toBeGreaterThan(180)
     expect(hole[0]).toBeLessThan(40)
+  }, 30000)
+
+  it('rect 加 depth 和 box 画出同一只盒子，box 报别名', async () => {
+    const source = (tag: string) =>
+      `<layer width="180" height="140" background="#010203" camera="500"><${tag} x="40" y="30" width="80" height="60" depth="36" fill="#ff2244" rotateY="-32" /></layer>`
+    const box = await renderLayer(source('box'))
+    const rect = await renderLayer(source('rect'))
+    const report = await checkLayer(source('box'))
+    expect(report.issues.some((issue) => issue.code === 'non-canonical' && issue.message.includes('box'))).toBe(true)
+    for (const [x, y] of [[70, 60], [50, 48], [110, 70]] as const) {
+      const a = await pixelAt(box.png, x, y)
+      const b = await pixelAt(rect.png, x, y)
+      expect([b[0], b[1], b[2], b[3]]).toEqual([a[0], a[1], a[2], a[3]])
+    }
+  }, 30000)
+
+  it('circle 加 depth 是朝向镜头的圆柱', async () => {
+    const { png } = await renderLayer(
+      `<layer width="120" height="120" background="#010203" camera="parallel"><circle cx="60" cy="60" r="28" depth="40" fill="#ff2244" /></layer>`,
+    )
+    const center = await pixelAt(png, 60, 60)
+    const outside = await pixelAt(png, 60, 16)
+    expect(center[0]).toBeGreaterThan(140)
+    expect(outside[0]).toBeLessThan(20)
+  }, 30000)
+
+  it('path 加 depth 按 fill-rule 留洞', async () => {
+    const scene = (rule: string) =>
+      `<layer width="120" height="120" background="#101010" camera="parallel"><path d="M16 16 H96 V96 H16 Z M32 32 H80 V80 H32 Z" depth="12" fill="#f2f2f2" fill-rule="${rule}" /></layer>`
+    const nonzero = await pixelAt((await renderLayer(scene('nonzero'))).png, 56, 56)
+    const even = await pixelAt((await renderLayer(scene('evenodd'))).png, 56, 56)
+    expect(nonzero[0]).toBeGreaterThan(180)
+    expect(even[0]).toBeLessThan(40)
+  }, 30000)
+
+  it('transform 的 rotateX 和属性是同一套姿态', async () => {
+    const attr = await renderLayer(
+      `<layer width="160" height="120" background="#010203" camera="400"><rect x="30" y="24" width="90" height="60" depth="28" fill="#44aaff" rotateX="48" /></layer>`,
+    )
+    const fn = await renderLayer(
+      `<layer width="160" height="120" background="#010203" camera="400"><rect x="30" y="24" width="90" height="60" depth="28" fill="#44aaff" transform="rotateX(48)" /></layer>`,
+    )
+    const a = await pixelAt(attr.png, 75, 54)
+    const b = await pixelAt(fn.png, 75, 54)
+    expect([b[0], b[1], b[2]]).toEqual([a[0], a[1], a[2]])
   }, 30000)
 
   it('搭在另一笔上的形状仍是实体，不会被挖成洞', async () => {
@@ -371,7 +416,7 @@ describe('网格绘制', () => {
     const messages = report.issues.filter((issue) => issue.code === 'invalid-attr').map((issue) => issue.message)
     expect(messages.some((message) => message.includes('hidden 要和 stroke'))).toBe(true)
     expect(messages.some((message) => message.includes('stroke-width 要和 stroke'))).toBe(true)
-    expect(messages.some((message) => message.includes('hidden 只写在网格上'))).toBe(true)
+    expect(messages.some((message) => message.includes('hidden 只写在实体上'))).toBe(true)
   })
 
   it('matte 是默认磨砂，和没写 material 是同一张图', async () => {
@@ -588,7 +633,7 @@ describe('网格绘制', () => {
     const messages = report.issues.filter((issue) => issue.code === 'invalid-attr').map((issue) => issue.message)
     expect(messages.some((message) => message.includes('不认识的 material'))).toBe(true)
     expect(messages.some((message) => message.includes('粗糙度'))).toBe(true)
-    expect(messages.some((message) => message.includes('material 只写在网格上'))).toBe(true)
+    expect(messages.some((message) => message.includes('material 只写在实体上'))).toBe(true)
     const ok = await checkLayer(
       `<layer width="120" height="120" camera="400"><sphere cx="60" cy="60" r="20" fill="#fff" material="metal, rough 0.35" /></layer>`,
     )
@@ -751,7 +796,7 @@ describe('网格绘制', () => {
     }
     const built = bevelFewFaces(Float32Array.from(positions), Uint32Array.from(indices))
     expect(built).toBeTruthy()
-    const r = BEVEL_RADIUS
+    const r = bevelRadius(hd * 2)
     const center = { x: hw - r, y: hh - r, z: hd - r }
     let onSphere = 0
     for (let i = 0; i < built!.positions.length; i += 3) {
@@ -868,6 +913,7 @@ describe('网格绘制', () => {
     cap(-half, false)
     const built = bevelFewFaces(Float32Array.from(positions), Uint32Array.from(indices))
     expect(built).toBeTruthy()
+    const fillet = bevelRadius(radius * 2)
     let capInset = 0
     let sideInset = 0
     for (let i = 0; i < built!.positions.length; i += 3) {
@@ -877,11 +923,102 @@ describe('网格绘制', () => {
       const radial = Math.hypot(x, z)
       expect(radial).toBeLessThanOrEqual(radius + 0.2)
       expect(Math.abs(y)).toBeLessThanOrEqual(half + 0.2)
-      if (Math.abs(y) > half - 0.5 && radial < radius - BEVEL_RADIUS * 0.6) capInset++
-      if (radial > radius - 0.5 && Math.abs(y) < half - BEVEL_RADIUS * 0.6) sideInset++
+      if (Math.abs(y) > half - 0.5 && radial < radius - fillet * 0.6) capInset++
+      if (radial > radius - 0.5 && Math.abs(y) < half - fillet * 0.6) sideInset++
     }
     expect(capInset).toBeGreaterThan(8)
     expect(sideInset).toBeGreaterThan(8)
+  })
+
+  it('五星和细挤出按厚度的 1/40 收棱，尖角往里让', () => {
+    const prism = (depth: number) => {
+      const outer = 50
+      const inner = 20
+      const points: Array<[number, number]> = []
+      for (let i = 0; i < 10; i++) {
+        const ang = -Math.PI / 2 + (i * Math.PI) / 5
+        const r = i % 2 === 0 ? outer : inner
+        points.push([r * Math.cos(ang), r * Math.sin(ang)])
+      }
+      const positions: number[] = []
+      const indices: number[] = []
+      const half = depth / 2
+      const front: number[] = []
+      const back: number[] = []
+      for (const [x, y] of points) {
+        front.push(positions.length / 3)
+        positions.push(x, y, half)
+      }
+      for (const [x, y] of points) {
+        back.push(positions.length / 3)
+        positions.push(x, y, -half)
+      }
+      const fan = (ring: number[], z: number, outward: number) => {
+        const c = positions.length / 3
+        positions.push(0, 0, z)
+        for (let i = 0; i < ring.length; i++) {
+          const a = ring[i]!
+          const b = ring[(i + 1) % ring.length]!
+          if (outward > 0) indices.push(c, a, b)
+          else indices.push(c, b, a)
+        }
+      }
+      fan(front, half, 1)
+      fan(back, -half, -1)
+      for (let i = 0; i < points.length; i++) {
+        const a = front[i]!
+        const b = front[(i + 1) % points.length]!
+        const c = back[i]!
+        const d = back[(i + 1) % points.length]!
+        indices.push(a, c, b, c, d, b)
+      }
+      return bevelFewFaces(Float32Array.from(positions), Uint32Array.from(indices), bevelRadius(depth))
+    }
+
+    expect(bevelRadius(40)).toBe(1)
+    expect(bevelRadius(16)).toBe(0.4)
+    const built = prism(40)
+    expect(built).toBeTruthy()
+    let minY = Infinity
+    for (let i = 0; i < built!.positions.length; i += 3) {
+      if (built!.positions[i + 2]! > 18) minY = Math.min(minY, built!.positions[i + 1]!)
+    }
+    expect(minY).toBeGreaterThan(-50 + 0.4)
+    expect(minY).toBeLessThan(-50 + 6)
+    expect(prism(16)).toBeTruthy()
+  })
+
+  it('渲染时五星和带洞的挤出按 depth/40 收掉尖角', async () => {
+    const star = async (depth: number) => {
+      const pts: string[] = []
+      for (let i = 0; i < 10; i++) {
+        const ang = -Math.PI / 2 + (i * Math.PI) / 5
+        const r = i % 2 === 0 ? 70 : 28
+        pts.push(`${100 + r * Math.cos(ang)},${100 + r * Math.sin(ang)}`)
+      }
+      const { png } = await renderLayer(
+        `<layer width="200" height="200" background="#000000" camera="parallel"><polygon points="${pts.join(' ')}" depth="${depth}" fill="#e8b04a" /></layer>`,
+      )
+      return imageOf(png)
+    }
+    const thinStar = await star(8)
+    const thickStar = await star(80)
+    expect(thinStar.at(100, 32)[0]).toBeGreaterThan(180)
+    expect(thickStar.at(100, 32)[0]).toBeLessThan(40)
+    expect(thickStar.at(100, 48)[0]).toBeGreaterThan(180)
+
+    const frame = async (depth: number) => {
+      const { png } = await renderLayer(
+        `<layer width="200" height="200" background="#000000" camera="parallel"><path d="M20 20 H180 V180 H20 Z M60 60 V140 H140 V60 Z" depth="${depth}" fill="#e8b04a" /></layer>`,
+      )
+      return imageOf(png)
+    }
+    const thinFrame = await frame(8)
+    const thickFrame = await frame(120)
+    expect(thinFrame.at(20, 20)[0]).toBeGreaterThan(180)
+    expect(thickFrame.at(20, 20)[0]).toBeLessThan(40)
+    expect(thickFrame.at(40, 40)[0]).toBeGreaterThan(180)
+    expect(thickFrame.at(80, 80)[0]).toBeLessThan(40)
   })
 
   it('box 圆角：z 向棱挖掉正面角，沿宽的棱和正面四棱仍是直角轮廓', async () => {

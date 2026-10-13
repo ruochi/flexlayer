@@ -88,6 +88,13 @@ function modelStamp(file: string): string {
   }
 }
 
+function modelIdentity(mesh: { type: string; file?: string; revision?: string }): string {
+  if (mesh.type !== 'model') return ''
+  if (mesh.revision) return `mem:${mesh.revision}`
+  if (mesh.file) return modelStamp(mesh.file)
+  return ''
+}
+
 /** 子树里有画不出来的、或会跟着时间走的东西时返回 null。 */
 function hashNode(node: LayoutNode): string | null {
   if (node.kind === 'canvas') return null
@@ -233,7 +240,7 @@ function hashKind(node: LayoutNode): string | null {
   }
   if (node.kind === 'mesh') {
     const mesh = node.mesh
-    const stamp = mesh.type === 'model' && mesh.file ? modelStamp(mesh.file) : ''
+    const stamp = modelIdentity(mesh)
     return stable({
       mesh,
       stamp,
@@ -269,7 +276,7 @@ export function meshSceneCacheKey(scene: MeshCacheScene): string | null {
   for (const instance of scene.meshes) {
     const node = instance.node
     const mesh = node.mesh
-    const stamp = mesh.type === 'model' && mesh.file ? modelStamp(mesh.file) : ''
+    const stamp = modelIdentity(mesh)
     const body = stable({
       mesh,
       stamp,

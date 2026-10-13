@@ -1,17 +1,17 @@
 # Flex Layer 速查
 
-写法规则见 [SPEC.md](../SPEC.md)，给模型的入口是 [AGENTS.md](../AGENTS.md)。数字都是像素，y 轴向下。根元素 `<layer width height>` 就是一个 layer。推荐用 `.tsx` 的 `canvas.create(<layer>…</layer>)` 先量再摆，见 [examples/poster.tsx](../examples/poster.tsx)。`create` 是同步的，准备好的字体和图片会留在进程里，多帧接着用。自定义字体先 `canvas.font(family, src)`，或写进正在量的那一层。自定义标签用 `canvas.component` 注册，类型用 `declare module 'flexlayer/jsx-runtime'`。声明的属性就是回调参数的类型，返回值可以是一个元素或数组。同一套标签也可以手写进 `.layer`。`flexlayer render file.tsx` 会先执行再渲染。透视里的网格在 `elements` 上还有投影后的 `points`、`edges` 和轮廓 `d`；球只给解析轮廓，不在透视里的网格没有这三项。
+写法规则见 [SPEC.md](../SPEC.md)，给模型的入口是 [AGENTS.md](../AGENTS.md)。数字都是像素，y 轴向下。根元素 `<layer width height>` 就是一个 layer。推荐用 `.tsx` 的 `canvas.create(<layer>…</layer>)` 先量再摆，见 [examples/poster.tsx](../examples/poster.tsx)。`create` 是同步的，准备好的字体和图片会留在进程里，多帧接着用。自定义字体先 `canvas.font(family, src)`，或写进正在量的那一层。自定义标签用 `canvas.component` 注册，类型用 `declare module 'flexlayer/jsx-runtime'`。声明的属性就是回调参数的类型，返回值可以是一个元素或数组。同一套标签也可以手写进 `.layer`。`flexlayer render file.tsx` 会先执行再渲染。透视里的实体在 `elements` 上还有投影后的 `points`、`edges` 和轮廓 `d`；球只给解析轮廓，不在透视里的实体没有这三项。
 
 ## 结构
 
 | 标签 | 做什么 |
 | --- | --- |
-| `layer` | 根画布兼定位容器。根上写 `width` `height` `background`（画布底色，省略则 PNG 透明）`color` `safe`。定位用 `x` `y` `anchor`（默认左上角，没写是 0），还有 `opacity` `rotate` `rotateX` `rotateY` `z` `scale` `origin`。`view="x y w h"` 是镜头：这一层的宽高是屏幕上的取景窗，四个数是舞台上被取的矩形，窗口外裁掉。`camera` 是这一层的镜头（一个视距，或 `focal` / `fov` / `lens` / `parallel`，以及 `at` `orbit` `roll` `distance` `from` `vanish`；`aperture` `focus` `max` 是景深）。不写时，有网格、`ground` 或 `rotateX`、`rotateY`、`z` 的最外层用自己的 `height` 当视距。`camera="parallel"` 视线平行，没有近大远小。`preserve-3d` 让子元素进入外层镜头。可嵌套 |
+| `layer` | 根画布兼定位容器。根上写 `width` `height` `background`（画布底色，省略则 PNG 透明）`color` `safe`。定位用 `x` `y` `anchor`（默认左上角，没写是 0），还有 `opacity` `rotate` `rotateX` `rotateY` `z` `scale` `origin`。`view="x y w h"` 是镜头：这一层的宽高是屏幕上的取景窗，四个数是舞台上被取的矩形，窗口外裁掉。`camera` 是这一层的镜头（一个视距，或 `focal` / `fov` / `lens` / `parallel`，以及 `at` `orbit` `roll` `distance` `from` `vanish`；`aperture` `focus` `max` 是景深）。不写时，有实体、`ground` 或 `rotateX`、`rotateY`、`z` 的最外层用自己的 `height` 当视距。`camera="parallel"` 视线平行，没有近大远小。`preserve-3d` 让子元素进入外层镜头。可嵌套 |
 | `canvas` | 位图。`width` `height` 是位图尺寸，也是默认布局尺寸，不写是 300×150。`style` 宽高只改布局。`x` `y` 定位 |
 | `script` | 排版之后执行。`document.querySelector`、`getContext('2d')`、`getComputedStyle`、`dataset`、`requestAnimationFrame`、`performance.now`。见 SPEC 第 12 章 |
 | `div` 写 `display:flex` | 按 HTML 的 flex 排布，`style` 按 CSS，初始值不另写。竖排写 `flex-direction:column` |
 
-`shadows="none"` 写在开了镜头的 `layer` 上，关掉网格投到平面和地面上的硬边影子，深度遮挡还在。单只网格写 `cast-shadow="false"`，要保持干净的平面写 `receive-shadow="false"`。根上 `min-font="print"` 或 `min-font="16"` 放宽最小字号；不写是屏幕档 `min(宽, 高) / 1080 × 24`。同一张图里多处过小的字合并成一条 `min-font-size`。代码字体写 `font-family:JetBrainsMono`。属性逐条在 [attrs.json](attrs.json)。
+`shadows="none"` 写在开了镜头的 `layer` 上，关掉投到 `ground` 上的影子，深度遮挡还在。实体写 `cast-shadow="false"` 不投，`ground` 写 `receive-shadow="false"` 不接。根上 `min-font="print"` 或 `min-font="16"` 放宽最小字号；不写是屏幕档 `min(宽, 高) / 1080 × 24`。同一张图里多处过小的字合并成一条 `min-font-size`。代码字体写 `font-family:JetBrainsMono`。属性逐条在 [attrs.json](attrs.json)。
 
 没写 `display:flex` 的 `div` 可以直接放 `p`、`h1`–`h3`、另一个 `div`，以及写了宽高的 `layer`，从上到下排。只写文字时 `div` 仍是一段文字。`p` 里可以直接放 `<img>`。图标是 `<span class="material-symbols-outlined">home</span>`，字重写 `font-weight`。`p`、`h1`–`h3`、`span` 里不要放 `layer`。字形渐变写 `style="fill:linear-gradient(to right, #2f7bff, #b423c4)"`，没写 `fill` 时用 `color`。盒子渐变写 `background:linear-gradient(...)`，不写 `gradient()`。行内 `background` 高亮这一段的行盒，例如 `<span style="background:#ffe08a">词</span>`。
 
@@ -25,18 +25,15 @@
 | 写了宽高的 `layer` | 用 `x` `y` `anchor` 定位整组 | 直接放进 `div`。宽高是属性，里面的图形用局部坐标。这一层不写 `x` `y` |
 | 图片 `img`（`image` 相同） | 外包 `layer`。`src` 是属性，宽高和 `object-fit` 写 `style` | 直接放 |
 | 图标 | 跟文字一样外包 `layer`。`<span class="material-symbols-outlined">home</span>`，字重写 `font-weight`，字号和颜色跟周围文字 | 直接放。写进 `p` 时跟文字排在同一段 |
-| `rect` | `x y width height`，左上角。`rx` 是圆角，`ry` 没写时跟 `rx` | 包一层有宽高的 layer，或改用 div |
-| `ellipse` | `cx cy rx ry`，圆心 | 同上 |
-| `g` | 放在 `layer` 里。`transform` 写 `translate` / `rotate` / `scale` / `matrix`。`fill` 和纯色 `stroke` 传给子形状；`stroke="6 #000"` 留在这一组 | 不排进去，会 `warn` |
-| `circle` | `cx cy r`，圆心 | 同上 |
-| `sphere` | `cx cy r`，圆心，再加上 `z`。布局盒子是边长 `2r` 的正方形 | 放进 layer，不写 `camera` 时视距等于 height |
-| `box` | `x y width height depth`。`rx` 圆棱，`round` 选边（不写是 12 条都圆，如 `front`、`x`、`front-top`）。`x y` 是左上角，布局不计厚度 | 放进 layer，不写 `camera` 时视距等于 height |
-| `ground` | 没有大小。`x y z` 是平面上的一点。`rotate` `rotateX` `rotateY` 和 `box` 一样，`rotateX="90"` 是水平地面。不写 `fill` 时只有影子。`shadow-blur` 默认 0，`shadow-opacity` 默认 0.4，`shadow-color` 默认 `#000000` | 放进 layer，不写 `camera` 时视距等于 height |
-| `cylinder` | `cx cy r height`。轴竖直，`height` 是长度，圆截面朝镜头鼓出 `r`。`rx` 圆上下口，`round` 可写 `top` 或 `bottom`。盒子宽 `2r`、高 `height`，中心是 `cx cy` | 放进 layer，不写 `camera` 时视距等于 height |
-| `torus` | `cx cy r tube`。环躺在平面里，`r` 是环心到管心，`tube` 是管半径。盒子边长 `2(r+tube)` | 放进 layer，不写 `camera` 时视距等于 height |
-| `tube` | `d` 是中心线，`r` 是管半径。`Z` 闭合成环，开口两端封平盖。`x y` 是包围盒（四边各扩 `r`）的左上角 | 放进 layer，不写 `camera` 时视距等于 height |
-| `extrude` | `d` 与 `path` 相同，`depth` 是沿 z 的厚度，以平面为中心。位置用 `x y` | 放进 layer，不写 `camera` 时视距等于 height |
-| `model` | 只写 `src`（一个 `.glb`）。宽高和 `x y z` 写在外包的 layer 上，contain 居中 | 放进 layer，不写 `camera` 时视距等于 height |
+| `rect` | `x y width height`，左上角。`rx` 是圆角；写了 `depth` 时 `rx` 是圆棱，沿 z 挤出 | 包一层有宽高的 layer，或改用 div |
+| `ellipse` | `cx cy rx ry`，圆心。写了 `depth` 就挤出 | 同上 |
+| `g` | 放在 `layer` 里。`transform` 写 `translate` / `rotate` / `scale` / `matrix`。`rotateX()` `translateZ()` 也可以写在形状上。`fill` 和纯色 `stroke` 传给子形状；`stroke="6 #000"` 留在这一组 | 不排进去，会 `warn` |
+| `circle` | `cx cy r`，圆心。写了 `depth` 就是轴沿 z 的圆柱 | 同上 |
+| `sphere` | `cx cy r`。布局盒子是边长 `2r` 的正方形 | 放进 layer |
+| `torus` | `cx cy r tube`。环躺在平面里 | 放进 layer |
+| `tube` | `d` 是中心线，`r` 是管半径。`Z` 闭合成环 | 放进 layer |
+| `model` | `src` 指向一个 `.glb`，或在 tsx 里写 `object` 传入网格。宽高和 `x y z` 写在外包的 layer 上。不写 `unit` 时 contain 居中；写了 `unit` 就保留原始坐标 | 放进 layer |
+| `ground` | 没有大小。`rotateX="90"` 是水平地面。不写 `fill` 时只有影子。`shadow-blur` 默认 0，`shadow-opacity` 默认 0.4 | 放进 layer |
 | `line` `arrow` `polyline` `polygon` `path` `curve` | `x1 y1 x2 y2` / `points` / `d`。`curve` 闭合加 `closed`。`arrow` 是组件，展开成线和三角，`head` 默认 `max(12, stroke-width × 4)` | 包一层 `<layer>` |
 | `symbol` / `use` | `symbol` 不画。`use href="#id"` 用 `x y` 摆放 | `use` 按它的宽高排进去 |
 | `mask` | 只作为 `layer` 的直接子元素。里面写 `rect` `circle` `ellipse` `polygon` `path`、`img` 或 `g`。省略 `fill` 为 `#fff`，只看 alpha。`op` 默认 `add`，还可写 `subtract` `intersect` `xor`。`img` 可写 `channel="luma"`、`pick`、`derive` | 不排进去，会 `warn` |
@@ -52,11 +49,11 @@
 
 整层裁切用 `<mask>`，和内容并列写在 `layer` 里：`<mask><circle cx="160" cy="90" r="90" /></mask>`。实心是硬边，`fill="linear-gradient(to bottom, #fff, #fff0)"` 是软边。挖掉一块写 `op="subtract"`。羽化写 `<mask feather="8">`，反选写 `invert="true"`。黑白蒙版用 `<img channel="luma">`，编号区域用 `pick="3 5"`。缓存写 `<img src="photo.jpg" derive="subject">`。前景遮罩是 `npx flexlayer-select mask photo.jpg`，返回 `photo.foreground.png` 和前景的 `x` `y` `width` `height`。要留下的地方写 `--point x,y`，不要的地方写 `--omit x,y`，都可以写多次。不要写 `mask-image`。`overflow="hidden"` 只裁子元素。蒙版裁掉子元素的阴影和模糊；这一层自己的 `shadow`、`glow`、外侧 `stroke` 按留下的轮廓伸出蒙版，父层的描边和阴影也跟着这块轮廓。预览写在标记里：`<preview of="#cut" show="overlay checker" />`，`show` 是合法属性，正常成片不包含它。
 
-透视：`<layer camera="700"><rect rotateY="28" z="40" /></layer>`。`z` 越大越靠近观众。平行投影写 `<layer camera="parallel">`，位置不随 `z` 缩放，大的 `z` 仍画在前面。`camera="fov 40, orbit 35 18, distance 1200"` 把机位写在同一层；`camera="700"` 等于 `focal 700`。`aperture` 是无限远处的景深半径，`focus` 是对焦距离，`sharp="true"` 的表面不糊。`preserve-3d` 写在 layer 或 flex 上，子元素沿父链进入这台镜头。没有姿态的中间层只负责送进去，没写 `preserve-3d` 的卡片仍是一张图。没有网格时，直接子元素按中心深度从远到近画，深度相同按文档顺序。有 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 时改用深度缓冲，近的盖住远的。这一层没有正的 `height`、又没有写出视距时，`rotateX`、`rotateY`、`z` 仍按二维画，`z` 不改变顺序，并报 `flatten-3d`。采样点的投影 `w` 小于等于 0 报 `behind-camera`。例子见 [examples/perspective.layer](../examples/perspective.layer)。
+透视：`<layer camera="700"><rect rotateY="28" z="40" /></layer>`。`z` 越大越靠近观众。平行投影写 `<layer camera="parallel">`。没有实体时，直接子元素按中心深度从远到近画。有实体或 `ground` 时用深度缓冲。没落到镜头里报 `flatten-3d`。
 
-网格和透视共用这一层：`<layer camera="700"><sphere cx="220" cy="340" r="90" z="50" fill="#4CC3D9" /><box x="355" y="350" width="150" height="100" depth="60" fill="#EF2D5E" /></layer>`。`cylinder` 是竖直圆柱，`torus` 是躺着的圆环，`tube` 沿 `d` 扫出圆管。`box` 的 `rx` 圆棱，`round` 不写就是 12 条都圆；圆柱的 `rx` 圆上下口。没写 `rx`、也没描边、并且并成平面后不超过 200 个面的网格，渲染时在折棱上加一条最多 4px 的窄圆角。已经圆滑的边不加，圆柱的上下口仍然收。`extrude` 用 `d` 和 `depth`，`d` 里并排的形状各自挤出，套在里面的才是洞。`model` 放在有宽高的 layer 里，`src` 指向 `.glb`。网格的 `fill` 是纯色，渐变、`shadow`、`glow` 会警告。`material="matte"` 是默认的磨砂塑料，只有明暗。`material="plastic"` 和 `material="metal 0.35"` 都用这套明暗做底，再叠同一张工作室环境：主灯是左上方的大圆角正方形，从正左向中间偏 30°，顶部互不相接，暗面有贴轮廓的边缘光。金属更实，塑料更透，没有缩成一点的高光。粗糙度先模糊环境，噪点写进这张图再取样，越高越糊，噪点越密。`material="glass"` 是假玻璃：反射把主灯的方窗留在形体里，掠射边加轮廓光。折射按离开中心的位置轻轻扫过同一张环境，补在还没照亮的地方，按 `fill` 染色，不压暗底色。棱线写在网格上：`stroke="#1c1915" stroke-width="3 2 1"` 依次描轮廓、折棱和隐藏线，只写一个数时三档一样粗。`hidden="#8a8175"` 把被自己挡住的棱画成虚线。`halo="3"` 让这只网格的可见线在交叉处把更远的线断开。共用一个角的棱不断开，线管端面和自己的轮廓也不切开。`fill="none"` 只留线。球没有折棱，`stroke` 只画轮廓圆。没有镜头时不绘制。例子见 [examples/meshes.layer](../examples/meshes.layer)、[examples/solids.layer](../examples/solids.layer)、[examples/rounded.layer](../examples/rounded.layer)、[examples/wire.layer](../examples/wire.layer)、[examples/materials.layer](../examples/materials.layer)、[examples/glass.layer](../examples/glass.layer)。
+实体就是 SVG 形状加 `depth`：`<rect width="150" height="100" depth="60" rx="8" />` 是圆棱盒子，`<circle r="40" depth="80" />` 是轴沿 z 的圆柱，`<path d="…" depth="18" />` 按 `fill-rule` 挤出。另有 `sphere`、`torus`、`tube`、`model`。tsx 里 `model` 写 `object` 传入网格，`unit` 保留原始坐标。`material` 是 `matte`、`plastic`、`metal`、`glass`。`stroke` 描棱线，`hidden` 是隐藏线的颜色。影子只落在 `ground` 上。`box`、`cylinder`、`extrude` 是别名。
 
-竖排：`style="writing-mode:vertical-rl"`。字体名见 [docs/RESOURCES.md](RESOURCES.md)，直接写 `font-family`，不用自带字体文件。
+竖排：`style="writing-mode:vertical-rl"`。字体名见 [docs/RESOURCES.md](RESOURCES.md)，直接写 `font-family`，不用自带字体文件。自带的 `.ttc` 要选字形就写 `src="字体.ttc#2"`，从 0 数；不写序号用第 0 套。
 
 ## 例子
 

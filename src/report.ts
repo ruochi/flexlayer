@@ -60,6 +60,7 @@ function meshHalfDepth(node: MeshLayoutNode): number {
   if (mesh.type === 'torus') return mesh.tube
   if (mesh.type === 'box' || mesh.type === 'extrude') return mesh.depth / 2
   if (!mesh.span || node.width <= 0 || node.height <= 0) return 0
+  if (mesh.unit != null && mesh.unit > 0) return (mesh.span.z * mesh.unit) / 2
   const sx = mesh.span.x > 1e-6 ? node.width / mesh.span.x : Infinity
   const sy = mesh.span.y > 1e-6 ? node.height / mesh.span.y : Infinity
   const s = Math.min(sx, sy)
@@ -68,6 +69,8 @@ function meshHalfDepth(node: MeshLayoutNode): number {
 }
 
 function meshSamples(node: MeshLayoutNode): Array<[number, number, number]> {
+  const fitted = unitModelSamples(node)
+  if (fitted) return fitted
   if (node.mesh.type === 'sphere') {
     const r = node.mesh.r
     const cx = node.width / 2
@@ -105,6 +108,22 @@ function meshSamples(node: MeshLayoutNode): Array<[number, number, number]> {
   for (const u of [0, node.width]) {
     for (const v of [0, node.height]) {
       for (const z of [-half, half]) pts.push([u, v, z])
+    }
+  }
+  return pts
+}
+
+/** `unit` 保留模型坐标。着墨用真实包围盒，而不是撑满外包 layer 的那只布局盒。 */
+function unitModelSamples(node: MeshLayoutNode): Array<[number, number, number]> | null {
+  const mesh = node.mesh
+  if (mesh.type !== 'model' || mesh.unit == null || !(mesh.unit > 0) || !mesh.bounds) return null
+  const o = originOffset(node.origin, node.width, node.height)
+  const unit = mesh.unit
+  const box = mesh.bounds
+  const pts: Array<[number, number, number]> = []
+  for (const x of [box.minX, box.maxX]) {
+    for (const y of [box.minY, box.maxY]) {
+      for (const z of [box.minZ, box.maxZ]) pts.push([x * unit + o.x, o.y - y * unit, z * unit])
     }
   }
   return pts

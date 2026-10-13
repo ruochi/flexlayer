@@ -50,6 +50,11 @@ function rotate(angleDeg: number, cx = 0, cy = 0): SvgMatrix {
   return multiply(multiply(translate(cx, cy), r), translate(-cx, -cy))
 }
 
+/** 和 rotateX、rotateY、z 同一套姿态。多个同类函数相加。 */
+export type TransformPose = { rotateX: number; rotateY: number; rotateZ: number; z: number }
+
+const EMPTY_POSE: TransformPose = { rotateX: 0, rotateY: 0, rotateZ: 0, z: 0 }
+
 function fromArgs(name: string, nums: number[]): SvgMatrix | null {
   if (name === 'translate' && (nums.length === 1 || nums.length === 2)) return translate(nums[0]!, nums[1] ?? 0)
   if (name === 'scale' && (nums.length === 1 || nums.length === 2)) return scale(nums[0]!, nums[1] ?? nums[0]!)
@@ -60,27 +65,62 @@ function fromArgs(name: string, nums: number[]): SvgMatrix | null {
   return null
 }
 
-/** 从左到右读函数，作用顺序是从右到左，和 SVG 一致。 */
-export function parseSvgTransform(raw: string | undefined): { matrix: SvgMatrix; error?: string } {
+/** rotateX、rotateY、rotateZ、translateZ、translate3d 的 z。其余函数仍是二维矩阵。 */
+function foldPose(name: string, nums: number[], pose: TransformPose): SvgMatrix | 'pose' | null {
+  if (name === 'rotatex' && nums.length === 1) {
+    pose.rotateX += nums[0]!
+    return 'pose'
+  }
+  if (name === 'rotatey' && nums.length === 1) {
+    pose.rotateY += nums[0]!
+    return 'pose'
+  }
+  if (name === 'rotatez' && nums.length === 1) {
+    pose.rotateZ += nums[0]!
+    return 'pose'
+  }
+  if (name === 'translatez' && nums.length === 1) {
+    pose.z += nums[0]!
+    return 'pose'
+  }
+  if (name === 'translate3d' && nums.length === 3) {
+    pose.z += nums[2]!
+    return translate(nums[0]!, nums[1]!)
+  }
+  return null
+}
+
+export function poseMoves(pose: TransformPose): boolean {
+  return pose.rotateX !== 0 || pose.rotateY !== 0 || pose.rotateZ !== 0 || pose.z !== 0
+}
+
+/** 从左到右读函数，二维部分的作用顺序是从右到左，和 SVG 一致。 */
+export function parseSvgTransform(raw: string | undefined): { matrix: SvgMatrix; pose: TransformPose; saw2d: boolean; error?: string } {
   const text = (raw ?? '').trim()
-  if (!text) return { matrix: IDENTITY }
+  if (!text) return { matrix: IDENTITY, pose: { ...EMPTY_POSE }, saw2d: false }
   const re = /([a-zA-Z]+)\s*\(([^)]*)\)/g
   const parts: SvgMatrix[] = []
+  const pose: TransformPose = { ...EMPTY_POSE }
+  let saw2d = false
   let last = 0
   let match: RegExpExecArray | null
   while ((match = re.exec(text))) {
     const between = text.slice(last, match.index).trim()
-    if (between && between !== ',') return { matrix: IDENTITY, error: raw }
+    if (between && between !== ',') return { matrix: IDENTITY, pose: { ...EMPTY_POSE }, saw2d: false, error: raw }
     last = match.index + match[0].length
     const body = match[2]!.trim()
     const nums = body === '' ? [] : body.split(/[\s,]+/).map(Number)
-    if (nums.some((n) => !Number.isFinite(n))) return { matrix: IDENTITY, error: raw }
-    const part = fromArgs(match[1]!.toLowerCase(), nums)
-    if (!part) return { matrix: IDENTITY, error: raw }
+    if (nums.some((n) => !Number.isFinite(n))) return { matrix: IDENTITY, pose: { ...EMPTY_POSE }, saw2d: false, error: raw }
+    const name = match[1]!.toLowerCase()
+    const posed = foldPose(name, nums, pose)
+    if (posed === 'pose') continue
+    const part = posed ?? fromArgs(name, nums)
+    if (!part) return { matrix: IDENTITY, pose: { ...EMPTY_POSE }, saw2d: false, error: raw }
+    saw2d = true
     parts.push(part)
   }
-  if (text.slice(last).trim()) return { matrix: IDENTITY, error: raw }
+  if (text.slice(last).trim()) return { matrix: IDENTITY, pose: { ...EMPTY_POSE }, saw2d: false, error: raw }
   let matrix = IDENTITY
   for (const part of parts) matrix = multiply(matrix, part)
-  return { matrix }
+  return { matrix, pose, saw2d }
 }

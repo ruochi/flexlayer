@@ -527,11 +527,22 @@ export type CylinderRim = 'top' | 'bottom'
 export type MeshSpec =
   | { type: 'sphere'; r: number }
   | { type: 'box'; depth: number; rx: number; edges: readonly BoxEdge[] }
-  | { type: 'extrude'; d: string; depth: number }
-  | { type: 'cylinder'; r: number; height: number; rx: number; rims: readonly CylinderRim[] }
+  | { type: 'extrude'; d: string; depth: number; fillRule: 'nonzero' | 'evenodd' }
+  | { type: 'cylinder'; r: number; height: number; rx: number; rims: readonly CylinderRim[]; axis?: 'z' }
   | { type: 'torus'; r: number; tube: number }
   | { type: 'tube'; d: string; r: number }
-  | { type: 'model'; src: string; file?: string; span?: { x: number; y: number; z: number } }
+  | {
+      type: 'model'
+      src: string
+      file?: string
+      span?: { x: number; y: number; z: number }
+      /** 1 个模型单位对应的像素。写了就保留原始坐标，不再 contain。 */
+      unit?: number
+      /** 模型空间里的包围盒。只在写了 `unit` 时留下，给着墨范围用。 */
+      bounds?: { minX: number; minY: number; minZ: number; maxX: number; maxY: number; maxZ: number }
+      /** 内存网格的内容哈希。文件模型不写。 */
+      revision?: string
+    }
 
 /** 网格表面。不写时是 matte：磨砂塑料，主光乘 fill，没有高光。粗糙度 0 到 1，越大高光和反射越散。磨砂不看粗糙度。 */
 export type MeshMaterial = {

@@ -117,6 +117,16 @@ type LayerShape = LayerPositioned &
     width?: number | string
     height?: number | string
     fill?: string
+    /** 正数时沿 z 挤出。rect 的 rx 是圆棱 */
+    depth?: number | string
+    /** nonzero | evenodd。挤出时判断洞，不写是 nonzero */
+    'fill-rule'?: string
+    /** 被挡住的棱。要和 stroke 一起写 */
+    hidden?: string
+    /** matte、plastic、metal、glass。不写是磨砂 */
+    material?: string
+    /** rotateX()、rotateY()、translateZ()，和同名属性同一套姿态 */
+    transform?: string
     stroke?: string
     strokeWidth?: number | string
     'stroke-width'?: number | string
@@ -257,8 +267,8 @@ export namespace JSX {
         head?: number | string
       }
     polyline: LayerGraphic & LayerLinePaint & { points?: string }
-    polygon: LayerGraphic & LayerLinePaint & { points?: string }
-    path: LayerGraphic & LayerLinePaint & { d?: string }
+    polygon: LayerGraphic & LayerLinePaint & { points?: string; depth?: number | string; 'fill-rule'?: string; hidden?: string; material?: string; transform?: string }
+    path: LayerGraphic & LayerLinePaint & { d?: string; depth?: number | string; 'fill-rule'?: string; hidden?: string; material?: string; transform?: string }
     sphere: LayerPositioned &
       LayerCenter &
       LayerEffects & {
@@ -405,9 +415,13 @@ export namespace JSX {
         scale?: number | string
         opacity?: number | string
       }
-    /** 外部 glb。位置和宽高写在外包的 layer 上，src 只写在这里。面色来自文件。 */
+    /** 外部网格。`src` 是 .glb；tsx 里 `object` 是 three.js 的 Object3D。`unit` 保留原始坐标。位置和宽高写在外包的 layer 上。 */
     model: LayerGraphic & {
       src?: string
+      /** 1 个模型单位对应的像素。写了就不再 contain 居中 */
+      unit?: number | string
+      /** 内存中的网格，不进 .layer */
+      object?: object
       fill?: string
       stroke?: string
       'stroke-width'?: number | string

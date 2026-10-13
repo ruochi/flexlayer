@@ -38,7 +38,7 @@ Flex Layer 用标签描述**一帧画面**。`div`、`p`、`h1`–`h3`、`span`�
 | `font-family` | `ChillDuanSans` | 全局字体。目录里的名字直接写，第一次用到时自动下载。按气质挑选见 [docs/RESOURCES.md](docs/RESOURCES.md) 的推荐字体；那里除寒蝉端黑体外要自己带 `<font>` |
 | `safe` | 画布短边的 4% | 安全区边距，`上 右 下 左` 或一个数字，只用于检查 |
 
-`<font family="名字" src="路径或网址" />` 注册额外字体，只能写在根元素下。`src` 必须是字体文件。不想自己找文件时，写目录里的名字：`Song` / `宋体`（Noto Serif SC，思源宋体简体子集）、`Kai` / `楷体`（霞鹜文楷）、`Brush` / `书法`（马善政毛笔楷书），以及 `Inter`、`Playfair`、`NotoSans` 等。有 400 和 700 两档的取最近的一档，只登记了一档的字体始终用那一档。
+`<font family="名字" src="路径或网址" />` 注册额外字体，只能写在根元素下。`src` 必须是字体文件（ttf、otf、woff、ttc、otc）。`.ttc` 和 `.otc` 里有多套字形，不写序号时用第 0 套。序号写在路径后面，从 0 数：`src="SourceHanSans.ttc#2"`。`#` 不是文件名。思源、Noto CJK 的第 0 套是日文，简体的「复」会画成日文字形，简体用 `#2`。序号超出集合时报 `字体集合只有 N 套字形，没有 #2`。单个字体文件写了大于 0 的序号时报 `这不是字体集合，不能写 #2`。文件本身不存在仍报 `字体文件不存在`，路径里不带 `#`。不想自己找文件时，写目录里的名字：`Song` / `宋体`（Noto Serif SC，思源宋体简体子集）、`Kai` / `楷体`（霞鹜文楷）、`Brush` / `书法`（马善政毛笔楷书），以及 `Inter`、`Playfair`、`NotoSans` 等。有 400 和 700 两档的取最近的一档，只登记了一档的字体始终用那一档。
 
 ## 2. 元素一览
 
@@ -49,13 +49,13 @@ Flex Layer 用标签描述**一帧画面**。`div`、`p`、`h1`–`h3`、`span`�
 | 文字 | `h1`、`h2`、`h3`、`p`、`div`、`span`；行内：`span`、`strong`、`b`、`em`、`br` |
 | 图片 | `img`（`image` 是同一个标签） |
 | 图标 | 不是单独的标签。`<span class="material-symbols-outlined">home</span>`，字重写 `font-weight` |
-| 形状 | `rect`、`circle`、`ellipse` |
+| 形状 | `rect`、`circle`、`ellipse`。写了 `depth` 就沿 z 挤出 |
 | 分组 | `g`（放在 `layer` 里，用 `transform` 平移、旋转、缩放） |
-| 线条 | `line`、`arrow`、`polyline`、`polygon`、`path`、`curve`。`arrow` 是内置组件，排版时展开成 `g` |
+| 线条 | `line`、`arrow`、`polyline`、`polygon`、`path`、`curve`。`arrow` 是内置组件，排版时展开成 `g`。`polygon`、`path` 写了 `depth` 也挤出 |
 | 复用 | `symbol`、`use` |
 | 蒙版 | `mask`（只作为 `layer` 的直接子元素） |
-| 网格 | `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model`。放在 `layer` 里。不写 `camera` 时视距等于这一层的 height |
-| 地面 | `ground`。没有大小的无限平面，旋转和 `box` 一样。不写 `fill` 时透明，只接影子 |
+| 实体 | `sphere`、`torus`、`tube`、`model`，以及写了 `depth` 的形状。`box`、`cylinder`、`extrude` 是别名，报 `non-canonical` |
+| 地面 | `ground`。没有大小的无限平面。不写 `fill` 时透明，只接影子 |
 | 字体 | `font`（只作为根元素的子元素，`family` 加 `src`） |
 
 - 标签一律小写。`<Circle>` 不按小写渲染。根上写了大写或 `fvg`，直接拒绝。子元素报 `unknown-tag`（error），hint 给出小写写法。HTML 只写 `style`，`layer` 和图形只写属性。图片的 `src`、`alt` 仍是属性。
@@ -67,7 +67,7 @@ Flex Layer 用标签描述**一帧画面**。`div`、`p`、`h1`–`h3`、`span`�
 | 属性 | 说明 |
 | --- | --- |
 | `id` | 报告里用来指认元素 |
-| `x`、`y` | 写在 `layer`、`use`、`rect`、`box`、`extrude`、`tube` 和带尺寸的自定义元素上。是定位点，没写是 `0`。默认对应盒子左上角（见 `anchor`） |
+| `x`、`y` | 写在 `layer`、`use`、`rect`、`tube` 和带尺寸的自定义元素上。是定位点，没写是 `0`。默认对应盒子左上角（见 `anchor`） |
 | `anchor` | `(x, y)` 落在盒子的哪个点。九宫格：`top-left`（默认）、`top`、`bottom`、`left`、`right`、`center`、`top-right`、`bottom-left`、`bottom-right` |
 | `opacity` | 0 到 1。嵌套时逐层相乘 |
 | `rotate` | 绕 `origin` 旋转，单位度，顺时针为正。对文字、线条、形状和 layer 都生效；layer 上的旋转作用到整棵子树 |
@@ -76,21 +76,23 @@ Flex Layer 用标签描述**一帧画面**。`div`、`p`、`h1`–`h3`、`span`�
 
 `rotate`、`scale` 只影响绘制，不影响布局。支点是 `origin`，绕这一点缩放或旋转，这一点在画面上不动。百分比按这一层的布局盒子，`<layer scale="1.4" origin="33% 39%">`。`top 80` 和 `80 top` 相同。解析失败报 `invalid-attr`，并退回中心。要从舞台上取一块出图，写 `view`，不要靠 `scale` 把整页推近，见第 4.1 节。报告里的 `box` 是变换前的布局盒子（只累加平移），`ink` 是变换后的外接矩形。有透视时 `ink` 改成投影后的外接矩形，并多一个 `quad`（投影后的四个角）。`rotateX`、`rotateY` 和分轴 `scale` 的三维支点也是这个 `origin`。`screenScale` 是这一层落到屏幕上的倍数，见第 4.1 节。
 
-`camera` 的视距单位是像素，是直接子元素共用的。不写 `camera` 时，子树里有网格、`ground` 或 `rotateX`、`rotateY`、`z` 的最外层用自己的 `height` 当视距。灭点是这一层盒子的中心，`z` 正方向朝观众，数值越大看起来越大。写成 `camera="parallel"` 时是平行投影：视线平行于 z，屏幕位置不随 `z` 放大或缩小，也没有镜头平面，`z` 再大也不报 `behind-camera`、不因此跳过绘制。深度顺序不变，仍是 `z` 越大越靠近观众。`rotateX`、`rotateY` 仍会把侧面压扁。`rotateX`、`rotateY`、`z` 的归属和 `rotate` 相同，写在要转动或推近的那一层上，不改变布局。这一层没有正的 `height`、又没有写出视距时，仍按二维绘制，并报 `flatten-3d`；这时 `z` 不改变绘制顺序。平面或网格的采样点（平面中心、网格支点）投影后 `w` 小于等于 0 时报 `behind-camera`，该元素不绘制。检查和绘制用同一个判断。默认机位下这等于采样点的 `z` 大于等于视距；机位绕开之后要看乘过镜头矩阵的结果，父级空间里 `z` 还小于焦距也可能在镜头后面。带三维姿态的平面先按 4 倍分辨率绘制，再平均缩回逻辑像素，斜边因此抗锯齿。这一层自己的 `blur` 按平面局部像素计，超采样时乘上这个倍数，缩回后仍是作者写的半径；`shadow` 和 `glow` 已经按位图缩放，不再乘。只包住网格、去掉网格后没有可画纹理的层写了 `blur`，报 `invalid-attr`。平面上的 `shadow` 和 `glow` 画在这张位图的外侧，再一起投影，不会被裁在平面自己的框里。没有三维姿态、也没有网格、机位又是默认的内容仍走原来的二维绘制。
+`camera` 的视距单位是像素，是直接子元素共用的。不写 `camera` 时，子树里有实体、`ground` 或 `rotateX`、`rotateY`、`z` 的最外层用自己的 `height` 当视距。灭点是这一层盒子的中心，`z` 正方向朝观众，数值越大看起来越大。写成 `camera="parallel"` 时是平行投影：视线平行于 z，屏幕位置不随 `z` 放大或缩小，也没有镜头平面，`z` 再大也不报 `behind-camera`、不因此跳过绘制。深度顺序不变，仍是 `z` 越大越靠近观众。`rotateX`、`rotateY` 仍会把侧面压扁。`rotateX`、`rotateY`、`z` 的归属和 `rotate` 相同，写在要转动或推近的那一层上，不改变布局。这一层没有正的 `height`、又没有写出视距时，仍按二维绘制，并报 `flatten-3d`；这时 `z` 不改变绘制顺序。平面中心或实体顶点投影后 `w` 小于等于 0 时报 `behind-camera`，该元素不绘制。检查和绘制用同一个判断。默认机位下这等于采样点的 `z` 大于等于视距；机位绕开之后要看乘过镜头矩阵的结果，父级空间里 `z` 还小于焦距也可能在镜头后面。只包住实体、去掉实体后没有可画纹理的层写了 `blur`，报 `invalid-attr`。平面上的 `shadow` 和 `glow` 画在这张位图的外侧，再一起投影，不会被裁在平面自己的框里。没有三维姿态、也没有实体、机位又是默认的内容仍走原来的二维绘制。
 
-`camera` 写在这层取景 `layer` 上。不写时，子树里有网格、`ground` 或 `rotateX`、`rotateY`、`z` 的最外层用自己的 `height` 当视距，里面没写 `camera` 的层不另开镜头。`camera="1484"` 等于 `focal 1484`，`camera="parallel"` 是平行投影。不要和 `view` 写在同一层。镜头可以不写种类，视距就用 `height`。要写种类时用一种：`focal`、`fov`（`focal = height/2/tan(fov/2)`）、`lens`（竖直全画幅，`fov = 2·atan(12/mm)`）或 `parallel`。`at` 是对准点，默认盒子中心、`z=0`，投影到取景窗中心。`orbit` 是 yaw、pitch，度；yaw 正数机位往右绕，pitch 正数从上往下看。`roll` 正数让画面内容绕对准点顺时针转。`distance` 是机位到对准点的像素，焦距不变；不写时等于焦距。`from` 是机位坐标，不能再写 `orbit` 或 `distance`；和 `at` 重合报 `invalid-attr`。`vanish` 只改投影主点，`z=0` 的布局不平移，深处的线朝新灭点汇聚。`parallel` 下 `distance` 和 `vanish` 报 `info` 并忽略。对象和字符串等价，`--emit` 按作者写的字段写回，不把 `from` 折成 `orbit`。默认机位的像素与只写一个视距相同。机位一旦偏离默认，没有 `z` / `rotateX` / `rotateY` 的子元素也要投影。
+`camera` 写在这层取景 `layer` 上。不写时，子树里有实体、`ground` 或 `rotateX`、`rotateY`、`z` 的最外层用自己的 `height` 当视距，里面没写 `camera` 的层不另开镜头。`camera="1484"` 等于 `focal 1484`，`camera="parallel"` 是平行投影。不要和 `view` 写在同一层。镜头可以不写种类，视距就用 `height`。要写种类时用一种：`focal`、`fov`（`focal = height/2/tan(fov/2)`）、`lens`（竖直全画幅，`fov = 2·atan(12/mm)`）或 `parallel`。`at` 是对准点，默认盒子中心、`z=0`，投影到取景窗中心。`orbit` 是 yaw、pitch，度；yaw 正数机位往右绕，pitch 正数从上往下看。`roll` 正数让画面内容绕对准点顺时针转。`distance` 是机位到对准点的像素，焦距不变；不写时等于焦距。`from` 是机位坐标，不能再写 `orbit` 或 `distance`；和 `at` 重合报 `invalid-attr`。`vanish` 只改投影主点，`z=0` 的布局不平移，深处的线朝新灭点汇聚。`parallel` 下 `distance` 和 `vanish` 报 `info` 并忽略。对象和字符串等价，`--emit` 按作者写的字段写回，不把 `from` 折成 `orbit`。默认机位的像素与只写一个视距相同。机位一旦偏离默认，没有 `z` / `rotateX` / `rotateY` 的子元素也要投影。
 
 `aperture` 是景深：无限远处的模糊半径，成片像素。不写就没有景深。对焦距离 `focus` 从机位沿视线量，不写时等于 `distance`；也可以写 `focus x y z`，对到镜头局部坐标里的那一点。半径 = `aperture × |深度 − focus| / 深度`，`深度 = 焦距 − z`。`max` 是半径上限，不写时是 `aperture` 的 3 倍。深度按每个像素算，近处的糊边盖到已经画好的远处，不是把合成完的整张图再糊一遍，也不代替元素自己的 `blur`。`sharp="true"` 写在要保持清楚的那一层表面上。`parallel` 下这三个字段报 `info` 并忽略。报告里采样点的半径写在 `defocus`，不糊就不写。
 
 `preserve-3d` 写在 `layer` 或 flex 上时，子元素沿着父链（含 flex 的 padding 和边框）进入外层这台镜头，和直接子元素一起按深度排序。`opacity` 小于 1、`blur`、`filter`、`grade`、`<mask>`、`overflow="hidden"`，以及 `glass`、`backdrop-blur`、非 `source-over` 的 `blend`、`noise`、`overlay`，仍然把子树收成一张图，并报 `flattened-3d`（info），hint 里写是哪一个属性。自己写了 `camera` 的嵌套层是另一台镜头，不并进来。不写 `preserve-3d` 时，子孙仍先画进父平面。父链上没有 `rotateX`、`rotateY`、`z` 的 layer 和 flex 只把子元素送进同一台镜头：没写 `preserve-3d` 的卡片仍是一张图，色块和里面的文字一起投影。两段文字都有投影四边形时，`text-overlap` 看凸四边形是否相交；缺了 `quad` 时仍看 `ink` 的外接矩形。
 
-`z` 的前后只在开了镜头的那一层生效。这一层没有 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model`、`ground` 时，直接子元素按中心深度从远到近绘制，深度相同保持文档顺序。出现这些网格或 `ground` 时，这一层改成一台三维场景，网格和带姿态的平面放进同一个深度缓冲：更靠近观众（`z` 更大）的面盖住更远的面，不透明的面写入深度。嵌套 `layer` 自己没有 `camera` 时，里面的网格和平面仍算进外层这台场景。
+`z` 的前后只在开了镜头的那一层生效。这一层没有实体或 `ground` 时，直接子元素按中心深度从远到近绘制，深度相同保持文档顺序。出现实体或 `ground` 时，这一层改成一台三维场景，实体和带姿态的平面放进同一个深度缓冲：更靠近观众（`z` 更大）的面盖住更远的面，不透明的面写入深度。嵌套 `layer` 自己没有 `camera` 时，里面的实体和平面仍算进外层这台场景。
 
-同一层里如果出现 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude` 或 `model`，这一层改成一台三维场景，和带姿态的平面共用这一台镜头。没有这些标签时，像素和上面的平面透视一致。`sphere` 写 `cx` `cy` `r`，布局盒子是边长 `2r` 的正方形，圆心就是这个点。`box` 写 `x` `y` `width` `height` `depth`，布局只看宽高，`x` `y` 是左上角。`rx` 是棱上的圆角半径。不写 `round` 时 12 条棱都圆。`round` 挑选棱：`all`；`x`、`y`、`z` 是平行于宽、高、厚度的四条；`front`、`back`、`left`、`right`、`top`、`bottom` 是这一面的四条；单条写成 `front-top` 或 `top-front`，两个方向不分先后。`top` 是画面上方。三条棱都圆的角是一块球面。只有两条圆时，圆角收到它们的交线，第三条棱仍是直角。只写 `round` 不写正的 `rx`，名字不认识，或没有选中棱，报 `invalid-attr`，圆角不生效。半径大于棱能让开的距离时收小，并报 `invalid-attr`。布局盒子不因 `rx` 改变。渲染时，共面三角并成面之后不超过 200 个面的网格，会在折棱上加一条最多 4px 的窄圆角，向里收。相邻的面太窄放不下时，这条棱的圆角收小。已经圆滑过渡的边不加，旁边的折棱仍然收，所以圆柱侧面不加、上下口要收。写了 `rx` 或描了 `stroke` 的保持原来的棱。超过 200 个面的不加。`cylinder` 写 `cx` `cy` `r` `height`，轴沿画面竖直方向，`height` 是这段长度，圆截面在朝向镜头的方向上鼓出 `r`。布局盒子宽 `2r`、高 `height`，`cx` `cy` 是盒子中心。没写 `height` 时报 `invalid-attr`，并退回 `2r`。`rx` 圆两端圆口。不写 `round` 时上下都圆；`round="top"` 或 `"bottom"` 只圆一端。半径要小于 `r`，两端都圆时还不能大于 `height` 的一半，否则收小并报 `invalid-attr`。`torus` 写 `cx` `cy` `r` `tube`，环躺在所在平面里。`r` 是环心到管心的半径，`tube` 是管半径，要小于 `r` 才有孔。布局盒子是边长 `2(r+tube)` 的正方形，圆心是 `cx` `cy`。倾斜之后的 `ink` 按环面取样，不用这个正方形的四个角。没写 `tube`，或 `tube` 不小于 `r`，报 `invalid-attr`，并退回 `r/4`。`tube` 的 `d` 是中心线，语法和 `path` 相同，`r` 是管半径。开口的子路径两端是平的圆盖；写了 `Z` 的闭合成环。分开的子路径是分开的管子。布局盒子是中心线包围盒四边各扩 `r`，`x` `y` 是这个盒子的左上角。没写 `r` 时报 `invalid-attr`，并退回 8。`extrude` 的 `d` 和 `path` 相同，沿 z 挤出 `depth`，厚度以所在平面为中心。`d` 里分开的子路径是分开的实体；包在外圈里面的才是洞。`model` 只写 `src`，指向一个 `.glb`；位置和宽高写在外包的 `layer` 上，模型按 contain 居中放进这个盒子，文件里的相机忽略。单位都是像素。没写 `depth` 时报 `invalid-attr`，并退回宽高里较小的一边。面用 `fill`，默认 `#000000`。`fill="none"` 不填色，深度仍写入，后面的棱不会穿出来。正对镜头的面就是这个颜色，侧面更暗；`model` 的面色来自文件，不看 `fill`，再乘这套明暗。`material` 写在网格上。不写时是 `matte`，磨砂塑料，只有明暗、没有高光。写成 `material="matte"` 是同一个。`plastic` 和 `metal` 都用这套磨砂明暗做底色，再叠同一张工作室环境：比中间灰亮的地方加亮，暗的地方压暗。金属叠得更实，塑料更透。没有会缩成一点的高光。主灯是左上方一块大圆角正方形，从正左向中间偏 30°，方位和仰角躲开 90° 的整数倍，板子也偏开一点。暗面另有一条窄的圆角边缘光，顶边更低，接不到主灯，也不收到天顶。白、黑和灰过渡都有。粗糙度先把这张环境模糊，噪点也写进这张环境，再贴到反射上。越高越糊，噪点越密。`glass` 是假玻璃，等不透明的物体画完再叠上。反射把主灯的方窗留在形体里，掠过边缘再加一条轮廓光。折射沿进玻璃、从背面出来的方向取同一张环境，按离开形体中心的位置轻轻扫过，补在方窗和轮廓光还没照亮的地方。都按 `fill` 染色，不把底色压暗。没有缩成一点的高光，也不投主光的影子。`fill` 的透明度仍能透出后面，亮的地方更实。粗糙度写在名字后面，0 到 1，例如 `material="metal 0.35"`；不写时塑料 0.4、金属 0.25、玻璃 0.08。磨砂不看粗糙度。层上的 `glass` 仍是平面透镜。`material` 写在别的标签上，或名字不认识，报 `invalid-attr`，并退回磨砂。渐变 `fill` 只用第一个颜色，并报 `invalid-attr`。`stroke` 写在这个网格上时描可见的折棱和轮廓；不写就不描。两只都写了 `stroke` 的网格相互穿过时，描出交界线，算折棱，颜色和宽度跟后写的那只；面贴面的共面接触不描。`stroke-width` 是屏幕像素。写一个数时轮廓、折棱和隐藏线一样粗；`stroke-width="3 2 1"` 依次是轮廓、折棱、隐藏线；写两个数时隐藏线用折棱的宽度。写了 `stroke` 没写宽度时三档都是 2。超过三个数、负数或解析失败报 `invalid-attr`，并退回 2。`halo="3"` 写在网格上：这只网格的可见线从更远的线前面经过时，远处那条线在交叉处两侧各断开 3 个屏幕像素。不写就不断开。没写 `stroke`，或写在别的标签上，报 `invalid-attr`。共用一个角的棱不会被彼此断开。线管端面和自己的轮廓只在端点相接，不是交叉，不会被切开。同一只网格上，前面的棱仍然会在真正交叉的地方把后面的棱断开。`hidden` 是被这只网格自己的面挡住的棱的颜色，按屏幕像素画成 6 实、4 空的虚线，短段接成一条再取相位；被别的网格或平面挡住的部分不画。不写 `hidden` 就不画隐藏线。只写 `hidden` 或 `stroke-width`、没写 `stroke`，报 `invalid-attr`。`hidden` 写在别的标签上同样报 `invalid-attr`。球没有折棱，`stroke` 只画轮廓圆。圆柱描上下圆边和轮廓，圆环描轮廓，线管描轮廓以及两端圆盖的折棱。写了 `rx` 的棱和口缘与相邻面相切，不再是折棱。这些线在 4 倍缩小之后再描。父 `layer` 不负责把整层改成线框。`shadow` 和 `glow` 写在网格上也会报 `invalid-attr`，不绘制。网格可以画出它所在 layer 的盒子，和平面一样；投影后的 `ink` 超出画布时报 `overflow-canvas`。`overflow="hidden"` 仍裁在这一层里。网格没有落在镜头里时报 `flatten-3d`，并且不绘制。`src` 缺失、不是 `.glb` 或读不到时报 `missing-model`。这一层按 4 倍分辨率绘制，再按预乘 alpha 平均缩回，和透视平面同一套抗锯齿。网格用自带的三角形光栅绘制。同一台透视场景里，不透明的网格和平面会沿内置主光互相投下硬边影子；被挡住时主光不计，只留环境光和补光。这里的同一台场景不限于同一个父标签：没有自己 `camera` 的嵌套 `layer` 里的 `sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 和平面，仍算进外层这台场景，影子会投到父层的地板上，也会挡住父层的物体。嵌套 `layer` 自己写了 `camera` 时是另一台场景，不共用这张影子。属性 `shadow` 仍是平面上的偏移暗边。`Scene3D` 仍不使用。
+形状写了正的 `depth` 就沿 z 挤出，厚度以所在平面为中心，布局只看宽高。`rect` 是盒子，`rx` 是圆棱。`circle` 是圆柱，轴沿 z。`ellipse`、`polygon`、`path` 按轮廓挤出，洞用 `fill-rule`（默认 `nonzero`，也可 `evenodd`）。没写 `depth` 就是平面。开口的线写 `depth` 报 `invalid-attr`。`box`、`cylinder`、`extrude` 仍可用，报 `non-canonical`。
 
-`shadows` 写在开了镜头的那一层。不写是 `auto`：不透明网格和平面沿内置主光互相投下硬边影子。`shadows="none"` 关掉这一台场景的影子，深度遮挡还在。网格、平面和 `ground` 还可以写 `cast-shadow="false"`、`receive-shadow="false"`。不写都是投、都是接。玻璃本来就不投主光的影子。`shadows` 写在没开镜头的层上，或值不是 `auto` / `none`，报 `invalid-attr`。主光方向仍是内置的，作者灯光还没做。
+挤出做不到的用 `sphere`（`cx` `cy` `r`）、`torus`（`cx` `cy` `r` `tube`，环躺在平面里）、`tube`（`d` 是中心线，`r` 是管半径）、`model`（`src` 指向 `.glb`，或在 tsx 里写 `object` 传入网格，放进有宽高的 layer。不写 `unit` 时 contain 居中；写了 `unit` 就按这个像素保留原始坐标。不写 `material` 时，金属度不小于 0.5 用 `metal`，否则用 `plastic`）。同一层里出现这些实体、`ground`，或 `rotateX`、`rotateY`、`z`，就开镜头。不写 `camera` 时视距等于这一层的 `height`。`fill` 只收纯色，渐变用第一个颜色。`material` 是 `matte`、`plastic`、`metal`、`glass`，可跟粗糙度，不写是磨砂。实体上的 `stroke` 描棱线，`hidden` 是隐藏线的颜色。SVG 元素可以写 `transform="rotateX(40) translateZ(20)"`，和 `rotateX`、`z` 是同一套姿态。
 
-`ground` 是没有宽高的无限平面，用来接影子。`x` `y` `z` 是平面上的一点，定位和 `box` 相同。`rotate`、`rotateX`、`rotateY`、`scale`、`origin` 也和 `box` 相同：正的 `rotateX` 让平面上边远离观众，`rotateX="90"` 放成水平的地面。不写这些旋转时，平面正对镜头。平面没有边界，沿着姿态延伸到灭点；和视线平行的那一侧不画。不写 `fill`，或写成 `none`、`transparent` 时，地面本身透明，只留下影子，好和背景叠在一起。`fill` 是纯色，渐变只用第一个颜色并报 `invalid-attr`。影子来自这一层网格挡住的主光。`shadow-blur` 是影子的模糊半径，像素，默认 0。`shadow-opacity` 是 0 到 1，默认 0.4。`shadow-color` 默认 `#000000`。不要写 `angle`，也不要写平面用的 `shadow`。`shadow-blur`、`shadow-opacity`、`shadow-color` 写在别的标签上报 `invalid-attr`。没有落在镜头里时报 `flatten-3d`，并且不绘制。
+`shadows` 写在开了镜头的那一层。不写时，实体把影子投到 `ground` 上。`shadows="none"` 关掉，深度遮挡还在。`cast-shadow="false"` 这只实体不投。`receive-shadow` 只写在 `ground` 上，`false` 就不接。写在别处，或 `shadows` 不是 `auto` / `none`，或写在没开镜头的层上，报 `invalid-attr`。
+
+`ground` 没有宽高，用来接影子。`x` `y` `z` 是平面上的一点。旋转和形状一样：正的 `rotateX` 让上边远离观众，`rotateX="90"` 放成水平地面。不写这些旋转时，平面正对镜头。不写 `fill`，或写成 `none`、`transparent` 时，地面透明，只留影子。`fill` 是纯色，渐变只用第一个颜色并报 `invalid-attr`。`shadow-blur` 默认 0，`shadow-opacity` 默认 0.4，`shadow-color` 默认 `#000000`。这三项写在别的标签上，或写了 `angle`、平面用的 `shadow`，报 `invalid-attr`。没有落在镜头里时报 `flatten-3d`，并且不绘制。
 
 属性归属（由 [src/schema.ts](src/schema.ts) 生成，不要手改两行标记之间的表）。逐个属性的语法、默认值和说明在 [docs/attrs.json](docs/attrs.json)，同样由 `npm run docs:attrs` 生成：
 
@@ -100,8 +102,8 @@ Flex Layer 用标签描述**一帧画面**。`div`、`p`、`h1`–`h3`、`span`�
 | `width`、`height`、`min-font`、`x`、`y`、`anchor`、`anchor-box` | `width`、`height` 以及 `x`、`y`、`anchor`。`x`、`y` 是左上角，默认 0；`anchor` 默认 `top-left`。HTML 上写了报 `warn` |
 | `opacity`、`rotate`、`rotateX`、`rotateY`、`z`、`scale`、`origin` | 图形、线条和 `layer` 写属性；文字写在 `style`。HTML 上写成属性报 `warn` |
 | `background`、`padding`、`font-size`、`color`、`flex`、`flex-grow`、`flex-shrink`、`flex-basis`、`gap`、`border`、`border-radius`、`max-width`、`align-items`、`align-content`、`justify-content`、`flex-wrap`、`row-gap`、`column-gap`、`writing-mode`、`object-fit`、`object-position` | HTML，按 CSS 渲染，写在 `style` 里。初始值不另写。`layer` 或图形写了 `style` 报 `warn` |
-| `cx`、`cy`、`x1`、`y1`、`x2`、`y2`、`points`、`d`、`depth`、`tube`、`round`、`fill`、`stroke`、`hidden`、`halo`、`material`、`cast-shadow`、`receive-shadow`、`shadow-blur`、`shadow-opacity`、`shadow-color`、`transform` | 图形属性，坐标是所在 `layer` 的局部坐标 |
-| `src`、`alt` | 只写在 `img` 或 `model` 上。图片宽高仍放进 `style` |
+| `cx`、`cy`、`x1`、`y1`、`x2`、`y2`、`points`、`d`、`depth`、`fill-rule`、`tube`、`round`、`fill`、`stroke`、`hidden`、`halo`、`material`、`cast-shadow`、`receive-shadow`、`shadow-blur`、`shadow-opacity`、`shadow-color`、`transform` | 图形属性，坐标是所在 `layer` 的局部坐标 |
+| `src`、`unit`、`object`、`alt` | 只写在 `img` 或 `model` 上。`unit`、`object` 只写在 `model` 上。图片宽高仍放进 `style` |
 | `shadow`、`glow`、`inner-shadow`、`inner-glow`、`blur`、`backdrop-blur`、`glass`、`noise`、`filter`、`blend` | 图形和 `layer` 写属性；文字写在 `style`。见第 9 章 |
 | `camera`、`shadows`、`overlay`、`grade`、`grade-mask`、`view` | 只写在 `layer` 上。写在别处或写进 `style` 报 `warn` |
 | `data` | 任何元素都可以写。值是 JSON，不进普通属性。程序里直接传对象或数组 |
@@ -114,14 +116,14 @@ Flex Layer 用标签描述**一帧画面**。`div`、`p`、`h1`–`h3`、`span`�
 | --- | --- |
 | 文字，以及没写宽高的一组 HTML | 外包一层 `layer`，把 `x`、`y`、`anchor` 写在 `layer` 上。HTML 上写 `x`、`y` 会忽略并报 `warn` |
 | 图片 `img` | 和文字一样，外包一层 `layer` 来定位 |
-| `rect` | `x` `y` `width` `height`，左上角。`rx`、`ry` 是圆角。不用 `anchor`，写了报 `info` |
-| `box`、`extrude`、`tube`、带尺寸的自定义元素 | `x` `y` 加上 `anchor`，默认左上角 |
-| `ground` | `x` `y` 是平面上的一点。没有宽高。`rotate`、`rotateX`、`rotateY` 和 `box` 一样 |
-| `circle`、`ellipse`、`sphere`、`cylinder`、`torus` | 圆心 `cx` `cy`。椭圆再写 `rx` `ry`。圆柱再写 `r` `height`，圆环再写 `r` `tube` |
+| `rect` | `x` `y` `width` `height`，左上角。`rx`、`ry` 是圆角；写了 `depth` 时 `rx` 是圆棱。不用 `anchor`，写了报 `info` |
+| `tube`、带尺寸的自定义元素 | `x` `y` 加上 `anchor`，默认左上角 |
+| `ground` | `x` `y` 是平面上的一点。没有宽高。`rotate`、`rotateX`、`rotateY` 和形状一样 |
+| `circle`、`ellipse`、`sphere`、`torus` | 圆心 `cx` `cy`。椭圆再写 `rx` `ry`。圆环再写 `r` `tube`。`circle` 写了 `depth` 轴沿 z |
 | `g` | 放在 `layer` 里。`transform` 作用到子元素，盒子是变换后的并集 |
 | 线条 | 端点、`points`、`d` 本身就是坐标，不写 `x`、`y` |
 
-没写 `x`、`y` 时是 `0, 0`，不再放到父级中心。`layer`、`use`、`rect`、`box`、`extrude`、`tube` 上的 `cx`、`cy` 已忽略，报 `invalid-attr`，`hint` 给出等价的 `x`、`y`。
+没写 `x`、`y` 时是 `0, 0`，不再放到父级中心。`layer`、`use`、`rect`、`tube` 上的 `cx`、`cy` 已忽略，报 `invalid-attr`，`hint` 给出等价的 `x`、`y`。
 
 `anchor` 示例：`<layer x="60" y="120"><h1>标题</h1></layer>` 表示这一层的左上角在 (60, 120)。要让中心落在这一点，写 `anchor="center"`。写错的值按 `top-left` 摆，并报 `invalid-attr`。
 
@@ -131,7 +133,7 @@ Flex Layer 用标签描述**一帧画面**。`div`、`p`、`h1`–`h3`、`span`�
 
 ### 4.1 layer：自由摆放，也可以当分组
 
-原点是 layer 的左上角。嵌套 `layer`、`use`、`box`、`extrude`、`tube` 和带尺寸的自定义元素用 `x`、`y` 定位；圆、椭圆、球、圆柱和圆环用圆心。HTML 不写 `x`、`y`，要单独摆放就再包一层 layer。layer 可以嵌套。外层的 `opacity`、`rotate`、`scale` 会作用到里面的全部子元素，所以一组要一起移动、旋转或缩放时，包一层 layer 即可。嵌套 layer 写了 `width` 时，里面的文字按这个宽度换行；宽高都写了再减去这一层的 `safe`。这一层上的 `color`、`font-family` 会传给里面没写这些的文字，和根 layer 一样。
+原点是 layer 的左上角。嵌套 `layer`、`use`、`rect`、`tube` 和带尺寸的自定义元素用 `x`、`y` 定位；圆、椭圆、球和圆环用圆心。HTML 不写 `x`、`y`，要单独摆放就再包一层 layer。layer 可以嵌套。外层的 `opacity`、`rotate`、`scale` 会作用到里面的全部子元素，所以一组要一起移动、旋转或缩放时，包一层 layer 即可。嵌套 layer 写了 `width` 时，里面的文字按这个宽度换行；宽高都写了再减去这一层的 `safe`。这一层上的 `color`、`font-family` 会传给里面没写这些的文字，和根 layer 一样。
 
 - 写了 `width`、`height`：layer 就是这么大，原点固定。内容可以画出盒子。做动画的分组建议写上宽高，这样坐标不会跟着内容变。
 - 没写：宽高等于从原点到子元素右下角的距离。坐标在负方向的子元素会画到盒子外面，但不会把其他子元素一起平移。
@@ -140,7 +142,7 @@ Flex Layer 用标签描述**一帧画面**。`div`、`p`、`h1`–`h3`、`span`�
 
 `view="x y w h"` 把这一层变成镜头。`width` `height` 是屏幕上的取景窗，`x` `y` 是窗口在父层里的位置。`view` 是舞台坐标里被取的矩形，铺满取景窗：窗口上的一点是舞台上对应点乘 `取景窗 / view` 的宽高。窗口外的内容裁掉，和 `overflow="hidden"` 一样，不报 `overflow-canvas`。裁开后贴着窗口的文字边也不报 `outside-safe`；裁完仍露在安全区外的字还是要报。`view` 没被直接子元素转完、缩完的四边形盖住时报 `view-outside`（error），成片会露底。四边形是这一层直接子元素的布局盒子，绕它自己的 `origin` 做了 `rotate` 和 `scale`。直接子元素是 `<g>` 时，用 `transform` 之后里面每个形状的四边形，不用这一组的外接矩形。镜头四个角都落在这些四边形里才算盖住；多个子元素时，每个角落在其中一块里即可，角都盖住但中间有缝时可能不报。宽高比和取景窗差超过 1% 时不拉伸，按宽度保持中心重算高度，并 `warn`。要写 `width` 和 `height`。不要和 `camera` 写在同一层。屏幕上不跟着镜头放大的章节、字幕、标注，写在这一层外面，用成片像素。`zoomView(center, zoom, size)` 用来算推到某一点的 `view`。`bleed` 已不再使用，写了会 `warn`。
 
-检查和绘制都按屏幕上的实际大小。`scale` 和 `view` 叠出来的倍数写在报告的 `screenScale`（两轴绝对值的几何平均，等于 1 不写）。最小字号拿 `font-size × screenScale` 和根上的 `min-font` 比。不写或 `screen` 时是 `min(画布宽, 画布高) / 1080 × 24`，1080p 横屏和竖屏都是 24px。`print` 把 24 换成 12，适合海报上的注释。写成数字就是这一档的屏幕像素，`none` 关掉。同一张图里多处过小合并成一条 `min-font-size`。`min-font` 只写在根上。阴影、光晕、模糊的外扩同样乘这个倍数。`--debug` 的布局框和着墨框保持 1 屏幕像素，不跟着放大。网格光栅按这个倍数提高分辨率，推近后笔画仍然清楚。
+检查和绘制都按屏幕上的实际大小。`scale` 和 `view` 叠出来的倍数写在报告的 `screenScale`（两轴绝对值的几何平均，等于 1 不写）。最小字号拿 `font-size × screenScale` 和根上的 `min-font` 比。不写或 `screen` 时是 `min(画布宽, 画布高) / 1080 × 24`，1080p 横屏和竖屏都是 24px。`print` 把 24 换成 12，适合海报上的注释。写成数字就是这一档的屏幕像素，`none` 关掉。同一张图里多处过小合并成一条 `min-font-size`。`min-font` 只写在根上。阴影、光晕、模糊的外扩同样乘这个倍数。`--debug` 的布局框和着墨框保持 1 屏幕像素，不跟着放大。
 
 `<mask>` 裁的是这一层合成完的画面，包括子元素的阴影、模糊、调色和颗粒。这一层自己的 `shadow`、`glow` 和外侧或居中的 `stroke` 按蒙版留下的轮廓来画，可以伸出蒙版，用来做贴纸边和发光轮廓。写在父层上的描边和阴影也跟着这块轮廓，不跟着没抠过的矩形。内侧描边仍留在蒙版里面。它写在 `layer` 里面，和要裁的内容并列。自己不画出来，不占布局，不把层撑大，里面的形状不进报告的元素表，也不触发 `overflow-canvas`。蒙版画成位图之后量出来的面积、外接矩形、碎片数、软边宽度，以及每一步运算，写在这一层的 `mask` 字段上，见第 10 章和第 15 章。被它挡住的内容同样不报 `overflow-canvas` 或 `effect-clipped`：报告里的 `ink` 先和 mask 形状的外接范围求交。一层最多一个，多出来的 `warn` 并忽略。坐标和同层的图形一样，原点在 layer 左上角。
 
@@ -448,9 +450,11 @@ const fg = await foregroundMask('photo.jpg', {
 | `ellipse` | `cx` `cy` `rx` `ry`，圆心 |
 | `circle` | `cx` `cy` `r`，圆心 |
 
-`rect`、`circle`、`ellipse` 上的 `anchor` 忽略并报 `info`。`rect`、`box`、`extrude`、`tube` 上的 `cx`、`cy` 忽略并报 `warn`。
+`rect`、`circle`、`ellipse` 上的 `anchor` 忽略并报 `info`。`rect`、`tube` 上的 `cx`、`cy` 忽略并报 `warn`。
 
-绘制属性和 SVG 一致：`fill`（默认 `#000000`，写 `none` 不填充）、`stroke`（默认 `none`）、`stroke-width`（默认 1）、`stroke-dasharray`（像素长度，空格或逗号分隔；奇数段会再重复一遍；写错报 `invalid-attr` 并画成实线）。`stroke` 写成 `6 #000` 这种「宽度 + 颜料」时改为沿墨迹描边，见第 8 章。
+写了正的 `depth` 就沿 z 挤出，见第 3 章。平面上的 `rx` 是圆角；`rect` 有 `depth` 时 `rx` 是圆棱。
+
+绘制属性和 SVG 一致：`fill`（默认 `#000000`，写 `none` 不填充）、`stroke`（默认 `none`）、`stroke-width`（默认 1）、`stroke-dasharray`（像素长度，空格或逗号分隔；奇数段会再重复一遍；写错报 `invalid-attr` 并画成实线）。`stroke` 写成 `6 #000` 这种「宽度 + 颜料」时改为沿墨迹描边，见第 8 章。实体上的 `stroke` 改描棱线。
 
 ### 7.2 线条
 
@@ -474,7 +478,7 @@ const fg = await foregroundMask('photo.jpg', {
 
 `<g>` 放在 `layer` 里面，把几笔收成一组。它没有宽高，不建立新坐标系，子元素仍用 SVG 坐标。允许嵌套的形状、线条、`path`、`curve` 和 `<g>`。放进文字盒子或 flex 报 `invalid-child`。
 
-平移、旋转、缩放写 SVG 的 `transform`（`translate`、`rotate`、`scale`、`matrix`），只写在 `<g>` 上。`layer` 继续用 `x`、`y`、`rotate`、`scale`，不收成一条 `transform`。`fill` 和纯色 `stroke` 从 `<g>` 传到子形状，子元素自己写了的优先。写成宽度加颜料的 `stroke` 留在这一组，按合并后的墨迹描一圈。`opacity` 乘在这一组上。布局盒子是变换后的并集；父 `layer` 没写宽高时把这个范围算进去。
+平移、旋转、缩放写 SVG 的 `transform`（`translate`、`rotate`、`scale`、`matrix`），只写在 `<g>` 上。`rotateX()`、`rotateY()`、`rotateZ()`、`translateZ()` 可以写在形状上，和 `rotateX`、`z` 是同一套姿态。`layer` 继续用 `x`、`y`、`rotate`、`scale`，不收成一条 `transform`。`fill` 和纯色 `stroke` 从 `<g>` 传到子形状，子元素自己写了的优先。写成宽度加颜料的 `stroke` 留在这一组，按合并后的墨迹描一圈。`opacity` 乘在这一组上。布局盒子是变换后的并集；父 `layer` 没写宽高时把这个范围算进去。
 
 ```html
 <g transform="translate(12,8)" fill="#e8b04a">
@@ -498,7 +502,7 @@ const fg = await foregroundMask('photo.jpg', {
 
 文字盒子上的 `fill` 按这一层的盒子取样，行内标签自己的 `fill` 按这一段的行盒取样，这一段里的汉字和英文单词共用这一段。没写 `fill` 时字形用 `color`。
 
-`stroke` 用同一套颜料。形状和线条写颜色时居中描边，宽度是 `stroke-width`（形状默认 1，线条默认 4）。写成 `6 #000`、`6 #000 outside`、`6 #fff inside`、`8 #fff center`，或 `6 #ffffff, 14 #c8321e` 时，按到墨迹的距离描边，默认 `outside`，后一层的宽度是总距离。文字、图片、`layer` 和 flex 写颜色时沿墨迹外侧描：`style="stroke:#000"` 或 `stroke="#000"`，没写宽度时用 4，写了 `stroke-width` 用那个宽度。`layer` 和 flex 按整棵子树合并后的墨迹描一圈，背景和边框算进这圈。文字盒子和图片写了 `background` 或 `border` 时，描边绕着这块底板，不绕着字形。这一层是三维场景时，描边跟着已经画好的画面。当前变换带了旋转或错切时，这段距离改在屏幕像素里按 4 倍采样再平均，外缘仍是大约 1px 的过渡，斜边不会跟着位图一起变成台阶。网格的 `stroke` 仍是折线颜色，和填充画在同一张超采样缓冲上，再一起平均缩回。平面里全透明的像素不写深度，不会把后面的棱裁掉。描边伸到可见范围外时，多留出线宽再裁，贴边的线一直画到边上，不在窗口里面收成圆头。`inside` / `center` 的内侧宽度达到字号的约 8% 时报 `stroke-fill`。
+`stroke` 用同一套颜料。形状和线条写颜色时居中描边，宽度是 `stroke-width`（形状默认 1，线条默认 4）。写成 `6 #000`、`6 #000 outside`、`6 #fff inside`、`8 #fff center`，或 `6 #ffffff, 14 #c8321e` 时，按到墨迹的距离描边，默认 `outside`，后一层的宽度是总距离。文字、图片、`layer` 和 flex 写颜色时沿墨迹外侧描：`style="stroke:#000"` 或 `stroke="#000"`，没写宽度时用 4，写了 `stroke-width` 用那个宽度。`layer` 和 flex 按整棵子树合并后的墨迹描一圈，背景和边框算进这圈。文字盒子和图片写了 `background` 或 `border` 时，描边绕着这块底板，不绕着字形。这一层是三维场景时，描边跟着已经画好的画面。实体上的 `stroke` 描棱线，`hidden` 是隐藏线的颜色。平面里全透明的像素不写深度，不会把后面的棱裁掉。描边伸到可见范围外时，多留出线宽再裁，贴边的线一直画到边上，不在窗口里面收成圆头。`inside` / `center` 的内侧宽度达到字号的约 8% 时报 `stroke-fill`。
 
 ```html
 <rect x="0" y="0" width="720" height="960" fill="linear-gradient(to bottom, #0c1424, #1a3352 55%, #6e7c72)" />
@@ -801,7 +805,7 @@ registerFilter({
 | `invalid-script` | error / warn / info | `<script>` 语法错误或运行出错（error），内容为空（warn），或 `--no-script` 跳过（info）。运行出错带上源码位置，其余内容照常绘制 |
 | `missing-image` | warn | `img` 的 `src` 读不到 |
 | `missing-icon` | warn | `class="material-symbols-outlined"`（或 `font-family` 指到 `Symbols`）里的名字不是 Material Symbols 的图标名 |
-| `missing-model` | warn | `model` 的 `src` 缺失、不是 `.glb`，或文件读不到；没有可放入的宽高时也是这个码 |
+| `missing-model` | warn | `model` 的 `src` 缺失、不是 `.glb`、文件读不到，或 `object` 里没有三角形网格；没有可放入的宽高时也是这个码 |
 | `missing-symbol` | warn | `use` 的 `href` 没有对应的 `symbol` |
 | `symbol-cycle` | warn | `symbol` 通过 `use` 引用了自己 |
 | `open-curve-fill` | warn | 开口的 `curve` 写了 `fill`，没有填充 |
@@ -811,9 +815,9 @@ registerFilter({
 | `ink-inset` | info | 锚点贴着左边或右边，字形比布局盒子靠里至少 2px，且不小于字号的 4%。想让笔画贴齐就写 `anchor-box="ink"`。开了镜头的 layer 不报 |
 | `ink-anchor-empty` | info | `anchor-box="ink"` 的子树没有着墨，已按布局盒子定位 |
 | `ink-anchor-rotate` | info | `anchor-box="ink"` 和 `rotate` 同时存在，对齐点是旋转前的着墨 |
-| `flatten-3d` | warn | `rotateX`、`rotateY`、`z` 没有落在镜头里，仍按二维绘制。`sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model`、`ground` 同样报这个码，并且不绘制。`preserve-3d` 展开进外层镜头的子孙不报 |
+| `flatten-3d` | warn | `rotateX`、`rotateY`、`z` 没有落在镜头里，仍按二维绘制。实体和 `ground` 同样报这个码，并且不绘制。`preserve-3d` 展开进外层镜头的子孙不报 |
 | `flattened-3d` | info | 写了 `preserve-3d`，但这层有透明度、模糊、滤镜、调色、蒙版或 `overflow="hidden"` 等会把子树收成一张图的效果 |
-| `behind-camera` | warn | 平面中心或网格支点乘过镜头矩阵之后 `w` 小于等于 0，不绘制。`camera="parallel"` 没有镜头平面，不报这个码 |
+| `behind-camera` | warn | 平面中心或实体顶点乘过镜头矩阵之后 `w` 小于等于 0，不绘制。`camera="parallel"` 没有镜头平面，不报这个码 |
 | `unsupported-dom` | error | 脚本用了子集以外的 DOM。`hint` 给出能用的写法。已经记了这条就不再另记 `invalid-script` |
 | `emit-draw` | warn | `--emit` 时还写着 `draw` 回调。不再写出 `<draw>` |
 | `emit-script` | warn | `--emit` 时 `<script>` 是闭包。函数体写不回 `.layer` |
@@ -940,7 +944,7 @@ for await (const { frame, png, report } of renderFrames(scene, { from: 0, to: 30
 - 把帧序列编码成视频。原始像素已经可以从 `renderLayer` 的 `format: 'rgba'`、`renderFrames` 的 `rgba` 或命令行 `--rgba` 拿走，编码由调用方完成，flexlayer 不依赖 ffmpeg。时间轴预览还没有。
 - 墨迹布局：按着墨范围计算间距、居中、包裹。
 - `Icon`。
-- `Scene3D` 这个名字仍保留，不要挪作他用。`sphere`、`box`、`cylinder`、`torus`、`tube`、`extrude`、`model` 画在父 `layer` 的镜头里，见第 3 章。单独的视口、作者灯光和阴影还没有，讨论见 [docs/proposals/3D.md](docs/proposals/3D.md)。
+- `Scene3D` 这个名字仍保留，不要挪作他用。three.js 的几何体从 `<model object>` 进父 `layer` 的镜头，不单独开一块位图视口。讨论见 [docs/proposals/3D.md](docs/proposals/3D.md)。
 - 滤镜和公式的实现备注见 [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md)。勿占用：`outer-glow`、`drop-shadow`、`backdrop-filter`、`texture`、`outline`。
 
 ## 15. 用 tsx 写 layer
@@ -978,16 +982,16 @@ for await (const { frame, png, report } of renderFrames(scene, { from: 0, to: 30
 | `box` | 布局盒，字段是 `left`、`top`、`right`、`bottom`、`width`、`height`。不含这一元素自己的 `rotate` |
 | `ink` | 这一元素自己的 `rotate`、`scale` 之后的外接矩形，字段和 `box` 相同。线条含描边。没有旋转、缩放和描边外扩时与 `box` 重合。`layer` 的 `ink` 是子树着墨。`flex` 的 `ink` 是 padding 里面的内容区 |
 | `mask` | 写了 `<mask>` 的 `layer` 才有。`area`、`pieces`、`softEdge`、`ops` 和报告里的 `mask` 相同（第 10 章）。`ink` 是留下来的部分的外接矩形，字段和 `box` 相同，全部藏起来时是 `null` |
-| `points` | 落在镜头里的网格才有。投影后的顶点，`x`、`y` 和 `box` 同一套坐标。看得见的点带 `visible: true`，被自己或别的网格挡住的带 `hidden: true`。观众身后的顶点不在这里。球没有折点，不写这个字段 |
+| `points` | 落在镜头里的实体才有。投影后的顶点，`x`、`y` 和 `box` 同一套坐标。看得见的点带 `visible: true`，被挡住的带 `hidden: true`。观众身后的顶点不在这里。球没有折点，不写这个字段 |
 | `edges` | 这些顶点之间的棱。`a`、`b` 是 `points` 的下标。`outline` 是轮廓，`crease` 是看得见的折棱，`hidden` 是被挡住的整条棱 |
 | `d` | 看得见的轮廓，SVG 路径，坐标和 `points` 相同。球是解析出来的圆，不把细分三角的顶点放进 `points` |
 
-网格不在镜头里时，这三项都没有，和没写 `mask` 一样。`rect` 这些不是网格的元素也没有。坐标已经算上嵌套层的位置和缩放，不算这一层和祖先的平面旋转。标注贴着某个角时，用 `points` 里看得见的点，再加上这一层的 `left`、`top`。`create` 只做投影，填充仍在绘制时发生；被挡住的棱在这里整条标成 `hidden`，画面上的虚线仍按像素一段一段判断。渲染时加的窄圆角不进这三项，折点仍是原来的棱。
+实体不在镜头里时，这三项都没有，和没写 `mask` 一样。没写成实体的元素也没有。坐标已经算上嵌套层的位置和缩放，不算这一层和祖先的平面旋转。标注贴着某个角时，用 `points` 里看得见的点，再加上这一层的 `left`、`top`。`create` 只做投影，填充仍在绘制时发生；被挡住的棱在这里整条标成 `hidden`，画面上的虚线仍按像素一段一段判断。折点是原来的棱。
 
 ```tsx
 const scene = canvas.create(
   <layer width={480} height={360} camera="700">
-    <box id="cube" x={80} y={60} width={160} height={120} depth={90} rotateY={-28} />
+    <rect id="cube" x={80} y={60} width={160} height={120} depth={90} rotateY={-28} />
   </layer>,
 )
 const cube = scene.elements.find((el) => el.id === 'cube')

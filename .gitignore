@@ -3,6 +3,7 @@ dist/
 coverage/
 *.log
 .DS_Store
+.tmp-three-*/
 examples/pythagoras.mp4
 examples/pythagoras-sheet.png
 examples/pythagoras-keyframes.png
