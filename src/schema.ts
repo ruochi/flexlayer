@@ -176,6 +176,7 @@ export const ATTRS: AttrDef[] = [
   { name: 'flex', warnOnHtmlAttr: true, docGroup: 'html' },
   { name: 'flex-grow', warnOnHtmlAttr: true, docGroup: 'html' },
   { name: 'flex-shrink', warnOnHtmlAttr: true, docGroup: 'html' },
+  { name: 'flex-basis', warnOnHtmlAttr: true, docGroup: 'html' },
   { name: 'gap', warnOnHtmlAttr: true, docGroup: 'html' },
   { name: 'border', warnOnHtmlAttr: true, docGroup: 'html' },
   { name: 'border-radius', warnOnHtmlAttr: true, docGroup: 'html' },

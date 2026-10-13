@@ -99,7 +99,7 @@ Flex Layer 用标签描述**一帧画面**。`div`、`p`、`h1`–`h3`、`span`�
 | --- | --- |
 | `width`、`height`、`min-font`、`x`、`y`、`anchor`、`anchor-box` | `width`、`height` 以及 `x`、`y`、`anchor`。`x`、`y` 是左上角，默认 0；`anchor` 默认 `top-left`。HTML 上写了报 `warn` |
 | `opacity`、`rotate`、`rotateX`、`rotateY`、`z`、`scale`、`origin` | 图形、线条和 `layer` 写属性；文字写在 `style`。HTML 上写成属性报 `warn` |
-| `background`、`padding`、`font-size`、`color`、`flex`、`flex-grow`、`flex-shrink`、`gap`、`border`、`border-radius`、`max-width`、`align-items`、`align-content`、`justify-content`、`flex-wrap`、`row-gap`、`column-gap`、`writing-mode`、`object-fit`、`object-position` | HTML，按 CSS 渲染，写在 `style` 里。初始值不另写。`layer` 或图形写了 `style` 报 `warn` |
+| `background`、`padding`、`font-size`、`color`、`flex`、`flex-grow`、`flex-shrink`、`flex-basis`、`gap`、`border`、`border-radius`、`max-width`、`align-items`、`align-content`、`justify-content`、`flex-wrap`、`row-gap`、`column-gap`、`writing-mode`、`object-fit`、`object-position` | HTML，按 CSS 渲染，写在 `style` 里。初始值不另写。`layer` 或图形写了 `style` 报 `warn` |
 | `cx`、`cy`、`x1`、`y1`、`x2`、`y2`、`points`、`d`、`depth`、`tube`、`round`、`fill`、`stroke`、`hidden`、`halo`、`material`、`cast-shadow`、`receive-shadow`、`shadow-blur`、`shadow-opacity`、`shadow-color`、`transform` | 图形属性，坐标是所在 `layer` 的局部坐标 |
 | `src`、`alt` | 只写在 `img` 或 `model` 上。图片宽高仍放进 `style` |
 | `shadow`、`glow`、`inner-shadow`、`inner-glow`、`blur`、`backdrop-blur`、`glass`、`noise`、`filter`、`blend` | 图形和 `layer` 写属性；文字写在 `style`。见第 9 章 |
@@ -225,8 +225,6 @@ Flex Layer 用标签描述**一帧画面**。`div`、`p`、`h1`–`h3`、`span`�
 
 没写 `display:flex` 的 `div`，里面有行内标签放不下的子元素（`h1`–`h3`、`p`、`div`、图片、`math`、`layer`、形状等）时，按块级从上到下排。这些子元素会画出来，不报 `invalid-child`。夹在旁边的文字单独成段。只放文字和行内标签时，`div` 仍是文字盒子。
 
-`h1`–`h3` 用第 5.1 节的字号和字重。其余文字样式按 CSS 继承。
-
 图形要放进 flex，包一层写了宽高的 `layer`，或者改用 `div` 盒子（`width`、`height`、`background`、`border-radius`）。这一层就是 flex 的一格：宽高用属性，里面的圆、矩形用这一层的局部坐标。位置由 flex 决定，这一层上的 `x`、`y`、`anchor` 会报 `invalid-attr`。`.tsx` 里同样写，见 [examples/html-layer.tsx](examples/html-layer.tsx)。形状直接放进来会照尺寸渲染并报 `info`；线条直接放进来不渲染，报 `warn`。两点坐标写在 flex 里的形状上不渲染，报 `warn`。`p`、`h1`–`h3`、`span` 里放 `layer` 不参与排版，报 `invalid-child`。
 
 ```html
@@ -238,9 +236,7 @@ Flex Layer 用标签描述**一帧画面**。`div`、`p`、`h1`–`h3`、`span`�
 </div>
 ```
 
-`style` 里不认识的属性，或认识但写错的值，报 `invalid-attr`，该项退回 CSS 初始值。认这些属性：`flex-direction`、`gap`、`row-gap`、`column-gap`、`flex-wrap`、`padding`、`align-items`、`align-self`、`align-content`、`justify-content`、`flex`、`flex-grow`、`flex-shrink`、`width`、`height`、`background`、`border`、`border-radius`。`width`、`height` 是外框，含 padding 和 border。`border` 只支持实线。`flex` 只写 `1`。竖排写了 `baseline` 时按 `flex-start`。
-
-容器更窄、子项探出去时报 `flex-overflow`。`flex-wrap:wrap` 之后，换行能放下就不报；高度不够、下一行仍探出去，才报。
+`style` 里不认识的属性，或认识但写错的值，报 `invalid-attr`，该项退回 CSS 初始值。认这些属性：`flex-direction`、`gap`、`row-gap`、`column-gap`、`flex-wrap`、`padding`、`align-items`、`align-self`、`align-content`、`justify-content`、`flex`、`flex-grow`、`flex-shrink`、`flex-basis`、`width`、`height`、`background`、`border`、`border-radius`。
 
 **可用宽度**：放在 layer 里、没写 `width` 的 flex 容器，最宽只能到 layer 的宽度（根 layer 要减去左右安全区）。
 
@@ -250,34 +246,24 @@ Flex Layer 用标签描述**一帧画面**。`div`、`p`、`h1`–`h3`、`span`�
 `div` 里有块级子元素时不是文字盒子，见 4.2。
 `p`、`h1`–`h3`、`span` 里不要嵌套 `div`、`p`，也不要放 `layer`。多段上下排写成 `<div><p>…</p></div>`。图形和文字并排时，把写了宽高的 `layer` 放进 `<div style="display:flex">`。
 
-### 5.1 字号
-
-| 标签 | 字号 | 字重 |
-| --- | --- | --- |
-| `h1` | 88px | bold |
-| `h2` | 64px | bold |
-| `h3` | 48px | bold |
-| `p`、`div`、`span` | 40px | 400。标题不继承外层字号 |
-
-### 5.2 style 属性
+### 5.1 style 属性
 
 没写的按 CSS。下表只写取值更窄、或和 CSS 不一样的地方。
 
 | 属性 | 说明 |
 | --- | --- |
-| `font-size`、`font-weight`、`font-family`、`color`、`letter-spacing` | 行内标签也可以写。`color` 只收纯色，会继承。渐变写在 `color` 上报 `invalid-attr`，退回继承来的纯色。`letter-spacing` 可以写 `0`、`2px` 或 `0.05em`。`em` 按写这条声明的元素自己的字号换算，再按像素继承；子元素改了字号不会把父级的 `em` 重算 |
+| `font-size`、`font-weight`、`font-family`、`color`、`letter-spacing` | 行内标签也可以写。`letter-spacing` 可以写 `0`、`2px` 或 `0.05em`。`em` 按写这条声明的元素自己的字号换算，再按像素继承 |
 | `fill` | 字形的颜料，写在 `style` 里。没写时用 `color`。可以是纯色，或第 8 章的 `linear-gradient()`、`radial-gradient()`、`gradient()`。写在文字盒子上时，整段按这一层的盒子取样；写在行内标签上时，只铺这一段的行盒，这一段里的汉字和英文单词共用这一段。不继承：没写的子元素继续用 `color`。形状的 `fill` 仍是属性，见第 7 章 |
 | （字重规则） | `ChillDuanSans` 按可变字重绘制，字重轴约 300 到 800，中间的字重不会收成 400 和 700 两档。登记了多档文件的字体取最近的一档。只登记了一档的字体，例如 `Brush`、`Bebas`，请求别的字重仍用这一档。自带 `<font>` 且文件没有字重轴的，按 400 |
 | `writing-mode` | `horizontal-tb` 或 `vertical-rl`。竖排时字从上到下，列从右到左，`letter-spacing` 是字与字之间的额外间距 |
 | `line-height` | 倍数（`1.2`）或像素（`24px`）。`%`、`em` 报 `invalid-attr`。像素行高按像素继承，不跟子元素的字号再乘一次 |
 | `text-align` | `left`、`center`、`right` |
-| `width`、`height` | 外框尺寸（含 padding 和 border） |
-| `max-width` | 最大外框宽度，超出就换行，盒子贴合最长的一行 |
+| `max-width` | 超出就换行，盒子贴合最长的一行 |
 | `padding`、`background`、`background-color`、`border`、`border-radius` | `background-color` 只收纯色。`background` 收纯色，以及 CSS 的 `linear-gradient()`、`radial-gradient()`，不收 `gradient()`。文字盒子的 `background` 铺满外框。行内 `span`、`strong`、`b`、`em`、`i`、`u` 的 `background` 或 `background-color` 铺在这一段的行盒上，用来高亮一个词。行内背景不从文字盒子继承；嵌在里面的行内标签没写时，沿用包着它的那一层 |
 | `white-space: nowrap` | 禁止换行 |
 | `text-wrap` | `wrap` 或 `balance`（各行长度尽量均匀） |
 
-### 5.3 换行规则
+### 5.2 换行规则
 
 1. 写了 `width`：按内容宽度换行。
 2. 写了 `max-width`：超出才换行。
@@ -288,7 +274,7 @@ Flex Layer 用标签描述**一帧画面**。`div`、`p`、`h1`–`h3`、`span`�
 
 带 `id` 的行内标签（`span`、`strong`、`b`、`em`）会在报告的元素表里多一条，`inline` 为 true。`path` 像 `layer/p[0]/span[0]`，序号按元素子节点计，和布局路径一样，`<br>` 也占一个序号。`lines` 是每一行里属于它的那一段。`box` 和 `ink` 都是这些段合起来、再乘上父文字元素的变换（含祖先的 `rotate`、`scale` 和透视）之后的外接矩形；行内标签没有单独的布局盒。最内层写了 `id` 的那段拥有这些字，里面没写 `id` 的行内标签沿用外层。没写 `id` 的行内标签不进元素表。这些 `inline` 元素不参与 `outside-safe`、`min-font-size` 和 `text-overlap`，避免和父段落各报一次。
 
-### 5.4 轮廓 glyph
+### 5.3 轮廓 glyph
 
 `.tsx` 里可以从字体取出每个字的轮廓。它是同步的程序接口，不是标签。目录里的字体第一次用时会下载，下完直接返回数组，所以可以写在 `canvas.create` 前面。
 
@@ -329,7 +315,7 @@ const chars = glyph('春眠', { font: 'Kai', size: 120, weight: 700 })
 | --- | --- |
 | `src` | 必填属性。相对路径相对 `.layer` 所在目录，也支持 `http(s)` 和 data URL |
 | `alt` | 属性，不绘制 |
-| `width`、`height` | 外框尺寸，含 padding 和 border。都没写时用图片像素尺寸；只写一边时另一边按原比例 |
+| `width`、`height` | 都没写时用图片像素尺寸；只写一边时另一边按原比例 |
 | `object-fit` | `fill`（拉伸铺满）、`contain`（整张放进盒子）、`cover`（铺满并裁切）、`none`（原始像素，不缩放） |
 | `object-position` | `center`、`top`、`left`、`top-left`、`left top`，或相对图片盒子的 `0%`–`100%`（例如 `50% 0%`） |
 | `border-radius`、`opacity`、`padding`、`background`、`border` | 同其它 HTML。圆角会裁切图片 |

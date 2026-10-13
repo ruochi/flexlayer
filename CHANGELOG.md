@@ -1,8 +1,10 @@
 # Changelog
 
-## 0.5.2
+## 0.6.0
 
-HTML 标签按 HTML 渲染，`style` 按 CSS。对齐、伸缩、间距、换行和继承的初始值不再在规范里复述。规范只保留和 CSS 不一样的地方，以及画面字号：`h1` 88px、`h2` 64px、`h3` 48px、正文 40px。
+HTML 标签按 HTML 渲染，`style` 按 CSS。对齐、伸缩、间距、换行、继承、字号和盒子的初始值不再在规范里复述。
+
+初始字号是 16px。`h1` 是 2em，`h2` 是 1.5em，`h3` 是 1.17em，字重是 bold。`width` 和 `height` 是内容盒，padding 和 border 加在外面。`flex` 用 CSS 简写，`flex:1` 是 `1 1 0`。
 
 ## 0.5.1
 

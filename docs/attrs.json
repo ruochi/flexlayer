@@ -231,6 +231,17 @@
     "misplacedHint": null
   },
   {
+    "name": "flex-basis",
+    "group": "html",
+    "syntax": null,
+    "default": null,
+    "example": null,
+    "layerOnly": false,
+    "htmlUsesStyle": true,
+    "note": null,
+    "misplacedHint": null
+  },
+  {
     "name": "gap",
     "group": "html",
     "syntax": null,

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  parseFlexShorthand,
+  readFlexFactors,
   colorFilterToCss,
   parseOrigin,
   readOrigin,
@@ -21,6 +23,19 @@ import {
 } from './style.js'
 
 describe('style', () => {
+  it('flex 简写和浏览器一样', () => {
+    expect(parseFlexShorthand('1')).toEqual({ grow: 1, shrink: 1, basis: 0 })
+    expect(parseFlexShorthand('auto')).toEqual({ grow: 1, shrink: 1, basis: 'auto' })
+    expect(parseFlexShorthand('none')).toEqual({ grow: 0, shrink: 0, basis: 'auto' })
+    expect(parseFlexShorthand('initial')).toEqual({ grow: 0, shrink: 1, basis: 'auto' })
+    expect(parseFlexShorthand('2 3')).toEqual({ grow: 2, shrink: 3, basis: 0 })
+    expect(parseFlexShorthand('1 40px')).toEqual({ grow: 1, shrink: 1, basis: 40 })
+    expect(parseFlexShorthand('1 1 0')).toEqual({ grow: 1, shrink: 1, basis: 0 })
+    expect(parseFlexShorthand('40px')).toEqual({ grow: 1, shrink: 1, basis: 40 })
+    expect(parseFlexShorthand('1fr')).toBeNull()
+    expect(readFlexFactors('flex-grow:2; flex:1; flex-shrink:0')).toEqual({ grow: 1, shrink: 0, basis: 0 })
+  })
+
   it('origin 接受九宫格、像素和百分比', () => {
     expect(parseOrigin('top-left')).toEqual({
       x: { unit: 'percent', value: 0 },

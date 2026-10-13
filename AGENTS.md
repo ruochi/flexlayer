@@ -38,7 +38,7 @@
 | 蒙版、抠图、`preview`、`derive` | SPEC 第 4.1 节和第 6 章 |
 | 透视、镜头、景深、`preserve-3d`、网格 | SPEC 第 3 章 |
 | 公式 | SPEC 第 4.1 节 |
-| `canvas.create`、动画、`glyph` | SPEC 第 5.4 节、第 13 章、第 15 章 |
+| `canvas.create`、动画、`glyph` | SPEC 第 5.3 节、第 13 章、第 15 章 |
 | 问题码和报告字段 | SPEC 第 10 章 |
 | 某个属性怎么写 | [docs/attrs.json](docs/attrs.json)，按名字查 |
 | 按气质选字体 | [docs/RESOURCES.md](docs/RESOURCES.md) 的推荐字体。寒蝉端黑体是默认字体。其余名字自己带字体文件 |
