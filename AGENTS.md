@@ -42,6 +42,7 @@
 | `canvas.create`、动画、`glyph` | SPEC 第 5.4 节、第 13 章、第 15 章 |
 | 问题码和报告字段 | SPEC 第 10 章 |
 | 某个属性怎么写 | [docs/attrs.json](docs/attrs.json)，按名字查 |
+| 按气质选字体 | [docs/RESOURCES.md](docs/RESOURCES.md) 的推荐字体。寒蝉端黑体是默认字体。其余名字自己带字体文件 |
 
 flex 的默认值、文字盒子里不能嵌套块级标签、图标写法，都在 SPEC 第 4、5 章，不要在这里再记一份。
 

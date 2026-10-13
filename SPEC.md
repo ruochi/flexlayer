@@ -35,7 +35,7 @@ Flex Layer 用标签描述**一帧画面**。HTML 标签用 `style`，其余标�
 | `width`、`height` | 必填 | 画布尺寸 |
 | `background` | `transparent` | 画布底色，只收纯色。没写，或写 `transparent`，不铺底色，PNG 里空出来的像素是透明的。要白底写 `#ffffff`。整页渐变用铺满的 `<rect fill="…">` |
 | `color` | `#111111` | 全局文字色、线条默认色。只收纯色。字形渐变写 `fill` |
-| `font-family` | `ChillDuanSans` | 全局字体。目录里的名字直接写，第一次用到时自动下载。见 [docs/RESOURCES.md](docs/RESOURCES.md) |
+| `font-family` | `ChillDuanSans` | 全局字体。目录里的名字直接写，第一次用到时自动下载。按气质挑选见 [docs/RESOURCES.md](docs/RESOURCES.md) 的推荐字体；那里除寒蝉端黑体外要自己带 `<font>` |
 | `safe` | 画布短边的 4% | 安全区边距，`上 右 下 左` 或一个数字，只用于检查 |
 
 `<font family="名字" src="路径或网址" />` 注册额外字体，只能写在根元素下。`src` 必须是字体文件。不想自己找文件时，写目录里的名字：`Song` / `宋体`（Noto Serif SC，思源宋体简体子集）、`Kai` / `楷体`（霞鹜文楷）、`Brush` / `书法`（马善政毛笔楷书），以及 `Inter`、`Playfair`、`NotoSans` 等。有 400 和 700 两档的取最近的一档，只登记了一档的字体始终用那一档。
@@ -326,7 +326,7 @@ const chars = glyph('春眠', { font: 'Kai', size: 120, weight: 700 })
 | `ink` | 真实着墨，相对盒子左上角。空格是 `null`。可以稍微探出盒子 |
 | `missing` | 字体里没有这个字时为 `true`。`d` 仍是缺字方框，不同的缺字会得到同一条路径 |
 
-`font` 用 [docs/RESOURCES.md](docs/RESOURCES.md) 里的名字，或默认的 `ChillDuanSans`。`楷体` 这类别名也可以。没写 `size` 时是 40。多档字体的 `weight` 取最近的一档。`ChillDuanSans` 是可变字体，轮廓只有默认字重 300，请求其它字重会抛错。没注册的字体名也会抛错。
+`font` 用 [docs/RESOURCES.md](docs/RESOURCES.md) 目录里的名字，或默认的 `ChillDuanSans`。`楷体` 这类别名也可以。推荐字体里还没自带文件的名字会抛错。没写 `size` 时是 40。多档字体的 `weight` 取最近的一档。`ChillDuanSans` 是可变字体，轮廓只有默认字重 300，请求其它字重会抛错。没注册的字体名也会抛错。
 
 空格有字宽，`d` 是空字符串，`missing` 是 `false`。字体里没有的字（例如 `😀`、`𠀀`）`missing` 是 `true`，`d` 是同一个缺字方框。
 
@@ -875,7 +875,7 @@ flexlayer select cutout photo.jpg --preset portrait             # 转给 flexlay
 
 `--preview` 只用于单帧。文档里没有 `<preview>` 时报错，不改已经写出的成片。`flexlayer select` 把后面的参数转给 `flexlayer-select`，见第 6 章。
 
-默认字体寒蝉端黑体，以及 [docs/RESOURCES.md](docs/RESOURCES.md) 里的其它字体，首次使用时自动下载到 `~/.cache/flexlayer/fonts`。
+默认字体寒蝉端黑体，以及 [docs/RESOURCES.md](docs/RESOURCES.md) 目录里的其它字体，首次使用时自动下载到 `~/.cache/flexlayer/fonts`。推荐字体里除寒蝉端黑体外，自己带字体文件。
 
 ## 12. canvas 和 script
 

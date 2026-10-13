@@ -57,6 +57,10 @@ export default canvas.create(
 
 底色写在根节点的 `background` 上。嵌套 `layer` 不写 `background`，色块用 `<rect fill>`。
 
+## 选字体
+
+中文画面按气质从 `docs/RESOURCES.md` 的推荐字体里挑，粗黑体在前。没写字体时用 `ChillDuanSans`。其余推荐名要自己带 `<font family src>`。不要编造字体名，也不要编造字体文件地址。
+
 ## 规范在哪
 
 不要在对话里复述规范。写法、问题码和效果以安装包里的文件为准：
