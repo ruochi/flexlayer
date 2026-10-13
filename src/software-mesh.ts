@@ -4,7 +4,7 @@ import { studioAt } from './env-map.js'
 import { solidPaint } from './gradient.js'
 import { parseGlb } from './glb.js'
 import { heldModelPrims } from './three.js'
-import { bevelFewFaces } from './mesh-bevel.js'
+import { bevelFewFaces, bevelRadius } from './mesh-bevel.js'
 import { originOffset } from './matrix.js'
 import type { MeshClip } from './mesh-cache.js'
 import { applyDepthOfField } from './dof.js'
@@ -1358,12 +1358,30 @@ function geometryOfFresh(node: MeshLayoutNode): MeshGeometry | null {
   return geo
 }
 
+/** 沿厚度收棱。盒子和挤出用 depth，圆柱用轴向长度，其余用 z 向跨度。 */
+function bevelDepth(node: MeshLayoutNode, positions: Float32Array): number {
+  const mesh = node.mesh
+  if (mesh.type === 'box' || mesh.type === 'extrude') return mesh.depth
+  if (mesh.type === 'cylinder') return mesh.height
+  if (mesh.type === 'sphere') return mesh.r * 2
+  if (mesh.type === 'torus') return mesh.tube * 2
+  if (mesh.type === 'tube') return mesh.r * 2
+  let min = Infinity
+  let max = -Infinity
+  for (let i = 2; i < positions.length; i += 3) {
+    const z = positions[i]!
+    if (z < min) min = z
+    if (z > max) max = z
+  }
+  return Number.isFinite(min) ? max - min : 0
+}
+
 /** 窄圆角只进光栅。投影仍用原来的折点，避免圆角把正面的角标成挡住。 */
 function paintGeometry(node: MeshLayoutNode, positions: Float32Array, normals: Float32Array, indices: Uint32Array) {
   if (node.stroke !== 'none') return { positions, normals, indices }
   const mesh = node.mesh
   if ((mesh.type === 'box' || mesh.type === 'cylinder') && mesh.rx > 0) return { positions, normals, indices }
-  return bevelFewFaces(positions, indices) ?? { positions, normals, indices }
+  return bevelFewFaces(positions, indices, bevelRadius(bevelDepth(node, positions))) ?? { positions, normals, indices }
 }
 
 function geometryOf(node: MeshLayoutNode): MeshGeometry | null {

@@ -1,10 +1,14 @@
 # Changelog
 
-## 0.6.4
+## 0.6.5
 
 `<model>` 在 tsx 里可以写 `object`，传入 three.js 的 Object3D。几何体进 Flex Layer 自己的场景，和文字、线稿、标注共用深度。`unit` 保留原始坐标，1 个模型单位等于这么多像素。不写 `material` 时，图元的金属度和粗糙度映射到 `metal` / `plastic`。
 
 `three` 是可选的 peer dependency。适配在 `flexlayer/three`，核心不 import 它。裸包名按 ESM 从源文件所在目录往上解析，和类型检查同一条路径。
+
+## 0.6.4
+
+挤出的棱按厚度的 1/40 收一条小圆角。盒子和路径用 `depth`，圆柱用轴向长度。五星这种凹轮廓，以及带洞的字形，也收。写了 `rx` 或描了 `stroke` 的保持原来的棱。
 
 ## 0.6.3
 

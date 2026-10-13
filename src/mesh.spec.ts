@@ -5,7 +5,7 @@ import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { describe, expect, it } from 'vitest'
 import { parseGlb, solidBoxGlb } from './glb.js'
 import { BOX_EDGES, roundedBoxGeometry } from './mesh-round.js'
-import { BEVEL_RADIUS, bevelFewFaces } from './mesh-bevel.js'
+import { bevelFewFaces, bevelRadius } from './mesh-bevel.js'
 import { checkLayer, renderLayer } from './render.js'
 import { tessellateSvgPath } from './path.js'
 
@@ -796,7 +796,7 @@ describe('网格绘制', () => {
     }
     const built = bevelFewFaces(Float32Array.from(positions), Uint32Array.from(indices))
     expect(built).toBeTruthy()
-    const r = BEVEL_RADIUS
+    const r = bevelRadius(hd * 2)
     const center = { x: hw - r, y: hh - r, z: hd - r }
     let onSphere = 0
     for (let i = 0; i < built!.positions.length; i += 3) {
@@ -913,6 +913,7 @@ describe('网格绘制', () => {
     cap(-half, false)
     const built = bevelFewFaces(Float32Array.from(positions), Uint32Array.from(indices))
     expect(built).toBeTruthy()
+    const fillet = bevelRadius(radius * 2)
     let capInset = 0
     let sideInset = 0
     for (let i = 0; i < built!.positions.length; i += 3) {
@@ -922,11 +923,102 @@ describe('网格绘制', () => {
       const radial = Math.hypot(x, z)
       expect(radial).toBeLessThanOrEqual(radius + 0.2)
       expect(Math.abs(y)).toBeLessThanOrEqual(half + 0.2)
-      if (Math.abs(y) > half - 0.5 && radial < radius - BEVEL_RADIUS * 0.6) capInset++
-      if (radial > radius - 0.5 && Math.abs(y) < half - BEVEL_RADIUS * 0.6) sideInset++
+      if (Math.abs(y) > half - 0.5 && radial < radius - fillet * 0.6) capInset++
+      if (radial > radius - 0.5 && Math.abs(y) < half - fillet * 0.6) sideInset++
     }
     expect(capInset).toBeGreaterThan(8)
     expect(sideInset).toBeGreaterThan(8)
+  })
+
+  it('五星和细挤出按厚度的 1/40 收棱，尖角往里让', () => {
+    const prism = (depth: number) => {
+      const outer = 50
+      const inner = 20
+      const points: Array<[number, number]> = []
+      for (let i = 0; i < 10; i++) {
+        const ang = -Math.PI / 2 + (i * Math.PI) / 5
+        const r = i % 2 === 0 ? outer : inner
+        points.push([r * Math.cos(ang), r * Math.sin(ang)])
+      }
+      const positions: number[] = []
+      const indices: number[] = []
+      const half = depth / 2
+      const front: number[] = []
+      const back: number[] = []
+      for (const [x, y] of points) {
+        front.push(positions.length / 3)
+        positions.push(x, y, half)
+      }
+      for (const [x, y] of points) {
+        back.push(positions.length / 3)
+        positions.push(x, y, -half)
+      }
+      const fan = (ring: number[], z: number, outward: number) => {
+        const c = positions.length / 3
+        positions.push(0, 0, z)
+        for (let i = 0; i < ring.length; i++) {
+          const a = ring[i]!
+          const b = ring[(i + 1) % ring.length]!
+          if (outward > 0) indices.push(c, a, b)
+          else indices.push(c, b, a)
+        }
+      }
+      fan(front, half, 1)
+      fan(back, -half, -1)
+      for (let i = 0; i < points.length; i++) {
+        const a = front[i]!
+        const b = front[(i + 1) % points.length]!
+        const c = back[i]!
+        const d = back[(i + 1) % points.length]!
+        indices.push(a, c, b, c, d, b)
+      }
+      return bevelFewFaces(Float32Array.from(positions), Uint32Array.from(indices), bevelRadius(depth))
+    }
+
+    expect(bevelRadius(40)).toBe(1)
+    expect(bevelRadius(16)).toBe(0.4)
+    const built = prism(40)
+    expect(built).toBeTruthy()
+    let minY = Infinity
+    for (let i = 0; i < built!.positions.length; i += 3) {
+      if (built!.positions[i + 2]! > 18) minY = Math.min(minY, built!.positions[i + 1]!)
+    }
+    expect(minY).toBeGreaterThan(-50 + 0.4)
+    expect(minY).toBeLessThan(-50 + 6)
+    expect(prism(16)).toBeTruthy()
+  })
+
+  it('渲染时五星和带洞的挤出按 depth/40 收掉尖角', async () => {
+    const star = async (depth: number) => {
+      const pts: string[] = []
+      for (let i = 0; i < 10; i++) {
+        const ang = -Math.PI / 2 + (i * Math.PI) / 5
+        const r = i % 2 === 0 ? 70 : 28
+        pts.push(`${100 + r * Math.cos(ang)},${100 + r * Math.sin(ang)}`)
+      }
+      const { png } = await renderLayer(
+        `<layer width="200" height="200" background="#000000" camera="parallel"><polygon points="${pts.join(' ')}" depth="${depth}" fill="#e8b04a" /></layer>`,
+      )
+      return imageOf(png)
+    }
+    const thinStar = await star(8)
+    const thickStar = await star(80)
+    expect(thinStar.at(100, 32)[0]).toBeGreaterThan(180)
+    expect(thickStar.at(100, 32)[0]).toBeLessThan(40)
+    expect(thickStar.at(100, 48)[0]).toBeGreaterThan(180)
+
+    const frame = async (depth: number) => {
+      const { png } = await renderLayer(
+        `<layer width="200" height="200" background="#000000" camera="parallel"><path d="M20 20 H180 V180 H20 Z M60 60 V140 H140 V60 Z" depth="${depth}" fill="#e8b04a" /></layer>`,
+      )
+      return imageOf(png)
+    }
+    const thinFrame = await frame(8)
+    const thickFrame = await frame(120)
+    expect(thinFrame.at(20, 20)[0]).toBeGreaterThan(180)
+    expect(thickFrame.at(20, 20)[0]).toBeLessThan(40)
+    expect(thickFrame.at(40, 40)[0]).toBeGreaterThan(180)
+    expect(thickFrame.at(80, 80)[0]).toBeLessThan(40)
   })
 
   it('box 圆角：z 向棱挖掉正面角，沿宽的棱和正面四棱仍是直角轮廓', async () => {
