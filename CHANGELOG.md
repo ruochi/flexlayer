@@ -1,10 +1,14 @@
 # Changelog
 
-## 0.6.7
+## 0.6.8
 
 three.js 的 `Line`、`LineSegments`、`LineLoop` 画进 `<model object>` 的同一深度缓冲。材质 `wireframe: true` 只画边，不再填成实心，也不再整段跳过。线用材质颜色，线宽是屏幕像素，不写是 1。`Points` 仍不画。
 
 `.layer` 的 `<script>` 子进程在 canvas 包目录之外，再放行目录里的文件。只给目录、不给通配时，有的 Node 会报 `Access to this API has been restricted`，画布是空的。
+
+## 0.6.7
+
+说明收成四块：`layer`、支持的 HTML 和 SVG、实体和镜头、蒙版和程序。通用的 CSS、SVG 和公式间距不再在正文里展开。问题码、蒙版、`glyph` 和 `canvas.create` 仍在 SPEC 里。写法没有删。
 
 ## 0.6.6
 

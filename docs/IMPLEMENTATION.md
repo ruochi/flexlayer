@@ -20,7 +20,7 @@
 
 ## 效果
 
-归属：layer / 图形 / 线条写属性；文字 / flex HTML 写 `style`。`overlay`、`grade`、`grade-mask` 只允许写在 `layer` 上。`<mask>` 是标签，不是属性。绘制顺序见 SPEC 第 9 章开头。
+归属：layer / 图形 / 线条写属性；文字 / flex HTML 写 `style`。`overlay`、`grade`、`grade-mask` 只允许写在 `layer` 上。`<mask>` 是标签，不是属性。绘制顺序见 SPEC「效果」。
 
 ### 墨迹原则
 
@@ -104,7 +104,7 @@
 
 `pixel` 滤镜的 `apply` 拿到非预乘 RGBA，按满强度改像素，用 `frame` 知道盒子在缓冲里的位置。有遮罩时，引擎在 `apply` 之后用遮罩 alpha 和调用前的像素混合。`includeBackdrop: true` 时，写在根 layer 上会连画布底色一起处理。`canvas` 滤镜只返回一段 CSS filter 字符串。
 
-规范写法见 [SPEC.md 第 9.3 节](../SPEC.md)。
+规范写法见 [SPEC.md](../SPEC.md)「效果」。
 
 ### 实现触点
 
