@@ -1,9 +1,9 @@
-# Flex Layer 速查
+# Flex Layer cheat sheet
 
-规则在 [SPEC.md](../SPEC.md)。这里只放能直接改的例子。
+The rules are in [SPEC.md](../SPEC.md). This page is only examples you can edit.
 
 <!-- attrs:effects:begin -->
-效果：`shadow` `0 8 16 #00000055`（默认 颜色 `#00000066`）、`glow` `56 #f3ead4`（默认 颜色取本体）、`inner-shadow` `0 8 16 #00000055`（默认 同 shadow）、`inner-glow` `28 #7ec8ff`（默认 同 glow）、`blur` `6`、`backdrop-blur` `16`、`glass` `clear`、`noise` `0.08`、`filter` `saturate(1.1)`、`blend` `multiply`（默认 `source-over`）、`overlay` `#00000066`（默认 透明度 1，`source-over`）、`grade` `lomo 0.8, fade 0.1`（默认 强度 1）、`grade-mask` `radial-gradient(#fff0 30%, #fff)`。作用于整棵子树的 `overlay`、`grade`、`grade-mask` 只写在 `layer` 上。
+Effects: `shadow` `0 8 16 #00000055` (default color `#00000066`), `glow` `56 #f3ead4` (default color from the mark), `inner-shadow` `0 8 16 #00000055` (default same as shadow), `inner-glow` `28 #7ec8ff` (default same as glow), `blur` `6`, `backdrop-blur` `16`, `glass` `clear`, `noise` `0.08`, `filter` `saturate(1.1)`, `blend` `multiply` (default `source-over`), `overlay` `#00000066` (default opacity 1, `source-over`), `grade` `lomo 0.8, fade 0.1` (default amount 1), `grade-mask` `radial-gradient(#fff0 30%, #fff)`. `overlay`, `grade`, and `grade-mask` apply to the whole subtree and belong only on `layer`.
 <!-- attrs:effects:end -->
 
 ```html
@@ -35,9 +35,9 @@
 <layer width="800" height="200" background="#0e1219" color="#f4f1ea">
   <layer x="40" y="80">
     <div style="display:flex; width:720px; gap:16px; align-items:center">
-      <p style="font-size:40px">左</p>
+      <p style="font-size:40px">Left</p>
       <div style="flex:1; height:4px; background:#f5c16c"></div>
-      <p style="font-size:40px">右</p>
+      <p style="font-size:40px">Right</p>
     </div>
   </layer>
 </layer>
@@ -52,7 +52,7 @@
 </layer>
 ```
 
-tsx 里 `<model object={mesh} unit={1} />` 把网格放进同一层。Lambert 和 Toon 用 `matte`，Phong 按 `shininess` 收成粗糙度后用 `plastic`，透射不小于 0.5 用 `glass`，其余按金属度分 `metal` / `plastic`。内存里的 `map` 和顶点色给底色染色，`emissive` 加在明暗之后。`ShaderMaterial` 只取 uniforms 里的颜色。`Line` 和 `wireframe` 画进同一深度缓冲。
+In tsx, `<model object={mesh} unit={1} />` puts a mesh in the same layer. Lambert and Toon become `matte`. Phong becomes `plastic` after `shininess` is turned into roughness. Transmission of at least 0.5 becomes `glass`. Anything else is `metal` or `plastic` by metalness. An in-memory `map` and vertex colors tint the base color. `emissive` is added after shading. `ShaderMaterial` contributes only a color from its uniforms. `Line` and `wireframe` draw into the same depth buffer.
 
 ```html
 <layer width="320" height="180">
@@ -66,18 +66,18 @@ tsx 里 `<model object={mesh} unit={1} />` 把网格放进同一层。Lambert �
 ```tsx
 const title = canvas.create(
   <layer x={48} y={48}>
-    <h1 style="font-size:72px">标题</h1>
+    <h1 style="font-size:72px">Title</h1>
   </layer>,
 )
 ```
 
-`data={{ values: [1, 2] }}`。故意出现的问题写 `expect="overflow-canvas: 出血图"`。
+`data={{ values: [1, 2] }}`. An issue you expect is `expect="overflow-canvas: full bleed"`.
 
 ```html
 <p style="font-size:64px">
-  <span style="translate: 0 -8; rotate: 8">逐</span><span style="opacity: 0.35">字</span>
+  <span style="translate: 0 -8; rotate: 8">A</span><span style="opacity: 0.35">B</span>
 </p>
-<p split="chars" style="font-size:64px; rotate: 6">波浪</p>
+<p split="chars" style="font-size:64px; rotate: 6">Wave</p>
 ```
 
 ```bash
