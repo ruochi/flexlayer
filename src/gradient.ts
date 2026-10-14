@@ -1,4 +1,4 @@
-import type { CanvasRenderingContext2D } from '@napi-rs/canvas'
+import { createCanvas, type CanvasRenderingContext2D } from '@napi-rs/canvas'
 import { isGradientPaint, parseFieldGradient, rgbaToCss, sampleGradient } from './gradientField.js'
 
 export { isGradientPaint, sampleGradient }
@@ -18,7 +18,20 @@ export type Gradient = {
   stops: GradientStop[]
 }
 
-const COLOR = /^(#[0-9a-fA-F]{3,8}|rgba?\([^)]*\)|[a-zA-Z]+)$/
+let colorProbe: CanvasRenderingContext2D | undefined
+
+/** 画布能当成色标的颜色。不认识的名字、坏掉的 hex、残缺的 rgb() 都不是。 */
+function isCanvasColor(color: string): boolean {
+  const text = color.trim()
+  if (!text || text.toLowerCase() === 'currentcolor') return false
+  colorProbe ??= createCanvas(1, 1).getContext('2d')
+  try {
+    colorProbe.createLinearGradient(0, 0, 1, 0).addColorStop(0, text)
+    return true
+  } catch {
+    return false
+  }
+}
 
 function splitArgs(value: string): string[] {
   const args: string[] = []
@@ -72,7 +85,7 @@ function parseStop(arg: string): { color: string; offset?: number } | undefined 
   const parts = arg.trim().split(/\s+/)
   if (parts.length === 0 || parts.length > 2) return undefined
   const color = parts[0]!
-  if (!COLOR.test(color)) return undefined
+  if (!isCanvasColor(color)) return undefined
   if (parts.length === 1) return { color }
   const offset = parseOffset(parts[1])
   if (offset == null) return undefined
@@ -270,7 +283,7 @@ export function canvasPaint(
     const cy = y + gradient.at.y * height
     const radius = radialRadius(x, y, width, height, cx, cy, gradient.extent ?? 'farthest-corner')
     const paint = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(radius, 1))
-    addStops(paint, gradient.stops)
+    if (!addStops(paint, gradient.stops)) return '#000000'
     return paint
   }
   const radians = (gradient.angle * Math.PI) / 180
@@ -280,7 +293,7 @@ export function canvasPaint(
   const cx = x + width / 2
   const cy = y + height / 2
   const paint = ctx.createLinearGradient(cx - (dx * length) / 2, cy - (dy * length) / 2, cx + (dx * length) / 2, cy + (dy * length) / 2)
-  addStops(paint, gradient.stops)
+  if (!addStops(paint, gradient.stops)) return '#000000'
   return paint
 }
 
@@ -298,12 +311,15 @@ function radialRadius(x: number, y: number, width: number, height: number, cx: n
   return Math.max(...corners)
 }
 
-function addStops(paint: ReturnType<CanvasRenderingContext2D['createLinearGradient']>, stops: GradientStop[]) {
+function addStops(paint: ReturnType<CanvasRenderingContext2D['createLinearGradient']>, stops: GradientStop[]): boolean {
+  let added = 0
   for (const stop of stops) {
     try {
       paint.addColorStop(Math.min(1, Math.max(0, stop.offset)), stop.color)
+      added++
     } catch {
-      // 色标不是颜色时跳过这一档。不能让绘制抛出去，整张图就没有 PNG 也没有报告。
+      // 解析时已经拒绝画布不认识的颜色。这里再挡住，避免一档都没加上时绘制抛出。
     }
   }
+  return added > 0
 }

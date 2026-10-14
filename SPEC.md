@@ -149,7 +149,7 @@ Positions are 0 to 1. When omitted, the ends are 0 and 1 and the middle is even.
 | `radial cx cy r0 r1` | From the inner radius to the outer radius | Same as above |
 | `conic cx cy [angle]` | Clockwise from straight up, plus the start angle | From the center to the farthest corner of the box |
 
-A syntax failure reports `invalid-attr` and falls back to that attribute's default solid color.
+A syntax failure reports `invalid-attr` and falls back to that attribute's default solid color. A color stop the canvas cannot parse is a syntax failure. It is not dropped, and the picture is still written.
 
 When `stroke` is a color, shapes and lines stroke on center. Written as `6 #000`, `6 #000 outside`, `6 #fff inside`, `8 #fff center`, or `6 #ffffff, 14 #c8321e`, it strokes by distance from the ink. The default side is `outside`. A later layer's width is the total distance. Text, images, `layer`, and flex, when given a color, stroke outside the ink. When the width is omitted, it is 4. `layer` and flex trace one outline of the merged ink of the whole subtree. Background and border count. When a text box or an image has a plate, the stroke goes around the plate. An `inside` or `center` inner width of about 8% of the font size reports `stroke-fill`. `outline` and `-webkit-text-stroke` report `non-canonical`. Rewrite them as `stroke`.
 

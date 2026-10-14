@@ -214,6 +214,48 @@ describe('gradient()', () => {
     const shape = doc.root.children[0]
     expect(shape && shape.kind === 'shape' && shape.fill).toBe('#000000')
   })
+
+  it('画布不认识的色标让整段渐变无效', () => {
+    expect(parseGradient('linear-gradient(#ff0000, notacolor)')).toBeUndefined()
+    expect(parseGradient('linear-gradient(#12345, #fff)')).toBeUndefined()
+    expect(parseGradient('linear-gradient(notacolor, alsobad)')).toBeUndefined()
+    expect(parseGradient('radial-gradient(circle, #fff, nope)')).toBeUndefined()
+    expect(parseGradient('linear-gradient(red, blue)')).toMatchObject({
+      stops: [
+        { color: 'red', offset: 0 },
+        { color: 'blue', offset: 1 },
+      ],
+    })
+  })
+
+  it('写错的色标会报告，绘制不会中途退出', async () => {
+    const bad = await render(
+      `<layer width="40" height="20" background="#00ff00"><rect x="0" y="0" width="40" height="20" fill="linear-gradient(notacolor, alsobad)" /></layer>`,
+    )
+    expect(bad.doc.issues.some((issue) => issue.code === 'invalid-attr' && issue.message.includes('fill'))).toBe(true)
+    const shape = bad.doc.root.children[0]
+    expect(shape && shape.kind === 'shape' && shape.fill).toBe('#000000')
+    const pix = await pixelAt(bad.png, 20, 10)
+    expect(pix[0]).toBeLessThan(10)
+    expect(pix[1]).toBeLessThan(10)
+    expect(pix[2]).toBeLessThan(10)
+
+    const mixed = await render(
+      `<layer width="40" height="20" background="#00ff00"><rect x="0" y="0" width="40" height="20" fill="linear-gradient(#ff0000, notacolor)" /></layer>`,
+    )
+    expect(mixed.doc.issues.some((issue) => issue.code === 'invalid-attr' && issue.message.includes('notacolor'))).toBe(true)
+    const mixedPix = await pixelAt(mixed.png, 4, 10)
+    expect(mixedPix[0]).toBeLessThan(10)
+
+    const named = await render(
+      `<layer width="40" height="20" background="#000000"><rect x="0" y="0" width="40" height="20" fill="linear-gradient(to right, red, blue)" /></layer>`,
+    )
+    expect(named.doc.issues.filter((issue) => issue.code === 'invalid-attr')).toEqual([])
+    const left = await pixelAt(named.png, 2, 10)
+    const right = await pixelAt(named.png, 38, 10)
+    expect(left[0]).toBeGreaterThan(200)
+    expect(right[2]).toBeGreaterThan(200)
+  })
 })
 
 describe('shadow and glow', () => {
