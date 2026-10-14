@@ -16,7 +16,7 @@
   
 
   
-  <rect width="260" height="160" rx="20" fill="#3ecfc4" shadow="0 12 20 #00000088" x="90" y="200" />
+  <rect width="260" height="160" rx="20" fill="#3ecfc4" box-shadow="0 12px 20px #00000088" x="90" y="200" />
   
   
   <circle cx="540" cy="280" r="64" fill="#f4efe4" glow="36 #f4efe4" />

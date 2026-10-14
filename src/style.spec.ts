@@ -5,8 +5,10 @@ import {
   colorFilterToCss,
   parseOrigin,
   readOrigin,
+  parseBackdropFilter,
   parseBlend,
   parseBlurRadius,
+  parseBoxShadow,
   parseBorder,
   parseColorFilter,
   parseEdges,
@@ -101,6 +103,26 @@ describe('style', () => {
     expect(parseColorFilter('blur(4px)')).toBeUndefined()
     expect(colorFilterToCss([{ name: 'hue-rotate', value: 15 }])).toBe('hue-rotate(15deg)')
     expect(parseShadow('0 8 #00000055')).toEqual({ x: 0, y: 8, blur: 0, spread: 0, color: '#00000055' })
+    expect(parseBoxShadow('0 8px 16px #00000055')).toEqual({
+      outer: [{ x: 0, y: 8, blur: 16, spread: 0, color: '#00000055' }],
+      inset: [],
+    })
+    expect(parseBoxShadow('inset 0 4px 8px rgba(0, 0, 0, 0.4), 0 12px 24px #000')).toEqual({
+      outer: [{ x: 0, y: 12, blur: 24, spread: 0, color: '#000' }],
+      inset: [{ x: 0, y: 4, blur: 8, spread: 0, color: 'rgba(0, 0, 0, 0.4)' }],
+    })
+    expect(parseBoxShadow('#000 0 8px')).toEqual({
+      outer: [{ x: 0, y: 8, blur: 0, spread: 0, color: '#000' }],
+      inset: [],
+    })
+    expect(parseBoxShadow('4px')).toBeUndefined()
+    expect(parseBackdropFilter('blur(16px) brightness(1.1) hue-rotate(15deg)')).toEqual([
+      { name: 'blur', value: 16 },
+      { name: 'brightness', value: 1.1 },
+      { name: 'hue-rotate', value: 15 },
+    ])
+    expect(parseBackdropFilter('drop-shadow(0 8px 16px #000)')).toBeUndefined()
+    expect(parseBackdropFilter('none')).toBeUndefined()
     expect(parseGlow('48px #f6f1e7')).toEqual({ blur: 48, spread: 0, color: '#f6f1e7' })
     expect(parseInkStroke('6 #000 outside')).toEqual([{ width: 6, color: '#000', position: 'outside' }])
     expect(parseInkStroke('6px #fff, 14 #f00 inside')).toEqual([

@@ -98,7 +98,7 @@ function modelIdentity(mesh: { type: string; file?: string; revision?: string })
 /** 子树里有画不出来的、或会跟着时间走的东西时返回 null。 */
 function hashNode(node: LayoutNode): string | null {
   if (node.kind === 'canvas') return null
-  if (node.glass || node.backdropBlur != null) return null
+  if (node.glass || node.backdropBlur != null || (node.backdropFilter != null && node.backdropFilter.length > 0)) return null
   if (node.blend && node.blend !== 'source-over') return null
   if (node.grade) return null
   if (node.filters?.some((filter) => filter.includeBackdrop || filter.name === 'grade')) return null
@@ -122,8 +122,10 @@ function hashNode(node: LayoutNode): string | null {
     padding: node.padding,
     text: node.text,
     shadow: node.shadow ?? null,
+    shadowList: node.shadowList ?? null,
     glow: node.glow ?? null,
     innerShadow: node.innerShadow ?? null,
+    innerShadowList: node.innerShadowList ?? null,
     innerGlow: node.innerGlow ?? null,
     inkStroke: node.inkStroke ?? null,
     blur: node.blur ?? 0,

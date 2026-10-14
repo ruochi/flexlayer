@@ -1,4 +1,5 @@
 import { isGradient } from './gradient.js'
+import { shadowLayers } from './style.js'
 import type { LayoutNode } from './types.js'
 
 /**
@@ -151,11 +152,12 @@ export function visiblePlaneWindow(
 }
 
 function outwardPad(node: LayoutNode): number {
-  const shadow = node.shadow
-    ? node.shadow.blur * 2 + node.shadow.spread + Math.max(Math.abs(node.shadow.x), Math.abs(node.shadow.y))
-    : 0
+  let shadow = 0
+  for (const item of shadowLayers(node.shadow, node.shadowList)) {
+    shadow = Math.max(shadow, item.blur * 2 + item.spread + Math.max(Math.abs(item.x), Math.abs(item.y)))
+  }
   let glass = 0
-  if (!node.shadow && node.glass) {
+  if (shadow === 0 && node.glass) {
     const depth = node.glass.variant === 'thick' ? 18 : node.glass.variant === 'clear' ? 12 : 14
     glass = depth * 2 + Math.abs(depth * 0.35)
   }
@@ -181,6 +183,7 @@ function effectFree(node: LayoutNode): boolean {
     node.innerGlow == null &&
     (node.blur == null || node.blur === 0) &&
     (node.backdropBlur == null || node.backdropBlur === 0) &&
+    (node.backdropFilter == null || node.backdropFilter.length === 0) &&
     node.noise == null &&
     node.overlay == null &&
     node.glass == null &&

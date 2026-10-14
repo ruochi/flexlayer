@@ -3,8 +3,10 @@
 The rules are in [SPEC.md](../SPEC.md). This page is only examples you can edit.
 
 <!-- attrs:effects:begin -->
-Effects: `shadow` `0 8 16 #00000055` (default color `#00000066`), `glow` `56 #f3ead4` (default color from the mark), `inner-shadow` `0 8 16 #00000055` (default same as shadow), `inner-glow` `28 #7ec8ff` (default same as glow), `blur` `6`, `backdrop-blur` `16`, `glass` `clear`, `noise` `0.08`, `filter` `saturate(1.1)`, `blend` `multiply` (default `source-over`), `overlay` `#00000066` (default opacity 1, `source-over`), `grade` `lomo 0.8, fade 0.1` (default amount 1), `grade-mask` `radial-gradient(#fff0 30%, #fff)`. `overlay`, `grade`, and `grade-mask` apply to the whole subtree and belong only on `layer`.
+Effects: `shadow` `0 8 16 #00000055` (default color `#00000066`), `box-shadow` `0 8px 16px #00000055` (default color `#00000066`), `glow` `56 #f3ead4` (default color from the mark), `inner-shadow` `0 8 16 #00000055` (default same as shadow), `inner-glow` `28 #7ec8ff` (default same as glow), `blur` `6`, `backdrop-blur` `16`, `backdrop-filter` `blur(16px)`, `glass` `clear`, `noise` `0.08`, `filter` `saturate(1.1)`, `blend` `multiply` (default `source-over`), `overlay` `#00000066` (default opacity 1, `source-over`), `grade` `lomo 0.8, fade 0.1` (default amount 1), `grade-mask` `radial-gradient(#fff0 30%, #fff)`. `overlay`, `grade`, and `grade-mask` apply to the whole subtree and belong only on `layer`.
 <!-- attrs:effects:end -->
+
+`box-shadow` paints as `shadow`. `inset` is `inner-shadow`. `backdrop-filter: blur(16px)` paints as `backdrop-blur`. Its other functions use the same canvas filter string as `filter`.
 
 ```html
 <layer width="800" height="400" background="#0e1219" color="#f4f1ea">

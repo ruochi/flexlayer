@@ -1,4 +1,6 @@
-import type { Origin, OriginAxis } from './types.js'
+import type { BackdropFilterStep, Origin, OriginAxis } from './types.js'
+
+export type { BackdropFilterStep }
 
 export type StyleMap = Record<string, string>
 
@@ -334,6 +336,58 @@ export function parseShadow(value: string | undefined): ShadowValue | undefined 
   return { x, y, blur, spread, color: parts.color }
 }
 
+export type BoxShadowList = { outer: ShadowValue[]; inset: ShadowValue[] }
+
+/**
+ * CSS `box-shadow`。`inset` 和颜色可以写在长度前面或后面。多层用逗号分开。
+ * `none` 与无法解析都返回 undefined。
+ */
+export function parseBoxShadow(value: string | undefined): BoxShadowList | undefined {
+  if (!value || value.trim().toLowerCase() === 'none') return undefined
+  const layers = splitTopLevelCommas(value)
+  if (layers.length === 0) return undefined
+  const outer: ShadowValue[] = []
+  const inset: ShadowValue[] = []
+  for (const layer of layers) {
+    const parsed = parseBoxShadowLayer(layer)
+    if (!parsed) return undefined
+    ;(parsed.inset ? inset : outer).push(parsed.shadow)
+  }
+  if (outer.length === 0 && inset.length === 0) return undefined
+  return { outer, inset }
+}
+
+function parseBoxShadowLayer(layer: string): { inset: boolean; shadow: ShadowValue } | undefined {
+  const tokens = splitCssTokens(layer)
+  if (tokens.length === 0) return undefined
+  let inset = false
+  let color: string | undefined
+  const lengths: number[] = []
+  for (const token of tokens) {
+    if (token.toLowerCase() === 'inset') {
+      if (inset) return undefined
+      inset = true
+      continue
+    }
+    const px = parsePx(token)
+    if (px !== undefined) {
+      lengths.push(px)
+      continue
+    }
+    if (color !== undefined) return undefined
+    color = token
+  }
+  if (lengths.length < 2 || lengths.length > 4) return undefined
+  const [x, y, blur = 0, spread = 0] = lengths as [number, number, number?, number?]
+  if (blur < 0) return undefined
+  return { inset, shadow: { x, y, blur, spread, color } }
+}
+
+/** 有多层时用完整列表，否则用单独的一层。 */
+export function shadowLayers<T>(single: T | undefined, many: T[] | undefined): T[] {
+  return many && many.length > 0 ? many : single ? [single] : []
+}
+
 /** `blur [spread] [color]`。无法解析返回 undefined。 */
 export function parseGlow(value: string | undefined): GlowValue | undefined {
   if (!value || value.trim() === 'none') return undefined
@@ -547,6 +601,43 @@ export function colorFilterToCss(fns: ColorFilterFn[]): string {
   return fns
     .map((fn) => (fn.name === 'hue-rotate' ? `hue-rotate(${fn.value}deg)` : `${fn.name}(${fn.value})`))
     .join(' ')
+}
+
+/**
+ * CSS `backdrop-filter`。`blur()` 是背景模糊，其余函数和 `filter` 同一套。
+ * 不收 `drop-shadow()`。`none` 与无法解析都返回 undefined。
+ */
+export function parseBackdropFilter(value: string | undefined): BackdropFilterStep[] | undefined {
+  if (!value || value.trim().toLowerCase() === 'none') return undefined
+  const re = /([a-z-]+)\(\s*([^)]*?)\s*\)/gi
+  const out: BackdropFilterStep[] = []
+  let consumed = 0
+  let match: RegExpExecArray | null
+  while ((match = re.exec(value))) {
+    if (value.slice(consumed, match.index).trim() !== '') return undefined
+    const name = match[1]!.toLowerCase()
+    if (name === 'blur') {
+      const radius = parsePx(match[2])
+      if (radius === undefined || radius < 0) return undefined
+      out.push({ name: 'blur', value: radius })
+    } else if (COLOR_FILTER_NAMES.has(name)) {
+      const arg = parseFilterArg(match[2]!, name === 'hue-rotate' ? 'angle' : 'ratio')
+      if (arg === undefined) return undefined
+      out.push({ name: name as ColorFilterFn['name'], value: arg } as ColorFilterFn)
+    } else return undefined
+    consumed = match.index + match[0].length
+  }
+  if (out.length === 0) return undefined
+  if (value.slice(consumed).trim() !== '') return undefined
+  return out
+}
+
+/** 几段 `blur()` 合成一次高斯模糊的半径。 */
+export function backdropBlurRadius(steps: BackdropFilterStep[]): number {
+  const radii = steps.flatMap((step) => (step.name === 'blur' ? [step.value] : []))
+  if (radii.length === 0) return 0
+  if (radii.length === 1) return radii[0]!
+  return Math.hypot(...radii)
 }
 
 export function parseBlend(value: string | undefined): BlendMode | undefined {
@@ -769,6 +860,8 @@ const QUIET_STYLE = new Set([
   'ink-stroke',
   'blur',
   'backdrop-blur',
+  'backdrop-filter',
+  'box-shadow',
   'noise',
   'blend',
   'glass',

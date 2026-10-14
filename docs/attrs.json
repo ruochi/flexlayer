@@ -770,6 +770,17 @@
     "misplacedHint": null
   },
   {
+    "name": "box-shadow",
+    "group": "effect",
+    "syntax": "[inset] x y [blur] [spread] [color], …",
+    "default": "color `#00000066`",
+    "example": "0 8px 16px #00000055",
+    "layerOnly": false,
+    "htmlUsesStyle": true,
+    "note": "CSS spelling of shadow. inset is inner-shadow. Several layers paint, the first on top. Lengths are px. When shadow is also set, shadow wins",
+    "misplacedHint": null
+  },
+  {
     "name": "glow",
     "group": "effect",
     "syntax": "blur [spread] [color]",
@@ -822,6 +833,17 @@
     "layerOnly": false,
     "htmlUsesStyle": true,
     "note": null,
+    "misplacedHint": null
+  },
+  {
+    "name": "backdrop-filter",
+    "group": "effect",
+    "syntax": "blur() plus the same functions as filter",
+    "default": null,
+    "example": "blur(16px)",
+    "layerOnly": false,
+    "htmlUsesStyle": true,
+    "note": "blur() is backdrop-blur. Other functions use the same canvas filter string as filter, sampled from the backdrop. drop-shadow() is not accepted. When backdrop-blur is also set, that radius wins",
     "misplacedHint": null
   },
   {

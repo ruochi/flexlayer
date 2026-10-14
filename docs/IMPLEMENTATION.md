@@ -91,11 +91,13 @@ The mask is painted with `paintOf` to an offscreen buffer of the same size, then
 
 ### Tradeoffs
 
-- `backdrop-blur` / `glass` sample the main canvas and clip back by ink alpha when pasted.
-- When `glass` and `backdrop-blur` are both set, `glass` wins (`info`).
+- `backdrop-blur` / `backdrop-filter` / `glass` sample the main canvas and clip back by ink alpha when pasted.
+- `backdrop-filter` reuses the canvas filter string from `filter`. `blur()` is stored as `backdrop-blur`. Color functions call the registered `filter` `canvasFilter`.
+- `box-shadow` is parsed into `shadow` and `inner-shadow` (`inset`). It is not a canvas `drop-shadow()`, so spread and inset stay on the ink shadow path.
+- When `glass` and `backdrop-blur` or `backdrop-filter` are both set, `glass` wins (`info`).
 - `filter` does not include `blur()` / `drop-shadow()`, so it does not double up with `blur` / `shadow`.
 - When `blur` and `filter` are both set, blur follows `blur`, and an `info` is reported.
-- Do not take: `outer-glow`, `drop-shadow`, `backdrop-filter`, `texture`, `outline`.
+- Do not register: `outer-glow`, `drop-shadow`, `backdrop-filter`, `texture`, `outline`.
 
 ### Open interface
 
