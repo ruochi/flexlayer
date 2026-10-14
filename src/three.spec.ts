@@ -194,7 +194,7 @@ describe('fromThree', () => {
     expect(shader[0]!.color[0]).toBeGreaterThan(shader[0]!.color[2]!)
   })
 
-  it('LineSegments 收成线段，wireframe 只留边，Points 跳过', () => {
+  it('LineSegments 收成线段，wireframe 只留边，Points 收成点', () => {
     const positions = new Float32Array([0, 0, 0, 2, 0, 0, 0, 2, 0])
     const position = {
       count: 3,
@@ -229,8 +229,15 @@ describe('fromThree', () => {
     expect(edges[0]!.lines).toBe(true)
     expect(Array.from(edges[0]!.indices!).sort((a, b) => a - b)).toEqual([0, 0, 1, 1, 2, 2])
 
-    const points = { isPoints: true, geometry, material: { color: { r: 1, g: 1, b: 1 } }, matrixWorld: wire.matrixWorld }
-    expect(fromThree(points)).toEqual([])
+    const points = { isPoints: true, geometry, material: { color: { r: 1, g: 1, b: 1 }, size: 3 }, matrixWorld: wire.matrixWorld }
+    const dots = fromThree(points)
+    expect(dots).toHaveLength(1)
+    expect(dots[0]!.points).toBe(true)
+    expect(dots[0]!.pointPx).toBe(3)
+    expect(dots[0]!.lines).toBeUndefined()
+    expect(Array.from(dots[0]!.indices!)).toEqual([0, 1, 2])
+    expect(dots[0]!.positions[0]).toBeCloseTo(0)
+    expect(dots[0]!.color[0]).toBeGreaterThan(0.9)
   })
 })
 
@@ -426,6 +433,27 @@ describe('model object 和 unit', () => {
     const covered = await pixelAt(occluded.png, 60, 60)
     expect(outside[0]).toBeGreaterThan(100)
     expect(covered[2]).toBeGreaterThan(covered[0]! + 20)
+
+    const points = new THREE.Points(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-1.4, 0, 0),
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(1.4, 0, 0),
+      ]),
+      new THREE.PointsMaterial({ color: '#ff3040', size: 6 }),
+    )
+    const dotted = await renderLayer(
+      h(
+        'layer',
+        { width: 120, height: 120, camera: 'parallel', background: '#000000' },
+        h('model', { object: points, unit: 40 }),
+        h('model', { object: solid, unit: 40 }),
+      ),
+    )
+    const dot = await pixelAt(dotted.png, 4, 60)
+    const hiddenDot = await pixelAt(dotted.png, 60, 60)
+    expect(dot[0]).toBeGreaterThan(100)
+    expect(hiddenDot[2]).toBeGreaterThan(hiddenDot[0]! + 20)
   }, 30000)
 })
 

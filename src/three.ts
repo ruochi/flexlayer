@@ -10,7 +10,8 @@ import type { GlbPrimitive } from './glb.js'
  * 其余按金属度：不小于 0.5 是金属，否则是塑料。粗糙度越低，环境越清楚。
  * 内存里的 map 按 uv 给底色染色，再走同一套明暗。顶点色乘上材质色。emissive 加在明暗之后。
  * ShaderMaterial 只从 uniforms 里取一个颜色当底色。
- * Line、LineSegments、LineLoop 收成线段。材质 wireframe 为真时只留三角形的边。Points 跳过。
+ * Line、LineSegments、LineLoop 收成线段。材质 wireframe 为真时只留三角形的边。
+ * Points 收成屏幕像素的圆点，和线段共用深度。`PointsMaterial.size` 是像素，缺省 1。
  */
 
 type Mat4 = number[]
@@ -23,6 +24,7 @@ type Obj = {
   isLine?: boolean
   isLineSegments?: boolean
   isLineLoop?: boolean
+  isPoints?: boolean
   isInstancedMesh?: boolean
   isBufferGeometry?: boolean
   matrixWorld?: { elements?: ArrayLike<number> }
@@ -81,6 +83,7 @@ type Obj = {
   wireframe?: boolean
   wireframeLinewidth?: number
   linewidth?: number
+  size?: number
 }
 
 const IDENTITY: Mat4 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
@@ -136,6 +139,8 @@ export function modelRevision(prims: GlbPrimitive[]): string {
     }
     word(prim.lines ? 1 : 0)
     word(Math.round((prim.linePx ?? 1) * 1000))
+    word(prim.points ? 1 : 0)
+    word(Math.round((prim.pointPx ?? 1) * 1000))
   }
   return `${(h1 >>> 0).toString(16).padStart(8, '0')}${(h2 >>> 0).toString(16).padStart(8, '0')}`
 }
@@ -175,6 +180,7 @@ function walk(node: Obj, out: GlbPrimitive[]) {
   if (node.visible === false) return
   if (node.isMesh === true) emitMesh(node, out)
   else if (node.isLine === true) emitLines(node, out)
+  else if (node.isPoints === true) emitPoints(node, out)
   if (!Array.isArray(node.children)) return
   for (const child of node.children) {
     const next = asObj(child)
@@ -325,6 +331,58 @@ function emitLines(node: Obj, out: GlbPrimitive[]) {
   if (pairs.length < 2) return
   const pbr = readPbr(Array.isArray(node.material) ? node.material[0] : node.material)
   out.push(linePrim(positions, Uint32Array.from(pairs), pbr.color, linePx(node.material, false)))
+}
+
+function emitPoints(node: Obj, out: GlbPrimitive[]) {
+  const geometry = asObj(node.geometry)
+  if (!geometry || geometry.isBufferGeometry === false) return
+  const position = asObj(geometry.attributes?.position) ?? asObj(geometry.getAttribute?.('position'))
+  if (!position) return
+  const count = attrCount(position)
+  if (count < 1) return
+  const indexAttr = asObj(geometry.index)
+  const indexCount = indexAttr ? attrCount(indexAttr) : count
+  const drawStart = finite(geometry.drawRange?.start, 0)
+  const drawCount = finite(geometry.drawRange?.count, Number.POSITIVE_INFINITY)
+  const start = Math.max(0, drawStart)
+  const end = Math.min(indexCount, start + drawCount)
+  if (end - start < 1) return
+  const world = elementsOf(node.matrixWorld) ?? IDENTITY
+  const positions = new Float32Array(count * 3)
+  for (let i = 0; i < count; i++) {
+    const p = readVec3(position, i)
+    const w = applyPoint(world, p[0], p[1], p[2])
+    positions[i * 3] = w[0]
+    positions[i * 3 + 1] = w[1]
+    positions[i * 3 + 2] = w[2]
+  }
+  const ids: number[] = []
+  for (let i = start; i < end; i++) {
+    const a = readIndex(indexAttr, i)
+    if (a < 0 || a >= count) continue
+    ids.push(a)
+  }
+  if (ids.length === 0) return
+  const material = Array.isArray(node.material) ? node.material[0] : node.material
+  const pbr = readPbr(material)
+  out.push({
+    positions,
+    indices: Uint32Array.from(ids),
+    color: pbr.color,
+    roughness: 1,
+    metalness: 0,
+    doubleSided: true,
+    points: true,
+    pointPx: pointPx(material),
+  })
+}
+
+/** 屏幕像素。`PointsMaterial.size` 缺省 1。衰减按世界单位的算法这里不用。 */
+function pointPx(material: unknown): number {
+  const mat = asObj(material)
+  const raw = finite(mat?.size, 1)
+  if (!(raw > 0) || raw > 64) return 1
+  return raw
 }
 
 function linePrim(positions: Float32Array, indices: Uint32Array, color: [number, number, number, number], width: number): GlbPrimitive {

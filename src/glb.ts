@@ -35,6 +35,10 @@ export type GlbPrimitive = {
   lines?: boolean
   /** 屏幕像素。不写是 1。 */
   linePx?: number
+  /** 圆点，不填三角形。来自 three.js 的 Points。 */
+  points?: boolean
+  /** 屏幕像素。不写是 1。 */
+  pointPx?: number
 }
 
 type Mat4 = number[]
