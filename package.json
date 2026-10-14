@@ -1,6 +1,6 @@
 {
   "name": "flexlayer",
-  "version": "0.6.16",
+  "version": "0.6.17",
   "engines": {
     "node": ">=20"
   },

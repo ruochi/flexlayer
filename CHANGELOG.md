@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.17
+
+`AGENTS.md` now opens with what a frame is, then a lookup of the places Flex Layer differs from HTML, CSS, and SVG, then the frequent issue codes and the change that clears each one. The hard rules and the workflow are unchanged. The full issue list stays in SPEC, "Report".
+
 ## 0.6.16
 
 `render` no longer type-checks on every run. Type checking stays in `check`. To check while rendering, add `--typecheck`. A type error is still `type-error`. The picture is still written, and the exit code is 1. `check --no-typecheck` skips type checking.
