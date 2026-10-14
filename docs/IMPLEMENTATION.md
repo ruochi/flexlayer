@@ -12,7 +12,8 @@
 | 调色 `grade.ts` | 树上有 `grade` 或 `grade-mask` | 同上。登记仍进 `filter.ts` 的滤镜表 |
 | 距离场、沿墨迹描边、玻璃、噪点 | 排版结果里真有对应效果 | `paintDocument` 开头的 `ensurePaintFeatures` |
 | 图标码位 | 第一次把图标名换成码位 | `icons.ts` 读 `icon-codepoints.txt`。没有图标字体时不读、也不下载字体文件 |
-| esbuild、TypeScript | 源文件是 `.tsx` / `.ts` / `.jsx` / `.js` | `cli-main.ts` 再去加载。`.layer` 不走这条路 |
+| esbuild、语法扫描 | 源文件是 `.tsx` / `.ts` / `.jsx` / `.js` | `load-source.ts`。语法扫描用 TypeScript 解析器。`.layer` 不走这条路 |
+| 类型检查 | `check`，或 `render --typecheck` | `cli-main.ts` 再去加载 `typecheck.ts`。普通 `render` 不跑。多个文件在同一次进程里查 |
 | `frame.ts` | 源文件是 Composition，要渲染多帧或联系表 | 同上 |
 | esbuild 缓存 | 同一份源文件再次执行 | `~/.cache/flexlayer/code/<内容哈希>/entry.mjs`。入口、相对引用和当前 flexlayer 安装路径一起哈希，变了就重打 |
 

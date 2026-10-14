@@ -262,9 +262,11 @@ flexlayer render scene.tsx --frames out/ --from 0 --to 90
 flexlayer render scene.tsx --rgba -
 flexlayer check scene.tsx --frames 0-90 --step 5
 flexlayer render scene.layer --preview out.png
+flexlayer render a.tsx b.tsx -o out/ --scale 1 --scale 2
+flexlayer check a.tsx b.tsx
 ```
 
-`.tsx` 会先执行并做类型检查，类型错误记为 `type-error`，仍然出图，退出码为 1。文件头写 `/** @jsxImportSource flexlayer */`。默认导出一个 `<layer>`，或返回该节点的函数。命名导出 `composition` 可以是 `Composition`。`check` 不写 `--frames` 时抽第 0 帧、中间帧和最后一帧。`--emit` 写回 `.layer`；闭包记 `emit-script`，不能写成 JSON 的 `data` 记 `emit-data`。帧数超过 300 且没有 `--frame`、`--frames` 或 `--rgba` 时不渲染联系表。flexlayer 不调用 ffmpeg。
+`.tsx` 会先执行。类型检查在 `check` 里做，类型错误记为 `type-error`，退出码为 1。`render` 默认不查类型。`render --typecheck` 把类型错误记入报告，照常出图，退出码为 1。`check --no-typecheck` 跳过类型检查。多个文件可以写在同一个命令里，一次进程做完。`render` 可以重复 `--scale`，同一份源只执行一次，文件名加上 `@1x`、`@2x`。这时 `-o`、`--report`、`--emit` 是目录。文件头写 `/** @jsxImportSource flexlayer */`。默认导出一个 `<layer>`，或返回该节点的函数。命名导出 `composition` 可以是 `Composition`。`check` 不写 `--frames` 时抽第 0 帧、中间帧和最后一帧。`--emit` 写回 `.layer`；闭包记 `emit-script`，不能写成 JSON 的 `data` 记 `emit-data`。帧数超过 300 且没有 `--frame`、`--frames` 或 `--rgba` 时不渲染联系表。flexlayer 不调用 ffmpeg。
 
 ### canvas.create
 
@@ -356,7 +358,7 @@ declare module 'flexlayer/jsx-runtime' {
 | `emit-data` | warn | `--emit` 时 `data` 写不成 JSON |
 | `unused-expect` | warn | 写了 `expect`，但子树里没有这个问题码 |
 | `nondeterministic` | warn | `.tsx` 里调用了不可重复的随机或时间 |
-| `type-error` | error | `.tsx` 的 TypeScript 诊断 |
+| `type-error` | error | `.tsx` 的 TypeScript 诊断。`check` 和 `render --typecheck` 才产生 |
 | `measure-mismatch` | warn | `canvas.create` 量到的宽高和最终排版不一致 |
 
 任何元素可以写 `expect="overflow-canvas: 出血图; text-overlap"`。对得上的问题降成 `info`，并带上 `expected`。没对上的报 `unused-expect`。多帧检查时，只要有一帧用上就不报。Composition 抽查出来的问题带 `frame` 和 `frames`。

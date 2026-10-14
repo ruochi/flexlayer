@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.15
+
+`render` 不再每次做 TypeScript 类型检查。类型检查留在 `check`。出图时要一起查，加 `--typecheck`，类型错误仍记为 `type-error`，图会写出，退出码为 1。`check --no-typecheck` 跳过类型检查。
+
+`render` 和 `check` 可以一次接多个文件。`render` 还可以重复 `--scale`。同一份源只执行一次，图都在这一次进程里画完。多个文件或多个倍率时，`-o`、`--report`、`--emit` 是目录，文件名带 `@1x`、`@2x`。
+
 ## 0.6.14
 
 主入口再导出 `loadImage` 和 `registerFontPath`。二者和 `createCanvas` 用的是排版那一份 `@napi-rs/canvas`。`registerFontPath(family, filePath)` 登记自定义字体文件；这个名字已经登记过就不再换文件。

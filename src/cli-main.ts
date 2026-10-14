@@ -1,6 +1,6 @@
-import { createWriteStream, readFileSync, statSync, watch, type FSWatcher } from 'node:fs'
+import { createWriteStream, existsSync, readFileSync, statSync, watch, type FSWatcher } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { basename, dirname, extname, join, resolve } from 'node:path'
+import { basename, dirname, extname, join, relative, resolve } from 'node:path'
 import { stdout } from 'node:process'
 import type { Writable } from 'node:stream'
 import { mergeFrameIssues, sampleFrames, type SampleSpec } from './check-frames.js'
@@ -16,11 +16,15 @@ const CONTACT_LIMIT = 300
 
 function usage(): never {
   console.error(`用法:
-  flexlayer render <file.layer|file.tsx> [-o out.png] [--report out.json] [--scale 0.5] [--debug] [--preview out.png] [--emit out.layer] [--frame N] [--frames dir] [--from N] [--to N] [--step N] [--rgba -|file] [--mesh-samples 1|2|4] [--no-script] [--watch]
-  flexlayer check <file.layer|file.tsx> [--report out.json] [--emit out.layer] [--frame N] [--frames all|A-B|N] [--step N] [--no-script] [--watch]
+  flexlayer render <file> [<file>...] [-o out.png|dir] [--report out.json|dir] [--scale 1] [--scale 2] [--debug] [--preview out.png] [--emit out.layer|dir] [--frame N] [--frames dir] [--from N] [--to N] [--step N] [--rgba -|file] [--mesh-samples 1|2|4] [--no-script] [--typecheck] [--watch]
+  flexlayer check <file> [<file>...] [--report out.json|dir] [--emit out.layer|dir] [--frame N] [--frames all|A-B|N] [--step N] [--no-script] [--no-typecheck] [--watch]
   flexlayer select …   转给 flexlayer-select。没安装时提示安装命令
 
 .tsx / .jsx / .ts / .js 会先执行，得到和 .layer 相同的节点树。
+类型检查只在 check 时做。render 要一起查类型就加 --typecheck。check 要跳过就加 --no-typecheck。
+多个文件，或 render 写了多个 --scale，就在这一次进程里做完。同一份源只执行一次。
+这时 -o、--report、--emit 是目录。多个 --scale 的文件名带 @1x、@2x。
+--frame、--frames、--rgba、--preview、--watch 只用于一张图、一个倍率。
 Composition 用 --frame N 渲染一帧；不写时，范围内帧数不超过 ${CONTACT_LIMIT} 就输出联系表。
 --frames <目录> 边渲染边写出 PNG。--from、--to 含端点，--step 是步长。
 --rgba - 把不预乘的原始像素写到标准输出，日志改走标准错误。写成文件路径则写入该文件。
@@ -34,8 +38,8 @@ check 不写 --frames 时抽查第 0 帧、中间一帧和最后一帧。--frame
 
 function parseArgs(argv: string[]) {
   const cmd = argv[0]
-  const file = argv[1]
-  if (!cmd || !file || (cmd !== 'render' && cmd !== 'check')) usage()
+  if (cmd !== 'render' && cmd !== 'check') usage()
+  const files: string[] = []
   let out: string | undefined
   let report: string | undefined
   let emit: string | undefined
@@ -45,23 +49,33 @@ function parseArgs(argv: string[]) {
   let from: number | undefined
   let to: number | undefined
   let step: number | undefined
-  let scale = 1
+  const scales: number[] = []
   let debug = false
   let preview: string | undefined
   let meshSamples: 1 | 2 | 4 | undefined
   let watchMode = false
   let noScript = false
-  for (let i = 2; i < argv.length; i++) {
+  let typecheckFlag = false
+  let noTypecheckFlag = false
+  for (let i = 1; i < argv.length; i++) {
     const a = argv[i]!
+    if (!a.startsWith('-')) {
+      files.push(a)
+      continue
+    }
     const next = () => {
       const value = argv[++i]
-      if (value == null) usage()
+      // `--rgba -` 的值就是一个横线。别的横线开头的是下一个参数，不是值。
+      if (value == null || (value.startsWith('-') && value !== '-')) usage()
       return value
     }
     if (a === '-o') out = next()
     else if (a === '--report') report = next()
-    else if (a === '--scale') scale = Number(next())
-    else if (a === '--debug') debug = true
+    else if (a === '--scale') {
+      const scale = Number(next())
+      if (!Number.isFinite(scale) || scale <= 0) usage()
+      if (!scales.includes(scale)) scales.push(scale)
+    } else if (a === '--debug') debug = true
     else if (a === '--preview') preview = next()
     else if (a === '--emit') emit = next()
     else if (a === '--frames') framesArg = next()
@@ -72,23 +86,32 @@ function parseArgs(argv: string[]) {
     else if (a === '--step') step = Number(next())
     else if (a === '--watch') watchMode = true
     else if (a === '--no-script') noScript = true
+    else if (a === '--typecheck') typecheckFlag = true
+    else if (a === '--no-typecheck') noTypecheckFlag = true
     else if (a === '--mesh-samples') {
       const n = Number(next())
       if (n !== 1 && n !== 2 && n !== 4) usage()
       meshSamples = n
     } else usage()
   }
+  if (files.length === 0) usage()
+  if (scales.length === 0) scales.push(1)
+  if (typecheckFlag && noTypecheckFlag) usage()
   if (frame != null && (!Number.isInteger(frame) || frame < 0)) usage()
   if (from != null && (!Number.isInteger(from) || from < 0)) usage()
   if (to != null && (!Number.isInteger(to) || to < 0)) usage()
   if (step != null && (!Number.isInteger(step) || step < 1)) usage()
-  if (!Number.isFinite(scale) || scale <= 0) usage()
   if (cmd === 'check' && (rgba || from != null || to != null || preview)) usage()
+  if (cmd === 'check' && scales.length > 1) usage()
   if (frame != null && (framesArg != null || rgba != null || from != null || to != null || step != null)) usage()
   if (cmd === 'render' && rgba != null && framesArg != null) usage()
   if (cmd === 'check' && step != null && framesArg == null) usage()
   if (watchMode && (rgba != null || framesArg != null)) usage()
-  return { cmd, file, out, report, emit, framesArg, rgba, frame, from, to, step, scale, debug, preview, meshSamples, watchMode, noScript }
+  const batch = files.length > 1 || (cmd === 'render' && scales.length > 1)
+  if (batch && watchMode) usage()
+  if (cmd === 'render' && batch && (preview || framesArg || rgba != null || frame != null || from != null || to != null || step != null)) usage()
+  const typecheck = cmd === 'check' ? !noTypecheckFlag : typecheckFlag
+  return { cmd, files, out, report, emit, framesArg, rgba, frame, from, to, step, scales, debug, preview, meshSamples, watchMode, noScript, typecheck }
 }
 
 function frameInput(frame: number, fps: number): FrameInput {
@@ -115,19 +138,24 @@ async function emitNode(node: Parameters<typeof emitLayer>[0], emit: string | un
 
 let holdErrors = false
 
-function failIfErrors(report: LayerReport) {
-  if (holdErrors) return
-  const errors = report.issues.filter((issue) => issue.level === 'error').length
-  if (errors > 0) process.exit(1)
+function failIfErrors(report: LayerReport): boolean {
+  const failed = report.issues.some((issue) => issue.level === 'error')
+  if (!holdErrors && failed) process.exit(1)
+  return failed
 }
 
-function printIssues(report: LayerReport) {
-  for (const issue of report.issues) say(formatIssueLine(issue))
+function visibleIssues(report: LayerReport, showType: boolean): Issue[] {
+  if (showType) return report.issues
+  return report.issues.filter((issue) => issue.code !== 'type-error')
 }
 
-function printCheckResult(report: LayerReport) {
-  printIssues(report)
-  if (report.issues.length === 0) say('✓ 0 issues')
+function printIssues(report: LayerReport, showType = true) {
+  for (const issue of visibleIssues(report, showType)) say(formatIssueLine(issue))
+}
+
+function printCheckResult(report: LayerReport, showType = true) {
+  printIssues(report, showType)
+  if (visibleIssues(report, showType).length === 0) say('✓ 0 issues')
 }
 
 function checkSample(spec: string, step: number | undefined): number | SampleSpec {
@@ -237,6 +265,123 @@ function watchNames(files: string[], onChange: () => void): () => void {
   }
 }
 
+type Parsed = ReturnType<typeof parseArgs>
+type RunArgs = Omit<Parsed, 'files' | 'scales'> & {
+  file: string
+  scale: number
+  /** 同一份源渲多个倍率时，类型错误只在第一张图上打印。报告里仍然都有。 */
+  showType: boolean
+}
+type LoadedJob = { abs: string; loaded: LoadedLayer; typeIssues: Issue[] }
+
+const CODE_EXT = new Set(['.tsx', '.jsx', '.ts', '.js'])
+let batchMode = false
+
+function showPath(file: string): string {
+  const abs = resolve(file)
+  const rel = relative(process.cwd(), abs)
+  if (!rel || rel.startsWith('..')) return abs
+  return rel
+}
+
+function stem(file: string): string {
+  const base = basename(file)
+  const stripped = base.replace(/\.(tsx|jsx|ts|js|layer|fvg)$/i, '')
+  return stripped || base
+}
+
+function batchPng(file: string, scale: number, out: string | undefined, multiScale: boolean): string {
+  const name = `${stem(file)}${multiScale ? `@${scale}x` : ''}.png`
+  if (out) return join(out, name)
+  return join(dirname(resolve(file)), name)
+}
+
+function batchBeside(file: string, dir: string, ext: string): string {
+  return join(dir, `${stem(file)}${ext}`)
+}
+
+function job(args: Parsed, file: string, scale: number, patch?: Partial<Pick<RunArgs, 'out' | 'report' | 'emit' | 'showType'>>): RunArgs {
+  const { files: _files, scales: _scales, ...rest } = args
+  return { ...rest, file, scale, showType: true, ...patch }
+}
+
+function isBatch(args: Parsed): boolean {
+  return args.files.length > 1 || (args.cmd === 'render' && args.scales.length > 1)
+}
+
+function rejectFilePath(flag: string, value: string | undefined, extensions: string[]) {
+  if (!value) return
+  const lower = value.toLowerCase()
+  const looksLikeFile = extensions.some((ext) => lower.endsWith(ext)) || (existsSync(value) && statSync(value).isFile())
+  if (looksLikeFile) {
+    console.error(`多张图时 ${flag} 是目录，例如 ${flag} out/`)
+    process.exit(2)
+  }
+}
+
+async function loadJob(file: string, typecheck: boolean): Promise<LoadedJob> {
+  const abs = resolve(file)
+  const ext = extname(abs).toLowerCase()
+  let loaded: LoadedLayer
+  if (CODE_EXT.has(ext)) {
+    const { loadLayerFile } = await import('./load-source.js')
+    loaded = await loadLayerFile(abs)
+  } else {
+    loaded = { kind: 'markup', source: await readFile(abs, 'utf8') }
+  }
+  let typeIssues: Issue[] = []
+  if (typecheck && CODE_EXT.has(ext)) {
+    const { typecheckLayerFile } = await import('./typecheck.js')
+    typeIssues = typecheckLayerFile(abs)
+  }
+  return { abs, loaded, typeIssues }
+}
+
+function notComposition(abs: string): never {
+  if (batchMode) throw new Error(`${showPath(abs)} 不是 Composition`)
+  usage()
+}
+
+async function runAll(args: Parsed) {
+  if (!isBatch(args)) {
+    await run(job(args, args.files[0]!, args.scales[0] ?? 1))
+    return
+  }
+  batchMode = true
+  holdErrors = true
+  rejectFilePath('-o', args.out, ['.png'])
+  rejectFilePath('--report', args.report, ['.json'])
+  rejectFilePath('--emit', args.emit, ['.layer'])
+  if (args.cmd === 'render' && args.out) await mkdir(args.out, { recursive: true })
+  if (args.report) await mkdir(args.report, { recursive: true })
+  if (args.emit) await mkdir(args.emit, { recursive: true })
+  let failed = false
+  const scales = args.cmd === 'render' ? args.scales : [1]
+  const multiScale = scales.length > 1
+  for (const file of args.files) {
+    say(`· ${showPath(file)}`)
+    try {
+      const loaded = await loadJob(file, args.typecheck)
+      for (let i = 0; i < scales.length; i++) {
+        const scale = scales[i]!
+        const out = args.cmd === 'render' ? batchPng(file, scale, args.out, multiScale) : undefined
+        const report = args.report
+          ? args.cmd === 'render'
+            ? join(args.report, `${stem(file)}${multiScale ? `@${scale}x` : ''}.json`)
+            : batchBeside(file, args.report, '.json')
+          : undefined
+        const emit = args.emit && i === 0 ? batchBeside(file, args.emit, '.layer') : undefined
+        const had = await execute(job(args, file, scale, { out, report, emit, showType: i === 0 }), loaded)
+        if (had) failed = true
+      }
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : err)
+      failed = true
+    }
+  }
+  if (failed) process.exit(1)
+}
+
 export async function main() {
   if (process.argv[2] === 'select') {
     await forwardSelect(process.argv.slice(3))
@@ -244,9 +389,10 @@ export async function main() {
   }
   const args = parseArgs(process.argv.slice(2))
   if (!args.watchMode) {
-    await run(args)
+    await runAll(args)
     return
   }
+  const file = args.files[0]!
   holdErrors = true
   let stop = () => {}
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -259,14 +405,14 @@ export async function main() {
     }
     running = true
     try {
-      await run(args)
-      say(`· watching ${args.file}`)
+      await run(job(args, file, args.scales[0] ?? 1))
+      say(`· watching ${file}`)
     } catch (err) {
       console.error(err instanceof Error ? err.message : err)
     } finally {
       running = false
       stop()
-      stop = watchNames(collectWatchFiles(resolve(args.file)), () => {
+      stop = watchNames(collectWatchFiles(resolve(file)), () => {
         if (timer) clearTimeout(timer)
         timer = setTimeout(() => {
           void cycle()
@@ -282,25 +428,17 @@ export async function main() {
   await new Promise(() => {})
 }
 
-const CODE_EXT = new Set(['.tsx', '.jsx', '.ts', '.js'])
+async function run(args: RunArgs): Promise<boolean> {
+  return execute(args, await loadJob(args.file, args.typecheck))
+}
 
-async function run(args: ReturnType<typeof parseArgs>) {
-  const abs = resolve(args.file)
-  const ext = extname(abs).toLowerCase()
-  let loaded: LoadedLayer
-  let typeIssues: Issue[] = []
-  if (CODE_EXT.has(ext)) {
-    const [{ loadLayerFile }, { typecheckLayerFile }] = await Promise.all([import('./load-source.js'), import('./typecheck.js')])
-    loaded = await loadLayerFile(abs)
-    typeIssues = typecheckLayerFile(abs)
-  } else {
-    loaded = { kind: 'markup', source: await readFile(abs, 'utf8') }
-  }
+async function execute(args: RunArgs, input: LoadedJob): Promise<boolean> {
+  const { abs, loaded, typeIssues } = input
   const baseDir = dirname(abs)
 
   if (args.preview && loaded.kind === 'composition') throw new Error('--preview 只用于单帧 .layer 或 .tsx')
-  if (args.frame != null && loaded.kind !== 'composition') usage()
-  if ((args.framesArg || args.rgba || args.from != null || args.to != null || args.step != null) && loaded.kind !== 'composition') usage()
+  if (args.frame != null && loaded.kind !== 'composition') notComposition(abs)
+  if ((args.framesArg || args.rgba || args.from != null || args.to != null || args.step != null) && loaded.kind !== 'composition') notComposition(abs)
   if (args.emit && loaded.kind === 'markup') throw new Error('--emit 只用于 .tsx 等会展开的源文件')
 
   const attachFileIssues = (report: LayerReport) => {
@@ -314,10 +452,9 @@ async function run(args: ReturnType<typeof parseArgs>) {
       const report = await checkLayer(node, { baseDir, noScript: args.noScript })
       if (typeof node !== 'string') await emitNode(node, args.emit, report)
       attachFileIssues(report)
-      printCheckResult(report)
+      printCheckResult(report, args.showType)
       if (args.report) await writeFile(args.report, JSON.stringify(report, null, 2))
-      failIfErrors(report)
-      return
+      return failIfErrors(report)
     }
     const duration = loaded.composition.durationInFrames
     if (args.frame != null && args.frame >= duration) {
@@ -338,10 +475,9 @@ async function run(args: ReturnType<typeof parseArgs>) {
     report!.issues = mergeFrameIssues(parts)
     if (emitAt) await emitNode(emitAt, args.emit, report!)
     attachFileIssues(report!)
-    printCheckResult(report!)
+    printCheckResult(report!, args.showType)
     if (args.report) await writeFile(args.report, JSON.stringify(report, null, 2))
-    failIfErrors(report!)
-    return
+    return failIfErrors(report!)
   }
 
   if (loaded.kind === 'composition') {
@@ -367,11 +503,11 @@ async function run(args: ReturnType<typeof parseArgs>) {
       await emitNode(node, args.emit, report)
       const outPath = outPng(abs, args.out)
       await writeFile(outPath, png)
-      printIssues(report)
+      printIssues(report, args.showType)
       if (args.report) await writeFile(args.report, JSON.stringify(report, null, 2))
-      failIfErrors(report)
+      const failed = failIfErrors(report)
       say(`✓ ${outPath}  ${report.width}×${report.height}  第 ${args.frame} 帧`)
-      return
+      return failed
     }
 
     const rgbaToStdout = args.rgba === '-'
@@ -438,17 +574,17 @@ async function run(args: ReturnType<typeof parseArgs>) {
     if (args.emit && emitFrame <= to) {
       await emitNode(comp.component(frameInput(emitFrame, comp.fps)), args.emit, report)
     }
-    printIssues(report)
+    printIssues(report, args.showType)
     if (sheet) {
       const outPath = outPng(abs, args.out)
       await writeFile(outPath, sheet.toPng())
     }
     if (args.report) await writeFile(args.report, JSON.stringify(report, null, 2))
-    failIfErrors(report)
+    const failed = failIfErrors(report)
     if (args.framesArg) say(`✓ ${args.framesArg}  ${count} 帧`)
     if (args.rgba && !rgbaToStdout) say(`✓ ${args.rgba}  ${count} 帧原始像素`)
     if (sheet) say(`✓ ${outPng(abs, args.out)}  联系表  ${count} 帧`)
-    return
+    return failed
   }
 
   const source = loaded.kind === 'markup' ? loaded.source : loaded.node
@@ -463,9 +599,10 @@ async function run(args: ReturnType<typeof parseArgs>) {
     await mkdir(dirname(resolve(args.preview)), { recursive: true })
     await writeFile(args.preview, sheet)
   }
-  printIssues(report)
+  printIssues(report, args.showType)
   if (args.report) await writeFile(args.report, JSON.stringify(report, null, 2))
-  failIfErrors(report)
+  const failed = failIfErrors(report)
   if (args.preview) say(`✓ ${args.preview}  选区预览`)
   say(`✓ ${outPath}  ${report.width}×${report.height}  ${report.elements.length} 个元素`)
+  return failed
 }

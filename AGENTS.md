@@ -7,9 +7,9 @@
 ## 工作流
 
 1. 对照下面的约定写 `.tsx` 或 `.layer`。
-2. `npx tsx src/cli.ts check scene.tsx`。有 **error** 时退出码为 1，按报告里的 `path`、`hint` 改，再查。动画不写 `--frames` 时只抽第 0 帧、中间帧和最后一帧。
+2. `npx tsx src/cli.ts check scene.tsx`。有 **error** 时退出码为 1，按报告里的 `path`、`hint` 改，再查。类型检查只在 `check` 里做。动画不写 `--frames` 时只抽第 0 帧、中间帧和最后一帧。多个文件可以写在同一个命令里。
 3. 间距不对时 `npx tsx src/cli.ts render scene.tsx -o scene.png --debug --report scene.json`，看 `box`（布局盒）和 `ink`（转完或投影后的着墨）。`.tsx` 还有 `source`（`scene.tsx:18:5`）。
-4. 满意后 `npx tsx src/cli.ts render scene.tsx -o scene.png`。
+4. 满意后 `npx tsx src/cli.ts render scene.tsx -o scene.png`。`render` 不查类型。多张图、多个倍率一次写完：`npx tsx src/cli.ts render a.tsx b.tsx -o out/ --scale 1 --scale 2`。
 
 ## 硬性约定
 

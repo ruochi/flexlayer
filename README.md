@@ -45,7 +45,11 @@ npx tsx src/cli.ts check examples/hello.layer
 npx tsx src/cli.ts render examples/hello.layer -o hello.png --watch
 npx tsx src/cli.ts render examples/hello.tsx -o hello.png --emit hello.out.layer
 npx tsx src/cli.ts render examples/slide.tsx --frame 1 -o slide.png
+npx tsx src/cli.ts render a.tsx b.tsx -o out/ --scale 1 --scale 2
+npx tsx src/cli.ts check a.tsx b.tsx
 ```
+
+`render` 不跑类型检查，类型检查在 `check`。出图时要一起查，加 `--typecheck`。多个文件和多个 `--scale` 在一次进程里做完，同一份 `.tsx` 只执行一次。多个文件或多个倍率时，`-o`、`--report`、`--emit` 是目录。
 
 构建之后也可以：
 
