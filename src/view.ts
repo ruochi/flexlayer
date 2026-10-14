@@ -1,4 +1,4 @@
-import { apply, aroundPivot, matrixScale, multiply, originOffset, scaled, translated, type Matrix } from './matrix.js'
+import { absoluteNodeMatrix, apply, isIdentity, matrixScale, multiply, scaled, translated, type Matrix } from './matrix.js'
 import { parseNumber } from './style.js'
 import type { LayoutNode, ViewRect } from './types.js'
 
@@ -52,11 +52,10 @@ export function layoutScale(node: LayoutNode): number {
 
 const VIEW_SLACK = 0.51
 
-/** 绕自己的 origin 做 rotate、scale。没有这些时是单位变换。 */
+/** 绕自己的 origin 做 rotate、scale，或 CSS motion。没有这些时是单位变换。 */
 function poseOf(node: LayoutNode): Matrix | null {
-  if (node.rotate === 0 && node.scaleX === 1 && node.scaleY === 1) return null
-  const pivot = originOffset(node.origin, node.width, node.height)
-  return aroundPivot(node.x + pivot.x, node.y + pivot.y, node.rotate, node.scaleX, node.scaleY)
+  const pose = absoluteNodeMatrix(node)
+  return isIdentity(pose) ? null : pose
 }
 
 /** 布局盒子绕 origin 做完 rotate、scale 之后的四个角，顺序是左上、右上、右下、左下。 */

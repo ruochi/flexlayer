@@ -40,6 +40,9 @@ import {
   parseNoise,
   parseLineHeight,
   parseLetterSpacing,
+  parseAngle,
+  parseCssLength,
+  parseCssTransform,
   parseNumber,
   parseOverlay,
   readFlexFactors,
@@ -48,6 +51,7 @@ import {
   parseScale,
   parseShadow,
   parseStyle,
+  readOrigin,
   readAnchor,
   ZERO_EDGES,
   type Edges,
@@ -63,7 +67,7 @@ import {
   isTextBoxTag,
   layoutText,
 } from './text.js'
-import { applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset, translated } from './matrix.js'
+import { applyToBox, IDENTITY, intersectBox, isIdentity, localNodeMatrix, multiply, translated } from './matrix.js'
 import { layoutMath } from './math/load.js'
 import { asBlockFlow, checkChildAttrs, checkTextBoxChildren, haloAttrIssues, hasTwoPoint, hiddenAttrIssues, isDisplayFlex, isHtmlTag, legacyCenterIssues, materialAttrIssues, originValueIssues, rowColumnHint, splitAttrIssues, styleIssues, typoAttrIssues } from './rules.js'
 import { fitViewAspect, parseView, viewExceeds } from './view.js'
@@ -73,6 +77,9 @@ import type {
   Anchor,
   AppliedFilter,
   Box,
+  CssLength,
+  CssMotion,
+  CssTransformStep,
   CanvasLayoutNode,
   DrawComputedStyle,
   LayerScript,
@@ -97,6 +104,7 @@ import type {
   MaskOp,
   MeshMaterial,
   NoiseSpec,
+  Origin,
   PreviewSpec,
   OverlaySpec,
   ShadowSpec,
@@ -479,6 +487,103 @@ function scalePair(raw: string | undefined): { scaleX: number; scaleY: number } 
   return { scaleX: scale.x, scaleY: scale.y }
 }
 
+function angleOf(raw: string | undefined): number {
+  if (raw == null) return 0
+  return parseAngle(raw)?.degrees ?? 0
+}
+
+const ZERO_LENGTH: CssLength = { unit: 'px', value: 0 }
+
+function lengthIsZero(len: CssLength): boolean {
+  return len.value === 0
+}
+
+function readBoxTranslate(raw: string | undefined): { x: CssLength; y: CssLength } {
+  const zero = { x: ZERO_LENGTH, y: ZERO_LENGTH }
+  if (raw == null) return zero
+  const text = raw.trim().toLowerCase()
+  if (text === '' || text === 'none') return zero
+  const parts = text.split(/[\s,]+/).filter(Boolean)
+  if (parts.length === 0 || parts.length > 2) return zero
+  const x = parseCssLength(parts[0]!, true)
+  const y = parts[1] ? parseCssLength(parts[1], true) : ZERO_LENGTH
+  if (!x || !y) return zero
+  return { x, y }
+}
+
+/**
+ * 没有平移、且线性部分能写成「先缩放再旋转」时，沿用 rotate / scale。
+ * 否则留给 motion，画的时候再按盒子尺寸算百分比。
+ */
+function foldSimpleMotion(
+  translate: { x: CssLength; y: CssLength },
+  rotate: number,
+  scale: { x: number; y: number },
+  steps: CssTransformStep[],
+): { rotate: number; sx: number; sy: number } | null {
+  if (!lengthIsZero(translate.x) || !lengthIsZero(translate.y)) return null
+  let sx = scale.x
+  let sy = scale.y
+  let extra = 0
+  for (const step of steps) {
+    if (step.op === 'translate') {
+      if (!lengthIsZero(step.x) || !lengthIsZero(step.y)) return null
+      continue
+    }
+    if (step.op === 'rotate') {
+      if (Math.abs(sx - sy) > 1e-9 && Math.abs(step.degrees) > 1e-9) return null
+      extra += step.degrees
+      continue
+    }
+    sx *= step.x
+    sy *= step.y
+  }
+  return { rotate: rotate + extra, sx, sy }
+}
+
+function readMotionOrigin(style: Record<string, string>): { origin?: Origin } {
+  const primary = style['transform-origin']
+  if (primary != null && primary.trim() !== '') {
+    const read = readOrigin(primary)
+    if (!read.invalid) return { origin: read.origin }
+  }
+  const fallback = style.origin
+  if (fallback != null && fallback.trim() !== '') {
+    const read = readOrigin(fallback)
+    if (!read.invalid) return { origin: read.origin }
+  }
+  return {}
+}
+
+/** 把 style 里的平移、旋转、缩放和 transform 记到节点上。只改绘制，不改 x / y / width / height。 */
+function applyCssMotion(node: { rotate: number; scaleX: number; scaleY: number; origin?: Origin; motion?: CssMotion }, style: Record<string, string>) {
+  const rotate = angleOf(style.rotate)
+  const scale = parseScale(style.scale)
+  const translate = readBoxTranslate(style.translate)
+  const parsed = style.transform != null ? parseCssTransform(style.transform) : { ok: true as const, steps: [] }
+  const steps = parsed.ok ? parsed.steps : []
+  const origin = readMotionOrigin(style)
+  if (origin.origin) node.origin = origin.origin
+  const simple = foldSimpleMotion(translate, rotate, scale, steps)
+  if (simple) {
+    node.rotate = simple.rotate
+    node.scaleX = simple.sx
+    node.scaleY = simple.sy
+    return
+  }
+  node.rotate = 0
+  node.scaleX = 1
+  node.scaleY = 1
+  node.motion = {
+    translateX: translate.x,
+    translateY: translate.y,
+    rotate,
+    scaleX: scale.x,
+    scaleY: scale.y,
+    steps,
+  }
+}
+
 /** `color` / `background-color` 只收纯色。渐变返回 undefined，并报 invalid-attr。 */
 function solidColor(raw: string | undefined, ctx: LayoutContext, label: string): string | undefined {
   const value = raw?.trim()
@@ -542,12 +647,12 @@ function readHtmlAppearance(style: Record<string, string>) {
     borderRadius: parsePx(style['border-radius']) ?? 0,
     background: style.background ?? style['background-color'],
     opacity: parseNumber(style.opacity) ?? 1,
-    rotate: parseNumber(style.rotate) ?? 0,
-    rotateX: parseNumber(style.rotateX) ?? 0,
-    rotateY: parseNumber(style.rotateY) ?? 0,
+    rotate: 0,
+    rotateX: angleOf(style.rotatex),
+    rotateY: angleOf(style.rotatey),
     z: parseNumber(style.z) ?? 0,
-    ...scalePair(style.scale),
-    origin: parseOrigin(style.origin),
+    scaleX: 1,
+    scaleY: 1,
   }
 }
 
@@ -1111,7 +1216,7 @@ function layoutTextBox(node: LayerNode, ctx: LayoutContext, contentWidthLimit?: 
     })
   }
 
-  return {
+  const laid: TextLayoutNode = {
     kind: 'text',
     path: ctx.pathPrefix,
     id: node.attrs.id,
@@ -1128,6 +1233,8 @@ function layoutTextBox(node: LayerNode, ctx: LayoutContext, contentWidthLimit?: 
     ...readEffects(style, ctx, color, 'ink'),
     ...layoutDrawMeta(node, ctx),
   }
+  if (node.attrs.split?.trim().toLowerCase() !== 'chars') applyCssMotion(laid, style)
+  return laid
 }
 
 function refitImageNode(node: ImageLayoutNode, x: number, y: number, width: number, height: number): ImageLayoutNode {
@@ -1260,6 +1367,7 @@ function layoutImage(node: LayerNode, ctx: LayoutContext): ImageLayoutNode {
     outer.width,
     outer.height,
   )
+  applyCssMotion(laid, style)
   return laid
 }
 
@@ -2713,7 +2821,7 @@ function layoutFlex(node: LayerNode, ctx: LayoutContext): FlexLayoutNode {
     })
   }
 
-  return {
+  const laid: FlexLayoutNode = {
     kind: 'flex',
     path: ctx.pathPrefix,
     id: node.attrs.id,
@@ -2731,6 +2839,8 @@ function layoutFlex(node: LayerNode, ctx: LayoutContext): FlexLayoutNode {
     ...readEffects(style, ctx, solidPaint(appearance.background, ctx.color), 'ink'),
     ...layoutDrawMeta(node, ctx),
   }
+  applyCssMotion(laid, style)
+  return laid
 }
 
 function layoutUse(node: LayerNode, ctx: LayoutContext): LayerLayoutNode | null {
@@ -3254,11 +3364,8 @@ function addLocalInk(union: Box | null, box: Box | null): Box | null {
 function accumulateInk(node: LayoutNode, parentOpacity: number, matrix: typeof IDENTITY, applyOwnTransform: boolean): Box | null {
   const opacity = parentOpacity * node.opacity
   if (opacity < VISIBLE_OPACITY) return null
-  const origin = originOffset(node.origin, node.width, node.height)
-  const m =
-    applyOwnTransform && (node.rotate !== 0 || node.scaleX !== 1 || node.scaleY !== 1)
-      ? multiply(matrix, aroundPivot(origin.x, origin.y, node.rotate, node.scaleX, node.scaleY))
-      : matrix
+  const local = localNodeMatrix(node)
+  const m = applyOwnTransform && !isIdentity(local) ? multiply(matrix, local) : matrix
 
   if (node.kind === 'layer' || node.kind === 'flex') {
     let union: Box | null = null

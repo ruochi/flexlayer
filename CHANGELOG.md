@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.19
+
+`rotate`, `rotateX`, and `rotateY` in `style` take a CSS angle: `deg`, `rad`, `grad`, or `turn`. `0` may omit the unit. A bare nonzero number is still degrees, and reports `non-canonical`. An invalid angle reports `invalid-attr` and is ignored.
+
+`transform` accepts `translate()`, `rotate()`, and `scale()`, including the axis-specific forms, and they combine left to right. With the individual properties, the order is `translate`, then `rotate`, then `scale`, then `transform`. The center is `transform-origin`, default `50% 50%`. These change drawing only. The layout box stays put. Attributes such as `rotate="30"` are unchanged.
+
+`.layer` `<script>` no longer enables the permission model on Node versions without `--allow-addons` (Node 20.11 and earlier). On those versions the flag is rejected, or the native canvas library cannot load, and the canvas stays blank. Later Node versions also allow the `node_modules` directories and the canvas package files the loader stats, including `index.js`. If startup is still denied on one of those paths, that path is added and the subprocess is tried again. A script still cannot read arbitrary files such as `/etc/passwd`.
+
 ## 0.6.18
 
 `radial-gradient()` accepts `circle` or `ellipse`, a size keyword, and `at` a position. `radial-gradient(circle, #fff, #000)` paints. A bad color stop no longer aborts the process, so the PNG and the report are still written.
