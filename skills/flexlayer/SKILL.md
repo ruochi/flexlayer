@@ -46,7 +46,7 @@ When the current workspace is the flexlayer repo (it has `src/cli.ts`), read the
 
 | File | Contents |
 | --- | --- |
-| `AGENTS.md` | Entry, workflow, hard rules |
+| `AGENTS.md` | Entry, deviations, hard rules, common issues |
 | `SPEC.md` | Tags, attributes, issue codes |
 | `docs/CHEATSHEET.md` | One page of syntax |
 | `docs/RESOURCES.md` | Fonts, images, palettes |
