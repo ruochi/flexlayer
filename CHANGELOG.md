@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.22
+
+Chinese font recommendations are three tiers: 最推荐, 推荐, and 其他. `resources.recommendedFonts` no longer groups faces by mood. ChillDuanSans (寒蝉端黑体) is still the default. Kai (霞鹜文楷) is the other name already in the catalog. Every other name is only for choosing a face. You supply `<font family src>` yourself.
+
 ## 0.6.21
 
 A gradient color stop the canvas cannot parse makes the whole gradient invalid. The report is `invalid-attr`, and the paint falls back to that attribute's default solid. The stop is not dropped, and rendering still writes the picture.
