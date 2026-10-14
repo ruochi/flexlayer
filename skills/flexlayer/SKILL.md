@@ -1,61 +1,61 @@
 ---
 name: flexlayer
-description: "用 Flex Layer 把一帧画面排成 PNG。用户要海报、封面、幻灯、信息图、示意图、社媒图，或提到 flexlayer、.layer 时使用。特色是同一深度里的线框断线、文字按墨迹藏到图片后、按物体景深、绕墨迹描边。写法读当前版本的文档。"
+description: "Lay out one frame as a PNG with Flex Layer. Use for a poster, cover, slide, infographic, diagram, or social image, or when the user mentions flexlayer or .layer. Distinctive features: wireframe breaks in one depth buffer, text hidden behind an image by its ink, depth of field per object, and a stroke around the ink. Read the docs for the version in use."
 license: MIT
-compatibility: Node.js 20 或更高。目录里的字体第一次用到时需要联网，下载到 ~/.cache/flexlayer/fonts。
+compatibility: Node.js 20 or newer. Catalog fonts need a network the first time they are used, and download to ~/.cache/flexlayer/fonts.
 metadata:
   author: ruochi
 ---
 
 # Flex Layer
 
-Flex Layer 用标签描述一帧画面，渲染成 PNG，并写出布局报告。文字和排布是 HTML，按 HTML 渲染。图形用 SVG 的写法。生成和渲染分开，中间交接 `.layer` 文本。有数据、循环或动画时写 `.tsx`，执行后得到同一棵树。不接 Vue 或 React。
+Flex Layer describes one frame with tags, renders it to PNG, and writes a layout report. Text and layout are HTML, rendered as HTML. Shapes use the SVG form. Authoring and rendering are separate. The handoff is `.layer` text. When there is data, a loop, or animation, write `.tsx`. Running it produces the same tree. Vue and React are not part of this.
 
-仓库：https://github.com/ruochi/flexlayer
+Repository: https://github.com/ruochi/flexlayer
 
-本技能不记属性、标签、命令参数和例子。那些随版本改。动笔前读和当前渲染器同一份的文档。写错时以报告里的 `path`、`hint` 为准。
+This skill does not record attributes, tags, command flags, or examples. Those change with the version. Before writing, read the docs that match the renderer you are using. When something is wrong, follow `path` and `hint` in the report.
 
-## 特色
+## What is distinctive
 
-文字、图片、线框和实体进同一张深度，只有有墨的像素才遮挡。
+Text, images, wireframes, and solids share one depth buffer. Only pixels that have ink occlude.
 
-- 线框遇空白不断，遇实体才断开。被自己挡住的棱是虚线，被别的物体挡住就断开。
-- 文字按墨迹藏到图片后面。一个字可以一半在前、一半在后。
-- 景深按物体分开糊，糊边不漏出被挡住的颜色。
-- 描边绕着合成后的墨迹。重叠的字只有一圈。
-- 半透明玻璃不写深度，后面的棱还在。
+- A wireframe does not break on empty space. It breaks when it meets a solid. An edge hidden by its own body is dashed. An edge hidden by another object breaks.
+- Text hides behind an image by its ink. One character can be half in front and half behind.
+- Depth of field blurs per object. A blurred edge does not leak a color that was hidden.
+- A stroke follows the ink after compositing. Overlapping characters get one outline.
+- Translucent glass does not write depth. Edges behind it stay visible.
 
-校验出报告，渲染出 PNG。报告里有路径、布局盒和着墨。字体和配色用资源文档里的名字。
+Check writes a report. Render writes a PNG. The report has paths, layout boxes, and ink. Fonts and palettes use the names in the resources doc.
 
-## 超出 HTML 截图的能力
+## Beyond an HTML screenshot
 
-HTML 截图把浏览器里的网页画下来。Flex Layer 的文字排布走同一套 CSS。下面这些能力要打开文档再写：
+An HTML screenshot paints a page from a browser. Flex Layer lays out text with the same CSS. The features below need the docs open:
 
-- **先量再摆。** 量完一块再放下一块，按实际布局盒，以及转完或投影后的着墨对齐。
-- **图形和文字在同一棵树。** 矩形、圆、线、路径、箭头用图形属性画在 layer 里。
-- **实体和镜头。** 形状可以沿厚度挤出，另有球、环、管、地面和影子。three.js 的几何体可以和文字、线稿放进同一深度。
-- **蒙版、抠图、字形轮廓。** 遮罩裁合成后的一层。主体遮罩和单个字的轮廓可以量完再摆回画面。
-- **整层效果和自绘像素。** 调色、玻璃、噪点作用整棵子树。像素可以交给画布脚本。
-- **帧。** 每个时刻仍是一棵 Flex Layer。随机和时钟按帧固定，同一输入得到同一张图。
+- **Measure, then place.** Measure one block, then place the next, against the real layout box and against the ink after transform or projection.
+- **Shapes and text in one tree.** Rectangles, circles, lines, paths, and arrows are drawn in a layer with shape attributes.
+- **Solids and a camera.** A shape can be extruded by thickness. There are also spheres, tori, tubes, a ground, and shadows. three.js geometry can share depth with text and line art.
+- **Masks, cutouts, glyph outlines.** A mask clips a layer after it is composited. A subject mask and a single character's outline can be measured and placed back into the picture.
+- **Layer effects and custom pixels.** Grade, glass, and noise apply to a whole subtree. Pixels can be handed to a canvas script.
+- **Frames.** Each instant is still one Flex Layer tree. Randomness and the clock are fixed per frame. The same input produces the same picture.
 
-## 文档
+## Docs
 
-先找和正在用的那一版相同的文件。仓库的 main 可能比已安装的包新；已经安装时，以包里的文件为准。
+Find the files that match the version you are using. `main` in the repo may be newer than an installed package. When a package is installed, use the files inside it.
 
-当前工作区就是 flexlayer 仓库（有 `src/cli.ts`）时，读仓库里的这些文件，命令用 `npx tsx src/cli.ts`：
+When the current workspace is the flexlayer repo (it has `src/cli.ts`), read these files and run commands with `npx tsx src/cli.ts`:
 
-| 文件 | 内容 |
+| File | Contents |
 | --- | --- |
-| `AGENTS.md` | 入口、工作流、硬性约定 |
-| `SPEC.md` | 标签、属性、问题码 |
-| `docs/CHEATSHEET.md` | 一页写法 |
-| `docs/RESOURCES.md` | 字体、图片、配色 |
-| `docs/GALLERY.md` | 效果图 |
-| `docs/attrs.json` | 按属性名查 |
+| `AGENTS.md` | Entry, workflow, hard rules |
+| `SPEC.md` | Tags, attributes, issue codes |
+| `docs/CHEATSHEET.md` | One page of syntax |
+| `docs/RESOURCES.md` | Fonts, images, palettes |
+| `docs/GALLERY.md` | Sample pictures |
+| `docs/attrs.json` | Lookup by attribute name |
 
-装在别的项目里时，读 `node_modules/flexlayer/` 下的 `SPEC.md`、`docs/CHEATSHEET.md`、`docs/RESOURCES.md`、`docs/GALLERY.md`、`docs/attrs.json`，命令用 `npx flexlayer`。`AGENTS.md` 不随安装包发布，入口约定在仓库的 `AGENTS.md` 和 SPEC 里。
+When it is installed in another project, read `SPEC.md`, `docs/CHEATSHEET.md`, `docs/RESOURCES.md`, `docs/GALLERY.md`, and `docs/attrs.json` under `node_modules/flexlayer/`, and run commands with `npx flexlayer`. `AGENTS.md` is not published in the package. The entry rules are in the repo's `AGENTS.md` and in SPEC.
 
-同一批文档的地址：
+The same docs on the web:
 
 - https://github.com/ruochi/flexlayer/blob/main/AGENTS.md
 - https://github.com/ruochi/flexlayer/blob/main/SPEC.md
@@ -64,9 +64,9 @@ HTML 截图把浏览器里的网页画下来。Flex Layer 的文字排布走同�
 - https://github.com/ruochi/flexlayer/blob/main/docs/GALLERY.md
 - https://github.com/ruochi/flexlayer/blob/main/docs/attrs.json
 
-## 开始
+## Start
 
-需要 Node.js 20 或更高。
+Node.js 20 or newer.
 
 ```bash
 npm install github:ruochi/flexlayer
@@ -74,4 +74,4 @@ npx flexlayer check scene.tsx
 npx flexlayer render scene.tsx -o scene.png
 ```
 
-先 `check`。有 error 时退出码为 1，按报告改完再查。通过后再 `render`。其余参数写在 SPEC 和安装包的 README 里。
+`check` first. An error exits with code 1. Fix it from the report, then check again. `render` after it passes. The other flags are in SPEC and in the installed package's README.

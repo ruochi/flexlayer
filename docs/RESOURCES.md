@@ -1,42 +1,44 @@
-# 可用资源
+# Resources
 
-生成画面时用这里的名字和地址。字体、图片、配色、效果名都对得上当前实现。程序里 `import { resources } from 'flexlayer'`，`resources.font('楷体')`、`resources.recommendedFont('得意黑')`、`resources.image('lake')`、`resources.palettes.night`。
+Use these names and URLs when generating a picture. Fonts, images, palettes, and effect names match the current implementation. In code, `import { resources } from 'flexlayer'`, then `resources.font('楷体')`, `resources.recommendedFont('得意黑')`, `resources.image('lake')`, `resources.palettes.night`.
 
-## 字体
+## Fonts
 
-写 `font-family="Song"` 或 `style="font-family:Inter"`。没写是 `ChillDuanSans`。第一次用到某个名字时，字体文件下载到 `~/.cache/flexlayer/fonts`。
+Write `font-family="Song"` or `style="font-family:Inter"`. The default is `ChillDuanSans`. The first time a name is used, the font file downloads to `~/.cache/flexlayer/fonts`.
 
-`<font src>` 要的是字体文件（ttf、otf、woff、ttc、otc）。`fonts.googleapis.com` 的 CSS 地址不是字体文件，写进去会下载失败。目录里的 Google 字体已经换成 jsDelivr 上的文件，直接写名字即可。
+`<font src>` wants a font file (ttf, otf, woff, ttc, otc). A `fonts.googleapis.com` CSS URL is not a font file, and using it fails the download. Google fonts in this catalog already point at files on jsDelivr. Write the name.
 
-`.ttc`、`.otc` 是字体集合，里面有多套字形。不写序号时用第 0 套。思源、Noto CJK 的第 0 套是日文，「复」这类简繁日不同的字会不对。简体写 `src="SourceHanSans.ttc#2"`，`#` 后面是从 0 开始的序号，不是文件名。
+`.ttc` and `.otc` are collections with several faces. With no index, face 0 is used. For Source Han and Noto CJK, face 0 is Japanese, so a character that differs between simplified, traditional, and Japanese (such as 复) comes out wrong. Simplified Chinese is `src="SourceHanSans.ttc#2"`. The number after `#` is a zero-based index, not part of the file name.
 
-多档字体在 400 和 700 里取最近的一档。只登记了一档的，标题的 bold 仍用这一档。`Symbols` 是图标字体，按 100 到 700 的整百取最近一档。写成 `<span class="material-symbols-outlined">home</span>`，字重用 `font-weight`。`ChillDuanSans` 是可变字体，字重轴约 300 到 800；轮廓只有默认字重 300。
+When both 400 and 700 are registered, the nearest one is used. A family with only one face keeps that face for a bold title. `Symbols` is the icon font. Weight snaps to the nearest hundred from 100 to 700. Write `<span class="material-symbols-outlined">home</span>` and set the weight with `font-weight`. `ChillDuanSans` is a variable font, with a weight axis of about 300 to 800. Its outlines exist only at the default weight 300.
 
-简体子集不含完整拉丁字形时，缺的字回退到 `ChillDuanSans`。拉丁子集不含汉字。
+When a simplified-Chinese subset has no complete Latin glyphs, missing characters fall back to `ChillDuanSans`. Latin subsets do not contain Han characters.
 
-| 名字 | 别名 | 字重 | 覆盖 | 适合 | 来源 |
+The Alias column is text you can pass to `font-family`. Those strings are part of the API.
+
+| Name | Aliases | Weights | Coverage | Use | Source |
 | --- | --- | --- | --- | --- | --- |
-| `ChillDuanSans` | 寒蝉端黑体 | 可变 300–800 | 简体、拉丁 | 默认正文 | 寒蝉端黑体 |
-| `Song` | 宋体、思源宋体 | 400、700 | 简体 | 正文宋体 | Noto Serif SC |
-| `Kai` | 楷体、霞鹜文楷 | 400、700 | 简体 | 楷体 | 霞鹜文楷 |
-| `Brush` | 书法、毛笔 | 400 | 简体 | 书法标题 | Ma Shan Zheng |
-| `Inter` | | 400、700 | 拉丁 | 英文正文 | Inter |
-| `JetBrainsMono` | jetbrains mono、等宽 | 400、700 | 拉丁 | 代码与等宽 | JetBrains Mono |
-| `Playfair` | Playfair Display | 400、700 | 拉丁 | 英文标题 | Playfair Display |
-| `Baskerville` | Libre Baskerville | 400、700 | 拉丁 | 英文正文衬线 | Libre Baskerville |
-| `Oswald` | | 400、700 | 拉丁 | 窄标题 | Oswald |
-| `SpaceGrotesk` | Space Grotesk | 400、700 | 拉丁 | 几何无衬线 | Space Grotesk |
-| `Cormorant` | Cormorant Garamond | 400、700 | 拉丁 | 细衬线 | Cormorant Garamond |
-| `Bebas` | Bebas Neue | 400 | 拉丁 | 全大写展示字 | Bebas Neue |
-| `Newsreader` | | 400、700 | 拉丁 | 阅读衬线 | Newsreader |
-| `Fraunces` | | 400、700 | 拉丁 | 软衬线标题 | Fraunces |
-| `Instrument` | Instrument Serif | 400 | 拉丁 | 展示衬线 | Instrument Serif |
-| `STIXTwoMath` | STIX Two Math | 400 | 拉丁、希腊、数学符号 | 公式只用它。带 MATH 表，别的字体排不了公式 | STIX Two Math |
-| `NotoSans` | 思源黑体 | 400、700 | 简体 | 黑体正文 | Noto Sans SC |
-| `XiaoWei` | 站酷小薇 | 400 | 简体 | 宋意标题 | ZCOOL XiaoWei |
-| `KuaiLe` | 站酷快乐体 | 400 | 简体 | 活泼标题 | ZCOOL KuaiLe |
-| `MaoCao` | 刘建毛草 | 400 | 简体 | 手写 | Liu Jian Mao Cao |
-| `Symbols` | 图标 | 100–700 | 图标 | 图标 | Material Symbols Outlined |
+| `ChillDuanSans` | 寒蝉端黑体 | variable 300–800 | Simplified Chinese, Latin | Default body text | ChillDuanSans |
+| `Song` | 宋体, 思源宋体 | 400, 700 | Simplified Chinese | Song body text | Noto Serif SC |
+| `Kai` | 楷体, 霞鹜文楷 | 400, 700 | Simplified Chinese | Kai | LXGW WenKai |
+| `Brush` | 书法, 毛笔 | 400 | Simplified Chinese | Calligraphic titles | Ma Shan Zheng |
+| `Inter` | | 400, 700 | Latin | English body text | Inter |
+| `JetBrainsMono` | jetbrains mono, 等宽 | 400, 700 | Latin | Code and monospace | JetBrains Mono |
+| `Playfair` | Playfair Display | 400, 700 | Latin | English titles | Playfair Display |
+| `Baskerville` | Libre Baskerville | 400, 700 | Latin | English body serif | Libre Baskerville |
+| `Oswald` | | 400, 700 | Latin | Condensed titles | Oswald |
+| `SpaceGrotesk` | Space Grotesk | 400, 700 | Latin | Geometric sans | Space Grotesk |
+| `Cormorant` | Cormorant Garamond | 400, 700 | Latin | Light serif | Cormorant Garamond |
+| `Bebas` | Bebas Neue | 400 | Latin | All-caps display | Bebas Neue |
+| `Newsreader` | | 400, 700 | Latin | Reading serif | Newsreader |
+| `Fraunces` | | 400, 700 | Latin | Soft serif titles | Fraunces |
+| `Instrument` | Instrument Serif | 400 | Latin | Display serif | Instrument Serif |
+| `STIXTwoMath` | STIX Two Math | 400 | Latin, Greek, math symbols | Formulas only. It has a MATH table. Other fonts cannot set formulas | STIX Two Math |
+| `NotoSans` | 思源黑体 | 400, 700 | Simplified Chinese | Gothic body text | Noto Sans SC |
+| `XiaoWei` | 站酷小薇 | 400 | Simplified Chinese | Song-like titles | ZCOOL XiaoWei |
+| `KuaiLe` | 站酷快乐体 | 400 | Simplified Chinese | Lively titles | ZCOOL KuaiLe |
+| `MaoCao` | 刘建毛草 | 400 | Simplified Chinese | Handwriting | Liu Jian Mao Cao |
+| `Symbols` | 图标 | 100–700 | Icons | Icons | Material Symbols Outlined |
 
 ```html
 <layer width="720" height="360" background="#0c1424" color="#f4ecdf" font-family="Song">
@@ -47,71 +49,71 @@
 </layer>
 ```
 
-## 推荐字体
+## Recommended fonts
 
-按气质选字，粗黑体在前。程序里 `resources.recommendedFonts`，`resources.recommendedFont('得意黑')` 返回这一组和名字。
+Pick by mood. The heavy gothic group comes first. In code, `resources.recommendedFonts`. `resources.recommendedFont('得意黑')` returns that group and the name.
 
-寒蝉端黑体已在上面的目录里，没写 `font-family` 时用它。表里其余名字只供选型，字体文件写在根下。`src` 可以是相对路径或字体文件的网址。
+`group` and `title` are the strings the API returns. They stay in Chinese because `recommendedFont` looks them up that way. ChillDuanSans is already in the catalog above and is used when `font-family` is omitted. The other names are for choosing a face. You supply the file under the root. `src` can be a relative path or a URL of a font file.
 
-| 气质 | 名字 | 中文 | 适合 |
-| --- | --- | --- | --- |
-| 粗黑体 | `ChillDuanSans` | 寒蝉端黑体 | 主标题，默认字体 |
-| 瘦黑体 | `DeYiHei` | 得意黑 | 细长黑体 |
-| 瘦黑体 | `ZhuoTeQingYaTi` | 卓特清雅体 | 细长黑体 |
-| 圆体 | `JingNanBoBoHei` | 荆南波波黑体 | 圆角标题 |
-| 圆体 | `JingNanYuanTi` | 荆南圆体 | 圆角标题 |
-| 圆体 | `MaoKenZhuYuanTi` | 猫啃珠圆体 | 圆角标题 |
-| 圆体 | `TangYuanTi` | 猫啃糖圆体 | 圆角标题 |
-| 宋体 | `FengYaSong` | 猫啃风雅宋体 | 宋体标题与正文 |
-| 宋体 | `NaXiChuXiaSong` | 南西初夏宋体 | 宋体标题与正文 |
-| 手写体 | `YeZiGongChangXiaoShiTou` | 也字工厂小石头体 | 手写 |
-| 广告体 | `DouYuZhuiGuangTi` | 斗鱼追光体 | 广告标题 |
+| Group | Mood | Name | Title you can pass | Use |
+| --- | --- | --- | --- | --- |
+| 粗黑体 | Heavy gothic | `ChillDuanSans` | 寒蝉端黑体 | Main titles. Default font. API `use` is 主标题 |
+| 瘦黑体 | Condensed gothic | `DeYiHei` | 得意黑 | Tall condensed gothic. API `use` is 细长黑体 |
+| 瘦黑体 | Condensed gothic | `ZhuoTeQingYaTi` | 卓特清雅体 | Tall condensed gothic. API `use` is 细长黑体 |
+| 圆体 | Rounded | `JingNanBoBoHei` | 荆南波波黑体 | Rounded titles. API `use` is 圆角标题 |
+| 圆体 | Rounded | `JingNanYuanTi` | 荆南圆体 | Rounded titles. API `use` is 圆角标题 |
+| 圆体 | Rounded | `MaoKenZhuYuanTi` | 猫啃珠圆体 | Rounded titles. API `use` is 圆角标题 |
+| 圆体 | Rounded | `TangYuanTi` | 猫啃糖圆体 | Rounded titles. API `use` is 圆角标题 |
+| 宋体 | Song | `FengYaSong` | 猫啃风雅宋体 | Song titles and body. API `use` is 宋体标题与正文 |
+| 宋体 | Song | `NaXiChuXiaSong` | 南西初夏宋体 | Song titles and body. API `use` is 宋体标题与正文 |
+| 手写体 | Handwriting | `YeZiGongChangXiaoShiTou` | 也字工厂小石头体 | Handwriting. API `use` is 手写 |
+| 广告体 | Advertising | `DouYuZhuiGuangTi` | 斗鱼追光体 | Advertising titles. API `use` is 广告标题 |
 
 ```html
 <font family="DeYiHei" src="fonts/deyihei.otf" />
 ```
 
-图标写 `class="material-symbols-outlined"`，里面是图标名。字重写 `font-weight`，没写就跟周围的字重。字号没写就跟周围的 `font-size`。颜色写 `style`。这是空心的一套。
+Icons use `class="material-symbols-outlined"` and an icon name inside. Set the weight with `font-weight`. When omitted, it follows the surrounding weight. When the size is omitted, it follows the surrounding `font-size`. Set the color in `style`. This is the outlined set.
 
 ```html
 <div style="display:flex; align-items:center; gap:12px; font-size:40px; color:#f4ecdf">
   <span class="material-symbols-outlined">home</span>
-  <span>首页</span>
+  <span>Home</span>
 </div>
 ```
 
-## 图片
+## Images
 
-`img` 的 `src` 可以是相对路径，或直接返回图片字节的 http(s) 地址。下面三张是裁好的样图，宽约 960。
+`img` `src` can be a relative path, or an http(s) URL that returns image bytes directly. These three are cropped samples, about 960 wide.
 
-| 名字 | 画面 | 地址 |
+| Name | Picture | URL |
 | --- | --- | --- |
-| `lake` | 山湖 | `https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=960&q=80` |
-| `valley` | 山谷 | `https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=960&q=80` |
-| `forest` | 森林 | `https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=960&q=80` |
+| `lake` | Mountain lake | `https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=960&q=80` |
+| `valley` | Valley | `https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=960&q=80` |
+| `forest` | Forest | `https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=960&q=80` |
 
 ```html
 <img src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=960&q=80" style="width:640px; height:360px; object-fit:cover" />
 ```
 
-来源记在 `resources.images[].credit`。Unsplash 许可以该站当时的条款为准。
+Credits are in `resources.images[].credit`. The Unsplash license is whatever that site's terms were at the time.
 
-## 配色
+## Palettes
 
-| 名字 | 用途 |
+| Name | Use |
 | --- | --- |
-| `night` | 底 `#0c1424`，字 `#f4ecdf`，强调 `#e8b04a` |
-| `paper` | 底 `#f4f1ea`，字 `#0e1219`，强调 `#3ecfc4`，线条 `#f5c16c` |
-| `halving` | 底 `#0f1115`，字 `#ffffff`，强调 `#f7931a` |
+| `night` | Ground `#0c1424`, type `#f4ecdf`, accent `#e8b04a` |
+| `paper` | Ground `#f4f1ea`, type `#0e1219`, accent `#3ecfc4`, line `#f5c16c` |
+| `halving` | Ground `#0f1115`, type `#ffffff`, accent `#f7931a` |
 
-## 效果名
+## Effect names
 
-这些是属性的取值，不是标签。
+These are attribute values, not tags.
 
-| 属性 | 可以写 |
+| Attribute | You can write |
 | --- | --- |
-| `grade` | `lomo`、`matte`、`chrome`、`bleach`、`mono`。强度和单项改动写在后面，如 `lomo 0.8, fade 0.1` |
-| `glass` | `clear`、`regular`、`thick`，或 `clear, blur 8, tint #fff2` |
-| `blend` | `source-over`、`multiply`、`screen`、`overlay`、`soft-light`、`lighten`、`darken` |
+| `grade` | `lomo`, `matte`, `chrome`, `bleach`, `mono`. Amount and single-parameter overrides follow, as in `lomo 0.8, fade 0.1` |
+| `glass` | `clear`, `regular`, `thick`, or `clear, blur 8, tint #fff2` |
+| `blend` | `source-over`, `multiply`, `screen`, `overlay`, `soft-light`, `lighten`, `darken` |
 
-`grade` 和 `grade-mask` 只写在 `layer` 上。
+`grade` and `grade-mask` are written only on `layer`.

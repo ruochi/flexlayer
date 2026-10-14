@@ -1,7 +1,7 @@
 {
   "name": "flexlayer-select",
   "version": "0.1.0",
-  "description": "从照片里取出前景遮罩，或抠出主体并写成编号选择题",
+  "description": "Take a foreground mask from a photo, or cut out the subject and write it as numbered choices",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

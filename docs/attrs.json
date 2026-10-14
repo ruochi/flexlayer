@@ -85,7 +85,7 @@
     "layerOnly": true,
     "htmlUsesStyle": false,
     "note": null,
-    "misplacedHint": "写在取景的 layer 上，例如 <layer camera=\"900\">。不写时视距等于这一层的 height。不要和 view 写在同一层"
+    "misplacedHint": "Put this on the layer that frames the shot, for example <layer camera=\"900\">. When omitted, the viewing distance is that layer's height. Do not combine it with view on the same layer"
   },
   {
     "name": "shadows",
@@ -95,8 +95,8 @@
     "example": "none",
     "layerOnly": true,
     "htmlUsesStyle": false,
-    "note": "写在开了镜头的 layer 上。none 关掉投到 ground 上的影子，深度遮挡还在",
-    "misplacedHint": "写在取景的 layer 上，例如 <layer camera=\"900\" shadows=\"none\">"
+    "note": "On a layer that has a camera. none turns off shadows cast onto ground. Depth occlusion stays",
+    "misplacedHint": "Put this on the layer that frames the shot, for example <layer camera=\"900\" shadows=\"none\">"
   },
   {
     "name": "min-font",
@@ -106,8 +106,8 @@
     "example": "print",
     "layerOnly": true,
     "htmlUsesStyle": false,
-    "note": "只写在根上。screen 是 min(宽, 高) / 1080 × 24，print 是 × 12。写成数字就是屏幕像素下限，none 关掉 min-font-size",
-    "misplacedHint": "只写在根 layer 上，例如 <layer width=\"1240\" height=\"1754\" min-font=\"print\">"
+    "note": "Root only. screen is min(width, height) / 1080 × 24. print uses × 12. A number is the minimum size in screen pixels. none turns min-font-size off",
+    "misplacedHint": "Root layer only, for example <layer width=\"1240\" height=\"1754\" min-font=\"print\">"
   },
   {
     "name": "preserve-3d",
@@ -118,7 +118,7 @@
     "layerOnly": false,
     "htmlUsesStyle": false,
     "note": null,
-    "misplacedHint": "只写在 layer 或 display:flex 的 div 上"
+    "misplacedHint": "Only on layer, or on a div with display:flex"
   },
   {
     "name": "sharp",
@@ -129,7 +129,7 @@
     "layerOnly": false,
     "htmlUsesStyle": false,
     "note": null,
-    "misplacedHint": "写在要保持清楚的 layer、flex、形状或实体上"
+    "misplacedHint": "On a layer, flex container, shape, or solid that should stay sharp"
   },
   {
     "name": "scale",
@@ -161,8 +161,8 @@
     "example": "chars",
     "layerOnly": false,
     "htmlUsesStyle": false,
-    "note": "写在文字盒子或行内标签上。每个字单独做 translate、rotate、scale、opacity，行宽和折行不变。文字盒子因此不再整块转动、缩放或变透明",
-    "misplacedHint": "写在 p、h1 或 span 上，例如 <p split=\"chars\">"
+    "note": "On a text box or an inline tag. Each character gets its own translate, rotate, scale, and opacity. Line width and wrapping stay the same, so the text box no longer rotates, scales, or fades as one piece",
+    "misplacedHint": "On p, h1, or span, for example <p split=\"chars\">"
   },
   {
     "name": "background",
@@ -535,7 +535,7 @@
     "example": "40",
     "layerOnly": false,
     "htmlUsesStyle": false,
-    "note": "写在 rect、circle、ellipse、polygon、path 上就沿 z 挤出，厚度以平面为中心，布局不计。不写就是平面",
+    "note": "On rect, circle, ellipse, polygon, or path, extrude along z. Thickness is centered on the plane and is not part of layout. Omit it for a flat shape",
     "misplacedHint": null
   },
   {
@@ -546,7 +546,7 @@
     "example": "evenodd",
     "layerOnly": false,
     "htmlUsesStyle": false,
-    "note": "挤出时判断洞。nonzero 要内圈反绕向；evenodd 按嵌套奇偶",
+    "note": "How holes are decided when extruding. nonzero needs the inner contour wound the other way. evenodd uses nesting parity",
     "misplacedHint": null
   },
   {
@@ -634,7 +634,7 @@
     "example": "false",
     "layerOnly": false,
     "htmlUsesStyle": false,
-    "note": "false 时这只实体不把影子投到 ground 上。玻璃本来就不投",
+    "note": "When false, this solid does not cast a shadow onto ground. Glass never casts one",
     "misplacedHint": null
   },
   {
@@ -645,7 +645,7 @@
     "example": "false",
     "layerOnly": false,
     "htmlUsesStyle": false,
-    "note": "只写在 ground 上。false 时地面不接影子",
+    "note": "Only on ground. When false, the ground does not receive shadows",
     "misplacedHint": null
   },
   {
@@ -711,7 +711,7 @@
     "example": "40",
     "layerOnly": false,
     "htmlUsesStyle": false,
-    "note": "只写在 model 上。1 个模型单位对应的像素。写了就保留原始坐标，原点落在外包 layer 的 origin（默认中心），不再 contain 居中",
+    "note": "Only on model. Pixels per model unit. When set, original coordinates are kept and the origin sits on the wrapping layer's origin (center by default), instead of contain-centering",
     "misplacedHint": null
   },
   {
@@ -722,7 +722,7 @@
     "example": null,
     "layerOnly": false,
     "htmlUsesStyle": false,
-    "note": "只在 tsx 里写在 model 上，传入 three.js 的 Object3D。.layer 里写不了",
+    "note": "Only on model in tsx. Pass a three.js Object3D. A .layer file cannot write this",
     "misplacedHint": null
   },
   {
@@ -741,7 +741,7 @@
     "group": "expect",
     "syntax": null,
     "default": null,
-    "example": "overflow-canvas: 出血图",
+    "example": "overflow-canvas: full bleed",
     "layerOnly": false,
     "htmlUsesStyle": false,
     "note": null,
@@ -762,7 +762,7 @@
     "name": "shadow",
     "group": "effect",
     "syntax": "x y [blur] [spread] [color]",
-    "default": "颜色 `#00000066`",
+    "default": "color `#00000066`",
     "example": "0 8 16 #00000055",
     "layerOnly": false,
     "htmlUsesStyle": true,
@@ -773,7 +773,7 @@
     "name": "glow",
     "group": "effect",
     "syntax": "blur [spread] [color]",
-    "default": "颜色取本体",
+    "default": "color from the mark",
     "example": "56 #f3ead4",
     "layerOnly": false,
     "htmlUsesStyle": true,
@@ -783,8 +783,8 @@
   {
     "name": "inner-shadow",
     "group": "effect",
-    "syntax": "同 shadow",
-    "default": "同 shadow",
+    "syntax": "same as shadow",
+    "default": "same as shadow",
     "example": "0 8 16 #00000055",
     "layerOnly": false,
     "htmlUsesStyle": true,
@@ -794,8 +794,8 @@
   {
     "name": "inner-glow",
     "group": "effect",
-    "syntax": "同 glow",
-    "default": "同 glow",
+    "syntax": "same as glow",
+    "default": "same as glow",
     "example": "28 #7ec8ff",
     "layerOnly": false,
     "htmlUsesStyle": true,
@@ -805,7 +805,7 @@
   {
     "name": "blur",
     "group": "effect",
-    "syntax": "单个非负像素",
+    "syntax": "one non-negative length in px",
     "default": null,
     "example": "6",
     "layerOnly": false,
@@ -816,7 +816,7 @@
   {
     "name": "backdrop-blur",
     "group": "effect",
-    "syntax": "单个非负像素",
+    "syntax": "one non-negative length in px",
     "default": null,
     "example": "16",
     "layerOnly": false,
@@ -827,7 +827,7 @@
   {
     "name": "glass",
     "group": "effect",
-    "syntax": "clear | regular | thick，或 clear, blur 8, tint #fff2",
+    "syntax": "clear | regular | thick, or clear, blur 8, tint #fff2",
     "default": null,
     "example": "clear",
     "layerOnly": false,
@@ -838,7 +838,7 @@
   {
     "name": "noise",
     "group": "effect",
-    "syntax": "强度，或强度加颜色",
+    "syntax": "amount, or amount plus a color",
     "default": null,
     "example": "0.08",
     "layerOnly": false,
@@ -872,34 +872,34 @@
     "name": "overlay",
     "group": "layer-only",
     "syntax": "<paint> [opacity] [blend]",
-    "default": "透明度 1，`source-over`",
+    "default": "opacity 1, `source-over`",
     "example": "#00000066",
     "layerOnly": true,
     "htmlUsesStyle": false,
     "note": null,
-    "misplacedHint": "外包一层 layer，例如 <layer overlay=\"#00000066\"><rect …/></layer>"
+    "misplacedHint": "Wrap a layer, for example <layer overlay=\"#00000066\"><rect …/></layer>"
   },
   {
     "name": "grade",
     "group": "layer-only",
-    "syntax": "预设 [强度], 参数 值",
-    "default": "强度 1",
+    "syntax": "preset [amount], param value",
+    "default": "amount 1",
     "example": "lomo 0.8, fade 0.1",
     "layerOnly": true,
     "htmlUsesStyle": false,
     "note": null,
-    "misplacedHint": "外包一层 layer，例如 <layer grade=\"lomo\"><img src=\"…\" style=\"width:320px\" /></layer>"
+    "misplacedHint": "Wrap a layer, for example <layer grade=\"lomo\"><img src=\"…\" style=\"width:320px\" /></layer>"
   },
   {
     "name": "grade-mask",
     "group": "layer-only",
-    "syntax": "同 fill，alpha 是强度",
+    "syntax": "same as fill; alpha is the amount",
     "default": null,
     "example": "radial-gradient(#fff0 30%, #fff)",
     "layerOnly": true,
     "htmlUsesStyle": false,
     "note": null,
-    "misplacedHint": "外包一层 layer，例如 <layer grade=\"lomo\" grade-mask=\"radial-gradient(#fff0 30%, #fff)\">"
+    "misplacedHint": "Wrap a layer, for example <layer grade=\"lomo\" grade-mask=\"radial-gradient(#fff0 30%, #fff)\">"
   },
   {
     "name": "view",
@@ -910,7 +910,7 @@
     "layerOnly": true,
     "htmlUsesStyle": false,
     "note": null,
-    "misplacedHint": "只写在 layer 上，例如 <layer width=\"1920\" height=\"1080\" view=\"200 80 960 540\">"
+    "misplacedHint": "Only on layer, for example <layer width=\"1920\" height=\"1080\" view=\"200 80 960 540\">"
   },
   {
     "name": "bleed",
