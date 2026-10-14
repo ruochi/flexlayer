@@ -112,7 +112,7 @@ Fix from the report's `path` and `hint`. An error exits with code 1. A warn stil
 | Masks, cutouts, `glyph`, `canvas.create`, animation | SPEC, "Masks and programs" |
 | Issue codes and report fields | SPEC, "Report" |
 | How one attribute is written | [docs/attrs.json](docs/attrs.json), look up the name |
-| A font for a mood | Recommended fonts in [docs/RESOURCES.md](docs/RESOURCES.md). ChillDuanSans (寒蝉端黑体) is the default. Other names need their own font file |
+| A Chinese face | Recommended fonts in [docs/RESOURCES.md](docs/RESOURCES.md), in the order 最推荐, 推荐, 其他. ChillDuanSans (寒蝉端黑体) is the default. Kai (霞鹜文楷) is already in the catalog. Other names need their own font file |
 
 HTML and `display:flex` render as CSS. Defaults are not copied here.
 

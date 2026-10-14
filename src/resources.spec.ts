@@ -54,26 +54,43 @@ describe('可用资源', () => {
     expect(doc).not.toContain('fonts.googleapis.com/css')
   })
 
-  it('推荐字体按气质列出，除默认字体外不进下载目录', () => {
+  it('推荐字体按档列出，目录里已有的不必再带文件', () => {
     const doc = readFileSync(new URL('../docs/RESOURCES.md', import.meta.url), 'utf8')
-    expect(RECOMMENDED_FONTS.map((group) => group.name)).toEqual(['粗黑体', '瘦黑体', '圆体', '宋体', '手写体', '广告体'])
+    expect(RECOMMENDED_FONTS.map((group) => [group.name, group.use])).toEqual([
+      ['最推荐', '优先选用'],
+      ['推荐', '常用'],
+      ['其他', '备选'],
+    ])
     expect(resources.recommendedFonts).toBe(RECOMMENDED_FONTS)
-    const families = RECOMMENDED_FONTS.flatMap((group) => group.fonts.map((font) => font.family))
+    const fonts = RECOMMENDED_FONTS.flatMap((group) => group.fonts)
+    const families = fonts.map((font) => font.family)
+    const titles = fonts.map((font) => font.title.trim().toLowerCase())
     expect(new Set(families).size).toBe(families.length)
-    const builtin = RECOMMENDED_FONTS.flatMap((group) => group.fonts).filter((font) => font.builtin)
-    expect(builtin.map((font) => font.family)).toEqual([DEFAULT_FONT.family])
-    expect(resources.recommendedFont('寒蝉端黑体')?.group).toBe('粗黑体')
-    expect(resources.recommendedFont('DeYiHei')).toEqual({
-      group: '瘦黑体',
-      font: { family: 'DeYiHei', title: '得意黑' },
+    expect(new Set(titles).size).toBe(titles.length)
+    expect(fonts.filter((font) => font.builtin).map((font) => font.family)).toEqual([DEFAULT_FONT.family, 'Kai'])
+    expect(resources.recommendedFont('寒蝉端黑体')?.group).toBe('最推荐')
+    expect(resources.recommendedFont('ChillDuanHeiSong')).toEqual({
+      group: '最推荐',
+      font: { family: 'ChillDuanHeiSong', title: '寒蝉端黑宋' },
     })
-    for (const group of RECOMMENDED_FONTS) expect(doc).toContain(group.name)
-    for (const font of RECOMMENDED_FONTS.flatMap((group) => group.fonts)) {
+    expect(resources.recommendedFont('霞鹜文楷')).toEqual({
+      group: '其他',
+      font: { family: 'Kai', title: '霞鹜文楷', builtin: true },
+    })
+    for (const group of RECOMMENDED_FONTS) {
+      expect(doc).toContain(group.name)
+      expect(doc).toContain(group.use)
+    }
+    for (const font of fonts) {
       expect(doc).toContain(`\`${font.family}\``)
       expect(doc).toContain(font.title)
-      if (font.builtin) continue
+      const inCatalog = CATALOG_FONTS.some((item) => item.family === font.family)
+      if (font.builtin) {
+        expect(inCatalog).toBe(true)
+        continue
+      }
       expect(builtinFont(font.family)).toBeUndefined()
-      expect(CATALOG_FONTS.some((item) => item.family === font.family)).toBe(false)
+      expect(inCatalog).toBe(false)
     }
   })
 

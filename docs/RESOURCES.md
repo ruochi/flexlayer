@@ -1,6 +1,6 @@
 # Resources
 
-Use these names and URLs when generating a picture. Fonts, images, palettes, and effect names match the current implementation. In code, `import { resources } from 'flexlayer'`, then `resources.font('楷体')`, `resources.recommendedFont('得意黑')`, `resources.image('lake')`, `resources.palettes.night`.
+Use these names and URLs when generating a picture. Fonts, images, palettes, and effect names match the current implementation. In code, `import { resources } from 'flexlayer'`, then `resources.font('楷体')`, `resources.recommendedFont('寒蝉端黑宋')`, `resources.image('lake')`, `resources.palettes.night`.
 
 ## Fonts
 
@@ -51,26 +51,55 @@ The Alias column is text you can pass to `font-family`. Those strings are part o
 
 ## Recommended fonts
 
-Pick by mood. The heavy gothic group comes first. In code, `resources.recommendedFonts`. `resources.recommendedFont('得意黑')` returns that group and the name.
+Pick a Chinese face by tier. 最推荐 comes first. In code, `resources.recommendedFonts`. `resources.recommendedFont('寒蝉端黑宋')` returns that group and the name.
 
-`group` and `title` are the strings the API returns. They stay in Chinese because `recommendedFont` looks them up that way. ChillDuanSans is already in the catalog above and is used when `font-family` is omitted. The other names are for choosing a face. You supply the file under the root. `src` can be a relative path or a URL of a font file.
+`group` and `title` are the strings the API returns. They stay in Chinese because `recommendedFont` looks them up that way. The group `use` values are 优先选用, 常用, and 备选. `ChillDuanSans` is already in the catalog above and is used when `font-family` is omitted. `Kai` is 霞鹜文楷, also already in the catalog. The other names are for choosing a face. You supply the file under the root. `src` can be a relative path or a URL of a font file.
 
-| Group | Mood | Name | Title you can pass | Use |
-| --- | --- | --- | --- | --- |
-| 粗黑体 | Heavy gothic | `ChillDuanSans` | 寒蝉端黑体 | Main titles. Default font. API `use` is 主标题 |
-| 瘦黑体 | Condensed gothic | `DeYiHei` | 得意黑 | Tall condensed gothic. API `use` is 细长黑体 |
-| 瘦黑体 | Condensed gothic | `ZhuoTeQingYaTi` | 卓特清雅体 | Tall condensed gothic. API `use` is 细长黑体 |
-| 圆体 | Rounded | `JingNanBoBoHei` | 荆南波波黑体 | Rounded titles. API `use` is 圆角标题 |
-| 圆体 | Rounded | `JingNanYuanTi` | 荆南圆体 | Rounded titles. API `use` is 圆角标题 |
-| 圆体 | Rounded | `MaoKenZhuYuanTi` | 猫啃珠圆体 | Rounded titles. API `use` is 圆角标题 |
-| 圆体 | Rounded | `TangYuanTi` | 猫啃糖圆体 | Rounded titles. API `use` is 圆角标题 |
-| 宋体 | Song | `FengYaSong` | 猫啃风雅宋体 | Song titles and body. API `use` is 宋体标题与正文 |
-| 宋体 | Song | `NaXiChuXiaSong` | 南西初夏宋体 | Song titles and body. API `use` is 宋体标题与正文 |
-| 手写体 | Handwriting | `YeZiGongChangXiaoShiTou` | 也字工厂小石头体 | Handwriting. API `use` is 手写 |
-| 广告体 | Advertising | `DouYuZhuiGuangTi` | 斗鱼追光体 | Advertising titles. API `use` is 广告标题 |
+| Group | Name | Title you can pass |
+| --- | --- | --- |
+| 最推荐 | `ChillDuanSans` | 寒蝉端黑体 |
+| 最推荐 | `ChillDuanHeiSong` | 寒蝉端黑宋 |
+| 推荐 | `ChillCalligraphyChunQiu` | 寒蝉书体·春秋 |
+| 推荐 | `ChillLongCangKai` | 寒蝉龙藏楷书 |
+| 推荐 | `ChillDINGothic` | 寒蝉德黑体 |
+| 推荐 | `ChillGSans` | 寒蝉高黑体 |
+| 推荐 | `ChillJinshuSongCC` | 寒蝉锦书宋 CC |
+| 推荐 | `ChillKai` | 寒蝉楷体 |
+| 推荐 | `ChillKSans` | 寒蝉宽黑体 |
+| 推荐 | `ChillHuoSongF` | 寒蝉活宋体·復 |
+| 推荐 | `ChillHuoKai` | 寒蝉活楷体 |
+| 推荐 | `ChillHuoGothicF` | 寒蝉活黑体·復 |
+| 推荐 | `ChillHuoFangSong` | 寒蝉活仿宋 |
+| 推荐 | `ChillHuoFangKaiF` | 寒蝉活仿楷·復 |
+| 推荐 | `ChillReunion` | 寒蝉团圆体 |
+| 推荐 | `ChillRoundF` | 寒蝉全圆体 |
+| 推荐 | `ChillRoundM` | 寒蝉半圆体 |
+| 推荐 | `ChillRoundGothic` | 寒蝉圆黑体 |
+| 推荐 | `ChillZhuo` | 寒蝉手拙体 |
+| 推荐 | `ChillInorganic` | 寒蝉无机体 |
+| 推荐 | `ChillOrganic` | 寒蝉有机体 |
+| 推荐 | `ChillYunmoGothic` | 寒蝉云墨黑 |
+| 推荐 | `ChillZhuoKai` | 寒蝉拙楷体 |
+| 其他 | `AlimamaShuHeiTi` | 阿里妈妈数黑体 |
+| 其他 | `Kai` | 霞鹜文楷 |
+| 其他 | `JingNanBoBoHei` | 荆南波波黑体 |
+| 其他 | `ZiKuXingQiuFeiYangTi` | 字库星球飞扬体 |
+| 其他 | `DouYuZhuiGuangTi` | 斗鱼追光体 |
+| 其他 | `XiHuanTi` | 字制区喜脉喜欢体 |
+| 其他 | `SlideYouran` | 演示悠然小楷 |
+| 其他 | `ZhiMangXing` | 钟齐志莽行书 |
+| 其他 | `MaokenFengYaSong` | 猫啃网风雅宋 |
+| 其他 | `DymonShouXieTi` | 呆萌手写体 |
+| 其他 | `MaoKenTangYuan` | 猫啃网糖圆体 |
+| 其他 | `NanxiChuxiaSong` | 南西初夏宋 |
+| 其他 | `YEFONTXiaoShiTou` | 也字工厂小石头 |
+| 其他 | `QianTuBiFengShouXieTi` | 千图笔锋手写体 |
+| 其他 | `WenxinXile` | 文心喜乐体 |
+| 其他 | `XuandongKaishu` | 玄冬楷书 |
+| 其他 | `JingNanYuanTi` | 荆南圆体 |
 
 ```html
-<font family="DeYiHei" src="fonts/deyihei.otf" />
+<font family="ChillDuanHeiSong" src="fonts/ChillDuanHeiSong.ttf" />
 ```
 
 Icons use `class="material-symbols-outlined"` and an icon name inside. Set the weight with `font-weight`. When omitted, it follows the surrounding weight. When the size is omitted, it follows the surrounding `font-size`. Set the color in `style`. This is the outlined set.
