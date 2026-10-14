@@ -362,8 +362,15 @@ function applyBoxShadow(src: EffectSource, ctx: LayoutContext, out: EffectFields
   }
 }
 
+function paintDropShadowColor(steps: ColorFilterSpec[], color: string) {
+  for (const step of steps) {
+    if (step.name !== 'drop-shadow') continue
+    if (!step.color || step.color.toLowerCase() === 'currentcolor') step.color = color
+  }
+}
+
 /** 色彩步骤走 filter 的同一套函数。blur() 收成 backdropBlur，和 backdrop-blur 共用绘制。 */
-function applyBackdropFilter(src: EffectSource, ctx: LayoutContext, out: EffectFields) {
+function applyBackdropFilter(src: EffectSource, ctx: LayoutContext, out: EffectFields, current: string) {
   const raw = src['backdrop-filter']
   if (!wroteEffect(raw)) return
   const steps = parseBackdropFilter(raw)
@@ -372,10 +379,11 @@ function applyBackdropFilter(src: EffectSource, ctx: LayoutContext, out: EffectF
       ctx,
       'backdrop-filter',
       raw!,
-      '写成 blur(16px)，或 blur(16px) brightness(1.1)。色彩函数和 filter 相同，不收 drop-shadow()',
+      '写成 blur(16px)，或 blur(16px) brightness(1.1)。函数和 filter 相同，不收 url()',
     )
     return
   }
+  paintDropShadowColor(steps, current)
   const cssBlur = backdropBlurRadius(steps)
   const attrBlur = wroteEffect(src['backdrop-blur']) && out.backdropBlur != null
   if (cssBlur > 0 && attrBlur) {
@@ -476,7 +484,10 @@ function readEffects(
   pushFilterIssues(ctx, shared.issues)
   if (shared.applied.length) out.filters = shared.applied
   const color = shared.applied.find((item) => item.name === 'filter')
-  if (color) out.colorFilter = color.spec as ColorFilterSpec[]
+  if (color) {
+    out.colorFilter = color.spec as ColorFilterSpec[]
+    paintDropShadowColor(out.colorFilter, glowColor)
+  }
 
   const blendRaw = src.blend
   const parsedBlend = parseBlend(blendRaw)
@@ -493,7 +504,7 @@ function readEffects(
   }
 
   applyBoxShadow(src, ctx, out, glowColor)
-  applyBackdropFilter(src, ctx, out)
+  applyBackdropFilter(src, ctx, out, glowColor)
 
   if (out.glass && (out.backdropBlur != null || (out.backdropFilter?.length ?? 0) > 0)) {
     const viaFilter = wroteEffect(src['backdrop-filter'])
@@ -508,14 +519,26 @@ function readEffects(
     })
   }
 
-  if (out.blur != null && out.colorFilter) {
+  if ((out.blur ?? 0) > 0 && out.colorFilter?.some((step) => step.name === 'blur')) {
     ctx.issues.push({
       level: 'info',
       code: 'non-canonical',
       path: ctx.pathPrefix,
       message: '同时写了 blur 与 filter，图层模糊以 blur 为准',
-      hint: '色彩调整继续用 filter；模糊只用 blur 属性',
+      hint: '模糊只用 blur 属性。filter 里的 blur() 会去掉，其余函数保留',
     })
+    const kept = out.colorFilter.filter((step) => step.name !== 'blur')
+    const item = out.filters?.find((entry) => entry.name === 'filter')
+    if (kept.length === 0) {
+      delete out.colorFilter
+      if (out.filters) {
+        out.filters = out.filters.filter((entry) => entry.name !== 'filter')
+        if (out.filters.length === 0) delete out.filters
+      }
+    } else {
+      out.colorFilter = kept
+      if (item) item.spec = kept
+    }
   }
 
   return out

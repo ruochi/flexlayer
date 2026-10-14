@@ -138,10 +138,12 @@ export type GradeSpec = {
   vignetteColor: string
 }
 export type ColorFilterSpec =
-  | { name: 'brightness' | 'contrast' | 'saturate' | 'grayscale' | 'sepia' | 'invert'; value: number }
+  | { name: 'brightness' | 'contrast' | 'saturate' | 'grayscale' | 'sepia' | 'invert' | 'opacity'; value: number }
   | { name: 'hue-rotate'; value: number }
-/** `backdrop-filter` 里的一步。`blur` 是背景模糊半径，其余和 `filter` 相同。 */
-export type BackdropFilterStep = ColorFilterSpec | { name: 'blur'; value: number }
+  | { name: 'blur'; value: number }
+  | { name: 'drop-shadow'; x: number; y: number; blur: number; color?: string }
+/** `backdrop-filter` 里的一步，和 `filter` 同一套函数。 */
+export type BackdropFilterStep = ColorFilterSpec
 export type BlendMode =
   | 'source-over'
   | 'multiply'

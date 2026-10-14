@@ -155,7 +155,7 @@ describe('绘制', () => {
       </layer>`,
     )
     const bad = await checkLayer(
-      `<layer width="80" height="40"><div style="width:40px; height:20px; background:#fff; box-shadow: 4px; backdrop-filter: drop-shadow(0 4px 8px #000)"></div></layer>`,
+      `<layer width="80" height="40"><div style="width:40px; height:20px; background:#fff; box-shadow: 4px; backdrop-filter: url(#missing)"></div></layer>`,
     )
 
     const card = await pixels(css.png)
@@ -210,6 +210,61 @@ describe('绘制', () => {
     const g = await pixels(gray.png)
     expect(c.at(20, 20)[0]).toBeGreaterThan(c.at(20, 20)[1] + 50)
     expect(Math.abs(g.at(20, 20)[0] - g.at(20, 20)[1])).toBeLessThan(8)
+  })
+
+  it('filter 的 blur、drop-shadow 和 opacity 画在同一条 canvas filter 上', async () => {
+    const sharp = await renderLayer(
+      `<layer width="80" height="80" background="#000000"><rect x="30" y="30" width="20" height="20" fill="#ffffff" /></layer>`,
+    )
+    const soft = await renderLayer(
+      `<layer width="80" height="80" background="#000000"><rect x="30" y="30" width="20" height="20" fill="#ffffff" filter="blur(6px)" /></layer>`,
+    )
+    const attr = await renderLayer(
+      `<layer width="80" height="80" background="#000000"><rect x="30" y="30" width="20" height="20" fill="#ffffff" blur="6" /></layer>`,
+    )
+    const shadow = await renderLayer(
+      `<layer width="80" height="80" background="#ffffff"><rect x="20" y="16" width="40" height="20" fill="#ffffff" filter="drop-shadow(0 28px 0 #ff0000)" /></layer>`,
+    )
+    const omitted = await renderLayer(
+      `<layer width="80" height="80" background="#ffffff"><rect x="20" y="16" width="40" height="20" fill="#00ff00" filter="drop-shadow(0 28px 0)" /></layer>`,
+    )
+    const faded = await renderLayer(
+      `<layer width="40" height="40" background="#000000"><rect x="10" y="10" width="20" height="20" fill="#ffffff" filter="opacity(0.5)" /></layer>`,
+    )
+    const both = await renderLayer(
+      `<layer width="80" height="80" background="#000000"><rect x="30" y="30" width="20" height="20" fill="#ffffff" blur="6" filter="blur(2px) brightness(1.2)" /></layer>`,
+    )
+    const bad = await checkLayer(
+      `<layer width="40" height="40"><rect x="0" y="0" width="20" height="20" fill="#ffffff" filter="url(#a)" /></layer>`,
+    )
+
+    const a = await pixels(sharp.png)
+    const b = await pixels(soft.png)
+    const c = await pixels(attr.png)
+    expect(a.at(40, 22)[0]).toBeLessThan(10)
+    expect(b.at(40, 22)[0]).toBeGreaterThan(20)
+    expect(Math.abs(b.at(40, 22)[0] - c.at(40, 22)[0])).toBeLessThan(3)
+    expect(soft.report.elements.some((el) => el.filter?.[0]?.name === 'blur' && el.blur == null)).toBe(true)
+
+    const red = await pixels(shadow.png)
+    expect(red.at(40, 50)[0]).toBeGreaterThan(200)
+    expect(red.at(40, 50)[1]).toBeLessThan(30)
+
+    const green = omitted.report.elements.find((el) => el.tag === 'rect')
+    expect(green?.filter?.[0]).toMatchObject({ name: 'drop-shadow', color: '#00ff00' })
+    const tint = await pixels(omitted.png)
+    expect(tint.at(40, 50)[1]).toBeGreaterThan(200)
+
+    const gray = await pixels(faded.png)
+    expect(gray.at(20, 20)[0]).toBeGreaterThan(100)
+    expect(gray.at(20, 20)[0]).toBeLessThan(160)
+
+    const kept = both.report.elements.find((el) => el.tag === 'rect')
+    expect(kept?.blur).toBe(6)
+    expect(kept?.filter?.some((step) => step.name === 'blur')).toBe(false)
+    expect(kept?.filter?.some((step) => step.name === 'brightness')).toBe(true)
+    expect(both.report.issues.some((issue) => issue.message.includes('图层模糊以 blur 为准'))).toBe(true)
+    expect(bad.issues.some((issue) => issue.message.includes('filter'))).toBe(true)
   })
 
   it('noise 与 blend 进入报告', async () => {

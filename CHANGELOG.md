@@ -4,6 +4,8 @@
 
 CSS `box-shadow` and `backdrop-filter` paint. `box-shadow` follows the ink shadow. `inset` is an inner shadow, and several layers paint with the first on top. `backdrop-filter` samples the backdrop. `blur()` is `backdrop-blur`. The other functions use the same canvas filter string as `filter`.
 
+`filter` accepts the canvas functions `blur()`, `brightness()`, `contrast()`, `drop-shadow()`, `grayscale()`, `hue-rotate()`, `invert()`, `opacity()`, `saturate()`, and `sepia()`. Lengths are pixels and scale with the supersample. `url()` is not accepted. When `blur` is also set, that radius wins and `blur()` is removed. A missing `drop-shadow()` color uses the element color. `backdrop-filter` accepts the same functions.
+
 ## 0.6.18
 
 `radial-gradient()` accepts `circle` or `ellipse`, a size keyword, and `at` a position. `radial-gradient(circle, #fff, #000)` paints. A bad color stop no longer aborts the process, so the PNG and the report are still written.

@@ -5,8 +5,8 @@ import { MESH_TAGS } from './tags.js'
 import { apply, applyToBox, aroundPivot, IDENTITY, intersectBox, matrixScale, multiply, originOffset, translated, type Matrix } from './matrix.js'
 import { applyPoseMatrix, behindCamera, cameraSceneCustom, has3dPose, hasPerspective, planeDepth, poseMatrix, posePoint, project as projectPoint, splitsForCamera, type Perspective } from './perspective.js'
 import { maskStats } from './mask-stats.js'
-import { innerInkStrokeReach, outerInkStrokeReach, shadowLayers } from './style.js'
-import type { Box, ElementReport, LayerDocument, LayerReport, InlineOwner, Issue, LayerLayoutNode, LayoutNode, MeshLayoutNode, MinFontSpec, TextLayoutNode } from './types.js'
+import { cssFilterPad, innerInkStrokeReach, outerInkStrokeReach, shadowLayers } from './style.js'
+import type { Box, ColorFilterSpec, ElementReport, LayerDocument, LayerReport, InlineOwner, Issue, LayerLayoutNode, LayoutNode, MeshLayoutNode, MinFontSpec, TextLayoutNode } from './types.js'
 import { boxToRect, emptyBox, translateBox, unionBoxes } from './types.js'
 import { viewMatrix } from './view.js'
 
@@ -264,6 +264,8 @@ function effectPadOf(node: {
   blur?: number
   glass?: LayoutNode['glass']
   inkStroke?: LayoutNode['inkStroke']
+  colorFilter?: ColorFilterSpec[]
+  filter?: ColorFilterSpec[]
 }): number {
   const visible = 0.55
   const strokeReach = outerInkStrokeReach(node.inkStroke)
@@ -273,10 +275,11 @@ function effectPadOf(node: {
       (shadow.blur + shadow.spread + strokeReach) * visible + Math.max(Math.abs(shadow.x), Math.abs(shadow.y))
     if (pad > shadowPad) shadowPad = pad
   }
+  const filterPad = cssFilterPad(node.colorFilter ?? node.filter)
   return Math.max(
     shadowPad,
     node.glow ? (node.glow.blur + node.glow.spread + strokeReach) * visible : 0,
-    node.blur != null ? node.blur * 2 : 0,
+    (node.blur != null ? node.blur * 2 : 0) + filterPad,
     node.glass ? node.glass.blur * 2 : 0,
     strokeReach,
   )

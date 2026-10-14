@@ -44,8 +44,8 @@ HTML, flex, and SVG geometry follow their own standards. Below, only the deviati
 ### Stroke and effects
 
 - `stroke="6 #000 outside"` traces the ink. The default side is `outside`. A bare color strokes on center, as in SVG. `outline` and `-webkit-text-stroke` report `non-canonical`.
-- On shapes and `layer`, effects are attributes. On text they go in `style`. Names: `shadow`, `glow`, `inner-shadow`, `inner-glow`, `blur`, `backdrop-blur`, `glass`, `noise`, `filter`, `blend`. Do not write `blur()` or `drop-shadow()` inside `filter`.
-- CSS `box-shadow` and `backdrop-filter` paint. `box-shadow` is `shadow`, and `inset` is `inner-shadow`. `backdrop-filter: blur()` is `backdrop-blur`. Its other functions use the same canvas filter path as `filter`.
+- On shapes and `layer`, effects are attributes. On text they go in `style`. Names: `shadow`, `glow`, `inner-shadow`, `inner-glow`, `blur`, `backdrop-blur`, `glass`, `noise`, `filter`, `blend`. `filter` accepts `blur()`, `brightness()`, `contrast()`, `drop-shadow()`, `grayscale()`, `hue-rotate()`, `invert()`, `opacity()`, `saturate()`, and `sepia()`. Lengths are pixels. `url()` is not accepted. When `blur` and `blur()` inside `filter` are both set, `blur` wins.
+- CSS `box-shadow` and `backdrop-filter` paint. `box-shadow` is `shadow`, and `inset` is `inner-shadow`. `backdrop-filter` uses the same functions as `filter`. `blur()` is `backdrop-blur`.
 - `overlay`, `grade`, and `grade-mask` belong only on `layer` and cover the subtree. `grade` presets: `lomo`, `matte`, `chrome`, `bleach`, `mono`.
 
 ### Solids

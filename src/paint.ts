@@ -1094,12 +1094,12 @@ function nodeDeviceBounds(ctx: PaintCtx, node: LayoutNode, padDevice: number) {
   return { matrix, minX, minY, maxX, maxY, sw: maxX - minX, sh: maxY - minY }
 }
 
-/** 一步色彩函数，走已注册的 `filter`。换掉 filter 的实现时，背景滤镜跟着换。 */
-function backdropColorCss(step: ColorFilterSpec): string {
+/** 一步滤镜函数，走已注册的 `filter`。换掉 filter 的实现时，背景滤镜跟着换。 */
+function backdropColorCss(step: ColorFilterSpec, scale: number): string {
   const render = getFilter('filter')?.canvasFilter
-  const css = render?.([step])
+  const css = render?.([step], scale)
   if (css) return css
-  return colorFilterToCss([step])
+  return colorFilterToCss([step], scale)
 }
 
 /**
@@ -1112,12 +1112,9 @@ function backdropFilterCss(node: LayoutNode, k: number): string {
     const parts: string[] = []
     let sawBlur = false
     for (const step of steps) {
-      if (step.name === 'blur') {
-        sawBlur = true
-        if (step.value > 0) parts.push(`blur(${step.value * k}px)`)
-        continue
-      }
-      const css = backdropColorCss(step)
+      if (step.name === 'blur') sawBlur = true
+      if (step.name === 'blur' && step.value <= 0) continue
+      const css = backdropColorCss(step, k)
       if (css) parts.push(css)
     }
     if (!sawBlur && (node.backdropBlur ?? 0) > 0) parts.unshift(`blur(${node.backdropBlur! * k}px)`)
@@ -2063,7 +2060,7 @@ function canvasFilterCss(node: LayoutNode, samples = 1): string {
   const parts: string[] = []
   if ((node.blur ?? 0) > 0) parts.push(`blur(${node.blur! * samples}px)`)
   for (const item of orderedFilters(node.filters, 'canvas')) {
-    const css = getFilter(item.name)?.canvasFilter?.(item.spec)
+    const css = getFilter(item.name)?.canvasFilter?.(item.spec, samples)
     if (css) parts.push(css)
   }
   return parts.join(' ')

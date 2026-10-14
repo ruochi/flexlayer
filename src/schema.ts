@@ -380,10 +380,10 @@ export const ATTRS: AttrDef[] = [
     warnOnHtmlAttr: true,
     docGroup: 'effect',
     effect: true,
-    syntax: 'blur() plus the same functions as filter',
+    syntax: 'the same functions as filter',
     example: 'blur(16px)',
     issue: 'invalid-attr',
-    note: 'blur() is backdrop-blur. Other functions use the same canvas filter string as filter, sampled from the backdrop. drop-shadow() is not accepted. When backdrop-blur is also set, that radius wins',
+    note: 'Same functions as filter, sampled from the backdrop. blur() is backdrop-blur. Lengths are px. url() is not accepted. When backdrop-blur is also set, that radius wins',
   },
   {
     name: 'glass',
@@ -408,8 +408,9 @@ export const ATTRS: AttrDef[] = [
     warnOnHtmlAttr: true,
     docGroup: 'effect',
     effect: true,
-    syntax: 'brightness() contrast() saturate() grayscale() sepia() invert() hue-rotate()',
+    syntax: 'blur() brightness() contrast() drop-shadow() grayscale() hue-rotate() invert() opacity() saturate() sepia()',
     example: 'saturate(1.1)',
+    note: 'Lengths are px. url() is not accepted. When blur is also set, that radius wins and blur() is removed. A missing drop-shadow color uses the element color',
     issue: 'invalid-attr',
   },
   {

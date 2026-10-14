@@ -1,5 +1,5 @@
 import { isGradient } from './gradient.js'
-import { shadowLayers } from './style.js'
+import { cssFilterPad, shadowLayers } from './style.js'
 import type { LayoutNode } from './types.js'
 
 /**
@@ -162,7 +162,7 @@ function outwardPad(node: LayoutNode): number {
     glass = depth * 2 + Math.abs(depth * 0.35)
   }
   const glow = node.glow ? node.glow.blur * 2 + node.glow.spread : 0
-  const blur = node.blur != null ? node.blur * 2 : 0
+  const blur = (node.blur != null ? node.blur * 2 : 0) + cssFilterPad(node.colorFilter)
   return Math.max(shadow, glass, glow, blur)
 }
 
