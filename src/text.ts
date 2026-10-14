@@ -3,8 +3,8 @@ import type { LayerChild, LayerNode } from './parse.js'
 import { applyCanvasFont } from './fonts.js'
 import { applySymbolsClass, classAttr, rewriteIconLigatures, symbolsClassNotes, type SymbolsNote } from './icons.js'
 import { getMeasureCtx } from './measureCtx.js'
-import { applyToBox, aroundPivot, multiply, translated, type Matrix } from './matrix.js'
-import { parseFontWeight, parseLetterSpacing, parseNumber, parsePx, parseScale } from './style.js'
+import { applyToBox, aroundPivot, cssMotionMatrix, multiply, translated, type Matrix } from './matrix.js'
+import { parseAngle, parseCssTransform, parseFontWeight, parseLetterSpacing, parseNumber, parsePx, parseScale } from './style.js'
 import { emptyBox, translateBox, unionBoxes, type Box, type InlineOwner, type LaidTextSegment, type TextLayoutResult, type TextRunStyle, type TextSegment } from './types.js'
 
 const require = createRequire(import.meta.url)
@@ -113,8 +113,8 @@ function mergeStyle(base: TextRunStyle, styleMap: Record<string, string>, inline
       if (opacity != null) next.opacity = opacity
     }
     if (styleMap.rotate != null) {
-      const rotate = parseNumber(styleMap.rotate)
-      if (rotate != null) next.rotate = rotate
+      const rotate = parseAngle(styleMap.rotate)
+      if (rotate) next.rotate = rotate.degrees
     }
     if (styleMap.scale != null) {
       const scale = readScale(styleMap.scale)
@@ -129,6 +129,10 @@ function mergeStyle(base: TextRunStyle, styleMap: Record<string, string>, inline
         next.translateX = translate.x
         next.translateY = translate.y
       }
+    }
+    if (styleMap.transform != null) {
+      const parsed = parseCssTransform(styleMap.transform)
+      if (parsed.ok && parsed.steps.length > 0) next.transform = parsed.steps
     }
   }
   return next
@@ -327,6 +331,7 @@ function sameRunPaint(a: TextRunStyle, b: TextRunStyle): boolean {
     (a.translateY ?? 0) === (b.translateY ?? 0) &&
     (a.rotate ?? 0) === (b.rotate ?? 0) &&
     (a.scaleX ?? 1) === (b.scaleX ?? 1) &&
+    JSON.stringify(a.transform ?? []) === JSON.stringify(b.transform ?? []) &&
     (a.scaleY ?? 1) === (b.scaleY ?? 1) &&
     a.splitChars === b.splitChars &&
     a.paintGroup === b.paintGroup
@@ -424,7 +429,8 @@ export function runPaintMoves(style: TextRunStyle): boolean {
     (style.translateY ?? 0) !== 0 ||
     (style.rotate ?? 0) !== 0 ||
     (style.scaleX ?? 1) !== 1 ||
-    (style.scaleY ?? 1) !== 1
+    (style.scaleY ?? 1) !== 1 ||
+    (style.transform?.length ?? 0) > 0
   )
 }
 
@@ -432,10 +438,25 @@ export function segmentNeedsPaint(style: TextRunStyle): boolean {
   return runPaintMoves(style) || runOpacity(style) !== 1
 }
 
-function paintMatrix(style: TextRunStyle, cx: number, cy: number): Matrix {
-  return multiply(
-    translated(style.translateX ?? 0, style.translateY ?? 0),
-    aroundPivot(cx, cy, style.rotate ?? 0, style.scaleX ?? 1, style.scaleY ?? 1),
+function paintMatrix(style: TextRunStyle, cx: number, cy: number, w = 0, h = 0): Matrix {
+  if (!style.transform?.length) {
+    return multiply(
+      translated(style.translateX ?? 0, style.translateY ?? 0),
+      aroundPivot(cx, cy, style.rotate ?? 0, style.scaleX ?? 1, style.scaleY ?? 1),
+    )
+  }
+  return cssMotionMatrix(
+    {
+      translateX: { unit: 'px', value: style.translateX ?? 0 },
+      translateY: { unit: 'px', value: style.translateY ?? 0 },
+      rotate: style.rotate ?? 0,
+      scaleX: style.scaleX ?? 1,
+      scaleY: style.scaleY ?? 1,
+      steps: style.transform,
+    },
+    { x: { unit: 'px', value: cx }, y: { unit: 'px', value: cy } },
+    w,
+    h,
   )
 }
 
@@ -525,7 +546,7 @@ export function planLinePaint(
     const cx = anchor.x + anchor.width / 2
     const cy = anchor.y + anchor.height / 2
     const moves = runPaintMoves(style)
-    const matrix = paintMatrix(style, cx, cy)
+    const matrix = paintMatrix(style, cx, cy, anchor.width, anchor.height)
     const visible = runOpacity(style) >= PAINT_VISIBLE
     const pieces: PaintPiece[] = current.map((piece) => {
       const glyph = !visible ? emptyBox() : moves ? applyToBox(matrix, piece.localInk) : piece.localInk

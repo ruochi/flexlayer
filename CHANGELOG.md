@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.17
+
+`rotate`, `rotateX`, and `rotateY` in `style` take a CSS angle: `deg`, `rad`, `grad`, or `turn`. `0` may omit the unit. A bare nonzero number is still degrees, and reports `non-canonical`. An invalid angle reports `invalid-attr` and is ignored.
+
+`transform` accepts `translate()`, `rotate()`, and `scale()`, including the axis-specific forms, and they combine left to right. With the individual properties, the order is `translate`, then `rotate`, then `scale`, then `transform`. The center is `transform-origin`, default `50% 50%`. These change drawing only. The layout box stays put. Attributes such as `rotate="30"` are unchanged.
+
 ## 0.6.16
 
 `render` no longer type-checks on every run. Type checking stays in `check`. To check while rendering, add `--typecheck`. A type error is still `type-error`. The picture is still written, and the exit code is 1. `check --no-typecheck` skips type checking.
