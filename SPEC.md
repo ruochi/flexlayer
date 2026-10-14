@@ -262,9 +262,11 @@ flexlayer render scene.tsx --frames out/ --from 0 --to 90
 flexlayer render scene.tsx --rgba -
 flexlayer check scene.tsx --frames 0-90 --step 5
 flexlayer render scene.layer --preview out.png
+flexlayer render a.tsx b.tsx -o out/ --scale 1 --scale 2
+flexlayer check a.tsx b.tsx
 ```
 
-`.tsx` runs first and is type-checked. A type error is recorded as `type-error`. A picture is still produced, and the exit code is 1. Put `/** @jsxImportSource flexlayer */` at the top of the file. The default export is a `<layer>`, or a function that returns that node. A named export `composition` may be a `Composition`. `check` without `--frames` samples frame 0, the middle frame, and the last frame. `--emit` writes `.layer` back. A closure records `emit-script`. `data` that cannot be written as JSON records `emit-data`. When the frame count is over 300 and there is no `--frame`, `--frames`, or `--rgba`, the contact sheet is not rendered. flexlayer does not call ffmpeg.
+`.tsx` runs first. Type checking happens in `check`. A type error is recorded as `type-error`, and the exit code is 1. `render` does not type-check by default. `render --typecheck` records type errors in the report, still writes the picture, and exits with code 1. `check --no-typecheck` skips type checking. Several files can be named in one command and finish in one process. `render` may repeat `--scale`. The same source runs once, and the file names gain `@1x` and `@2x`. In that case `-o`, `--report`, and `--emit` are directories. Put `/** @jsxImportSource flexlayer */` at the top of the file. The default export is a `<layer>`, or a function that returns that node. A named export `composition` may be a `Composition`. `check` without `--frames` samples frame 0, the middle frame, and the last frame. `--emit` writes `.layer` back. A closure records `emit-script`. `data` that cannot be written as JSON records `emit-data`. When the frame count is over 300 and there is no `--frame`, `--frames`, or `--rgba`, the contact sheet is not rendered. flexlayer does not call ffmpeg.
 
 ### canvas.create
 
@@ -356,7 +358,7 @@ Rendering also writes JSON. Each node in `elements` has `path`, `id`, `tag`, `bo
 | `emit-data` | warn | `data` cannot be written as JSON at `--emit` |
 | `unused-expect` | warn | `expect` was written, but that issue code is not in the subtree |
 | `nondeterministic` | warn | `.tsx` called randomness or time that cannot be repeated |
-| `type-error` | error | A TypeScript diagnostic in `.tsx` |
+| `type-error` | error | A TypeScript diagnostic in `.tsx`. Produced by `check` and by `render --typecheck` |
 | `measure-mismatch` | warn | The width and height measured by `canvas.create` do not match the final layout |
 
 Any element may write `expect="overflow-canvas: full bleed; text-overlap"`. A matching issue is lowered to `info` and carries `expected`. A miss reports `unused-expect`. During a multi-frame check, one frame that uses it is enough to avoid the report. Issues sampled from a Composition carry `frame` and `frames`.

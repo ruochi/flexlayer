@@ -49,7 +49,11 @@ npx tsx src/cli.ts check examples/hello.layer
 npx tsx src/cli.ts render examples/hello.layer -o hello.png --watch
 npx tsx src/cli.ts render examples/hello.tsx -o hello.png --emit hello.out.layer
 npx tsx src/cli.ts render examples/slide.tsx --frame 1 -o slide.png
+npx tsx src/cli.ts render a.tsx b.tsx -o out/ --scale 1 --scale 2
+npx tsx src/cli.ts check a.tsx b.tsx
 ```
+
+`render` does not type-check. Type checking is `check`. To check while rendering, add `--typecheck`. Several files and several `--scale` values finish in one process. The same `.tsx` runs once. When there are several files or scales, `-o`, `--report`, and `--emit` are directories.
 
 After a build:
 

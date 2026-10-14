@@ -48,8 +48,17 @@ describe('render hello.layer', () => {
 const tsxBin = join(pkgDir, 'node_modules/.bin/tsx')
 const cliPath = join(pkgDir, 'src/cli.ts')
 
-function runCli(args: string[]) {
-  return spawnSync(tsxBin, [cliPath, ...args], { cwd: pkgDir, encoding: 'utf8' })
+function runCli(args: string[], env?: NodeJS.ProcessEnv) {
+  return spawnSync(tsxBin, [cliPath, ...args], {
+    cwd: pkgDir,
+    encoding: 'utf8',
+    env: env ? { ...process.env, ...env } : undefined,
+  })
+}
+
+function pngSize(file: string) {
+  const buf = readFileSync(file)
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) }
 }
 
 function runCliBuffer(args: string[]) {
@@ -150,5 +159,103 @@ export const composition: Composition = {
     } finally {
       child.kill('SIGKILL')
     }
+  })
+})
+
+describe('类型检查和批量出图', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'flexlayer-batch-'))
+  const bad = join(dir, 'bad.tsx')
+  const card = join(dir, 'card.tsx')
+  const mark = join(dir, 'mark.txt')
+  const plain = join(dir, 'plain.layer')
+  const other = join(dir, 'other.tsx')
+  writeFileSync(bad, `const title: number = 'hi'\nexport default <layer width="40" height="24" background="#000" />\n`)
+  writeFileSync(
+    card,
+    `import { appendFileSync } from 'node:fs'
+export default () => {
+  appendFileSync(process.env.MARK!, 'x')
+  return <layer width="16" height="10" background="#000" />
+}
+`,
+  )
+  writeFileSync(other, `export default <layer width="8" height="8" background="#fff"><rect x="1" y="1" width="4" height="4" fill="#000" /></layer>\n`)
+  writeFileSync(plain, `<layer width="8" height="8" background="#fff"><rect x="1" y="1" width="4" height="4" fill="#000" /></layer>`)
+
+  it('render 默认不查类型，--typecheck 才记 type-error，图仍然写出', () => {
+    const plainPng = join(dir, 'plain.png')
+    const skipped = runCli(['render', bad, '-o', plainPng])
+    expect(skipped.status).toBe(0)
+    expect(skipped.stdout).not.toContain('type-error')
+    expect(existsSync(plainPng)).toBe(true)
+
+    const checkedPng = join(dir, 'checked.png')
+    const checked = runCli(['render', bad, '-o', checkedPng, '--typecheck'])
+    expect(checked.status).toBe(1)
+    expect(checked.stdout).toContain('type-error')
+    expect(existsSync(checkedPng)).toBe(true)
+  })
+
+  it('check 查类型，--no-typecheck 跳过', () => {
+    const checked = runCli(['check', bad])
+    expect(checked.status).toBe(1)
+    expect(checked.stdout).toContain('type-error')
+
+    const skipped = runCli(['check', bad, '--no-typecheck'])
+    expect(skipped.status).toBe(0)
+    expect(skipped.stdout).not.toContain('type-error')
+    expect(skipped.stdout.trim()).toBe('✓ 0 issues')
+  })
+
+  it('一次进程渲多张和多个倍率，同一份源只执行一次', () => {
+    const out = join(dir, 'out')
+    const reports = join(dir, 'reports')
+    const emitted = join(dir, 'emitted')
+    const result = runCli(['render', card, other, '--scale', '1', '--scale', '2', '-o', out, '--report', reports, '--emit', emitted], { MARK: mark })
+    expect(result.status, result.stderr).toBe(0)
+    expect(result.stdout).not.toContain('type-error')
+    expect(readFileSync(mark, 'utf8')).toBe('x')
+    expect(pngSize(join(out, 'card@1x.png'))).toEqual({ width: 16, height: 10 })
+    expect(pngSize(join(out, 'card@2x.png'))).toEqual({ width: 32, height: 20 })
+    expect(pngSize(join(out, 'other@1x.png'))).toEqual({ width: 8, height: 8 })
+    expect(pngSize(join(out, 'other@2x.png'))).toEqual({ width: 16, height: 16 })
+    const report = JSON.parse(readFileSync(join(reports, 'card@2x.json'), 'utf8')) as { width: number }
+    expect(report.width).toBe(16)
+    expect(readdirSync(emitted).sort()).toEqual(['card.layer', 'other.layer'])
+    expect(readFileSync(join(emitted, 'card.layer'), 'utf8')).toContain('<layer')
+  })
+
+  it('一张出错时其余的图仍然写出', () => {
+    const broken = join(dir, 'broken.tsx')
+    writeFileSync(broken, `export default 1\n`)
+    const out = join(dir, 'rest')
+    const result = runCli(['render', broken, plain, '-o', out])
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('需要默认导出')
+    expect(pngSize(join(out, 'plain.png'))).toEqual({ width: 8, height: 8 })
+    expect(existsSync(join(out, 'broken.png'))).toBe(false)
+  })
+
+  it('check 可以一次查多个文件', () => {
+    const reports = join(dir, 'check-reports')
+    const result = runCli(['check', bad, plain, '--report', reports])
+    expect(result.status).toBe(1)
+    expect(result.stdout).toContain('type-error')
+    expect(result.stdout).toContain('✓ 0 issues')
+    expect(JSON.parse(readFileSync(join(reports, 'plain.json'), 'utf8'))).toMatchObject({ width: 8, height: 8 })
+    const badReport = JSON.parse(readFileSync(join(reports, 'bad.json'), 'utf8')) as { issues: Array<{ code: string }> }
+    expect(badReport.issues.some((issue) => issue.code === 'type-error')).toBe(true)
+  })
+
+  it('多张图时 -o 要是目录，单个倍率不改文件名', () => {
+    const asFile = runCli(['render', plain, card, '-o', join(dir, 'out.png')])
+    expect(asFile.status).toBe(2)
+    expect(asFile.stderr).toContain('目录')
+
+    const twice = join(dir, 'twice.png')
+    const scaled = runCli(['render', plain, '--scale', '2', '-o', twice])
+    expect(scaled.status).toBe(0)
+    expect(pngSize(twice)).toEqual({ width: 16, height: 16 })
+    expect(existsSync(join(dir, 'twice@2x.png'))).toBe(false)
   })
 })

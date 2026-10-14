@@ -12,7 +12,8 @@ Paint and layout functions stay synchronous. A module is loaded before those fun
 | Grade `grade.ts` | The tree has `grade` or `grade-mask` | Same as above. Registration still goes into the filter table in `filter.ts` |
 | Distance field, stroke along ink, glass, noise | The layout result actually has that effect | `ensurePaintFeatures` at the start of `paintDocument` |
 | Icon code points | The first time an icon name is turned into a code point | `icons.ts` reads `icon-codepoints.txt`. With no icon font it does not read the file and does not download a font |
-| esbuild, TypeScript | The source is `.tsx` / `.ts` / `.jsx` / `.js` | Loaded later from `cli-main.ts`. `.layer` does not take this path |
+| esbuild, syntax scan | The source is `.tsx` / `.ts` / `.jsx` / `.js` | `load-source.ts`. The syntax scan uses the TypeScript parser. `.layer` does not take this path |
+| Type check | `check`, or `render --typecheck` | Loaded later from `cli-main.ts` as `typecheck.ts`. A plain `render` does not run it. Several files are checked in the same process |
 | `frame.ts` | The source is a Composition, and several frames or a contact sheet are rendered | Same as above |
 | esbuild cache | The same source runs again | `~/.cache/flexlayer/code/<content hash>/entry.mjs`. The entry, relative imports, and the current flexlayer install path are hashed together. A change rebuilds |
 

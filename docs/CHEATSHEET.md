@@ -83,5 +83,6 @@ const title = canvas.create(
 ```bash
 flexlayer render scene.tsx -o scene.png
 flexlayer check scene.tsx
+flexlayer render a.tsx b.tsx -o out/ --scale 1 --scale 2
 flexlayer render scene.tsx --frames out/ --from 0 --to 90
 ```

@@ -7,9 +7,9 @@ Tag, attribute, and issue-code prose lives only in [SPEC.md](SPEC.md). One page 
 ## Workflow
 
 1. Write `.tsx` or `.layer` against the rules below.
-2. `npx tsx src/cli.ts check scene.tsx`. An **error** exits with code 1. Fix it from the report's `path` and `hint`, then check again. An animation without `--frames` samples frame 0, the middle frame, and the last frame.
+2. `npx tsx src/cli.ts check scene.tsx`. An **error** exits with code 1. Fix it from the report's `path` and `hint`, then check again. Type checking happens only in `check`. An animation without `--frames` samples frame 0, the middle frame, and the last frame. Several files can be named in one command.
 3. When spacing is wrong, `npx tsx src/cli.ts render scene.tsx -o scene.png --debug --report scene.json`. Read `box` (the layout box) and `ink` (the mark after transform or projection). `.tsx` also has `source` (`scene.tsx:18:5`).
-4. When it looks right, `npx tsx src/cli.ts render scene.tsx -o scene.png`.
+4. When it looks right, `npx tsx src/cli.ts render scene.tsx -o scene.png`. `render` does not type-check. Several pictures and scales are written in one command: `npx tsx src/cli.ts render a.tsx b.tsx -o out/ --scale 1 --scale 2`.
 
 ## Hard rules
 

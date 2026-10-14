@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.16
+
+`render` no longer type-checks on every run. Type checking stays in `check`. To check while rendering, add `--typecheck`. A type error is still `type-error`. The picture is still written, and the exit code is 1. `check --no-typecheck` skips type checking.
+
+`render` and `check` can take several files. `render` can repeat `--scale`. The same source runs once, and every picture is drawn in that process. When there are several files or scales, `-o`, `--report`, and `--emit` are directories. File names include `@1x` and `@2x`.
+
 ## 0.6.15
 
 The repository docs are in English. The README keeps one short note in Chinese and English. The attribute catalog, the ownership table in SPEC, and the effects line in the cheat sheet are generated in English from the registry.
