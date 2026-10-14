@@ -311,6 +311,8 @@ export type TextRunStyle = {
   /** 绘制时绕字心缩放。 */
   scaleX?: number
   scaleY?: number
+  /** `transform` 函数。和 translate、rotate、scale 按规范叠在字心上。 */
+  transform?: CssTransformStep[]
   /** 每个字单独绕自己的字心。 */
   splitChars?: boolean
   /** 不拆字时，同一组绕整段字心画一次。 */
@@ -377,6 +379,28 @@ export type LineGeometry =
   | { kind: 'polyline' | 'polygon'; points: Array<{ x: number; y: number }> }
   | { kind: 'path'; d: string }
 
+/** CSS 长度。百分比相对元素自己的边框盒。 */
+export type CssLength = { unit: 'px' | 'percent'; value: number }
+
+/** `transform` 里的一个函数。从左到右叠成矩阵。 */
+export type CssTransformStep =
+  | { op: 'translate'; x: CssLength; y: CssLength }
+  | { op: 'rotate'; degrees: number }
+  | { op: 'scale'; x: number; y: number }
+
+/**
+ * 个别属性和 `transform` 合在一起，画的时候才按最终宽高换成矩阵。
+ * 设了它，`rotate` 为 0、`scale` 为 1，避免再套一次。
+ */
+export type CssMotion = {
+  translateX: CssLength
+  translateY: CssLength
+  rotate: number
+  scaleX: number
+  scaleY: number
+  steps: CssTransformStep[]
+}
+
 export type LayoutNodeBase = {
   path: string
   id?: string
@@ -404,6 +428,8 @@ export type LayoutNodeBase = {
   scaleY: number
   /** 变换支点，缺省为盒子中心。 */
   origin?: Origin
+  /** 平移、旋转、缩放和 `transform` 合在一起。只影响绘制。 */
+  motion?: CssMotion
   background?: string
   border?: { width: number; color: string }
   borderRadius?: number

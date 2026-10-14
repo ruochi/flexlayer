@@ -1,4 +1,4 @@
-import type { Box, Origin, OriginAxis } from './types.js'
+import type { Box, CssLength, CssMotion, Origin, OriginAxis } from './types.js'
 
 /** 画布仿射矩阵：x' = a*x + c*y + e，y' = b*x + d*y + f。 */
 export type Matrix = {
@@ -11,6 +11,17 @@ export type Matrix = {
 }
 
 export const IDENTITY: Matrix = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }
+
+export function isIdentity(m: Matrix): boolean {
+  return (
+    Math.abs(m.a - 1) < 1e-9 &&
+    Math.abs(m.b) < 1e-9 &&
+    Math.abs(m.c) < 1e-9 &&
+    Math.abs(m.d - 1) < 1e-9 &&
+    Math.abs(m.e) < 1e-9 &&
+    Math.abs(m.f) < 1e-9
+  )
+}
 
 /** 逆矩阵。缩放为 0 时返回 null。 */
 export function invert(m: Matrix): Matrix | null {
@@ -99,4 +110,60 @@ function axisOffset(axis: OriginAxis, size: number): number {
 export function originOffset(origin: Origin | undefined, w: number, h: number): { x: number; y: number } {
   if (!origin) return { x: w / 2, y: h / 2 }
   return { x: axisOffset(origin.x, w), y: axisOffset(origin.y, h) }
+}
+
+function cssLengthPx(len: CssLength, size: number): number {
+  return len.unit === 'percent' ? (len.value / 100) * size : len.value
+}
+
+/**
+ * 局部矩阵，原点是盒子左上角。
+ * `T(origin) * translate * rotate * scale * transform * T(-origin)`，和 CSS 一样，右边的先作用在点上。
+ */
+export function cssMotionMatrix(motion: CssMotion, origin: Origin | undefined, w: number, h: number): Matrix {
+  const o = originOffset(origin, w, h)
+  let list = IDENTITY
+  for (const step of motion.steps) {
+    if (step.op === 'translate') list = multiply(list, translated(cssLengthPx(step.x, w), cssLengthPx(step.y, h)))
+    else if (step.op === 'rotate') list = multiply(list, rotated(step.degrees))
+    else list = multiply(list, scaled(step.x, step.y))
+  }
+  let m = translated(-o.x, -o.y)
+  m = multiply(list, m)
+  m = multiply(scaled(motion.scaleX, motion.scaleY), m)
+  m = multiply(rotated(motion.rotate), m)
+  m = multiply(translated(cssLengthPx(motion.translateX, w), cssLengthPx(motion.translateY, h)), m)
+  m = multiply(translated(o.x, o.y), m)
+  return m
+}
+
+type PoseNode = {
+  x: number
+  y: number
+  width: number
+  height: number
+  rotate: number
+  scaleX: number
+  scaleY: number
+  origin?: Origin
+  motion?: CssMotion
+}
+
+/** 盒子局部变换。没有平移和一般 `transform` 时，就是绕 origin 的旋转和缩放。 */
+export function localNodeMatrix(node: PoseNode): Matrix {
+  if (node.motion) return cssMotionMatrix(node.motion, node.origin, node.width, node.height)
+  if (node.rotate === 0 && node.scaleX === 1 && node.scaleY === 1) return IDENTITY
+  const o = originOffset(node.origin, node.width, node.height)
+  return aroundPivot(o.x, o.y, node.rotate, node.scaleX, node.scaleY)
+}
+
+/** 画布坐标里的变换。绘制仍用 node.x / node.y，所以先挪到左上角，变完再挪回去。 */
+export function absoluteNodeMatrix(node: PoseNode): Matrix {
+  if (node.motion) {
+    const local = cssMotionMatrix(node.motion, node.origin, node.width, node.height)
+    return multiply(translated(node.x, node.y), multiply(local, translated(-node.x, -node.y)))
+  }
+  if (node.rotate === 0 && node.scaleX === 1 && node.scaleY === 1) return IDENTITY
+  const o = originOffset(node.origin, node.width, node.height)
+  return aroundPivot(node.x + o.x, node.y + o.y, node.rotate, node.scaleX, node.scaleY)
 }

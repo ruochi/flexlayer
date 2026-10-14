@@ -1,4 +1,4 @@
-import type { BackdropFilterStep, ColorFilterSpec, Origin, OriginAxis } from './types.js'
+import type { BackdropFilterStep, ColorFilterSpec, CssLength, CssTransformStep, Origin, OriginAxis } from './types.js'
 
 export type { BackdropFilterStep }
 
@@ -41,6 +41,103 @@ export function parseNumber(value: string | undefined): number | undefined {
   if (value == null || value.trim() === '') return undefined
   const n = Number(value)
   return Number.isFinite(n) ? n : undefined
+}
+
+const NUMBER_UNIT = /^([+-]?(?:\d+\.?\d*|\.\d+))([a-z%]+)?$/
+
+/** 角度。`none` 是 0。带单位换成度。裸数字仍是度，`unitless` 为 true。解析失败返回 undefined。 */
+export function parseAngle(value: string | undefined): { degrees: number; unitless: boolean } | undefined {
+  if (value == null) return undefined
+  const token = value.trim().toLowerCase()
+  if (token === '' || token === 'none') return { degrees: 0, unitless: false }
+  const m = NUMBER_UNIT.exec(token)
+  if (!m) return undefined
+  const n = Number(m[1])
+  if (!Number.isFinite(n)) return undefined
+  const unit = m[2]
+  if (!unit) return { degrees: n, unitless: true }
+  if (unit === 'deg') return { degrees: n, unitless: false }
+  if (unit === 'rad') return { degrees: (n * 180) / Math.PI, unitless: false }
+  if (unit === 'grad') return { degrees: n * 0.9, unitless: false }
+  if (unit === 'turn') return { degrees: n * 360, unitless: false }
+  return undefined
+}
+
+/**
+ * 长度。`allowUnitless` 时裸数字当像素，和 `translate: 0 -12` 的旧写法一样。
+ * 否则只有 0 可以不带单位。百分比留给调用方按盒子尺寸换算。
+ */
+export function parseCssLength(token: string, allowUnitless: boolean): CssLength | undefined {
+  const m = NUMBER_UNIT.exec(token.trim().toLowerCase())
+  if (!m) return undefined
+  const n = Number(m[1])
+  if (!Number.isFinite(n)) return undefined
+  const unit = m[2]
+  if (unit === '%') return { unit: 'percent', value: n }
+  if (unit === 'px' || n === 0 || (allowUnitless && !unit)) return { unit: 'px', value: n }
+  return undefined
+}
+
+function parseScaleArg(token: string): number | undefined {
+  const t = token.trim().toLowerCase()
+  if (t.endsWith('%')) {
+    const n = Number(t.slice(0, -1))
+    return Number.isFinite(n) ? n / 100 : undefined
+  }
+  const m = NUMBER_UNIT.exec(t)
+  if (!m || m[2]) return undefined
+  return Number(m[1])
+}
+
+function cssArgs(raw: string): string[] {
+  return raw.split(/[\s,]+/).filter(Boolean)
+}
+
+function parseTransformFunction(name: string, raw: string): CssTransformStep | undefined {
+  const args = cssArgs(raw)
+  if (name === 'translate' || name === 'translatex' || name === 'translatey') {
+    const zero: CssLength = { unit: 'px', value: 0 }
+    if (name === 'translate' && (args.length < 1 || args.length > 2)) return undefined
+    if (name !== 'translate' && args.length !== 1) return undefined
+    const x = name === 'translatey' ? zero : parseCssLength(args[0]!, false)
+    const y = name === 'translatex' ? zero : name === 'translate' ? (args[1] ? parseCssLength(args[1], false) : zero) : parseCssLength(args[0]!, false)
+    if (!x || !y) return undefined
+    return { op: 'translate', x, y }
+  }
+  if (name === 'rotate') {
+    if (args.length !== 1) return undefined
+    const angle = parseAngle(args[0])
+    if (!angle || (angle.unitless && angle.degrees !== 0)) return undefined
+    return { op: 'rotate', degrees: angle.degrees }
+  }
+  if (name === 'scale' || name === 'scalex' || name === 'scaley') {
+    if (name === 'scale' && (args.length < 1 || args.length > 2)) return undefined
+    if (name !== 'scale' && args.length !== 1) return undefined
+    const x = name === 'scaley' ? 1 : parseScaleArg(args[0]!)
+    const y = name === 'scalex' ? 1 : name === 'scale' ? parseScaleArg(args[1] ?? args[0]!) : parseScaleArg(args[0]!)
+    if (x == null || y == null) return undefined
+    return { op: 'scale', x, y }
+  }
+  return undefined
+}
+
+/** CSS `transform`。`none` 是空列表。任一函数写错，整段无效。 */
+export function parseCssTransform(value: string): { ok: true; steps: CssTransformStep[] } | { ok: false } {
+  const text = value.trim().toLowerCase()
+  if (text === 'none') return { ok: true, steps: [] }
+  const steps: CssTransformStep[] = []
+  const re = /([a-z]+)\(([^)]*)\)/g
+  let index = 0
+  let match: RegExpExecArray | null
+  while ((match = re.exec(text))) {
+    if (text.slice(index, match.index).trim() !== '') return { ok: false }
+    const step = parseTransformFunction(match[1]!, match[2]!)
+    if (!step) return { ok: false }
+    steps.push(step)
+    index = match.index + match[0].length
+  }
+  if (index === 0 || text.slice(index).trim() !== '') return { ok: false }
+  return { ok: true, steps }
 }
 
 export type FlexFactors = { grow: number; shrink: number; basis: number | 'auto' }
@@ -237,9 +334,11 @@ export function parseOrigin(raw: string | undefined): Origin {
   return readOrigin(raw).origin
 }
 
-/** `1.2` 两轴相同；`1.2 0.8` 或 `-1 1` 分轴。解析失败时为 1。 */
+/** `1.2` 两轴相同；`1.2 0.8` 或 `-1 1` 分轴。`none` 和解析失败时为 1。 */
 export function parseScale(value: string | undefined): { x: number; y: number } {
-  const parts = value?.trim().split(/[\s,]+/).filter(Boolean) ?? []
+  const text = value?.trim().toLowerCase()
+  if (!text || text === 'none') return { x: 1, y: 1 }
+  const parts = text.split(/[\s,]+/).filter(Boolean)
   const x = parseNumber(parts[0])
   if (x == null) return { x: 1, y: 1 }
   if (parts.length < 2) return { x, y: x }
@@ -934,6 +1033,12 @@ function numberHint(value: string, hint: string): StyleDiagnostic | null {
   return parseNumber(value) == null ? { hint } : null
 }
 
+const ANGLE_HINT = '写成 30deg、0.5rad、0.25turn。0 可以不带单位'
+
+function angleHint(value: string): StyleDiagnostic | null {
+  return parseAngle(value) ? null : { hint: ANGLE_HINT }
+}
+
 /** 认识的 CSS 属性。返回 null 表示值可用；不在表里的名字由调用方当成不支持。 */
 const STYLE_CHECKS: Record<string, (value: string) => StyleDiagnostic | null> = {
   'font-size': (value) => lengthHint(value, '写成 40 或 40px'),
@@ -990,22 +1095,28 @@ const STYLE_CHECKS: Record<string, (value: string) => StyleDiagnostic | null> = 
   background: () => null,
   'background-color': () => null,
   opacity: (value) => numberHint(value, '写成 0 到 1 的数字，例如 0.5'),
-  rotate: (value) => numberHint(value, '写成角度，例如 12'),
-  rotateX: (value) => numberHint(value, '写成角度，例如 20'),
-  rotateY: (value) => numberHint(value, '写成角度，例如 20'),
+  rotate: angleHint,
+  rotatex: angleHint,
+  rotatey: angleHint,
   z: (value) => numberHint(value, '写成像素，例如 40'),
   scale: (value) => {
+    if (value.trim().toLowerCase() === 'none') return null
     const parts = value.trim().split(/[\s,]+/).filter(Boolean)
     if (parts.length === 0 || parts.length > 2) return { hint: '写成 1.2 或 1.2 0.8' }
     if (parts.some((part) => parseNumber(part) == null)) return { hint: '写成 1.2 或 1.2 0.8' }
     return null
   },
   translate: (value) => {
+    if (value.trim().toLowerCase() === 'none') return null
     const parts = value.trim().split(/[\s,]+/).filter(Boolean)
-    if (parts.length === 0 || parts.length > 2) return { hint: '写成 0 -12 或 12 0' }
-    if (parts.some((part) => parsePx(part) == null)) return { hint: '写成 0 -12 或 12px 0' }
+    if (parts.length === 0 || parts.length > 2) return { hint: '写成 0 -12、12px 0 或 50% 0' }
+    if (parts.some((part) => parseCssLength(part, true) == null)) return { hint: '写成 0 -12、12px 0 或 50% 0' }
     return null
   },
+  transform: (value) =>
+    parseCssTransform(value).ok ? null : { hint: '写成 translate(10px, 0) rotate(30deg) scale(1.2)，或 none' },
+  'transform-origin': (value) =>
+    readOrigin(value).invalid ? { hint: '写成 center、0 0、50% 50%，或 top left' } : null,
   origin: (value) => (readOrigin(value).invalid ? { hint: '写成 center、top-left，或 120 80、30% 40%' } : null),
 }
 

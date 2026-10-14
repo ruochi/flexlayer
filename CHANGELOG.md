@@ -1,10 +1,18 @@
 # Changelog
 
-## 0.6.19
+## 0.6.20
 
 CSS `box-shadow` and `backdrop-filter` paint. `box-shadow` follows the ink shadow. `inset` is an inner shadow, and several layers paint with the first on top. `backdrop-filter` samples the backdrop. `blur()` is `backdrop-blur`. The other functions use the same canvas filter string as `filter`.
 
 `filter` accepts the canvas functions `blur()`, `brightness()`, `contrast()`, `drop-shadow()`, `grayscale()`, `hue-rotate()`, `invert()`, `opacity()`, `saturate()`, and `sepia()`. Lengths are pixels and scale with the supersample. `url()` is not accepted. When `blur` is also set, that radius wins and `blur()` is removed. A missing `drop-shadow()` color uses the element color. `backdrop-filter` accepts the same functions.
+
+## 0.6.19
+
+`rotate`, `rotateX`, and `rotateY` in `style` take a CSS angle: `deg`, `rad`, `grad`, or `turn`. `0` may omit the unit. A bare nonzero number is still degrees, and reports `non-canonical`. An invalid angle reports `invalid-attr` and is ignored.
+
+`transform` accepts `translate()`, `rotate()`, and `scale()`, including the axis-specific forms, and they combine left to right. With the individual properties, the order is `translate`, then `rotate`, then `scale`, then `transform`. The center is `transform-origin`, default `50% 50%`. These change drawing only. The layout box stays put. Attributes such as `rotate="30"` are unchanged.
+
+`.layer` `<script>` no longer enables the permission model on Node versions without `--allow-addons` (Node 20.11 and earlier). On those versions the flag is rejected, or the native canvas library cannot load, and the canvas stays blank. Later Node versions also allow the `node_modules` directories and the canvas package files the loader stats, including `index.js`. If startup is still denied on one of those paths, that path is added and the subprocess is tried again. A script still cannot read arbitrary files such as `/etc/passwd`.
 
 ## 0.6.18
 

@@ -2,7 +2,7 @@ import { cameraItems } from './camera.js'
 import { circleOfConfusion } from './dof.js'
 import { filtersInPaintOrder, getFilter } from './filter.js'
 import { MESH_TAGS } from './tags.js'
-import { apply, applyToBox, aroundPivot, IDENTITY, intersectBox, matrixScale, multiply, originOffset, translated, type Matrix } from './matrix.js'
+import { absoluteNodeMatrix, apply, applyToBox, IDENTITY, intersectBox, isIdentity, matrixScale, multiply, originOffset, translated, type Matrix } from './matrix.js'
 import { applyPoseMatrix, behindCamera, cameraSceneCustom, has3dPose, hasPerspective, planeDepth, poseMatrix, posePoint, project as projectPoint, splitsForCamera, type Perspective } from './perspective.js'
 import { maskStats } from './mask-stats.js'
 import { cssFilterPad, innerInkStrokeReach, outerInkStrokeReach, shadowLayers } from './style.js'
@@ -209,9 +209,9 @@ function tighten(clip: Box | undefined, next: Box): Box {
 }
 
 function nodeMatrix(parent: Matrix, node: LayoutNode): Matrix {
-  if (node.rotate === 0 && node.scaleX === 1 && node.scaleY === 1) return parent
-  const o = originOffset(node.origin, node.width, node.height)
-  return multiply(parent, aroundPivot(node.x + o.x, node.y + o.y, node.rotate, node.scaleX, node.scaleY))
+  const pose = absoluteNodeMatrix(node)
+  if (isIdentity(pose)) return parent
+  return multiply(parent, pose)
 }
 
 function cornerList(box: Box): Array<[number, number]> {
@@ -333,8 +333,7 @@ function projectBox(project: Projector, box: Box, cornerRadius = 0): Box {
 }
 
 function placement(plane: PlaneSpace, node: LayoutNode): Matrix {
-  const o = originOffset(node.origin, node.width, node.height)
-  return multiply(plane.toPlane, aroundPivot(node.x + o.x, node.y + o.y, node.rotate, node.scaleX, node.scaleY))
+  return multiply(plane.toPlane, absoluteNodeMatrix(node))
 }
 
 /** 节点局部盒子变成平面局部的轴对齐范围。平面根的局部坐标就是平面坐标。 */
