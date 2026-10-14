@@ -152,6 +152,10 @@ A text box's own `rotate`, `scale`, and `opacity` still turn the whole box. When
 
 Glow and stroke go through `drawTextNode`, so they follow the pixels that were painted. With `blur` or a pixel filter, the offscreen range is the layout box union the ink. A character that rotates out of the box is not clipped.
 
+## Script subprocess
+
+`.layer` script text runs in a child process. The child loads `@napi-rs/canvas`, so it needs a native addon. Node's permission model blocks addons unless `--allow-addons` is passed, and that flag does not exist before Node 20.12 (and the matching 21.x). Passing it earlier makes Node exit before the script runs. Omitting the permission model on those versions is what lets the canvas paint. On later versions the read list includes the package directory, each file in it, the `node_modules` directories the resolver stats, and `package.json` walked upward. An existing directory is not also listed as `directory/*`. After the list is built, the child is started once; a denied module path from `resource:` is added and the start is repeated. `/etc/passwd` and other paths outside the package are not added.
+
 ## Models
 
 An external triangle mesh and a three.js Object3D become the same primitives. Later raster, line art, materials, and shadows do not branch.
