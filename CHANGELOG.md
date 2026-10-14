@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.18
+
+`radial-gradient()` accepts `circle` or `ellipse`, a size keyword, and `at` a position. `radial-gradient(circle, #fff, #000)` paints. A bad color stop no longer aborts the process, so the PNG and the report are still written.
+
+`.layer` `<script>` grants every `package.json` from the host file up to the package root. Node 20 reads those paths while resolving the canvas module, including ones that are not there yet. Without the grant the subprocess exits with `Access to this API has been restricted` and the canvas stays empty.
+
+three.js `Points` draw into the same depth buffer as meshes and lines. The disc diameter is `PointsMaterial.size` in screen pixels. The default is 1.
+
 ## 0.6.17
 
 `AGENTS.md` now opens with what a frame is, then a lookup of the places Flex Layer differs from HTML, CSS, and SVG, then the frequent issue codes and the change that clears each one. The hard rules and the workflow are unchanged. The full issue list stays in SPEC, "Report".

@@ -23,6 +23,28 @@ describe('parseGradient', () => {
       at: { x: 0.4, y: 0.35 },
     })
   })
+
+  it('circle 和 at 是形状和位置，不是色标', () => {
+    expect(parseGradient('radial-gradient(circle, #fff, #000)')).toMatchObject({
+      kind: 'radial',
+      at: { x: 0.5, y: 0.5 },
+      extent: 'farthest-corner',
+      stops: [
+        { color: '#fff', offset: 0 },
+        { color: '#000', offset: 1 },
+      ],
+    })
+    expect(parseGradient('radial-gradient(circle at 20% 30%, #fff, #000)')).toMatchObject({
+      at: { x: 0.2, y: 0.3 },
+    })
+    expect(parseGradient('radial-gradient(ellipse at top left, #fff, #000)')).toMatchObject({
+      at: { x: 0, y: 0 },
+    })
+    expect(parseGradient('radial-gradient(closest-side at center, #fff, #000)')).toMatchObject({
+      extent: 'closest-side',
+      at: { x: 0.5, y: 0.5 },
+    })
+  })
 })
 
 const box = { x: 0, y: 0, width: 100, height: 100 }
@@ -48,6 +70,21 @@ async function render(source: string, scale = 1) {
   })
   return { doc, png: canvas.toBuffer('image/png') }
 }
+
+describe('CSS 渐变绘制', () => {
+  it('radial-gradient(circle, …) 出图，圆心比角上亮', async () => {
+    const { png, doc } = await render(
+      `<layer width="64" height="64" background="#000"><rect x="0" y="0" width="64" height="64" fill="radial-gradient(circle, #fff, #000)" /></layer>`,
+    )
+    expect(png[0]).toBe(0x89)
+    expect(doc.issues.filter((issue) => issue.level === 'error')).toEqual([])
+    const center = await pixelAt(png, 32, 32)
+    const corner = await pixelAt(png, 2, 2)
+    expect(center[0]).toBeGreaterThan(200)
+    expect(corner[0]).toBeLessThan(40)
+    expect(center[0]).toBeGreaterThan(corner[0]! + 80)
+  })
+})
 
 describe('gradient()', () => {
   it('一行是从左到右，一列是从上到下，斜杠是矩阵', () => {

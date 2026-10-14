@@ -5,12 +5,16 @@ export { isGradientPaint, sampleGradient }
 
 export type GradientStop = { color: string; offset: number }
 
+export type RadialExtent = 'closest-side' | 'farthest-side' | 'closest-corner' | 'farthest-corner'
+
 export type Gradient = {
   kind: 'linear' | 'radial'
   /** CSS 角度：0 朝上，顺时针。线性渐变默认 180，也就是从上到下。 */
   angle: number
   /** 径向渐变的圆心，相对元素盒子的 0 到 1。 */
   at: { x: number; y: number }
+  /** 径向渐变盖住盒子的方式。缺省是 farthest-corner，和 CSS 一样。 */
+  extent?: RadialExtent
   stops: GradientStop[]
 }
 
@@ -75,6 +79,94 @@ function parseStop(arg: string): { color: string; offset?: number } | undefined 
   return { color, offset }
 }
 
+const RADIAL_EXTENTS = new Set<RadialExtent>(['closest-side', 'farthest-side', 'closest-corner', 'farthest-corner'])
+
+function keywordOffset(token: string): number | undefined {
+  if (token === 'left' || token === 'top') return 0
+  if (token === 'center') return 0.5
+  if (token === 'right' || token === 'bottom') return 1
+  return undefined
+}
+
+function axisOf(token: string): 'x' | 'y' | 'either' | undefined {
+  if (token === 'left' || token === 'right') return 'x'
+  if (token === 'top' || token === 'bottom') return 'y'
+  if (token === 'center') return 'either'
+  return undefined
+}
+
+/** CSS `<position>`。一个值时另一个轴是 center。`top left` 按轴认，不按书写顺序硬套到 x、y。 */
+function readPosition(parts: string[]): { x: number; y: number } | undefined {
+  if (parts.length === 0 || parts.length > 2) return undefined
+  const value = (token: string) => keywordOffset(token) ?? parseOffset(token)
+  if (parts.length === 1) {
+    const token = parts[0]!
+    const axis = axisOf(token)
+    if (axis === 'y') return { x: 0.5, y: keywordOffset(token)! }
+    if (axis === 'x') return { x: keywordOffset(token)!, y: 0.5 }
+    const n = value(token)
+    if (n == null) return undefined
+    return { x: n, y: 0.5 }
+  }
+  const a = parts[0]!
+  const b = parts[1]!
+  const ax = axisOf(a)
+  const bx = axisOf(b)
+  if (ax === 'y' && (bx === 'x' || bx === 'either')) return { x: keywordOffset(b)!, y: keywordOffset(a)! }
+  if (ax === 'x' && (bx === 'y' || bx === 'either')) return { x: keywordOffset(a)!, y: keywordOffset(b)! }
+  if (ax === 'either' && bx === 'x') return { x: keywordOffset(b)!, y: 0.5 }
+  if (ax === 'either' && bx === 'y') return { x: 0.5, y: keywordOffset(b)! }
+  if (ax === 'y') {
+    const x = value(b)
+    const y = keywordOffset(a)
+    if (x == null || y == null) return undefined
+    return { x, y }
+  }
+  if (bx === 'y') {
+    const x = value(a)
+    const y = keywordOffset(b)
+    if (x == null || y == null) return undefined
+    return { x, y }
+  }
+  const x = value(a)
+  const y = value(b)
+  if (x == null || y == null) return undefined
+  return { x, y }
+}
+
+/**
+ * `circle` / `ellipse`、尺寸和 `at` 位置。不是这种前缀时返回 null，调用方把它当色标。
+ * 写了形状但位置读不出来时返回 undefined，整段渐变无效，不能把 `circle` 当成颜色。
+ */
+function parseRadialPrelude(raw: string): { at: { x: number; y: number }; extent: RadialExtent } | null | undefined {
+  const parts = raw.trim().toLowerCase().replace(/\s+/g, ' ').split(' ')
+  const radial = parts.some((part) => part === 'circle' || part === 'ellipse' || part === 'at' || RADIAL_EXTENTS.has(part as RadialExtent))
+  if (!radial) return null
+  let extent: RadialExtent = 'farthest-corner'
+  let i = 0
+  while (i < parts.length && parts[i] !== 'at') {
+    const part = parts[i]!
+    if (part === 'circle' || part === 'ellipse') {
+      i++
+      continue
+    }
+    if (RADIAL_EXTENTS.has(part as RadialExtent)) {
+      extent = part as RadialExtent
+      i++
+      continue
+    }
+    if (/^-?\d*\.?\d+(px|%)?$/.test(part)) {
+      i++
+      continue
+    }
+    return undefined
+  }
+  if (i === parts.length) return { at: { x: 0.5, y: 0.5 }, extent }
+  const at = readPosition(parts.slice(i + 1))
+  if (!at) return undefined
+  return { at, extent }
+}
+
 function assignOffsets(stops: Array<{ color: string; offset?: number }>): GradientStop[] | undefined {
   if (stops.length === 0) return undefined
   const out: GradientStop[] = stops.map((stop) => ({ color: stop.color, offset: stop.offset ?? Number.NaN }))
@@ -108,6 +200,7 @@ export function parseCssGradient(value: string | undefined): Gradient | undefine
   if (args.length === 0) return undefined
   let angle = 180
   let at = { x: 0.5, y: 0.5 }
+  let extent: RadialExtent = 'farthest-corner'
   let index = 0
   const first = args[0]!
   if (kind === 'linear') {
@@ -116,19 +209,20 @@ export function parseCssGradient(value: string | undefined): Gradient | undefine
       angle = parsed
       index = 1
     }
-  } else if (/^at\s+/i.test(first)) {
-    const parts = first.replace(/^at\s+/i, '').trim().split(/\s+/)
-    const x = parseOffset(parts[0])
-    const y = parseOffset(parts[1] ?? parts[0])
-    if (x == null || y == null) return undefined
-    at = { x, y }
-    index = 1
+  } else {
+    const prelude = parseRadialPrelude(first)
+    if (prelude === undefined) return undefined
+    if (prelude) {
+      at = prelude.at
+      extent = prelude.extent
+      index = 1
+    }
   }
   const parsedStops = args.slice(index).map(parseStop)
   if (parsedStops.some((stop) => stop == null)) return undefined
   const stops = assignOffsets(parsedStops as Array<{ color: string; offset?: number }>)
   if (!stops || stops.length === 0) return undefined
-  return { kind, angle, at, stops }
+  return { kind, angle, at, stops, ...(kind === 'radial' ? { extent } : {}) }
 }
 
 export function isGradient(value: string | undefined): boolean {
@@ -174,14 +268,9 @@ export function canvasPaint(
   if (gradient.kind === 'radial') {
     const cx = x + gradient.at.x * width
     const cy = y + gradient.at.y * height
-    const radius = Math.max(
-      Math.hypot(cx - x, cy - y),
-      Math.hypot(x + width - cx, cy - y),
-      Math.hypot(cx - x, y + height - cy),
-      Math.hypot(x + width - cx, y + height - cy),
-    )
+    const radius = radialRadius(x, y, width, height, cx, cy, gradient.extent ?? 'farthest-corner')
     const paint = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(radius, 1))
-    for (const stop of gradient.stops) paint.addColorStop(Math.min(1, Math.max(0, stop.offset)), stop.color)
+    addStops(paint, gradient.stops)
     return paint
   }
   const radians = (gradient.angle * Math.PI) / 180
@@ -191,6 +280,30 @@ export function canvasPaint(
   const cx = x + width / 2
   const cy = y + height / 2
   const paint = ctx.createLinearGradient(cx - (dx * length) / 2, cy - (dy * length) / 2, cx + (dx * length) / 2, cy + (dy * length) / 2)
-  for (const stop of gradient.stops) paint.addColorStop(Math.min(1, Math.max(0, stop.offset)), stop.color)
+  addStops(paint, gradient.stops)
   return paint
+}
+
+/** 画布的径向渐变是圆。`ellipse` 也用这个圆盖住盒子，尺寸关键字决定半径。 */
+function radialRadius(x: number, y: number, width: number, height: number, cx: number, cy: number, extent: RadialExtent): number {
+  const left = Math.max(0, cx - x)
+  const right = Math.max(0, x + width - cx)
+  const top = Math.max(0, cy - y)
+  const bottom = Math.max(0, y + height - cy)
+  const sides = [left, right, top, bottom]
+  const corners = [Math.hypot(left, top), Math.hypot(right, top), Math.hypot(left, bottom), Math.hypot(right, bottom)]
+  if (extent === 'closest-side') return Math.min(...sides)
+  if (extent === 'farthest-side') return Math.max(...sides)
+  if (extent === 'closest-corner') return Math.min(...corners)
+  return Math.max(...corners)
+}
+
+function addStops(paint: ReturnType<CanvasRenderingContext2D['createLinearGradient']>, stops: GradientStop[]) {
+  for (const stop of stops) {
+    try {
+      paint.addColorStop(Math.min(1, Math.max(0, stop.offset)), stop.color)
+    } catch {
+      // 色标不是颜色时跳过这一档。不能让绘制抛出去，整张图就没有 PNG 也没有报告。
+    }
+  }
 }

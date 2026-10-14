@@ -150,6 +150,14 @@ function isDirectory(target: string): boolean {
   }
 }
 
+function isFile(target: string): boolean {
+  try {
+    return statSync(target).isFile()
+  } catch {
+    return false
+  }
+}
+
 /** 顺着 Node `realpath` 的每一跳，把遇到的符号链接本身放进名单。一跳解析完再走下一截。 */
 function grantSymlinkHops(grants: Set<string>, target: string) {
   if (!isAbsolute(target) || target.includes('*')) return
@@ -221,15 +229,55 @@ function logicalPackages(host: string, name: string): string[] {
 }
 
 /**
+ * Node 20 解析 ESM 时，从宿主文件往上每一级都要读 `package.json`。
+ * 这一级还不存在也要放行：权限检查在 stat 之前，没放行就报
+ * Access to this API has been restricted，子进程退出，画布是空的。
+ * 读到已经存在的那一份就停，再往上不是这个包。
+ */
+function grantPackageScope(grants: Set<string>, startFile: string) {
+  const seen = new Set<string>()
+  const walk = (file: string) => {
+    let dir = dirname(file)
+    while (dir && !seen.has(dir)) {
+      seen.add(dir)
+      const pkg = join(dir, 'package.json')
+      addGrant(grants, pkg)
+      if (isFile(pkg)) break
+      const parent = dirname(dir)
+      if (parent === dir) break
+      dir = parent
+    }
+  }
+  walk(startFile)
+  try {
+    const real = realpathSync(startFile)
+    if (real !== startFile) walk(real)
+  } catch {
+    // 宿主路径可以还没落盘。
+  }
+}
+
+function scriptFailure(stderr: string, code: number | null): string {
+  const text = stderr.trim()
+  const resource = text.match(/resource: '([^']+)'/)?.[1]
+  const message = text.match(/^Error: .+$/m)?.[0]
+  if (message && resource) return `${message}（${resource}）`
+  if (message) return message
+  if (text) return text.slice(0, 500)
+  return `脚本进程退出 ${code}`
+}
+
+/**
  * 子进程要读到的路径。`require.resolve` 给的是真实目录，ESM 加载器读的是
  * `node_modules` 上的符号链接。只放行一边时，读 `package.json` 会报
  * Access to this API has been restricted。链接的父目录如果自己也是符号链接，
- * `realpathSync` 同样要先读到那一跳。
+ * `realpathSync` 同样要先读到那一跳。Node 20 还要读宿主往上每一级的 `package.json`。
  */
 export function scriptReadGrants(host: string): string[] {
   const { canvasDir, nativeDir, nativeFile } = nativeBinding()
   const grants = new Set<string>()
   addGrant(grants, host)
+  grantPackageScope(grants, host)
   for (const dir of [canvasDir, nativeDir, ...logicalPackages(host, '@napi-rs/canvas'), ...logicalPackages(host, join('@napi-rs', basename(nativeDir)))]) {
     addGrant(grants, dir)
     addGrant(grants, join(dir, 'package.json'))
@@ -273,8 +321,7 @@ function runChild(payload: unknown): Promise<{ issues: CanvasDomIssue[]; canvase
     child.on('close', (code) => {
       const text = Buffer.concat(stdout).toString('utf8')
       if (code !== 0 || !text.trim()) {
-        const detail = Buffer.concat(stderr).toString('utf8').trim().slice(0, 500)
-        reject(new Error(detail || `脚本进程退出 ${code}`))
+        reject(new Error(scriptFailure(Buffer.concat(stderr).toString('utf8'), code)))
         return
       }
       try {

@@ -126,6 +126,10 @@ type Batch = {
   segmentIndices?: Uint32Array | null
   /** 屏幕像素。线段粗细，不写是 1。 */
   linePx?: number
+  /** 点的顶点下标。和三角形、线段分开。 */
+  pointIndices?: Uint32Array | null
+  /** 屏幕像素。点的直径，不写是 1。 */
+  pointPx?: number
 }
 
 type Vert = {
@@ -210,6 +214,9 @@ type ModelPrim = {
   /** 下标是线段对，不光栅三角形。 */
   lines?: boolean
   linePx?: number
+  /** 下标是顶点，画成屏幕像素的圆点。 */
+  points?: boolean
+  pointPx?: number
 }
 
 const geometryCache = new Map<string, MeshGeometry | null>()
@@ -1374,6 +1381,28 @@ function buildModelFresh(node: MeshLayoutNode): ModelPrim[] {
       })
       continue
     }
+    if (prim.points) {
+      const ids = prim.indices
+      if (!ids || ids.length < 1) continue
+      const ink = prim.color
+      out.push({
+        positions,
+        normals: new Float32Array(positions.length),
+        indices: ids,
+        color: [
+          byte(ink[0] * 255),
+          byte(ink[1] * 255),
+          byte(ink[2] * 255),
+          byte(ink[3] * node.opacity * 255),
+        ],
+        roughness: 1,
+        metalness: 0,
+        doubleSided: true,
+        points: true,
+        pointPx: prim.pointPx && prim.pointPx > 0 ? prim.pointPx : 1,
+      })
+      continue
+    }
     const indices = prim.indices ?? Uint32Array.from({ length: count - (count % 3) }, (_, i) => i)
     if (indices.length < 3) continue
     const normals = prim.normals && prim.normals.length === src.length ? prim.normals : smoothNormals(positions, indices)
@@ -1477,7 +1506,7 @@ export function meshPrims(node: MeshLayoutNode): MeshPrim[] {
       return buildModel(node).map((prim) => ({
       positions: prim.positions,
       normals: prim.normals,
-      indices: prim.lines ? new Uint32Array(0) : prim.indices,
+      indices: prim.lines || prim.points ? new Uint32Array(0) : prim.indices,
       alpha: prim.color[3],
       doubleSided: prim.doubleSided,
     }))
@@ -2741,6 +2770,40 @@ function drawModelLines(
   }
 }
 
+/** 屏幕空间的圆点，和线段、三角形共用深度。直径是输出像素。 */
+function drawModelPoints(
+  color: Uint8ClampedArray,
+  depth: Float32Array,
+  owners: Int16Array,
+  pw: number,
+  ph: number,
+  verts: Vert[],
+  screen: Float32Array,
+  ids: Uint32Array,
+  pointPx: number,
+  pixelScale: number,
+  r: number,
+  g: number,
+  b: number,
+  a: number,
+  depthWrite: boolean,
+  owner: number,
+  writeOwner: boolean,
+  near: number,
+) {
+  const radius = Math.max(0.5, pointPx * pixelScale * 0.5)
+  for (let i = 0; i < ids.length; i++) {
+    const index = ids[i]!
+    const vert = verts[index]
+    if (!vert || !(vert.z < near)) continue
+    const o = index * 3
+    if (screen[o + 2] === 0) continue
+    const sx = screen[o]!
+    const sy = screen[o + 1]!
+    drawSegment(color, depth, owners, pw, ph, sx, sy, vert.z, sx, sy, vert.z, radius, r, g, b, a, depthWrite, owner, writeOwner)
+  }
+}
+
 function drawSegment(
   color: Uint8ClampedArray,
   depth: Float32Array,
@@ -2817,6 +2880,7 @@ function rasterize(
       margin = Math.max(margin, batch.lines.widths[0], batch.lines.widths[1], batch.lines.widths[2], batch.lines.halo)
     }
     if (batch.segmentIndices) margin = Math.max(margin, batch.linePx ?? 1)
+    if (batch.pointIndices) margin = Math.max(margin, batch.pointPx ?? 1)
     const count = batch.positions.length / 3
     const verts: Vert[] = new Array(count)
     const proj = new Float32Array(count * 3)
@@ -2942,6 +3006,28 @@ function rasterize(
         py,
         originX,
         originY,
+      )
+    }
+    if (batch.pointIndices && batch.pointIndices.length >= 1) {
+      drawModelPoints(
+        color,
+        depth,
+        owners,
+        pw,
+        ph,
+        verts,
+        screen,
+        batch.pointIndices,
+        batch.pointPx ?? 1,
+        pixelScale,
+        batch.r,
+        batch.g,
+        batch.b,
+        batch.a,
+        batch.depthWrite,
+        batch.owner,
+        writeOwner,
+        near,
       )
     }
     const indices = batch.indices
@@ -4142,6 +4228,38 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
             outline: null,
             segmentIndices: prim.indices,
             linePx: prim.linePx ?? 1,
+          })
+          continue
+        }
+        if (prim.points) {
+          batches.push({
+            positions: prim.positions,
+            normals: prim.normals,
+            uvs: null,
+            indices: new Uint32Array(0),
+            r: prim.color[0],
+            g: prim.color[1],
+            b: prim.color[2],
+            a: byte(prim.color[3] * (instance.opacity ?? 1)),
+            doubleSided: true,
+            shaded: false,
+            depthWrite: prim.color[3] >= 255,
+            castShadow: false,
+            receiveShadow: false,
+            material: 'lambert',
+            roughness: 1,
+            texture: null,
+            tw: 0,
+            th: 0,
+            toLayer: instance.toLayer,
+            originX: o.x,
+            originY: o.y,
+            owner,
+            edges: NO_EDGES,
+            lines: null,
+            outline: null,
+            pointIndices: prim.indices,
+            pointPx: prim.pointPx ?? 1,
           })
           continue
         }

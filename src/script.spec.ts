@@ -240,6 +240,13 @@ describe('canvas 和 script', () => {
     expect(seen).toEqual(['3,5'])
   })
 
+  it('Node 20 读宿主每一级 package.json 时路径已放行', () => {
+    const host = fileURLToPath(new URL('./canvas-dom.mjs', import.meta.url))
+    const grants = scriptReadGrants(host)
+    expect(grants).toContain(join(dirname(host), 'package.json'))
+    expect(grants).toContain(join(dirname(dirname(host)), 'package.json'))
+  })
+
   it('读权限不会在 Node 20 上把同一条前缀插两次', () => {
     const host = fileURLToPath(new URL('./canvas-dom.mjs', import.meta.url))
     const grants = scriptReadGrants(host)
