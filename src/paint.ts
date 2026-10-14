@@ -13,7 +13,7 @@ import { backdropFilters, filtersPad, getFilter, orderedFilters } from './filter
 import { fitImageRect } from './image.js'
 import { canvasPaint, isGradient } from './gradient.js'
 import { gradientStyle, isGradientPaint, type GradientBox } from './gradientField.js'
-import { apply, applyToBox, aroundPivot, IDENTITY, intersectBox, invert, multiply, originOffset, translated, type Matrix } from './matrix.js'
+import { absoluteNodeMatrix, apply, applyToBox, IDENTITY, intersectBox, invert, isIdentity, multiply, originOffset, translated, type Matrix } from './matrix.js'
 import { openSvgPath } from './path.js'
 import { cameraItems, projectOnLayer } from './camera.js'
 import { ownsMeshScene, renderMeshLayer, type MeshFrame } from './mesh.js'
@@ -570,6 +570,12 @@ function drawCanvasNode(ctx: PaintCtx, node: CanvasLayoutNode) {
 
 /** 绕 origin 旋转、缩放。支点用当前坐标系里的绝对位置，子绘制仍使用 node.x/node.y。 */
 function applyNodeTransform(ctx: CanvasRenderingContext2D, node: LayoutNode) {
+  if (node.motion) {
+    const m = absoluteNodeMatrix(node)
+    if (isIdentity(m)) return
+    ctx.transform(m.a, m.b, m.c, m.d, m.e, m.f)
+    return
+  }
   if (node.rotate === 0 && node.scaleX === 1 && node.scaleY === 1) return
   const o = originOffset(node.origin, node.width, node.height)
   const px = node.x + o.x
@@ -1363,9 +1369,9 @@ function leafInkBounds(node: LayoutNode): Box {
 function placedChildInk(node: LayoutNode, state?: PaintState): Box | null {
   const local = groupInkBounds(node, state)
   if (!local) return null
-  if (node.rotate === 0 && node.scaleX === 1 && node.scaleY === 1) return local
-  const origin = originOffset(node.origin, node.width, node.height)
-  return applyToBox(aroundPivot(node.x + origin.x, node.y + origin.y, node.rotate, node.scaleX, node.scaleY), local)
+  const pose = absoluteNodeMatrix(node)
+  if (isIdentity(pose)) return local
+  return applyToBox(pose, local)
 }
 
 /**
@@ -2251,9 +2257,7 @@ function paintNode(
 }
 
 function nodePose(node: LayoutNode): Matrix {
-  if (node.rotate === 0 && node.scaleX === 1 && node.scaleY === 1) return IDENTITY
-  const o = originOffset(node.origin, node.width, node.height)
-  return aroundPivot(node.x + o.x, node.y + o.y, node.rotate, node.scaleX, node.scaleY)
+  return absoluteNodeMatrix(node)
 }
 
 /** 文档画布和沿途裁剪，换算到这一层绘制网格时的坐标。 */

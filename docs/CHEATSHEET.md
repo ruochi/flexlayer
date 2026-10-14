@@ -75,9 +75,9 @@ const title = canvas.create(
 
 ```html
 <p style="font-size:64px">
-  <span style="translate: 0 -8; rotate: 8">A</span><span style="opacity: 0.35">B</span>
+  <span style="translate: 0 -8; rotate: 8deg">A</span><span style="opacity: 0.35">B</span>
 </p>
-<p split="chars" style="font-size:64px; rotate: 6">Wave</p>
+<p split="chars" style="font-size:64px; rotate: 6deg">Wave</p>
 ```
 
 ```bash
