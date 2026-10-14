@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.21
+
+A gradient color stop the canvas cannot parse makes the whole gradient invalid. The report is `invalid-attr`, and the paint falls back to that attribute's default solid. The stop is not dropped, and rendering still writes the picture.
+
 ## 0.6.20
 
 CSS `box-shadow` and `backdrop-filter` paint. `box-shadow` follows the ink shadow. `inset` is an inner shadow, and several layers paint with the first on top. `backdrop-filter` samples the backdrop. `blur()` is `backdrop-blur`. The other functions use the same canvas filter string as `filter`.
