@@ -770,6 +770,17 @@
     "misplacedHint": null
   },
   {
+    "name": "box-shadow",
+    "group": "effect",
+    "syntax": "[inset] x y [blur] [spread] [color], …",
+    "default": "color `#00000066`",
+    "example": "0 8px 16px #00000055",
+    "layerOnly": false,
+    "htmlUsesStyle": true,
+    "note": "CSS spelling of shadow. inset is inner-shadow. Several layers paint, the first on top. Lengths are px. When shadow is also set, shadow wins",
+    "misplacedHint": null
+  },
+  {
     "name": "glow",
     "group": "effect",
     "syntax": "blur [spread] [color]",
@@ -825,6 +836,17 @@
     "misplacedHint": null
   },
   {
+    "name": "backdrop-filter",
+    "group": "effect",
+    "syntax": "the same functions as filter",
+    "default": null,
+    "example": "blur(16px)",
+    "layerOnly": false,
+    "htmlUsesStyle": true,
+    "note": "Same functions as filter, sampled from the backdrop. blur() is backdrop-blur. Lengths are px. url() is not accepted. When backdrop-blur is also set, that radius wins",
+    "misplacedHint": null
+  },
+  {
     "name": "glass",
     "group": "effect",
     "syntax": "clear | regular | thick, or clear, blur 8, tint #fff2",
@@ -849,12 +871,12 @@
   {
     "name": "filter",
     "group": "effect",
-    "syntax": "brightness() contrast() saturate() grayscale() sepia() invert() hue-rotate()",
+    "syntax": "blur() brightness() contrast() drop-shadow() grayscale() hue-rotate() invert() opacity() saturate() sepia()",
     "default": null,
     "example": "saturate(1.1)",
     "layerOnly": false,
     "htmlUsesStyle": true,
-    "note": null,
+    "note": "Lengths are px. url() is not accepted. When blur is also set, that radius wins and blur() is removed. A missing drop-shadow color uses the element color",
     "misplacedHint": null
   },
   {

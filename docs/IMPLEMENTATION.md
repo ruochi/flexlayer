@@ -91,11 +91,14 @@ The mask is painted with `paintOf` to an offscreen buffer of the same size, then
 
 ### Tradeoffs
 
-- `backdrop-blur` / `glass` sample the main canvas and clip back by ink alpha when pasted.
-- When `glass` and `backdrop-blur` are both set, `glass` wins (`info`).
-- `filter` does not include `blur()` / `drop-shadow()`, so it does not double up with `blur` / `shadow`.
-- When `blur` and `filter` are both set, blur follows `blur`, and an `info` is reported.
-- Do not take: `outer-glow`, `drop-shadow`, `backdrop-filter`, `texture`, `outline`.
+- `backdrop-blur` / `backdrop-filter` / `glass` sample the main canvas and clip back by ink alpha when pasted.
+- `backdrop-filter` reuses the canvas filter string from `filter`. `blur()` is stored as `backdrop-blur`. Each other function calls the registered `filter` `canvasFilter`, with lengths scaled by the backdrop transform.
+- `box-shadow` is parsed into `shadow` and `inner-shadow` (`inset`). It is not a canvas `drop-shadow()`, so spread and inset stay on the ink shadow path.
+- When `glass` and `backdrop-blur` or `backdrop-filter` are both set, `glass` wins (`info`).
+- `filter` accepts the canvas CSS functions, including `blur()`, `drop-shadow()`, and `opacity()`. `url()` is rejected. Pixel lengths scale with the supersample. `pad()` is `blur × 2` plus each drop-shadow's `blur × 2 + |x| + |y|`.
+- `shadow` and `filter: drop-shadow()` both paint. `opacity` and `filter: opacity()` both apply.
+- When `blur` and a `blur()` inside `filter` are both set, the attribute wins, that `blur()` is removed, and an `info` is reported. A missing drop-shadow color uses the element color.
+- Do not register: `outer-glow`, `drop-shadow`, `backdrop-filter`, `texture`, `outline`.
 
 ### Open interface
 

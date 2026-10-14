@@ -138,8 +138,12 @@ export type GradeSpec = {
   vignetteColor: string
 }
 export type ColorFilterSpec =
-  | { name: 'brightness' | 'contrast' | 'saturate' | 'grayscale' | 'sepia' | 'invert'; value: number }
+  | { name: 'brightness' | 'contrast' | 'saturate' | 'grayscale' | 'sepia' | 'invert' | 'opacity'; value: number }
   | { name: 'hue-rotate'; value: number }
+  | { name: 'blur'; value: number }
+  | { name: 'drop-shadow'; x: number; y: number; blur: number; color?: string }
+/** `backdrop-filter` 里的一步，和 `filter` 同一套函数。 */
+export type BackdropFilterStep = ColorFilterSpec
 export type BlendMode =
   | 'source-over'
   | 'multiply'
@@ -245,8 +249,12 @@ export type ElementReport = {
    */
   inline?: boolean
   shadow?: ShadowSpec
+  /** `box-shadow` 有多层外阴影时的完整列表，第一层在最上，也写在 `shadow` 里。 */
+  shadowList?: ShadowSpec[]
   glow?: GlowSpec
   innerShadow?: ShadowSpec
+  /** `box-shadow` 有多层 inset 时的完整列表，第一层在最上，也写在 `innerShadow` 里。 */
+  innerShadowList?: ShadowSpec[]
   innerGlow?: GlowSpec
   /** 按墨迹距离描边，从内到外。 */
   inkStroke?: InkStrokeSpec[]
@@ -254,6 +262,8 @@ export type ElementReport = {
   /** 这一层镜头在采样点上的景深模糊半径，成片像素。没开景深或不糊时不写。 */
   defocus?: number
   backdropBlur?: number
+  /** `backdrop-filter` 里除单独一次模糊以外的步骤，顺序和作者写的一样。 */
+  backdropFilter?: BackdropFilterStep[]
   noise?: NoiseSpec
   overlay?: OverlaySpec
   glass?: GlassSpec
@@ -431,12 +441,18 @@ export type LayoutNodeBase = {
   computed: DrawComputedStyle
   text: string
   shadow?: ShadowSpec
+  /** `box-shadow` 有多层外阴影时的完整列表。第一层也在 `shadow`。 */
+  shadowList?: ShadowSpec[]
   glow?: GlowSpec
   innerShadow?: ShadowSpec
+  /** `box-shadow` 有多层 inset 时的完整列表。第一层也在 `innerShadow`。 */
+  innerShadowList?: ShadowSpec[]
   innerGlow?: GlowSpec
   inkStroke?: InkStrokeSpec[]
   blur?: number
   backdropBlur?: number
+  /** `backdrop-filter` 的步骤。只有一次 `blur()` 时不写，半径在 `backdropBlur`。 */
+  backdropFilter?: BackdropFilterStep[]
   noise?: NoiseSpec
   overlay?: OverlaySpec
   glass?: GlassSpec

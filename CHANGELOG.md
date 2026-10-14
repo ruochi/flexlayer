@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.20
+
+CSS `box-shadow` and `backdrop-filter` paint. `box-shadow` follows the ink shadow. `inset` is an inner shadow, and several layers paint with the first on top. `backdrop-filter` samples the backdrop. `blur()` is `backdrop-blur`. The other functions use the same canvas filter string as `filter`.
+
+`filter` accepts the canvas functions `blur()`, `brightness()`, `contrast()`, `drop-shadow()`, `grayscale()`, `hue-rotate()`, `invert()`, `opacity()`, `saturate()`, and `sepia()`. Lengths are pixels and scale with the supersample. `url()` is not accepted. When `blur` is also set, that radius wins and `blur()` is removed. A missing `drop-shadow()` color uses the element color. `backdrop-filter` accepts the same functions.
+
 ## 0.6.19
 
 `rotate`, `rotateX`, and `rotateY` in `style` take a CSS angle: `deg`, `rad`, `grad`, or `turn`. `0` may omit the unit. A bare nonzero number is still degrees, and reports `non-canonical`. An invalid angle reports `invalid-attr` and is ignored.
