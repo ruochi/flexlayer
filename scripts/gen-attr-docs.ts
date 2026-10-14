@@ -16,7 +16,7 @@ function fill(path: string, marker: string, body: string, kind: 'html' | 'line' 
   const start = text.indexOf(begin)
   const stop = text.indexOf(end)
   if (start < 0 || stop < 0 || stop < start) {
-    throw new Error(`${path} 缺少 ${begin} / ${end}`)
+    throw new Error(`${path} is missing ${begin} / ${end}`)
   }
   const next = `${text.slice(0, start + begin.length)}\n${body}\n${text.slice(stop)}`
   writeFileSync(path, next)

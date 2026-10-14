@@ -1,243 +1,249 @@
 # Changelog
 
+## 0.6.15
+
+The repository docs are in English. The README keeps one short note in Chinese and English. The attribute catalog, the ownership table in SPEC, and the effects line in the cheat sheet are generated in English from the registry.
+
+Checker sentences in the engine, and the Chinese names you can pass as font aliases, are unchanged.
+
 ## 0.6.14
 
-主入口再导出 `loadImage` 和 `registerFontPath`。二者和 `createCanvas` 用的是排版那一份 `@napi-rs/canvas`。`registerFontPath(family, filePath)` 登记自定义字体文件；这个名字已经登记过就不再换文件。
+The main entry also exports `loadImage` and `registerFontPath`. Both use the same `@napi-rs/canvas` instance as `createCanvas`, the one layout uses. `registerFontPath(family, filePath)` registers a custom font file. A name that is already registered is not swapped for another file.
 
-标点避头尾只看行内归属。`translate`、`rotate`、`scale`、`opacity` 不同时，逗号也不落到下一行行首。拼成同一段文字时仍要求这四项相同。没登记的字体名会抛错。透明度低于 0.01 的字不进着墨。`rotate` 仍是纯数字角度，例如 `12`。
+Line-break rules for punctuation look only at inline ownership. When `translate`, `rotate`, `scale`, or `opacity` differ, a comma does not drop to the start of the next line either. Joining into one text run still requires those four to match. An unregistered font name throws. A character with opacity below 0.01 does not join the ink. `rotate` is still a bare number of degrees, for example `12`.
 
 ## 0.6.13
 
-主入口导出 `createCanvas`、`initFonts`、`applyCanvasFont` 和 `DEFAULT_FONT_FAMILY`。这是排版用的那一份 `@napi-rs/canvas`。`initFonts()` 先准备默认字体，也可以带目录里的字体名。`applyCanvasFont` 把可变字重写进 `wght` 轴。
+The main entry exports `createCanvas`, `initFonts`, `applyCanvasFont`, and `DEFAULT_FONT_FAMILY`. This is the `@napi-rs/canvas` instance layout uses. `initFonts()` prepares the default font first, and can also take catalog font names. `applyCanvasFont` writes variable weight onto the `wght` axis.
 
-行内标签的 `translate`、`rotate`、`scale`、`opacity` 只改绘制。行宽、行高和折行仍按原来的前进宽度，布局盒留在原位。转完的范围并进这一行和文字盒子的着墨框。`split="chars"` 让每个字绕自己的字心。文字盒子写了它时，这四项不再转动整块盒子。
+`translate`, `rotate`, `scale`, and `opacity` on an inline tag change drawing only. Line width, line height, and wrapping still use the original advance. The layout box stays where it was. The transformed bounds join the ink box of the line and of the text box. `split="chars"` makes each character rotate around its own center. When a text box sets it, those four properties no longer turn the whole box.
 
 ## 0.6.12
 
-Skill 的特色补上同一深度里的几件事：线框遇空白不断、文字按墨迹分层、景深按物体糊、描边绕墨迹、半透明玻璃不挡后面的棱。
+The skill's distinctive features now include what happens in one depth buffer: a wireframe does not break on empty space, text layers by ink, depth of field blurs per object, a stroke follows the ink, and translucent glass does not hide edges behind it.
 
 ## 0.6.11
 
-`<model object>` 把 three.js 的材质种类换进现有着色。Lambert 和 Toon 用磨砂。Phong 的 `shininess` 收成粗糙度，100 是光滑。透射不小于 0.5 用玻璃，玻璃仍是假折射。其余仍按金属度分金属和塑料。
+`<model object>` maps three.js material kinds onto the existing shading. Lambert and Toon use matte. Phong `shininess` becomes roughness. 100 is smooth. Transmission of at least 0.5 uses glass. Glass is still fake refraction. Anything else still splits into metal and plastic by metalness.
 
-内存里的 `map` 按 uv 给底色染色，再走同一套明暗。顶点色乘上材质色。`emissive` 加在明暗之后，不照亮旁边的物体。`ShaderMaterial` 不执行，从 uniforms 里取一个颜色当底色。
+An in-memory `map` tints the base color by uv, then goes through the same shading. Vertex colors multiply the material color. `emissive` is added after shading and does not light neighboring objects. `ShaderMaterial` is not executed. One color from the uniforms is the base color.
 
 ## 0.6.10
 
-Skill 改成项目介绍、仓库和文档地址，以及超出 HTML 截图的能力。属性、命令和例子留在 SPEC，不再写进技能。
+The skill is now a project introduction, the repo and doc URLs, and the features that go beyond an HTML screenshot. Attributes, commands, and examples stay in SPEC. They are no longer written into the skill.
 
 ## 0.6.9
 
-`.layer` 的 `<script>` 子进程不再把已经存在的目录和 `目录/*`、`目录/**` 一起放进读权限。Node 会把存在的目录收成 `目录/*`，再写一遍同一条前缀时，Node 20 的权限树把空前缀插到叶子上，断言 `!path_prefix.empty()`，子进程直接退出，画布是空的。目录还不存在时仍只补一条 `目录/*`。`**` 不是递归通配。
+The `<script>` subprocess for `.layer` no longer puts an existing directory, `directory/*`, and `directory/**` into the read permission list together. Node collapses an existing directory to `directory/*`. Writing that same prefix again makes Node 20's permission tree insert an empty prefix on a leaf, assert `!path_prefix.empty()`, and the subprocess exits. The canvas is empty. When the directory does not exist yet, only one `directory/*` is added. `**` is not a recursive wildcard.
 
 ## 0.6.8
 
-three.js 的 `Line`、`LineSegments`、`LineLoop` 画进 `<model object>` 的同一深度缓冲。材质 `wireframe: true` 只画边，不再填成实心，也不再整段跳过。线用材质颜色，线宽是屏幕像素，不写是 1。`Points` 仍不画。
+three.js `Line`, `LineSegments`, and `LineLoop` draw into the same depth buffer as `<model object>`. A material with `wireframe: true` draws only edges. It is no longer filled solid, and it is no longer skipped entirely. Lines use the material color. Line width is in screen pixels, and the default is 1. `Points` are still not drawn.
 
-`.layer` 的 `<script>` 子进程在 canvas 包目录之外，再放行目录里的文件。只给目录、不给通配时，有的 Node 会报 `Access to this API has been restricted`，画布是空的。
+The `<script>` subprocess for `.layer` also allows files in the catalog directory, outside the canvas package directory. Giving only the directory, with no wildcard, makes some Node versions report `Access to this API has been restricted`, and the canvas is empty.
 
 ## 0.6.7
 
-说明收成四块：`layer`、支持的 HTML 和 SVG、实体和镜头、蒙版和程序。通用的 CSS、SVG 和公式间距不再在正文里展开。问题码、蒙版、`glyph` 和 `canvas.create` 仍在 SPEC 里。写法没有删。
+The docs are four blocks: `layer`, supported HTML and SVG, solids and cameras, and masks and programs. General CSS, SVG, and formula spacing are no longer spelled out in the prose. Issue codes, masks, `glyph`, and `canvas.create` stay in SPEC. No syntax was removed.
 
 ## 0.6.6
 
-公式、调色、沿墨迹描边、玻璃、噪点和命令行工具链按用到再加载。绘制和排版仍是同步的。同一份 `.tsx` 的 esbuild 结果缓存在本机，并带上当前 flexlayer 的安装路径。
+Formulas, grade, stroke along ink, glass, noise, and the command-line toolchain load when they are used. Paint and layout stay synchronous. The esbuild result of one `.tsx` is cached on the machine, and the cache key includes the current flexlayer install path.
 
 ## 0.6.5
 
-`<model>` 在 tsx 里可以写 `object`，传入 three.js 的 Object3D。几何体进 Flex Layer 自己的场景，和文字、线稿、标注共用深度。`unit` 保留原始坐标，1 个模型单位等于这么多像素。不写 `material` 时，图元的金属度和粗糙度映射到 `metal` / `plastic`。
+`<model>` in tsx can write `object` and pass a three.js Object3D. The geometry enters Flex Layer's own scene and shares depth with text, line art, and labels. `unit` keeps the original coordinates. One model unit equals that many pixels. When `material` is omitted, the primitive's metalness and roughness map to `metal` / `plastic`.
 
-`three` 是可选的 peer dependency。适配在 `flexlayer/three`，核心不 import 它。裸包名按 ESM 从源文件所在目录往上解析，和类型检查同一条路径。
+`three` is an optional peer dependency. The adapter is `flexlayer/three`. The core does not import it. A bare package name resolves upward from the source file as ESM, the same path type-checking uses.
 
 ## 0.6.4
 
-挤出的棱按厚度的 1/40 收一条小圆角。盒子和路径用 `depth`，圆柱用轴向长度。五星这种凹轮廓，以及带洞的字形，也收。写了 `rx` 或描了 `stroke` 的保持原来的棱。
+Extruded edges take a small round of 1/40 of the thickness. Boxes and paths use `depth`. Cylinders use the axial length. A concave contour such as a five-pointed star, and a glyph with holes, take the round too. A shape that wrote `rx` or stroked with `stroke` keeps its original edges.
 
 ## 0.6.3
 
-`.layer` 里的 `<script>` 在子进程里读 `@napi-rs/canvas`。`node_modules` 整目录、pnpm 虚拟目录这种符号链接，`realpath` 还要读链接自己和它的父目录，以前名单里没有，于是报 `Access to this API has been restricted`，画布是空的。
+`<script>` in `.layer` reads `@napi-rs/canvas` in a subprocess. A whole `node_modules` directory, or a pnpm virtual directory, is a symlink. `realpath` also has to read the link itself and its parent. Those were not on the allow list, so the report was `Access to this API has been restricted`, and the canvas was empty.
 
-横排 flex 没写 `height` 的子项按 `align-items:stretch` 撑满容器高度。空的 `flex:1` 也占满这一行。写了高度，或 `align-items` 不是 `stretch`，仍用内容高度。
+A horizontal flex child with no `height` stretches to the container height under `align-items:stretch`. An empty `flex:1` also fills the row. A set height, or an `align-items` other than `stretch`, still uses the content height.
 
 ## 0.6.2
 
-形状写了正的 `depth` 就沿 z 挤出：`rect` 是盒子，`circle` 是轴沿 z 的圆柱，`ellipse`、`polygon`、`path` 按轮廓挤出。洞用 `fill-rule`，默认 `nonzero`。`sphere`、`torus`、`tube`、`model`、`ground` 仍是单独的标签。`box`、`cylinder`、`extrude` 照旧绘制，报 `non-canonical`。
+A positive `depth` extrudes a shape along z. `rect` is a box. `circle` is a cylinder with its axis along z. `ellipse`, `polygon`, and `path` extrude along the contour. Holes use `fill-rule`, default `nonzero`. `sphere`, `torus`, `tube`, `model`, and `ground` stay separate tags. `box`, `cylinder`, and `extrude` still paint and report `non-canonical`.
 
-SVG 元素可以写 `transform="rotateX() rotateY() rotateZ() translateZ()"`。二维的 `translate`、`rotate`、`scale`、`matrix` 仍写在 `<g>` 上。
+An SVG element may write `transform="rotateX() rotateY() rotateZ() translateZ()"`. Two-dimensional `translate`, `rotate`, `scale`, and `matrix` are still written on `<g>`.
 
-影子只落在 `ground` 上。`shadows="none"` 关掉，`cast-shadow="false"` 这只实体不投，`receive-shadow` 只写在 `ground` 上。
+Shadows fall only on `ground`. `shadows="none"` turns them off. `cast-shadow="false"` means this solid does not cast. `receive-shadow` is only on `ground`.
 
 ## 0.6.1
 
-`.ttc`、`.otc` 可以用 `#` 选择字形。`src="SourceHanSans.ttc#2"` 是第 2 套，从 0 数。以前 `#2` 被当成路径，报「字体文件不存在」，于是用了集合里的第 0 套。思源和 Noto CJK 的第 0 套是日文，简体的「复」会不对。
+`.ttc` and `.otc` can select a face with `#`. `src="SourceHanSans.ttc#2"` is face 2, counting from 0. `#2` used to be treated as part of the path, the error was `字体文件不存在`, and face 0 of the collection was used. For Source Han and Noto CJK, face 0 is Japanese, so the simplified character 复 came out wrong.
 
 ## 0.6.0
 
-HTML 标签按 HTML 渲染，`style` 按 CSS。对齐、伸缩、间距、换行、继承、字号和盒子的初始值不再在规范里复述。
+HTML tags render as HTML. `style` follows CSS. Alignment, flex, gap, wrapping, inheritance, font size, and the initial values of the box are no longer restated in the spec.
 
-初始字号是 16px。`h1` 是 2em，`h2` 是 1.5em，`h3` 是 1.17em，字重是 bold。`width` 和 `height` 是内容盒，padding 和 border 加在外面。`flex` 用 CSS 简写，`flex:1` 是 `1 1 0`。
+The initial font size is 16px. `h1` is 2em, `h2` is 1.5em, `h3` is 1.17em, and the weight is bold. `width` and `height` are the content box. Padding and border are added outside. `flex` uses the CSS shorthand. `flex:1` is `1 1 0`.
 
 ## 0.5.2
 
-`.layer` 里的 `<script>` 在子进程里跑。`node_modules` 是符号链接时，权限名单以前只放真实目录，加载器读的却是链接上的 `package.json`，于是报 `Access to this API has been restricted`，canvas 是空的。现在链接和真实路径都放行。脚本出错时不再先打出渲染成功。
+`<script>` in `.layer` runs in a subprocess. When `node_modules` is a symlink, the permission list used to contain only the real directory, while the loader read `package.json` through the link. The report was `Access to this API has been restricted`, and the canvas was empty. The link and the real path are both allowed now. A script error no longer prints a successful render first.
 
 ## 0.5.1
 
-推荐字体按气质列在 `resources.recommendedFonts`，粗黑体在前。寒蝉端黑体仍是默认字体。其余名字只供选型，要自己带 `<font family src>`。
+Recommended fonts are listed by mood in `resources.recommendedFonts`, heavy gothic first. ChillDuanSans (寒蝉端黑体) is still the default. The other names are only for choosing a face. You supply `<font family src>` yourself.
 
-自动窄圆角收到 4px。已经圆滑的边不加，旁边的折棱仍然收，所以圆柱侧面不加、上下口要收。写了 `rx` 或描了 `stroke` 的保持原来的棱。
+The automatic narrow round is capped at 4px. An edge that is already smooth does not get one. A crease beside it still does, so a cylinder's side does not, and the top and bottom rims do. A shape that wrote `rx` or stroked with `stroke` keeps its original edges.
 
 ## 0.5.0
 
-删掉 `<draw>` 和 `draw` 回调。自定义像素改成 `<canvas>` 和 `<script>`。
+`<draw>` and the `draw` callback are removed. Custom pixels are `<canvas>` and `<script>`.
 
-`width`、`height` 是位图尺寸，也是默认布局尺寸，不写时是 300×150。`style` 里的宽高只改布局。脚本在排版之后、绘制之前执行，绘制顺序是文档顺序。`devicePixelRatio` 等于 `--scale`。每一帧都是新画布，只调用一轮 `requestAnimationFrame`。`performance.now()` 和 `Date.now()` 是这一帧的毫秒，`Math.random` 按帧播种。
+`width` and `height` are the bitmap size and the default layout size. When omitted they are 300×150. Width and height in `style` change only layout. The script runs after layout and before paint. Paint order is document order. `devicePixelRatio` equals `--scale`. Every frame is a new canvas, and only one round of `requestAnimationFrame` is called. `performance.now()` and `Date.now()` are this frame's milliseconds. `Math.random` is seeded per frame.
 
-`.layer` 里的脚本文本在子进程里跑，文件和网络关掉。`.tsx` 的函数闭包留在本进程。`--no-script` 跳过脚本。子集以外的 DOM 报 `unsupported-dom`。写了 `<draw>` 报 `invalid-child`，写了 `draw` 回调报 `invalid-attr`。
+Script text in `.layer` runs in a subprocess, with files and the network closed. A function closure in `.tsx` stays in this process. `--no-script` skips the script. DOM outside the subset reports `unsupported-dom`. `<draw>` reports `invalid-child`. A `draw` callback reports `invalid-attr`.
 
 ## 0.4.3
 
-开了镜头的那一层可以写 `shadows="none"`，不再给平面和地面投主光的硬边影子，深度遮挡还在。网格、平面和 `ground` 还可以写 `cast-shadow="false"`、`receive-shadow="false"`。不写时和以前一样，不透明表面互相投影子。
+The layer that opened a camera can write `shadows="none"`. Planes and the ground no longer receive a hard shadow from the key light. Depth occlusion stays. A mesh, a plane, and `ground` can also write `cast-shadow="false"` and `receive-shadow="false"`. When omitted, behavior matches before: opaque surfaces cast on each other.
 
-根上的 `min-font` 可以写成 `screen`（默认，`min(宽, 高) / 1080 × 24`）、`print`（× 12）、像素，或 `none`。同一张图里多处过小的字合并成一条 `min-font-size`。开了镜头的 layer 不再报 `ink-inset`。
+Root `min-font` can be `screen` (the default, `min(width, height) / 1080 × 24`), `print` (× 12), a pixel size, or `none`. Several too-small spots in one picture collapse into one `min-font-size`. A layer with a camera no longer reports `ink-inset`.
 
-`package.json` 写了 `engines.node >=20`。命令行在加载布局引擎之前检查版本，Node 18 会说明要换到 20 或更高，而不是抛出 yoga-layout 的 `ERR_REQUIRE_ESM`。
+`package.json` sets `engines.node >=20`. The command line checks the version before loading the layout engine. Node 18 says to switch to 20 or newer, instead of throwing yoga-layout's `ERR_REQUIRE_ESM`.
 
-内置 `JetBrainsMono`（别名 `jetbrains mono`、`等宽`）。`render` 和 `check` 可以加 `--watch`，源文件和它引用的相对路径一变就再跑一遍。
+`JetBrainsMono` is built in (aliases `jetbrains mono` and `等宽`). `render` and `check` can add `--watch`. When the source or a relative path it references changes, they run again.
 
-属性目录在 `docs/attrs.json`，由 `npm run docs:attrs` 从注册表生成。
+The attribute catalog is `docs/attrs.json`, generated from the registry by `npm run docs:attrs`.
 
-flex 和文字的默认值改成和 CSS 一致。`align-items`、`align-content` 默认 `stretch`，`flex-shrink` 默认 `1`，`text-wrap` 默认 `wrap`，行高默认 `1.2`。图片和形状的最小尺寸仍是内容尺寸，不会被压到比自身更小。要交叉轴居中写 `align-items:center`。
+Flex and text defaults now match CSS. `align-items` and `align-content` default to `stretch`. `flex-shrink` defaults to `1`. `text-wrap` defaults to `wrap`. Line height defaults to `1.2`. The minimum size of an image or a shape is still the content size. It is not squeezed smaller than itself. Cross-axis centering is `align-items:center`.
 
 ## 0.4.2
 
-`--refine` 改回 BiRefNet 512。lite 512 在夜里的钟楼上输出全是负的 logits，遮罩是空的，位置也是 `null`。深度会话仍在载入抠图模型之前放掉。
+`--refine` is BiRefNet 512 again. lite 512 emitted all-negative logits on a clock tower at night. The mask was empty, and the position was `null`. The depth session is still released before the matting model loads.
 
-分层只留正向点和反向点，不再按两个点之间的远近收成一段。`--point` 点在要留下的地方，`--omit` 点在不要的地方，都可以写多次，看完遮罩可以再补点重跑。正向点沿着深度连着的一块长出去；没写反向点时，近端停在地面以上，和没点时同一条线。反向点落在这块里面时，和正向点各自往外长，离反向点更近的那一块去掉。没写点时仍从伸进远处的尖往下长。只写 `--omit` 时，从这张遮罩里挖掉点到的那一块。
+Layering keeps only positive points and negative points. It no longer collapses the span between two points into one segment. `--point` marks what to keep. `--omit` marks what to drop. Both can be repeated. After you look at the mask, add points and run it again. A positive point grows along the piece connected in depth. With no negative point, the near end stops above the ground, on the same line as a run with no points. When a negative point falls inside that piece, it and the positive point each grow outward, and the part closer to the negative point is removed. With no points, growth is still downward from tips that reach into the distance. `--omit` alone cuts the touched piece out of the mask.
 
-`packages/select` 的安装说明改成 `npm install`。`package-lock.json` 和 `package.json` 对不上时，`npm ci` 会报错。
+The install note for `packages/select` is `npm install`. When `package-lock.json` and `package.json` disagree, `npm ci` errors.
 
 ## 0.4.1
 
-`ground` 是没有宽高的无限平面，用来接主光的影子。`rotate`、`rotateX`、`rotateY` 和 `box` 一样。不写 `fill` 时地面透明。
+`ground` is an infinite plane with no width or height. It receives the key light's shadow. `rotate`, `rotateX`, `rotateY`, and `box` match the other elements. With no `fill`, the ground is transparent.
 
 ## 0.4.0
 
-删掉 `perspective`。镜头只写 `camera`。需要投影又没写 `camera` 时，有网格、`ground` 或 `rotateX`、`rotateY`、`z` 的最外层用自己的 `height` 当视距。里面没写 `camera` 的层不另开镜头。
+`perspective` is removed. The camera is only `camera`. When projection is needed and `camera` was not written, the outermost layer that has a mesh, a `ground`, or `rotateX`, `rotateY`, or `z` uses its own `height` as the viewing distance. Layers inside that did not write `camera` do not open another camera.
 
 ## 0.3.0
 
-删掉还能用的旧写法。下面这些现在会报错，或不再导出：
+Old syntax that still worked is removed. These now error, or are no longer exported:
 
-- 标签必须是规范里的小写。`<Layer>`、`<Circle>` 不再归一后照常画。根上写了大写，直接拒绝；子元素报 `unknown-tag`（error），hint 给出小写写法。旧根标签 `fvg` 同样不接受。
-- 不再导出 `renderFvg`、`checkFvg`。`parseFvg` 改名为 `parseLayer`。`FvgNode`、`FvgReport` 等类型改成 `LayerNode`、`LayerReport`。
-- 不再把旧包名重定向到 `flexlayer`。
-- `glass` 只接受预设名，或 `clear, blur 8, tint #fff2` 这种逗号写法。`regular 8 #ffffff22`、单独的像素数不再接受。
+- Tags must be the lowercase forms in the spec. `<Layer>` and `<Circle>` are no longer normalized and painted. Uppercase on the root is rejected outright. A child reports `unknown-tag` (error), and the hint gives the lowercase form. The old root tag `fvg` is not accepted either.
+- `renderFvg` and `checkFvg` are no longer exported. `parseFvg` is renamed `parseLayer`. Types such as `FvgNode` and `FvgReport` are `LayerNode` and `LayerReport`.
+- The old package name is no longer redirected to `flexlayer`.
+- `glass` accepts only a preset name, or a comma form such as `clear, blur 8, tint #fff2`. `regular 8 #ffffff22`, and a bare pixel count, are no longer accepted.
 
-`layer` 上的 `cx` / `cy`、`ink-stroke` 仍会指出正确写法。
+`cx` / `cy` on `layer`, and `ink-stroke`, still point at the right form.
 
 ## 0.2.58
 
-实现提交：`bbbad19239c9ec2956bb48ff758ca58a729af60c`
+Implementation commit: `bbbad19239c9ec2956bb48ff758ca58a729af60c`
 
-前景遮罩用 `--point x,y` 指出要留的地方，可以写多个点。远近取这些点里最近和最远，连在一起、落在这段深度里的留下。不写点时仍从伸进远处的尖往下长。`--front` 去掉了。
+A foreground mask uses `--point x,y` to mark what to keep. Several points are allowed. Near and far are the nearest and farthest of those points. What is connected and falls in that depth range is kept. With no points, growth is still downward from tips that reach into the distance. `--front` is removed.
 
-`--refine` 改用大约 100MB 的 BiRefNet lite。深度会话在载入抠图模型之前放掉，避免和完整模型大约 3GB 的中间结果叠在一起。
+`--refine` uses BiRefNet lite, about 100MB. The depth session is released before the matting model loads, so it does not stack with the full model's intermediates of about 3GB.
 
-比画布大很多的平面，裁完的多边形用一次单应贴图，接缝处的贴图和圆角描边不再折开。
+A plane much larger than the canvas pastes the clipped polygon with one homography. The texture and the rounded stroke at the seam no longer fold open.
 
-粗糙度 0 是清晰环境、不加噪点，1 是最糊的一层、噪点振幅最大。噪点改成加法，振幅是粗糙度平方的 10 级。金属的压暗随粗糙度减轻，玻璃往中间灰收一截。
+Roughness 0 is a sharp environment with no noise. 1 is the blurriest layer, and the noise amplitude is largest. Noise is additive. The amplitude is 10 steps of roughness squared. Metal darkens less as roughness rises. Glass pulls a step toward middle gray.
 
-图片和字体的相对路径只跳过系统临时目录里打包器写的入口。脚本目录名叫 flexlayer- 时，按这个目录解析。
+Relative paths for images and fonts skip only the entry the bundler wrote inside the system temp directory. When the script directory name starts with flexlayer-, paths resolve against that directory.
 
-默认字体从 `DEFAULT_FONT_FAMILY` 读。带 `blur`、`grade` 或 `<mask>` 的层在取景放大后只光栅化落在画面里的一块，并留出模糊和羽化要采样的边。取景窗或 `overflow="hidden"` 裁开的文字边不再报 `outside-safe`；裁完仍露在安全区外的字还是要报。
+The default font is read from `DEFAULT_FONT_FAMILY`. A layer with `blur`, `grade`, or `<mask>`, after the view is enlarged, rasters only the part that lands in the picture, and keeps the margin that blur and feather need to sample. A text edge cut by the viewport or by `overflow="hidden"` no longer reports `outside-safe`. Text that is still outside the safe area after the clip is still reported.
 
-`analyzeImage` 改成同步返回，和 `glyph` 一样。
+`analyzeImage` now returns synchronously, like `glyph`.
 
-`canvas.create` 在数值透视里带回网格投影后的 `points`、`edges` 和轮廓 `d`。球只给圆。渲染时加的窄圆角不进这三项。
+`canvas.create` brings back a mesh's projected `points`, `edges`, and contour `d` under numeric perspective. A sphere gives only the circle. The narrow round added at render time is not part of those three.
 
-面数不超过 200 的网格，渲染时在折棱上向里收一条最多 8px 的窄圆角。写了 `rx`、描了边，或本来就圆的，保持原来的棱。
+A mesh of at most 200 faces takes a narrow round of at most 8px inward on creases at render time. A shape that wrote `rx`, stroked an edge, or was already round keeps its original edges.
 
-Material Symbols 的字形停在基线上方。图标着墨放进行盒正中，不再每种图标偏得不一样。
+Material Symbols glyphs sit above the baseline. Icon ink is centered in the line box. Icons no longer sit at a different offset each.
 
-`draw` 回调的 `ctx` 可以 `drawImage`。已经排好的一帧用 `renderLayer(node, { format: 'rgba' })` 拿走不预乘像素和画布宽高。
+A `draw` callback's `ctx` can `drawImage`. A frame that is already laid out can be taken as unpremultiplied pixels plus canvas width and height with `renderLayer(node, { format: 'rgba' })`.
 
-去掉各平台的插件清单，只留 `skills/flexlayer/SKILL.md` 一份。`AGENTS.md` 收成入口，细则留在 SPEC。删掉已经落地的 `docs/PLAN.md`；效果和公式的实现备注并进 `docs/IMPLEMENTATION.md`。网格基准挪到 `scripts/bench-mesh.mjs`。勾股演示的视频和大图不再入库。
+Per-platform plugin manifests are gone. Only `skills/flexlayer/SKILL.md` remains. `AGENTS.md` is the entry. The details stay in SPEC. `docs/PLAN.md`, which had already landed, is deleted. Implementation notes for effects and formulas are merged into `docs/IMPLEMENTATION.md`. The mesh benchmark moved to `scripts/bench-mesh.mjs`. The Pythagorean demo video and the large pictures are no longer in the repo.
 
 ## 0.2.57
 
-实现提交：`ec49b328201f03385ff6b4d26323d05fb07f1309`
+Implementation commit: `ec49b328201f03385ff6b4d26323d05fb07f1309`
 
-`flexlayer-select mask` 取出前景遮罩，写到 `photo.foreground.png`，并返回这块前景的 `x`、`y`、`width`、`height`。`--front` 从 0 到 1，默认 0.5，调大遮罩变大，调小只留更靠近镜头的一段。`--refine` 用抠图模型修边。
+`flexlayer-select mask` takes a foreground mask, writes `photo.foreground.png`, and returns that foreground's `x`, `y`, `width`, and `height`. `--front` is from 0 to 1, default 0.5. Larger makes the mask larger. Smaller keeps only a stretch closer to the camera. `--refine` cleans the edge with the matting model.
 
 ## 0.2.56
 
-实现提交：`f902e0acd8496b583d98be6b2aed1273994d21df`
+Implementation commit: `f902e0acd8496b583d98be6b2aed1273994d21df`
 
-网格的 `material="glass"` 是假玻璃。反射把主灯的方窗留在形体里，掠射边加轮廓光。折射从背面出来，按离开中心的位置轻轻扫过同一张环境，补在方窗和轮廓光还没照亮的地方。
+A mesh with `material="glass"` is fake glass. The reflection leaves the key light's square window on the form, and a grazing edge adds a rim light. Refraction comes out the back, sweeps the same environment lightly by how far it is from the center, and fills where the window and the rim light have not lit yet.
 
 ## 0.2.55
 
-实现提交：`8c4fbc361ac37e5fd594e1f9230c7d64435f8812`
+Implementation commit: `8c4fbc361ac37e5fd594e1f9230c7d64435f8812`
 
-比画布大很多的平面先按视锥裁出可见的一块再光栅化，分辨率跟着屏幕密度。纯色地面不再分配整张布局尺寸的位图。完全落在画面里的小平面仍走原来的投影。
+A plane much larger than the canvas is clipped to the visible piece of the view frustum before it is rasterized. Resolution follows screen density. A solid-color ground no longer allocates a bitmap of the whole layout size. A small plane that falls entirely inside the picture still uses the old projection.
 
 ## 0.2.54
 
-实现提交：`d3cf69c60c70da2dea7e0dc9ed30eff3a75010e1`
+Implementation commit: `d3cf69c60c70da2dea7e0dc9ed30eff3a75010e1`
 
-取景层的 `camera` 写 `aperture` 时按每个像素的深度做景深。半径是 `aperture × |深度 − focus| / 深度`，近处的糊边盖到远处。`sharp="true"` 的表面保持清楚。
+When the framing layer's `camera` writes `aperture`, depth of field follows each pixel's depth. The radius is `aperture × |depth − focus| / depth`. A near blurred edge covers what is far. A surface with `sharp="true"` stays sharp.
 
 ## 0.2.53
 
-实现提交：`f9c392d55d7509a73dfffb1e351fe0d19a9dcb81`
+Implementation commit: `f9c392d55d7509a73dfffb1e351fe0d19a9dcb81`
 
-普通文字盒同时写 `background` 和 `stroke` 时，描边绕着底板，贴出画布报 `effect-clipped`。`preserve-3d` 穿过没有姿态的 flex 时，没写 `preserve-3d` 的旋转卡片仍是一张图，里面的文字跟着色块一起投影。
+When an ordinary text box sets both `background` and `stroke`, the stroke goes around the plate. Sticking out of the canvas reports `effect-clipped`. When `preserve-3d` passes through a flex container that has no pose, a rotated card that did not write `preserve-3d` is still one picture, and the text inside projects with the color block.
 
 ## 0.2.52
 
-实现提交：`780c328b65e051a52707d806f65888ccb3678a42`
+Implementation commit: `780c328b65e051a52707d806f65888ccb3678a42`
 
-金属和塑料用磨砂明暗做底，再叠同一张工作室环境，不再加会缩成一点的高光。主灯是左上方一块大圆角正方形，从正左向中间偏 30°。暗面另有一条窄的边缘光，顶部互不相接。粗糙度先把环境高斯模糊，噪点写进这张图再取样，越高越糊，噪点越密。
+Metal and plastic use matte shading as the base, then the same studio environment. The highlight that used to shrink to a point is gone. The key light is a large rounded square at the upper left, 30° in from straight left toward the center. The dark side has a narrow rim light. The two do not meet at the top. Roughness Gaussian-blurs the environment first. Noise is written into that image and then sampled. Higher roughness is blurrier, and the noise is denser.
 
 ## 0.2.51
 
-实现提交：`36e36c95e72b76d220920d3a559f9259080d30c6`
+Implementation commit: `36e36c95e72b76d220920d3a559f9259080d30c6`
 
-父层 `rotateX` 里的平面，贴图上全透明的像素不再挡住后面的棱。`scale` 或 `view` 放大后，贴边的网格描边画到边上，不再在窗口里面收成圆头。有背景的盒子按背景外框描边。三维场景的 `stroke` 和 `shadow` 跟着已经画好的画面。
+On a plane inside a parent's `rotateX`, a fully transparent pixel in the texture no longer hides edges behind it. After `scale` or `view` enlarges, a mesh stroke on the edge draws to the edge. It no longer closes into a round cap inside the window. A box with a background strokes the background's outer frame. `stroke` and `shadow` in a 3D scene follow the picture already painted.
 
 ## 0.2.50
 
-实现提交：`bb230b0bf0a5ea2e73c155c831c9cec1b6e36a7e`
+Implementation commit: `bb230b0bf0a5ea2e73c155c831c9cec1b6e36a7e`
 
-取景层可以写 `camera`。`preserve-3d` 让子元素沿着父链进入同一台镜头。
+The framing layer can write `camera`. `preserve-3d` sends children along the parent chain into the same camera.
 
 ## 0.2.49
 
-实现提交：`2a31f7c400057282fd518266a6ae912f1397c528`
+Implementation commit: `2a31f7c400057282fd518266a6ae912f1397c528`
 
-旋转后的距离描边改在屏幕像素里按 4 倍采样再平均，斜边不再跟着最近邻变成台阶，外侧描边垫进填充的抗锯齿边。网格折线画在超采样缓冲上，和填充一起平均缩回。
+A rotated distance stroke is sampled at 4× in screen pixels and then averaged. A slanted edge no longer turns into stairs with nearest-neighbor, and the outer stroke sits in the fill's antialiased edge. Mesh polylines are drawn on the supersampled buffer and averaged back with the fill.
 
 ## 0.2.48
 
-实现提交：`4627e8654dc32743dac694af66655ca7e5bd55e0`
+Implementation commit: `4627e8654dc32743dac694af66655ca7e5bd55e0`
 
-金属和玻璃的固定工作室环境从横条灯带改成竖向柔光板。方位和仰角躲开 90° 的整数倍，板子也从正竖直偏开一点。白、黑和灰过渡都留着，圆柱上是偏斜的亮带和暗带。
+The fixed studio environment for metal and glass changes from a horizontal light bar to a vertical soft panel. Azimuth and elevation avoid integer multiples of 90°. The panel is also tilted a little off straight vertical. White, black, and the gray transition all remain. A cylinder shows slanted bright and dark bands.
 
 ## 0.2.47
 
-实现提交：`f81a78ddb8e7a4d1c3d5fd07bea768c86805e4d0`
+Implementation commit: `f81a78ddb8e7a4d1c3d5fd07bea768c86805e4d0`
 
-合进 `main` 时，0.2.46 已经是「颜料改走 fill、描边并入 stroke」那一版，所以这次网格提速记为 0.2.47。
+When this merged to `main`, 0.2.46 was already the release that moved paint to `fill` and merged stroke into `stroke`, so this mesh speedup is recorded as 0.2.47.
 
-网格渲染按物体实际占的屏幕范围光栅化，并缓存完全静止的场景。
+Mesh rendering rasters the screen area the object actually occupies, and caches a scene that is completely still.
 
-- 光栅缓冲区只覆盖投影顶点（和平面四边形）与可见区域的交集。可见区域是文档画布换算到该 layer 后的范围，有裁剪时再交上裁剪盒。返回的画面带 `x` / `y` 偏移。
-- 采样数固定为 `meshSamples`（`1` | `2` | `4`，默认 `4`），不再因为视口含有画面外的部分而降级。原先因此落到 2×2 的场景现在保持 4×4，画质只会更好。`overflow-canvas` 等报告仍按完整投影外框，阴影贴图仍在光源空间。
-- 进程级场景缓存按内容哈希，不按对象引用。浮点数量化到 `1e-4`。`draw`、玻璃、`grade`、读背景的滤镜等无法稳定哈希的内容不缓存。命中时像素逐字节相同。上限默认 256MB，渲染选项 `meshCache` 或环境变量 `FLEXLAYER_MESH_CACHE`（字节数，或 `0` / `off` / `false`）可改、可关。
-- 挤出、圆角和 `model` 的几何按参数另做缓存，物体在转、形状不变时不必重建。
-- 颜色、深度、所有者和阴影深度缓冲按进程复用，只填本帧的矩形。
-- `meshSamples` 接到 `renderLayer`、`renderFrames`、`renderToCanvas` 和命令行 `--mesh-samples`。
+- The raster buffer covers only the intersection of the projected vertices (and plane quads) with the visible region. The visible region is the document canvas mapped into that layer, intersected with the clip box when there is a clip. The returned picture carries an `x` / `y` offset.
+- The sample count is fixed at `meshSamples` (`1` | `2` | `4`, default `4`). It no longer drops because the viewport contains area outside the picture. Scenes that used to fall to 2×2 stay at 4×4, so quality only improves. Reports such as `overflow-canvas` still use the full projected bounds. The shadow map stays in light space.
+- The process-level scene cache keys on a content hash, not an object reference. Floats quantize to `1e-4`. Content that cannot be hashed stably, such as `draw`, glass, `grade`, and filters that read the background, is not cached. A hit matches pixels byte for byte. The default cap is 256MB. The render option `meshCache`, or the environment variable `FLEXLAYER_MESH_CACHE` (a byte count, or `0` / `off` / `false`), can change it or turn it off.
+- Extrusion, rounding, and `model` geometry are cached separately by parameters. An object that is turning, with the same shape, does not have to be rebuilt.
+- Color, depth, owner, and shadow-depth buffers are reused per process. Only this frame's rectangle is filled.
+- `meshSamples` is wired to `renderLayer`, `renderFrames`, `renderToCanvas`, and the command-line `--mesh-samples`.
 
-基准（`node bench-mesh.mjs`，1920×1080，单进程，默认 4× 采样）：地面加挤出字静止约 19 ms/帧，只有字静止约 23 ms/帧，字在转约 280 ms/帧。
+Benchmark (`node bench-mesh.mjs`, 1920×1080, one process, default 4× sampling): a still ground plus extruded type is about 19 ms/frame, still type alone is about 23 ms/frame, and type that is turning is about 280 ms/frame.
