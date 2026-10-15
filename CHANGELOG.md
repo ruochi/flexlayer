@@ -4,6 +4,8 @@
 
 Common Chinese categories use Chill faces. 黑体 is 寒蝉端黑体, and it is still the default when `font-family` is omitted. 宋体 and `Song` are 寒蝉端黑宋. 楷体 and `Kai` are 寒蝉楷体. 仿宋 is 寒蝉活仿宋. 圆体 is 寒蝉全圆体. The first use downloads the file to `~/.cache/flexlayer/fonts`. The files are not in the package. 思源宋体, 思源黑体, and 霞鹜文楷 are no longer catalog faces. The recommendation list is unchanged aside from dropping 霞鹜文楷. Names that are not in the catalog still need `<font family src>`.
 
+A new recommendation group, 英文 (`use` 艺术标题), lists nine artistic Latin title faces: Playfair, Fraunces, Instrument, Cormorant, AbrilFatface, Cinzel, Syne, Monoton, and GreatVibes. AbrilFatface, Cinzel, Syne, Monoton, and GreatVibes are new catalog faces. All nine download on first use.
+
 ## 0.6.22
 
 Chinese font recommendations are three tiers: 最推荐, 推荐, and 其他. `resources.recommendedFonts` no longer groups faces by mood. ChillDuanSans (寒蝉端黑体) is still the default. Kai (霞鹜文楷) is the other name already in the catalog. Every other name is only for choosing a face. You supply `<font family src>` yourself.

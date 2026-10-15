@@ -1,5 +1,5 @@
 /**
- * 中文字体推荐，按档选型。最推荐在前。
+ * 字体推荐，按档选型。中文分三档，最推荐在前。英文一档，都偏艺术标题。
  * 这里登记选型名字。黑体、宋体、楷体、仿宋、圆体已经在字体目录里，写名字就会下载。
  * 其余要自己带文件：`<font family="ChillReunion" src="…" />`。
  */
@@ -13,7 +13,7 @@ export type RecommendedFont = {
 }
 
 export type FontRecommendation = {
-  /** 最推荐、推荐、其他 */
+  /** 最推荐、推荐、其他、英文 */
   name: string
   /** 这一档怎么用 */
   use: string
@@ -77,6 +77,21 @@ export const RECOMMENDED_FONTS: readonly FontRecommendation[] = [
       { family: 'WenxinXile', title: '文心喜乐体' },
       { family: 'XuandongKaishu', title: '玄冬楷书' },
       { family: 'JingNanYuanTi', title: '荆南圆体' },
+    ],
+  },
+  {
+    name: '英文',
+    use: '艺术标题',
+    fonts: [
+      { family: 'Playfair', title: 'Playfair Display', builtin: true },
+      { family: 'Fraunces', title: 'Fraunces', builtin: true },
+      { family: 'Instrument', title: 'Instrument Serif', builtin: true },
+      { family: 'Cormorant', title: 'Cormorant Garamond', builtin: true },
+      { family: 'AbrilFatface', title: 'Abril Fatface', builtin: true },
+      { family: 'Cinzel', title: 'Cinzel', builtin: true },
+      { family: 'Syne', title: 'Syne', builtin: true },
+      { family: 'Monoton', title: 'Monoton', builtin: true },
+      { family: 'GreatVibes', title: 'Great Vibes', builtin: true },
     ],
   },
 ]

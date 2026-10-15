@@ -35,6 +35,11 @@ The Alias column is text you can pass to `font-family`. Those strings are part o
 | `Newsreader` | | 400, 700 | Latin | Reading serif | Newsreader |
 | `Fraunces` | | 400, 700 | Latin | Soft serif titles | Fraunces |
 | `Instrument` | Instrument Serif | 400 | Latin | Display serif | Instrument Serif |
+| `AbrilFatface` | Abril Fatface | 400 | Latin | Fat poster serif | Abril Fatface |
+| `Cinzel` | | 400, 700 | Latin | Roman inscription capitals | Cinzel |
+| `Syne` | | 400, 700 | Latin | Avant-garde geometric titles | Syne |
+| `Monoton` | | 400 | Latin | Neon multi-line display | Monoton |
+| `GreatVibes` | Great Vibes | 400 | Latin | Flowing script | Great Vibes |
 | `STIXTwoMath` | STIX Two Math | 400 | Latin, Greek, math symbols | Formulas only. It has a MATH table. Other fonts cannot set formulas | STIX Two Math |
 | `XiaoWei` | 站酷小薇 | 400 | Simplified Chinese | Song-like titles | ZCOOL XiaoWei |
 | `KuaiLe` | 站酷快乐体 | 400 | Simplified Chinese | Lively titles | ZCOOL KuaiLe |
@@ -52,7 +57,7 @@ The Alias column is text you can pass to `font-family`. Those strings are part o
 
 ## Recommended fonts
 
-Pick a Chinese face by tier. 最推荐 comes first. In code, `resources.recommendedFonts`. `resources.recommendedFont('寒蝉端黑宋')` returns that group and the name.
+Pick a Chinese face by tier. 最推荐 comes first. Artistic Latin faces are the 英文 group at the end. In code, `resources.recommendedFonts`. `resources.recommendedFont('寒蝉端黑宋')` returns that group and the name.
 
 `group` and `title` are the strings the API returns. They stay in Chinese because `recommendedFont` looks them up that way. The group `use` values are 优先选用, 常用, and 备选. 黑体, 宋体, 楷体, 仿宋, and 圆体 are the catalog faces above: 寒蝉端黑体, 寒蝉端黑宋, 寒蝉楷体, 寒蝉活仿宋, and 寒蝉全圆体. Writing the category or the family downloads that file. The other names are for choosing a face. You supply the file under the root. `src` can be a relative path or a URL of a font file. None of these files are stored in the package.
 
@@ -100,6 +105,24 @@ Pick a Chinese face by tier. 最推荐 comes first. In code, `resources.recommen
 
 ```html
 <font family="ChillReunion" src="fonts/ChillReunion.ttf" />
+```
+
+The 英文 group is for artistic Latin titles. API `use` is 艺术标题. Every name is in the catalog above, so write the name and it downloads. These are Latin-only. Han characters fall back to `ChillDuanSans`. Use them for display sizes, not body text.
+
+| Group | Name | Character | Use |
+| --- | --- | --- | --- |
+| 英文 | `Playfair` | High-contrast Didone serif | Magazine and editorial titles |
+| 英文 | `Fraunces` | Soft, wonky old-style serif | Warm, literary titles |
+| 英文 | `Instrument` | Narrow, sharp display serif | Fashion and minimal covers |
+| 英文 | `Cormorant` | Light, long-stroke Garamond | Elegant, quiet titles |
+| 英文 | `AbrilFatface` | Fat Didone, thick and thin | Bold posters |
+| 英文 | `Cinzel` | Roman inscription capitals | Classical, ceremonial titles. Write in capitals |
+| 英文 | `Syne` | Wide avant-garde geometric | Art and gallery posters. Use `font-weight:700`. 400 is plain |
+| 英文 | `Monoton` | Neon tube lines | Night, music, retro signs. Short words only |
+| 英文 | `GreatVibes` | Flowing formal script | Invitations, signatures, romance |
+
+```html
+<h1 style="font-family:Playfair; font-size:120px">Spring</h1>
 ```
 
 Icons use `class="material-symbols-outlined"` and an icon name inside. Set the weight with `font-weight`. When omitted, it follows the surrounding weight. When the size is omitted, it follows the surrounding `font-size`. Set the color in `style`. This is the outlined set.

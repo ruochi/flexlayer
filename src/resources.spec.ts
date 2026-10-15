@@ -62,6 +62,7 @@ describe('可用资源', () => {
       ['最推荐', '优先选用'],
       ['推荐', '常用'],
       ['其他', '备选'],
+      ['英文', '艺术标题'],
     ])
     expect(resources.recommendedFonts).toBe(RECOMMENDED_FONTS)
     const fonts = RECOMMENDED_FONTS.flatMap((group) => group.fonts)
@@ -75,7 +76,24 @@ describe('可用资源', () => {
       'ChillKai',
       'ChillHuoFangSong',
       'ChillRoundF',
+      'Playfair',
+      'Fraunces',
+      'Instrument',
+      'Cormorant',
+      'AbrilFatface',
+      'Cinzel',
+      'Syne',
+      'Monoton',
+      'GreatVibes',
     ])
+    const english = RECOMMENDED_FONTS.find((group) => group.name === '英文')!
+    for (const font of english.fonts) {
+      expect(CATALOG_FONTS.find((item) => item.family === font.family)?.covers).toBe('拉丁')
+    }
+    expect(resources.recommendedFont('Great Vibes')).toEqual({
+      group: '英文',
+      font: { family: 'GreatVibes', title: 'Great Vibes', builtin: true },
+    })
     expect(resources.recommendedFont('寒蝉端黑体')?.group).toBe('最推荐')
     expect(resources.recommendedFont('ChillDuanHeiSong')).toEqual({
       group: '最推荐',
