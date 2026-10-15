@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.0
+
+Removed `flexlayer-select mask`, the depth model, and `--point`, `--omit`, `--refine`. `foregroundMask`, `splitLayers`, and `estimateDepth` are gone. `cutout` and `cutout --full` stay. `apply` still needs a `--full` run.
+
 ## 0.8.0
 
 `flexlayer-select cutout` writes only `photo.subject.png` and `photo.cutout.json` by default. `--full` writes `photo.mask.png`, `photo.regions.png`, `photo.questions.json`, `photo.cutout.layer`, and the `product` shadow as before. `apply`, `derive="mask"`, and `derive="regions"` need a `--full` run. `cutout` now prints a three-layer snippet, photo, text, `subject.png`, so text can sit behind a subject without `<mask>`.

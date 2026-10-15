@@ -218,13 +218,22 @@ An `img` uses its own alpha by default. `channel="luma"` reads luminance instead
 Generating a mask is `flexlayer-select`, which is not on npm. In the repo, enter `packages/select` and run `npm install && npm run build`.
 
 ```bash
-npx flexlayer-select cutout photo.jpg --preset portrait
-npx flexlayer-select cutout photo.jpg --full
-npx flexlayer-select apply photo.jpg --add 2 --subtract 1
-npx flexlayer-select mask photo.jpg --point 820,640 --omit 900,1100 --refine
+npx flexlayer-select cutout photo.jpg
 ```
 
-`cutout` presets are `portrait`, `product`, and `flat`. Beside the photo you get `photo.subject.png` and `photo.cutout.json`. `subject.png` is the same size as the photo, and only the subject stays opaque, so it can be an `<img>` stacked above the text. `--full` also writes `photo.mask.png`, `photo.regions.png`, `photo.questions.json`, `photo.cutout.layer`, and, for `product`, `photo.shadow.png`. `derive="mask"`, `derive="regions"`, and `apply` read those files. `mask` writes `photo.foreground.png` and `photo.foreground.json`. The fields are `mask`, `x`, `y`, `width`, `height`, `points`, and `omit`. `--point` marks what to keep. `--omit` marks what to drop. In code, call `foregroundMask`. When the package is not installed, `flexlayer select` only says to install it from `packages/select`.
+That writes `photo.subject.png` beside the photo: the same size, only the subject opaque. Stack the photo, the text, then the subject. Both images use the photo's width and height, so they line up. `y` sits a little below the top of the subject. Lower text is covered by more of the subject.
+
+```html
+<layer width="800" height="600" background="#000">
+  <img src="photo.jpg" style="width:800px; height:600px" />
+  <layer x="400" y="335" anchor="bottom" anchor-box="ink">
+    <h1 style="font-size:230px; color:#ffffffee">TITLE</h1>
+  </layer>
+  <img src="photo.subject.png" style="width:800px; height:600px" />
+</layer>
+```
+
+`--full` also writes `photo.mask.png`, `photo.regions.png`, `photo.questions.json`, `photo.cutout.layer`, and, for `product`, `photo.shadow.png`. `derive="mask"`, `derive="regions"`, and `apply` read those files. Presets are `portrait` (default), `product`, and `flat`. When the package is not installed, `flexlayer select` only says to install it from `packages/select`.
 
 ### Outlines
 

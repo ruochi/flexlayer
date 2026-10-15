@@ -4,7 +4,7 @@ import { explainFetchFailure } from './download.js'
 
 /**
  * BiRefNet 512 的 fp16，大约 470MB。lite 512 在夜里的钟楼上输出全是负的 logits，遮罩是空的，这里不用。
- * 解码器中间结果大约 3GB。修边前先放掉深度会话，不要和这份模型叠在一起。
+ * 解码器中间结果大约 3GB。
  */
 export const MODEL_ID = 'onnx-community/BiRefNet_512x512-ONNX'
 

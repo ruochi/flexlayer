@@ -1,7 +1,7 @@
 {
   "name": "flexlayer-select",
   "version": "0.1.0",
-  "description": "Take a foreground mask from a photo, or cut out the subject and write it as numbered choices",
+  "description": "Cut out the subject of a photo and write it beside the file",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
