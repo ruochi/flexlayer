@@ -1,5 +1,6 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { explainFetchFailure } from './download.js'
 
 /**
  * Depth Anything V2 Small 的 4 位量化，Apache-2.0。大约 19MB。
@@ -20,7 +21,7 @@ type DepthOutput = { depth: RawImageLike }
 
 type TransformersModule = {
   env: { cacheDir?: string }
-  pipeline: (task: string, model: string, opts: { dtype: string }) => Promise<(image: RawImageLike) => Promise<DepthOutput>>
+  pipeline: (task: string, model: string, opts: { dtype: string; session_options?: Record<string, unknown> }) => Promise<(image: RawImageLike) => Promise<DepthOutput>>
   RawImage: new (data: Uint8Array, width: number, height: number, channels: number) => RawImageLike
 }
 
@@ -46,9 +47,9 @@ async function loadTransformers(): Promise<TransformersModule> {
 async function loadPipeline(mod: TransformersModule) {
   if (!loaded) {
     mod.env.cacheDir = join(homedir(), '.cache', 'flexlayer', 'models')
-    loaded = mod.pipeline('depth-estimation', DEPTH_MODEL_ID, { dtype: DEPTH_DTYPE }).catch((err: unknown) => {
+    loaded = mod.pipeline('depth-estimation', DEPTH_MODEL_ID, { dtype: DEPTH_DTYPE, session_options: { logSeverityLevel: 3 } }).catch((err: unknown) => {
       loaded = null
-      throw err
+      throw explainFetchFailure(err)
     })
   }
   return loaded

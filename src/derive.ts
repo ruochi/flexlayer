@@ -30,8 +30,9 @@ export type DeriveStatus =
   | { status: 'stale'; file: string; command: string }
   | { status: 'ok'; file: string }
 
-function commandFor(srcFile: string, preset: string): string {
-  return `npx flexlayer-select cutout ${basename(srcFile)} --preset ${preset}`
+function commandFor(srcFile: string, preset: string, kind: DeriveKind): string {
+  const full = kind === 'subject' ? '' : ' --full'
+  return `npx flexlayer-select cutout ${basename(srcFile)} --preset ${preset}${full}`
 }
 
 /** 缓存不存在、或原图哈希和配方对不上。文件在但过期时仍返回 file，调用方可以先画再警告。 */
@@ -49,7 +50,7 @@ export function checkDerive(src: string, baseDir: string, kind: DeriveKind): Der
       recorded = undefined
     }
   }
-  const command = commandFor(paths.srcFile, preset)
+  const command = commandFor(paths.srcFile, preset, kind)
   if (!existsSync(paths.file)) return { status: 'missing', command }
   let current = ''
   try {

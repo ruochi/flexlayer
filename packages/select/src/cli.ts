@@ -17,12 +17,12 @@ export type SelectHooks = {
 function usageText(): string {
   return `用法:
   flexlayer-select mask <图片> [--point x,y ...] [--omit x,y ...] [--refine]
-  flexlayer-select cutout <图片> [--preset portrait|product|flat]
+  flexlayer-select cutout <图片> [--preset portrait|product|flat] [--full]
   flexlayer-select apply <图片> [--add 3,5] [--subtract 9]
 
 mask 取出前景遮罩，返回遮罩路径和这块前景的位置、大小。不写点时从伸进远处的尖往下长。--point 点在要留下的地方，--omit 点在不要的地方，都可以写多次。--refine 用抠图模型修边。
-cutout 把主体、蒙版、编号区域和配方写到图片旁边。
-apply 把编号题的答案写进 <mask>：--add 收进选区，--subtract 从选区去掉。`
+cutout 抠出主体，写 photo.subject.png 和 photo.cutout.json。文字插在主体后面：原图、文字、subject.png 依次叠放。--full 再写遮罩、编号区域、选择题和 <mask> 配方。
+apply 把编号题的答案写进 <mask>：--add 收进选区，--subtract 从选区去掉。要先用 cutout --full。`
 }
 
 function takeFile(argv: string[]): { file: string; rest: string[] } {
@@ -98,10 +98,16 @@ function stemOf(file: string): string {
 async function cutoutCommand(argv: string[], hooks: SelectHooks) {
   const { file, rest } = takeFile(argv)
   const presetFlag = flag(rest, 'preset')
-  if (presetFlag.rest.length > 0) throw new Error(usageText())
+  const full = presetFlag.rest.includes('--full')
+  const leftover = presetFlag.rest.filter((token) => token !== '--full')
+  if (leftover.length > 0) throw new Error(usageText())
   const preset = presetFlag.value ?? 'portrait'
   if (!isPreset(preset)) throw new Error(`preset 只能是 portrait、product 或 flat，收到 ${preset}`)
-  const result = await cutout(resolve(file), { preset: preset as Preset, segment: hooks.segment })
+  const result = await cutout(resolve(file), { preset: preset as Preset, segment: hooks.segment, full })
+  console.log(result.sandwich.trimEnd())
+  console.log(result.subject)
+  console.log(result.meta)
+  if (!full) return
   console.log(result.markup.trimEnd())
   console.log(`questions ${result.questions.length}`)
   console.log(result.layer)
@@ -119,7 +125,8 @@ async function applyCommand(argv: string[]) {
   const srcFile = resolve(file)
   const metaPath = `${stemOf(srcFile)}.cutout.json`
   const layerPath = `${stemOf(srcFile)}.cutout.layer`
-  if (!existsSync(metaPath)) throw new Error(`没有配方 ${metaPath}。先运行 flexlayer-select cutout ${basename(srcFile)}`)
+  if (!existsSync(metaPath)) throw new Error(`没有配方 ${metaPath}。先运行 flexlayer-select cutout ${basename(srcFile)} --full`)
+  if (!existsSync(`${stemOf(srcFile)}.regions.png`)) throw new Error(`没有编号图。apply 要用 flexlayer-select cutout ${basename(srcFile)} --full 写出的文件`)
   const meta = JSON.parse(readFileSync(metaPath, 'utf8')) as { src?: string; width?: number; height?: number; shadow?: string }
   if (!meta.src || !meta.width || !meta.height) throw new Error(`配方缺了 src、width 或 height: ${metaPath}`)
   const markup = existsSync(layerPath)

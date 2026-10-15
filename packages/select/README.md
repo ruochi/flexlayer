@@ -28,16 +28,16 @@ npm run build
 npx flexlayer-select cutout photo.jpg --preset portrait
 ```
 
-Written beside the picture:
+Written beside the picture by default: `photo.subject.png` and `photo.cutout.json`. Add `--full` for the rest:
 
 | File | Contents |
 | --- | --- |
-| `photo.subject.png` | The same size as the source. Color is decontaminated against the foreground. Alpha is the selection |
-| `photo.mask.png` | White plate. Alpha is the same selection |
-| `photo.regions.png` | The gray value is the id. 0 is background |
-| `photo.questions.json` | Each question has `id`, `area`, `where`, `now`, and `ask` |
-| `photo.cutout.json` | Source hash, model, preset, and the `analyzeImage` self-check |
-| `photo.cutout.layer` | `<mask>` and `<preview>` |
+| `photo.subject.png` | Always written. The same size as the source. Color is decontaminated against the foreground. Alpha is the selection |
+| `photo.mask.png` | `--full` only. White plate. Alpha is the same selection |
+| `photo.regions.png` | `--full` only. The gray value is the id. 0 is background |
+| `photo.questions.json` | `--full` only. Each question has `id`, `area`, `where`, `now`, and `ask` |
+| `photo.cutout.json` | Always written. Source hash, model, preset, and the `analyzeImage` self-check |
+| `photo.cutout.layer` | `--full` only. `<mask>` and `<preview>` |
 
 Presets:
 
@@ -45,7 +45,7 @@ Presets:
 - `product`: the same treatment as a portrait. The shadow is also written as `photo.shadow.png`.
 - `flat`: a hard cut at 128. Fits illustration and screenshots.
 
-After answering, write the ids back into the markup:
+After answering, write the ids back into the markup. This needs a `--full` run first:
 
 ```bash
 npx flexlayer-select apply photo.jpg --add 2 --subtract 1

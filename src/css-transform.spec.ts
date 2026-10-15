@@ -71,8 +71,8 @@ describe('css rotate render', () => {
     const degInk = deg.report.elements.find((el) => el.tag === 'div')!.ink
     for (const report of [fromRad.report, fromTurn.report]) {
       const ink = report.elements.find((el) => el.tag === 'div')!.ink
-      expect(ink.left).toBeCloseTo(degInk.left, 1)
-      expect(ink.top).toBeCloseTo(degInk.top, 1)
+      expect(ink.x).toBeCloseTo(degInk.x, 1)
+      expect(ink.y).toBeCloseTo(degInk.y, 1)
       expect(ink.width).toBeCloseTo(degInk.width, 1)
       expect(ink.height).toBeCloseTo(degInk.height, 1)
     }
@@ -82,8 +82,8 @@ describe('css rotate render', () => {
     expect(parseAngle('0.0833turn')!.degrees).toBeCloseTo(30, 1)
     const approx = await renderLayer(page('rotate: 0.5236rad'))
     const approxInk = approx.report.elements.find((el) => el.tag === 'div')!.ink
-    expect(approxInk.left).toBeCloseTo(degInk.left, 0)
-    expect(approxInk.top).toBeCloseTo(degInk.top, 0)
+    expect(approxInk.x).toBeCloseTo(degInk.x, 0)
+    expect(approxInk.y).toBeCloseTo(degInk.y, 0)
   })
 
   it('rotate: 30 出图，并只有一条兼容警告', async () => {
@@ -115,11 +115,11 @@ describe('css rotate render', () => {
     expect(spun.box.height).toBe(20)
     expect(spun.ink.width).toBeCloseTo(20, 3)
     expect(spun.ink.height).toBeCloseTo(80, 3)
-    expect(spun.ink.left).toBeCloseTo(spun.box.left - 20, 3)
-    expect(spun.ink.top).toBeCloseTo(spun.box.top, 3)
+    expect(spun.ink.x).toBeCloseTo(spun.box.x - 20, 3)
+    expect(spun.ink.y).toBeCloseTo(spun.box.y, 3)
     const centerBar = centered.report.elements.find((el) => el.tag === 'div' && el.box.width === 80)!
-    expect(centerBar.box.left).toBeCloseTo(spun.box.left, 3)
-    expect(centerBar.ink.left).not.toBeCloseTo(spun.ink.left, 0)
+    expect(centerBar.box.x).toBeCloseTo(spun.box.x, 3)
+    expect(centerBar.ink.x).not.toBeCloseTo(spun.ink.x, 0)
   })
 
   it('旋转不推动 flex 里的下一个兄弟', async () => {
@@ -127,7 +127,7 @@ describe('css rotate render', () => {
       `<layer width="200" height="80" background="#000000"><div style="display:flex"><div style="width:40px; height:20px; background:#ffffff; rotate:90deg"></div><div style="width:40px; height:20px; background:#ffffff"></div></div></layer>`,
     )
     const bars = result.report.elements.filter((el) => el.tag === 'div' && el.box.width === 40)
-    expect(bars.map((el) => el.box.left)).toEqual([0, 40])
+    expect(bars.map((el) => el.box.x)).toEqual([0, 40])
     expect(bars[0]?.box.width).toBe(40)
     expect(bars[0]?.box.height).toBe(20)
   })
@@ -139,6 +139,34 @@ describe('css rotate render', () => {
     expect(result.report.issues.filter((issue) => issue.code === 'non-canonical')).toEqual([])
     const rect = result.report.elements.find((el) => el.tag === 'rect')!
     expect(rect.ink.width).toBeGreaterThan(rect.box.width)
+  })
+
+  it('layer 和形状上的 rotate 接受 deg、rad、turn，写错的单位要报并且不转', async () => {
+    const layer = (rotate: string) =>
+      `<layer width="200" height="160" background="#000000" rotate="${rotate}"><rect x="70" y="70" width="60" height="20" fill="#ffffff" /></layer>`
+    const shape = (rotate: string) =>
+      `<layer width="200" height="160" background="#000000"><rect x="70" y="70" width="60" height="20" fill="#ffffff" rotate="${rotate}" /></layer>`
+    const bare = await renderLayer(layer('30'))
+    const deg = await renderLayer(layer('30deg'))
+    const rad = await renderLayer(layer(`${Math.PI / 6}rad`))
+    const turn = await renderLayer(layer(`${30 / 360}turn`))
+    expect(deg.png.equals(bare.png)).toBe(true)
+    expect(rad.png.equals(bare.png)).toBe(true)
+    expect(turn.png.equals(bare.png)).toBe(true)
+    expect(deg.report.issues.filter((issue) => issue.code === 'invalid-attr' || issue.code === 'non-canonical')).toEqual([])
+    const shapeDeg = await renderLayer(shape('30deg'))
+    const shapeBare = await renderLayer(shape('30'))
+    expect(shapeDeg.png.equals(shapeBare.png)).toBe(true)
+    const tilt = await renderLayer(shape('90deg'))
+    const tiltTurn = await renderLayer(shape('0.25turn'))
+    expect(tiltTurn.png.equals(tilt.png)).toBe(true)
+    const bad = await renderLayer(layer('30px'))
+    const plain = await renderLayer(layer('0'))
+    const hit = bad.report.issues.filter((issue) => issue.code === 'invalid-attr')
+    expect(hit).toHaveLength(1)
+    expect(hit[0]?.message).toContain('rotate')
+    expect(hit[0]?.hint).toContain('30deg')
+    expect(bad.png.equals(plain.png)).toBe(true)
   })
 
   it('写错的 transform 被忽略，渲染不中断', async () => {

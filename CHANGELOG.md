@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.0
+
+`flexlayer-select cutout` writes only `photo.subject.png` and `photo.cutout.json` by default. `--full` writes `photo.mask.png`, `photo.regions.png`, `photo.questions.json`, `photo.cutout.layer`, and the `product` shadow as before. `apply`, `derive="mask"`, and `derive="regions"` need a `--full` run. `cutout` now prints a three-layer snippet, photo, text, `subject.png`, so text can sit behind a subject without `<mask>`.
+
+The model session logs only errors, so the onnxruntime constant-folding warnings are gone. A failed model download says to set `NODE_USE_ENV_PROXY=1` instead of only `fetch failed`.
+
+## 0.7.1
+
+`rotate`, `rotateX`, and `rotateY` on a shape, a line, or a `layer` take the same angle as in `style`. `rotate="30deg"`, `0.5rad`, `100grad`, and `0.25turn` rotate. `rotate="30"` is still degrees and does not report `non-canonical`. An invalid value such as `30px` reports `invalid-attr` and is ignored.
+
 ## 0.7.0
 
 Reports are shorter. `box`, `ink`, `effect`, and `mask.ink` write only `x`, `y`, `width`, and `height`. They no longer include `left`, `top`, `right`, `bottom`, `centerX`, or `centerY`. Issues drop `frame` and keep `frames`. `canvas.create` still returns `left` through `height`, and also returns `x` and `y`.

@@ -640,6 +640,25 @@ function angleOf(raw: string | undefined): number {
   return parseAngle(raw)?.degrees ?? 0
 }
 
+const ANGLE_ATTR_HINT = '写成 30、30deg、0.5rad 或 0.25turn'
+
+/** 属性上的角度。纯数字仍是度，不报 non-canonical。带 deg、rad、grad、turn 也转。写错报 invalid-attr，当成 0。 */
+function readAngleAttr(raw: string | undefined, ctx: LayoutContext, label: string): number {
+  if (raw == null || raw.trim() === '') return 0
+  const parsed = parseAngle(raw)
+  if (!parsed) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 ${label}: ${raw}`,
+      hint: ANGLE_ATTR_HINT,
+    })
+    return 0
+  }
+  return parsed.degrees
+}
+
 const ZERO_LENGTH: CssLength = { unit: 'px', value: 0 }
 
 function lengthIsZero(len: CssLength): boolean {
@@ -804,7 +823,7 @@ function readHtmlAppearance(style: Record<string, string>) {
   }
 }
 
-function readAttrAppearance(attrs: Record<string, string>) {
+function readAttrAppearance(attrs: Record<string, string>, ctx: LayoutContext) {
   const pose = parseSvgTransform(attrs.transform).pose
   return {
     padding: ZERO_EDGES,
@@ -812,9 +831,9 @@ function readAttrAppearance(attrs: Record<string, string>) {
     borderRadius: parsePx(attrs['border-radius']) ?? 0,
     background: attrs.background as string | undefined,
     opacity: parseNumber(attrs.opacity) ?? 1,
-    rotate: (parseNumber(attrs.rotate) ?? 0) + pose.rotateZ,
-    rotateX: (parseNumber(attrs.rotateX) ?? 0) + pose.rotateX,
-    rotateY: (parseNumber(attrs.rotateY) ?? 0) + pose.rotateY,
+    rotate: readAngleAttr(attrs.rotate, ctx, 'rotate') + pose.rotateZ,
+    rotateX: readAngleAttr(attrs.rotateX, ctx, 'rotateX') + pose.rotateX,
+    rotateY: readAngleAttr(attrs.rotateY, ctx, 'rotateY') + pose.rotateY,
     z: (parseNumber(attrs.z) ?? 0) + pose.z,
     ...scalePair(attrs.scale),
     origin: parseOrigin(attrs.origin),
@@ -989,7 +1008,7 @@ function layoutCanvas(node: LayerNode, ctx: LayoutContext): CanvasLayoutNode {
   const height = styleH ?? attrH ?? CANVAS_HEIGHT
   const bitmapWidth = Math.max(1, Math.round(attrW ?? CANVAS_WIDTH))
   const bitmapHeight = Math.max(1, Math.round(attrH ?? CANVAS_HEIGHT))
-  const appearance = readAttrAppearance(node.attrs)
+  const appearance = readAttrAppearance(node.attrs, ctx)
   const meta = layoutDrawMeta(node, ctx)
   appearance.opacity = parseNumber(style.opacity) ?? appearance.opacity
   return {
@@ -1535,7 +1554,7 @@ function warnNestedMasks(node: LayerNode, ctx: LayoutContext) {
 function layoutShape(node: LayerNode, ctx: LayoutContext, _defaultStroke: string): ShapeLayoutNode {
   noteStrayDepth(node, ctx)
   warnNestedMasks(node, ctx)
-  const appearance = readAttrAppearance(node.attrs)
+  const appearance = readAttrAppearance(node.attrs, ctx)
   let x = 0
   let y = 0
   let w = parseNumber(node.attrs.width) ?? 0
@@ -1892,7 +1911,7 @@ function noteMeshAlias(node: LayerNode, ctx: LayoutContext) {
 function layoutMesh(node: LayerNode, ctx: LayoutContext): MeshLayoutNode {
   warnNestedMasks(node, ctx)
   noteMeshAlias(node, ctx)
-  const appearance = readAttrAppearance(node.attrs)
+  const appearance = readAttrAppearance(node.attrs, ctx)
   const fill = readPaint(node.attrs.fill ?? '#000000', '#000000', ctx, 'fill')
   let x = 0
   let y = 0
@@ -2244,7 +2263,7 @@ function layoutMesh(node: LayerNode, ctx: LayoutContext): MeshLayoutNode {
 
 function layoutGround(node: LayerNode, ctx: LayoutContext): GroundLayoutNode {
   warnNestedMasks(node, ctx)
-  const appearance = readAttrAppearance(node.attrs)
+  const appearance = readAttrAppearance(node.attrs, ctx)
   let fill: string | null = null
   const rawFill = node.attrs.fill?.trim()
   if (rawFill && rawFill !== 'none' && rawFill !== 'transparent') {
@@ -2409,7 +2428,7 @@ function layoutLineNode(node: LayerNode, ctx: LayoutContext, defaultStroke: stri
     height: box.height,
     ink,
     opacity: parseNumber(node.attrs.opacity) ?? 1,
-    rotate: parseNumber(node.attrs.rotate) ?? 0,
+    rotate: readAngleAttr(node.attrs.rotate, ctx, 'rotate'),
     ...scalePair(node.attrs.scale),
     origin: parseOrigin(node.attrs.origin),
     padding: ZERO_EDGES,
@@ -3035,7 +3054,7 @@ function layoutUse(node: LayerNode, ctx: LayoutContext): LayerLayoutNode | null 
     { tag: 'layer', attrs, children: symbol.children },
     { ...ctx, useStack: [...ctx.useStack, id] },
   )
-  const appearance = readAttrAppearance(node.attrs)
+  const appearance = readAttrAppearance(node.attrs, ctx)
   // use 与 layer 一样不填背景；色块用 rect、HTML 或 canvas
   appearance.background = undefined
   const effects = readEffects(node.attrs, ctx, solidPaint(appearance.border?.color, ctx.color), 'ink')
@@ -3353,7 +3372,7 @@ function layoutMaskEntries(parent: LayerNode, ctx: LayoutContext): LayoutNode[] 
 }
 
 function layoutMaskGroup(node: LayerNode, ctx: LayoutContext): GroupLayoutNode {
-  const appearance = readAttrAppearance(node.attrs)
+  const appearance = readAttrAppearance(node.attrs, ctx)
   const parsed = parseSvgTransform(node.attrs.transform)
   if (parsed.error) {
     ctx.issues.push({
@@ -3413,7 +3432,7 @@ function contentWidthFor(node: LayerNode, fixedW: number | undefined, parentMax:
 
 function layoutGroup(node: LayerNode, ctx: LayoutContext): GroupLayoutNode {
   warnNestedMasks(node, ctx)
-  const appearance = readAttrAppearance(node.attrs)
+  const appearance = readAttrAppearance(node.attrs, ctx)
   const parsed = parseSvgTransform(node.attrs.transform)
   if (parsed.error) {
     ctx.issues.push({
@@ -3740,7 +3759,7 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
       hint: '例如 <layer width="1240" height="1754" min-font="print">。screen 是屏幕档，print 适合海报注释，也可以写像素',
     })
   }
-  const appearance = readAttrAppearance(node.attrs)
+  const appearance = readAttrAppearance(node.attrs, ctx)
   // 根节点的 background 是画布底色，由 paintDocument 绘制。layer 自身不填色。
   appearance.background = undefined
   const fixedW = parseNumber(node.attrs.width)

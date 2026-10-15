@@ -3,7 +3,7 @@ export { foregroundMask, type DepthEstimator, type ForegroundMask, type Foregrou
 export { splitLayers, type KeepPoint, type SplitInput, type SplitResult } from './split.js'
 export { estimateDepth, DEPTH_DTYPE, DEPTH_MODEL_ID } from './depth.js'
 export { cutout, writeAnswers, type CutoutAnalysis, type CutoutOptions, type CutoutResult, type Segmenter } from './cutout.js'
-export { answersFromChoices, applyAnswers, cutoutMarkup, type Answer } from './markup.js'
+export { answersFromChoices, applyAnswers, cutoutMarkup, sandwichMarkup, type Answer } from './markup.js'
 export { isPreset, PRESETS, type Preset } from './preset.js'
 export { birefnetSegment, MODEL_ID } from './segment.js'
 export type { Question, Where } from './regions.js'

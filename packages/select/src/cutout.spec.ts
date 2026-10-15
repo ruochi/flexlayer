@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createCanvas, loadImage } from '@napi-rs/canvas'
@@ -118,7 +118,7 @@ describe('预设', () => {
       if (x >= 3 && x <= 10 && y >= 2 && y <= 14) return 255
       return 0
     })
-    const result = await cutout(src, { preset: 'product', segment })
+    const result = await cutout(src, { preset: 'product', segment, full: true })
     expect(result.shadow).toBeTruthy()
     const subjectFoot = await pixel(result.subject, 6, 15)
     const shadowFoot = await pixel(result.shadow!, 6, 15)
@@ -128,6 +128,37 @@ describe('预设', () => {
     expect(shadowFoot[0]).toBe(0)
     expect(shadowTop[3]).toBe(0)
     expect(result.markup).toContain('photo.shadow.png')
+  })
+})
+
+describe('默认输出', () => {
+  it('只写 subject.png 和 cutout.json，三层写法抄原图的宽高', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flexlayer-default-'))
+    const src = join(dir, 'photo.png')
+    paintPng(src, 8, 8, () => [255, 0, 0, 255])
+    const result = await cutout(src, { preset: 'product', segment: () => matteOf(8, 8, (x) => (x < 4 ? 255 : 0)) })
+    expect(readdirSync(dir).sort()).toEqual(['photo.cutout.json', 'photo.png', 'photo.subject.png'])
+    expect(result.mask).toBeUndefined()
+    expect(result.shadow).toBeUndefined()
+    expect(result.layer).toBeUndefined()
+    const meta = JSON.parse(readFileSync(result.meta, 'utf8')) as Record<string, unknown>
+    expect(meta.subject).toBe('photo.subject.png')
+    expect(meta.mask).toBeUndefined()
+    expect(meta.regions).toBeUndefined()
+    expect(result.sandwich).toContain('<img src="photo.png" style="width:8px; height:8px" />')
+    expect(result.sandwich).toContain('<img src="photo.subject.png" style="width:8px; height:8px" />')
+    expect(result.sandwich.indexOf('photo.png')).toBeLessThan(result.sandwich.indexOf('photo.subject.png'))
+    const report = await checkLayer(result.sandwich, { baseDir: dir })
+    expect(report.issues.filter((issue) => issue.level === 'error')).toEqual([])
+  })
+
+  it('writeAnswers 和 apply 没有 full 文件时说清楚', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flexlayer-nofull-'))
+    const src = join(dir, 'photo.png')
+    paintPng(src, 8, 8, () => [255, 0, 0, 255])
+    const result = await cutout(src, { preset: 'flat', segment: () => matteOf(8, 8, (x) => (x < 4 ? 255 : 0)) })
+    expect(() => writeAnswers(result, [])).toThrow(/full/)
+    await expect(runSelect(['apply', src, '--add', '1'])).rejects.toThrow(/--full/)
   })
 })
 
@@ -149,7 +180,7 @@ describe('编号选择题', () => {
       if (x >= 34 && x <= 37 && y >= 28 && y <= 39) return [0, 0, 255, 255]
       return [0, 200, 0, 255]
     })
-    const result = await cutout(src, { preset: 'portrait', segment, baseDir: dir })
+    const result = await cutout(src, { preset: 'portrait', segment, baseDir: dir, full: true })
     return { dir, src, result }
   }
 
@@ -163,15 +194,15 @@ describe('编号选择题', () => {
     expect(result.questions.map((question) => question.where)).toEqual(['左上', '中间', '右下'])
     expect(result.questions.map((question) => question.now)).toEqual(['已选', '未选', '未选'])
     expect(result.questions.every((question) => question.area > 0)).toBe(true)
-    const fragment = await pixel(result.regions, 2, 2)
-    const hole = await pixel(result.regions, 18, 18)
-    const soft = await pixel(result.regions, 35, 30)
-    const body = await pixel(result.regions, 10, 10)
+    const fragment = await pixel(result.regions!, 2, 2)
+    const hole = await pixel(result.regions!, 18, 18)
+    const soft = await pixel(result.regions!, 35, 30)
+    const body = await pixel(result.regions!, 10, 10)
     expect(fragment[0]).toBe(1)
     expect(hole[0]).toBe(2)
     expect(soft[0]).toBe(3)
     expect(body[0]).toBe(0)
-    const saved = JSON.parse(readFileSync(result.questionsFile, 'utf8')) as { questions: unknown[] }
+    const saved = JSON.parse(readFileSync(result.questionsFile!, 'utf8')) as { questions: unknown[] }
     expect(saved.questions).toEqual(result.questions)
   })
 
@@ -231,7 +262,7 @@ describe('命令行', () => {
       logs.push(args.map(String).join(' '))
     }
     try {
-      await runSelect(['cutout', src, '--preset', 'flat'], {
+      await runSelect(['cutout', src, '--preset', 'flat', '--full'], {
         segment: () => matteOf(8, 8, (x) => (x < 4 ? 255 : 0)),
       })
       await runSelect(['apply', src, '--subtract', '1', '--add', '2,3'])

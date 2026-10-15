@@ -9,7 +9,7 @@ import type { LayerNode } from './parse.js'
 import { divHasFlowBreak, isDisplayFlex } from './rules.js'
 import { placedElements, placedRootMask, type PlacedElement, type PlacedMask } from './placed-elements.js'
 import { placedText, type PlacedText } from './placed-text.js'
-import { parseNumber, parseOrigin, parseScale, readAnchor } from './style.js'
+import { parseAngle, parseNumber, parseOrigin, parseScale, readAnchor } from './style.js'
 import { isTextBoxTag } from './text.js'
 import type { Anchor, Issue } from './types.js'
 
@@ -248,7 +248,7 @@ function rotatedBoxOf(node: LayerNode, box: LayerBox): LayerBox {
   const pivot = originOffset(parseOrigin(node.attrs.origin), box.width, box.height)
   const scale = parseScale(node.attrs.scale)
   const visual = applyToBox(
-    aroundPivot(box.left + pivot.x, box.top + pivot.y, parseNumber(node.attrs.rotate) ?? 0, scale.x, scale.y),
+    aroundPivot(box.left + pivot.x, box.top + pivot.y, parseAngle(node.attrs.rotate)?.degrees ?? 0, scale.x, scale.y),
     { x: box.left, y: box.top, width: box.width, height: box.height },
   )
   return {
