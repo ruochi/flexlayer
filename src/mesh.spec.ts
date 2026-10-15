@@ -8,6 +8,7 @@ import { BOX_EDGES, roundedBoxGeometry } from './mesh-round.js'
 import { bevelFewFaces, bevelRadius } from './mesh-bevel.js'
 import { checkLayer, renderLayer } from './render.js'
 import { tessellateSvgPath } from './path.js'
+import { boxBottom, boxRight } from './types.js'
 
 const dir = mkdtempSync(join(tmpdir(), 'flexlayer-mesh-'))
 writeFileSync(join(dir, 'box.glb'), solidBoxGlb([0.15, 0.82, 0.35, 1]))
@@ -676,8 +677,8 @@ describe('网格绘制', () => {
     const ink = torus!.ink
     expect(Math.abs(ink.x - minX)).toBeLessThan(8)
     expect(Math.abs(ink.y - minY)).toBeLessThan(8)
-    expect(Math.abs(ink.right - (maxX + 1))).toBeLessThan(8)
-    expect(Math.abs(ink.bottom - (maxY + 1))).toBeLessThan(8)
+    expect(Math.abs(boxRight(ink) - (maxX + 1))).toBeLessThan(8)
+    expect(Math.abs(boxBottom(ink) - (maxY + 1))).toBeLessThan(8)
     const tight = await checkLayer(
       `<layer width="200" height="130" background="#ffffff" camera="800"><torus cx="100" cy="68" r="40" tube="12" fill="#ff2244" rotateX="64" /></layer>`,
     )

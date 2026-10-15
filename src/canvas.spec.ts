@@ -9,6 +9,7 @@ import { h } from './h.js'
 import { freshImageLoadsCount } from './image.js'
 import { layoutSource } from './layout.js'
 import { checkLayer, renderLayer } from './render.js'
+import { boxBottom, boxRight } from './types.js'
 
 async function pixelAt(png: Buffer, x: number, y: number) {
   const img = await loadImage(png)
@@ -37,10 +38,10 @@ describe('canvas.create', () => {
         h('rect', { x: '0', y: '0', width: '80', height: '40', fill: '#fff' }),
       ),
     )
-    expect(block.left).toBe(20)
-    expect(block.top).toBe(30)
-    expect(block.right).toBe(100)
-    expect(block.bottom).toBe(70)
+    expect(block.x).toBe(20)
+    expect(block.y).toBe(30)
+    expect(boxRight(block)).toBe(100)
+    expect(boxBottom(block)).toBe(70)
     expect(block.width).toBeCloseTo(80)
     expect(block.height).toBeCloseTo(40)
     const page = canvas.create(
@@ -48,7 +49,7 @@ describe('canvas.create', () => {
     )
     const report = await checkLayer(page)
     const rects = report.elements.filter((element) => element.tag === 'rect')
-    expect(rects.some((element) => element.box.left === 20 && element.box.top === 30)).toBe(true)
+    expect(rects.some((element) => element.box.x === 20 && element.box.y === 30)).toBe(true)
     expect(report.issues.filter((issue) => issue.code === 'measure-mismatch')).toEqual([])
   })
 
@@ -60,12 +61,12 @@ describe('canvas.create', () => {
         h('rect', { x: '0', y: '0', width: '200', height: '80', fill: '#fff' }),
       ),
     )
-    expect(block.left).toBe(100)
-    expect(block.top).toBe(100)
-    expect(block.right).toBe(300)
-    expect(block.bottom).toBe(180)
-    expect(block.rotatedBox.top).toBeCloseTo(41, 0)
-    expect(block.rotatedBox.bottom).toBeCloseTo(239, 0)
+    expect(block.x).toBe(100)
+    expect(block.y).toBe(100)
+    expect(boxRight(block)).toBe(300)
+    expect(boxBottom(block)).toBe(180)
+    expect(block.rotatedBox.y).toBeCloseTo(41, 0)
+    expect(boxBottom(block.rotatedBox)).toBeCloseTo(239, 0)
     expect(block.rotatedBox.width).toBeCloseTo(198, 0)
     expect(block.rotatedBox.height).toBeCloseTo(198, 0)
   })
@@ -74,10 +75,10 @@ describe('canvas.create', () => {
     const block = canvas.create(
       h('layer', { x: '100', y: '80', anchor: 'center', width: '80', height: '40' }, h('rect', { width: '80', height: '40', fill: '#fff' })),
     )
-    expect(block.left).toBeCloseTo(60)
-    expect(block.top).toBeCloseTo(60)
-    expect(block.right).toBeCloseTo(140)
-    expect(block.bottom).toBeCloseTo(100)
+    expect(block.x).toBeCloseTo(60)
+    expect(block.y).toBeCloseTo(60)
+    expect(boxRight(block)).toBeCloseTo(140)
+    expect(boxBottom(block)).toBeCloseTo(100)
   })
 
   it('只写宽时按比例放缩，下一块可以用 bottom', () => {
@@ -94,8 +95,8 @@ describe('canvas.create', () => {
     expect(bigger.width).toBeCloseTo(200)
     expect(bigger.height).toBeCloseTo(80)
     expect(Number(bigger.attrs.scale)).toBeCloseTo(2)
-    const next = canvas.create(h('layer', { y: String(block.bottom), width: '10', height: '10' }, h('rect', { width: '10', height: '10', fill: '#fff' })))
-    expect(next.top).toBeCloseTo(30)
+    const next = canvas.create(h('layer', { y: String(boxBottom(block)), width: '10', height: '10' }, h('rect', { width: '10', height: '10', fill: '#fff' })))
+    expect(next.y).toBeCloseTo(30)
   })
 
   it('换行文字不缩放，宽高都写了也不缩放', () => {
@@ -373,8 +374,8 @@ describe('canvas.create', () => {
     expect(card.ink).toEqual(card.box)
     expect(dot.id).toBeUndefined()
     expect(dot.box).toMatchObject({ left: 124, top: 20, width: 32, height: 32 })
-    expect(dot.box.left + dot.box.width / 2).toBeCloseTo(140)
-    expect(dot.box.top + dot.box.height / 2).toBeCloseTo(36)
+    expect(dot.box.x + dot.box.width / 2).toBeCloseTo(140)
+    expect(dot.box.y + dot.box.height / 2).toBeCloseTo(36)
 
     const column = canvas.create(
       h(
@@ -390,11 +391,11 @@ describe('canvas.create', () => {
     )
     const paragraphs = column.elements.filter((element) => element.tag === 'p')
     expect(paragraphs.map((element) => element.path)).toEqual(['div[0]/p[0]', 'div[0]/p[1]'])
-    expect(paragraphs[1]!.box.top).toBeCloseTo(paragraphs[0]!.box.bottom + 24, 0)
+    expect(paragraphs[1]!.box.y).toBeCloseTo(boxBottom(paragraphs[0]!.box) + 24, 0)
     const line = column.text[0]!.lines[0]!
-    expect(line.y).toBeGreaterThanOrEqual(paragraphs[0]!.box.top - 0.5)
-    expect(line.y + line.height).toBeLessThanOrEqual(paragraphs[0]!.box.bottom + 0.5)
-    expect(line.x).toBeGreaterThanOrEqual(paragraphs[0]!.box.left - 0.5)
+    expect(line.y).toBeGreaterThanOrEqual(paragraphs[0]!.box.y - 0.5)
+    expect(line.y + line.height).toBeLessThanOrEqual(boxBottom(paragraphs[0]!.box) + 0.5)
+    expect(line.x).toBeGreaterThanOrEqual(paragraphs[0]!.box.x - 0.5)
   })
 
   it('元素坐标计入嵌套层的位置和缩放，不计这一层自己的旋转', () => {
@@ -402,9 +403,9 @@ describe('canvas.create', () => {
     const turned = canvas.create(
       h('layer', { rotate: '30' }, h('rect', { x: '10', y: '20', width: '30', height: '40', fill: '#fff' })),
     )
-    expect(turned.elements[0]!.box.left).toBeCloseTo(plain.elements[0]!.box.left)
-    expect(turned.elements[0]!.box.top).toBeCloseTo(plain.elements[0]!.box.top)
-    expect(turned.elements[0]!.ink.left).toBeCloseTo(plain.elements[0]!.ink.left)
+    expect(turned.elements[0]!.box.x).toBeCloseTo(plain.elements[0]!.box.x)
+    expect(turned.elements[0]!.box.y).toBeCloseTo(plain.elements[0]!.box.y)
+    expect(turned.elements[0]!.ink.x).toBeCloseTo(plain.elements[0]!.ink.x)
 
     const nested = canvas.create(
       h(
@@ -420,8 +421,8 @@ describe('canvas.create', () => {
     const inner = nested.elements.find((element) => element.path === 'layer[0]')!
     const rect = nested.elements.find((element) => element.path === 'layer[0]/rect[0]')!
     expect(inner.box).toMatchObject({ left: 60, top: 60, width: 80, height: 40 })
-    expect(rect.box.left).toBeCloseTo(inner.box.left)
-    expect(rect.box.top).toBeCloseTo(inner.box.top)
+    expect(rect.box.x).toBeCloseTo(inner.box.x)
+    expect(rect.box.y).toBeCloseTo(inner.box.y)
 
     const scaled = canvas.create(
       h(
@@ -454,8 +455,8 @@ describe('canvas.create', () => {
     )
     const shape = spun.elements[0]!
     expect(shape.box).toMatchObject({ left: 50, top: 50, width: 100, height: 40 })
-    expect(shape.ink.left).toBeCloseTo(80)
-    expect(shape.ink.top).toBeCloseTo(20)
+    expect(shape.ink.x).toBeCloseTo(80)
+    expect(shape.ink.y).toBeCloseTo(20)
     expect(shape.ink.width).toBeCloseTo(40)
     expect(shape.ink.height).toBeCloseTo(100)
 
@@ -467,8 +468,8 @@ describe('canvas.create', () => {
       ),
     )
     expect(rule.elements[0]!.box).toMatchObject({ left: 10, top: 20, width: 40, height: 0 })
-    expect(rule.elements[0]!.ink.left).toBeCloseTo(8)
-    expect(rule.elements[0]!.ink.top).toBeCloseTo(18)
+    expect(rule.elements[0]!.ink.x).toBeCloseTo(8)
+    expect(rule.elements[0]!.ink.y).toBeCloseTo(18)
     expect(rule.elements[0]!.ink.width).toBeCloseTo(44)
     expect(rule.elements[0]!.ink.height).toBeCloseTo(4)
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { checkLayer } from './render.js'
 import { buildReport } from './report.js'
+import { boxCenterX, boxCenterY, boxRight } from './types.js'
 import type { LayerDocument, LayerLayoutNode, TextLayoutNode } from './types.js'
 
 function minimalDoc(overrides: Partial<LayerDocument> = {}): LayerDocument {
@@ -63,6 +64,7 @@ function minimalDoc(overrides: Partial<LayerDocument> = {}): LayerDocument {
     safe: { top: 40, right: 40, bottom: 40, left: 40 },
     root,
     issues: [],
+    scripts: [],
     ...overrides,
   }
 }
@@ -103,8 +105,18 @@ describe('buildReport', () => {
   })
 
   it('outside-safe', () => {
-    const rep = buildReport(minimalDoc())
+    const doc = minimalDoc()
+    const text = (doc.root as LayerLayoutNode).children[0]!
+    text.x = 20
+    const rep = buildReport(doc)
     expect(rep.issues.some((i) => i.code === 'outside-safe')).toBe(true)
+    expect(rep.issues.some((i) => i.code === 'overflow-canvas')).toBe(false)
+  })
+
+  it('已经出画布的文字不再重复报 outside-safe', () => {
+    const rep = buildReport(minimalDoc())
+    expect(rep.issues.some((i) => i.code === 'overflow-canvas')).toBe(true)
+    expect(rep.issues.some((i) => i.code === 'outside-safe')).toBe(false)
   })
 
   it('旋转后的 ink 是外接矩形', async () => {
@@ -117,10 +129,28 @@ describe('buildReport', () => {
     expect(rect!.ink.width).toBeLessThan(24)
     expect(rect!.ink.height).toBeGreaterThan(98)
     expect(rect!.ink.height).toBeLessThan(104)
-    expect(rect!.ink.centerX).toBeCloseTo(200, 0)
-    expect(rect!.ink.centerY).toBeCloseTo(200, 0)
+    expect(boxCenterX(rect!.ink)).toBeCloseTo(200, 0)
+    expect(boxCenterY(rect!.ink)).toBeCloseTo(200, 0)
     expect(rect!.box.width).toBeCloseTo(100, 0)
     expect(rect!.box.height).toBeCloseTo(20, 0)
+  })
+
+  it('交叉淡化的两段字降成 info，同时不透明的重叠仍是 warn', async () => {
+    const page = (a: number, b: number) =>
+      `<layer width="400" height="200"><layer x="20" y="20" opacity="${a}"><p style="font-size:48px">甲乙</p></layer><layer x="20" y="20" opacity="${b}"><p style="font-size:48px">丙丁</p></layer></layer>`
+    const fade = (await checkLayer(page(0.6, 0.4))).issues.find((i) => i.code === 'text-overlap')
+    expect(fade).toMatchObject({ level: 'info', expected: '交叉淡化' })
+    const both = (await checkLayer(page(0.9, 0.9))).issues.find((i) => i.code === 'text-overlap')
+    expect(both?.level).toBe('warn')
+    const solid = (await checkLayer(page(1, 1))).issues.find((i) => i.code === 'text-overlap')
+    expect(solid?.level).toBe('warn')
+  })
+
+  it('报告里的矩形只有 x、y、width、height 四个数', async () => {
+    const rep = await checkLayer(`<layer width="100" height="100"><rect x="10" y="10" width="20" height="20" fill="#fff" /></layer>`)
+    const rect = rep.elements.find((e) => e.tag === 'rect')!
+    expect(Object.keys(rect.box).sort()).toEqual(['height', 'width', 'x', 'y'])
+    expect(Object.keys(rect.ink).sort()).toEqual(['height', 'width', 'x', 'y'])
   })
 
   it('完全透明的重叠文字不报 text-overlap', async () => {
@@ -145,7 +175,7 @@ describe('buildReport', () => {
     )
     expect(clipped.issues.some((i) => i.code === 'overflow-canvas')).toBe(false)
     const rect = clipped.elements.find((e) => e.tag === 'rect')
-    expect(rect!.ink.right).toBeLessThanOrEqual(80 + 1e-6)
+    expect(boxRight(rect!.ink)).toBeLessThanOrEqual(80 + 1e-6)
 
     const visible = await checkLayer(
       `<layer width="100" height="100"><layer x="0" y="0" width="80" height="80"><rect x="70" y="10" width="50" height="20" fill="#fff" /></layer></layer>`,

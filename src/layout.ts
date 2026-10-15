@@ -3325,7 +3325,7 @@ function maybeInkInset(node: LayoutNode, anchor: Anchor, ctx: LayoutContext) {
   const ink = inkInLocal(node, 1)
   if (!ink) return
   const inset = side === 'left' ? ink.x : node.width - (ink.x + ink.width)
-  if (Math.round(inset) < 2 || inset < fontSize * 0.04) return
+  if (Math.round(inset) < 3 || inset < fontSize * 0.05) return
   const where = side === 'left' ? '左' : '右'
   ctx.issues.push({
     level: 'info',

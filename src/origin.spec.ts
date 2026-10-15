@@ -14,8 +14,8 @@ describe('origin 任意一点', () => {
       `<layer width="400" height="300" safe="0"><rect x="100" y="80" width="40" height="20" fill="#fff" scale="2" origin="10 5" /></layer>`,
     )
     const ink = rectInk(report.elements).ink
-    expect(ink.left).toBeCloseTo(90)
-    expect(ink.top).toBeCloseTo(75)
+    expect(ink.x).toBeCloseTo(90)
+    expect(ink.y).toBeCloseTo(75)
     expect(ink.width).toBeCloseTo(80)
     expect(ink.height).toBeCloseTo(40)
   })

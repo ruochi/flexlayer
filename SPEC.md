@@ -308,6 +308,7 @@ declare module 'flexlayer/jsx-runtime' {
 
 渲染同时输出 JSON。`elements` 里每个节点有 `path`、`id`、`tag`、`box`、`ink`。从 `.tsx` 来的还可以有 `source`，形如 `examples/hello.tsx:18:5`。
 
+- 矩形（`box`、`ink`、`effect`、`mask.ink`）只写 `x`、`y`、`width`、`height`。右边是 `x + width`，底边是 `y + height`。
 - `box`：布局盒子，只累加平移。
 - `ink`：转完、缩完、投影之后的着墨外接矩形，并和祖先的 `overflow="hidden"`、`<mask>` 求过交。像素对位看 `ink`。线条的中心线落在画布边上时，描边半径探出去不算超出。
 - `effect`：阴影、光晕、图层模糊或玻璃可能占用的范围。没有外扩时不写。画出画布时报 `effect-clipped`。
@@ -344,7 +345,7 @@ declare module 'flexlayer/jsx-runtime' {
 | `effect-clipped` | warn | 本体在画布内，阴影、光晕、描边或模糊超出画布 |
 | `view-outside` | error | `view` 没有被直接子元素盖住 |
 | `stroke-fill` | warn | 内侧描边达到字号的约 8% |
-| `ink-inset` | info | 锚点贴着左右边，字形比盒子靠里。开了镜头的 layer 不报 |
+| `ink-inset` | info | 锚点贴着左右边，字形比盒子靠里，至少 3px 且不小于字号的 5%。开了镜头的 layer 不报 |
 | `ink-anchor-empty` | info | `anchor-box="ink"` 没有着墨 |
 | `ink-anchor-rotate` | info | `anchor-box="ink"` 和 `rotate` 同时存在 |
 | `flatten-3d` | warn | 三维姿态或实体没有落在镜头里 |
@@ -359,4 +360,10 @@ declare module 'flexlayer/jsx-runtime' {
 | `type-error` | error | `.tsx` 的 TypeScript 诊断 |
 | `measure-mismatch` | warn | `canvas.create` 量到的宽高和最终排版不一致 |
 
-任何元素可以写 `expect="overflow-canvas: 出血图; text-overlap"`。对得上的问题降成 `info`，并带上 `expected`。没对上的报 `unused-expect`。多帧检查时，只要有一帧用上就不报。Composition 抽查出来的问题带 `frame` 和 `frames`。
+任何元素可以写 `expect="overflow-canvas: 出血图; text-overlap"`。对得上的问题降成 `info`，并带上 `expected`。没对上的报 `unused-expect`。多帧检查时，只要有一帧用上就不报。Composition 抽查出来的问题带 `frames`，是含两端的帧区间。
+
+动画里本来就会出现的情况不用写 `expect`，也会降成 `info` 并写出 `expected`：
+
+- `入场`、`出场`：`overflow-canvas`、`outside-safe`、`effect-clipped` 出现在元素刚进画面或刚离开画面的那几帧，期间着墨在动，前后抽查帧里元素在画面内或已不可见。一直停在画面外、静止不动、序列末尾才跳出去的，仍按原级别报。要看到前后帧，抽查要带上相邻的帧，例如 `--frames all`。
+- `交叉淡化`：两段文字重叠，各自的有效 `opacity` 都小于 1，加起来不超过 1.05。同时不透明的重叠仍是 `warn`。
+- 文字已经出了画布时，不再重复报 `outside-safe`。

@@ -4,6 +4,7 @@ import { h } from './h.js'
 import { poseOffset } from './perspective.js'
 import { parseOrigin } from './style.js'
 import { checkLayer } from './render.js'
+import { boxBottom, boxRight } from './types.js'
 import type { LayoutNode } from './types.js'
 
 const page = (body: string, attrs = 'width="320" height="240" safe="0"') =>
@@ -17,10 +18,10 @@ describe('分轴 scale', () => {
     const a = plain.elements.find((el) => el.tag === 'rect')!
     const b = mirror.elements.find((el) => el.tag === 'rect')!
     const c = flat.elements.find((el) => el.tag === 'rect')!
-    expect(b.ink.left).toBeCloseTo(a.ink.left, 1)
-    expect(b.ink.right).toBeCloseTo(a.ink.right, 1)
-    expect(b.ink.top).toBeCloseTo(a.ink.top, 1)
-    expect(b.ink.bottom).toBeCloseTo(a.ink.bottom, 1)
+    expect(b.ink.x).toBeCloseTo(a.ink.x, 1)
+    expect(boxRight(b.ink)).toBeCloseTo(boxRight(a.ink), 1)
+    expect(b.ink.y).toBeCloseTo(a.ink.y, 1)
+    expect(boxBottom(b.ink)).toBeCloseTo(boxBottom(a.ink), 1)
     expect(c.ink.width).toBeCloseTo(a.ink.width / 2, 1)
     expect(c.ink.height).toBeCloseTo(a.ink.height, 1)
   })
@@ -41,10 +42,10 @@ describe('分轴 scale', () => {
     const a = plain.elements.find((el) => el.tag === 'rect')!
     const b = mirror.elements.find((el) => el.tag === 'rect')!
     expect(b.quad).toHaveLength(4)
-    expect(b.ink.left).toBeCloseTo(a.ink.left, 1)
-    expect(b.ink.right).toBeCloseTo(a.ink.right, 1)
-    expect(b.ink.top).toBeCloseTo(a.ink.top, 1)
-    expect(b.ink.bottom).toBeCloseTo(a.ink.bottom, 1)
+    expect(b.ink.x).toBeCloseTo(a.ink.x, 1)
+    expect(boxRight(b.ink)).toBeCloseTo(boxRight(a.ink), 1)
+    expect(b.ink.y).toBeCloseTo(a.ink.y, 1)
+    expect(boxBottom(b.ink)).toBeCloseTo(boxBottom(a.ink), 1)
     expect(b.quad![0]!.x).toBeCloseTo(a.quad![1]!.x, 1)
     expect(b.quad![1]!.x).toBeCloseTo(a.quad![0]!.x, 1)
     expect(b.quad![0]!.y).toBeCloseTo(a.quad![1]!.y, 1)
@@ -65,7 +66,7 @@ describe('分轴 scale', () => {
     expect(mirrored.attrs.scale).toBe('-0.5 0.5')
     expect(mirrored.rotatedBox.width).toBeCloseTo(45)
     expect(mirrored.rotatedBox.height).toBeCloseTo(15)
-    expect(mirrored.rotatedBox.left).toBeCloseTo(mirrored.left - 45)
+    expect(mirrored.rotatedBox.x).toBeCloseTo(mirrored.x - 45)
 
     const single = canvas.create(
       h('layer', { width: '90', scale: '-1' }, h('rect', { x: '0', y: '0', width: '180', height: '60', fill: '#fff' })),

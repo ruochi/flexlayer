@@ -71,6 +71,8 @@ export function layerBaseDir(): string {
 const UNLIMITED = 1_000_000
 
 export type LayerBox = {
+  x: number
+  y: number
   left: number
   top: number
   right: number
@@ -210,6 +212,8 @@ export function create(node: LayerNode): CreatedLayer {
   const box: LayerBox = {
     left: origin.x,
     top: origin.y,
+    x: origin.x,
+    y: origin.y,
     right: origin.x + laid.width,
     bottom: origin.y + laid.height,
     width: laid.width,
@@ -250,6 +254,8 @@ function rotatedBoxOf(node: LayerNode, box: LayerBox): LayerBox {
   return {
     left: visual.x,
     top: visual.y,
+    x: visual.x,
+    y: visual.y,
     right: visual.x + visual.width,
     bottom: visual.y + visual.height,
     width: visual.width,

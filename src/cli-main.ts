@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, join, resolve } from 'node:path'
 import { stdout } from 'node:process'
 import type { Writable } from 'node:stream'
-import { mergeFrameIssues, sampleFrames, type SampleSpec } from './check-frames.js'
+import { mergeFrameIssues, sampleFrames, type FramePart, type SampleSpec } from './check-frames.js'
 import { emitLayer } from './emit.js'
 import type { Composition, FrameInput } from './frame.js'
 import type { LoadedLayer } from './load-source.js'
@@ -325,7 +325,7 @@ async function run(args: ReturnType<typeof parseArgs>) {
     }
     const sample = args.framesArg != null ? checkSample(args.framesArg, args.step) : args.frame
     const frames = sampleFrames(duration, sample)
-    const parts: Array<{ frame: number; issues: Issue[] }> = []
+    const parts: FramePart[] = []
     let report: LayerReport | undefined
     let emitAt: LayerNode | undefined
     for (const frame of frames) {
@@ -333,7 +333,7 @@ async function run(args: ReturnType<typeof parseArgs>) {
       const one = await checkLayer(node, { baseDir, noScript: args.noScript, t: frame / loaded.composition.fps, frame, fps: loaded.composition.fps })
       if (!report) report = one
       if (frame === (args.frame ?? 0)) emitAt = node
-      parts.push({ frame, issues: one.issues })
+      parts.push({ frame, issues: one.issues, elements: one.elements })
     }
     report!.issues = mergeFrameIssues(parts)
     if (emitAt) await emitNode(emitAt, args.emit, report!)
@@ -401,7 +401,7 @@ async function run(args: ReturnType<typeof parseArgs>) {
       }
     }
 
-    const parts: Array<{ frame: number; issues: Issue[] }> = []
+    const parts: FramePart[] = []
     let report: LayerReport | undefined
     let count = 0
     for await (const rendered of renderFrames(comp, {
@@ -422,7 +422,7 @@ async function run(args: ReturnType<typeof parseArgs>) {
       }
       if (sheet && rendered.png) await sheet.add(rendered.png)
       if (!report) report = rendered.report
-      parts.push({ frame: rendered.frame, issues: rendered.report.issues })
+      parts.push({ frame: rendered.frame, issues: rendered.report.issues, elements: rendered.report.elements })
       count++
     }
     if (rgbaFile) {

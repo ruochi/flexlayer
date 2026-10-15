@@ -99,15 +99,15 @@ describe('属性归属', () => {
     expect(hit?.hint).toContain('x="10"')
     expect(hit?.hint).toContain('y="20"')
     const rect = report.elements.find((element) => element.tag === 'rect')
-    expect(rect?.box.left).toBeCloseTo(0, 3)
-    expect(rect?.box.top).toBeCloseTo(0, 3)
+    expect(rect?.box.x).toBeCloseTo(0, 3)
+    expect(rect?.box.y).toBeCloseTo(0, 3)
   })
 
   it('rect 的 x、y 是左上角', async () => {
     const report = await issues(`<layer width="400" height="200"><rect x="15" y="25" width="30" height="40" /></layer>`)
     const rect = report.elements.find((element) => element.tag === 'rect')
-    expect(rect?.box.left).toBeCloseTo(15, 3)
-    expect(rect?.box.top).toBeCloseTo(25, 3)
+    expect(rect?.box.x).toBeCloseTo(15, 3)
+    expect(rect?.box.y).toBeCloseTo(25, 3)
     expect(report.issues.filter((issue) => issue.code === 'non-canonical')).toEqual([])
   })
 

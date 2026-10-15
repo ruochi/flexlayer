@@ -5,6 +5,7 @@ import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { describe, expect, it } from 'vitest'
 import { solidBoxGlb } from './glb.js'
 import { checkLayer, renderLayer } from './render.js'
+import { boxRight } from './types.js'
 import type { RenderOptions } from './types.js'
 
 const dir = mkdtempSync(join(tmpdir(), 'flexlayer-software-mesh-'))

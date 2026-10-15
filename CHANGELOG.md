@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.0
+
+报告更短。`box`、`ink`、`effect`、`mask.ink` 只写 `x`、`y`、`width`、`height`，不再有 `left`、`top`、`right`、`bottom`、`centerX`、`centerY`。问题里去掉 `frame`，只留 `frames`。`canvas.create` 返回的 `left` 到 `height` 不变，另加 `x`、`y`。
+
+动画里本来就会出现的情况降成 `info` 并写明原因：元素滑入、滑出画面时的 `overflow-canvas`、`outside-safe`、`effect-clipped`（`入场`、`出场`），交叉淡化时两段字的 `text-overlap`（`交叉淡化`）。已经出了画布的字不再重复报 `outside-safe`。`ink-inset` 门槛抬到 3px 和字号的 5%。带 `expected` 的问题在命令行里只写原因，不再重复改法。
+
 ## 0.6.14
 
 主入口再导出 `loadImage` 和 `registerFontPath`。二者和 `createCanvas` 用的是排版那一份 `@napi-rs/canvas`。`registerFontPath(family, filePath)` 登记自定义字体文件；这个名字已经登记过就不再换文件。

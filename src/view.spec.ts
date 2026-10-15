@@ -41,8 +41,8 @@ describe('view', () => {
     )
     const green = report.elements.find((el) => el.tag === 'rect' && el.view == null && (el.ink.width ?? 0) > 20)
     expect(green?.screenScale).toBeCloseTo(2, 2)
-    expect(green?.ink.left).toBeCloseTo(0, 0)
-    expect(green?.ink.top).toBeCloseTo(0, 0)
+    expect(green?.ink.x).toBeCloseTo(0, 0)
+    expect(green?.ink.y).toBeCloseTo(0, 0)
     expect(green?.ink.width).toBeCloseTo(40, 0)
     expect(green?.ink.height).toBeCloseTo(40, 0)
     expect(report.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
@@ -213,7 +213,7 @@ describe('view', () => {
       ),
     )
     const cutText = cut.elements.find((el) => el.tag === 'p')
-    expect(cutText?.ink.left).toBeLessThan(16)
+    expect(cutText?.ink.x).toBeLessThan(16)
     expect(cut.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
     expect(cut.issues.some((issue) => issue.code === 'outside-safe')).toBe(false)
 
@@ -223,14 +223,14 @@ describe('view', () => {
         'width="200" height="80" safe="16"',
       ),
     )
-    expect(shown.elements.find((el) => el.tag === 'p')?.ink.left).toBeLessThan(16)
+    expect(shown.elements.find((el) => el.tag === 'p')?.ink.x).toBeLessThan(16)
     expect(shown.issues.some((issue) => issue.code === 'outside-safe')).toBe(true)
     expect(shown.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
 
     const hidden = await checkLayer(
       `<layer width="200" height="80" safe="16" overflow="hidden" background="#111"><layer x="-40" y="8"><p style="font-size:28px; white-space:nowrap">窗外的字被裁开以后还很长很长</p></layer></layer>`,
     )
-    expect(hidden.elements.find((el) => el.tag === 'p')?.ink.left).toBeLessThan(16)
+    expect(hidden.elements.find((el) => el.tag === 'p')?.ink.x).toBeLessThan(16)
     expect(hidden.issues.some((issue) => issue.code === 'outside-safe')).toBe(false)
     expect(hidden.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
   })

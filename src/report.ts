@@ -11,6 +11,8 @@ import { boxToRect, emptyBox, translateBox, unionBoxes } from './types.js'
 import { viewMatrix } from './view.js'
 
 const VISIBLE_OPACITY = 0.01
+/** 交叉淡化时两段透明度之和的上限，留一点缓动的余量。 */
+const CROSSFADE_SUM = 1.05
 
 type Pt = { x: number; y: number }
 type Quad = [{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }, { x: number; y: number }]
@@ -869,7 +871,7 @@ export function buildReport(doc: LayerDocument): LayerReport {
     if (el.opacity < VISIBLE_OPACITY || !hasArea(el.ink)) continue
     const slack = inkSlack[index] ?? 0
     const edge = 1e-3 + slack
-    const inkOutside = el.ink.right > doc.width + edge || el.ink.bottom > doc.height + edge || el.ink.left < -edge || el.ink.top < -edge
+    const inkOutside = el.ink.x + el.ink.width > doc.width + edge || el.ink.y + el.ink.height > doc.height + edge || el.ink.x < -edge || el.ink.y < -edge
     if (inkOutside) {
       issues.push({
         level: 'error',
@@ -900,9 +902,9 @@ export function buildReport(doc: LayerDocument): LayerReport {
     }
     if (!el.inline && el.lines != null && (el.tag === 'h1' || el.tag === 'h2' || el.tag === 'h3' || el.tag === 'p' || el.tag === 'div' || el.tag === 'span')) {
       const cut = sideCuts[index]
-      const pastLeft = el.ink.left < doc.safe.left - 1e-3 && !cut?.left
-      const pastRight = el.ink.right > doc.width - doc.safe.right + 1e-3 && !cut?.right
-      if (pastLeft || pastRight) {
+      const pastLeft = el.ink.x < doc.safe.left - 1e-3 && !cut?.left
+      const pastRight = el.ink.x + el.ink.width > doc.width - doc.safe.right + 1e-3 && !cut?.right
+      if ((pastLeft || pastRight) && !inkOutside) {
         issues.push({
           level: 'warn',
           code: 'outside-safe',
@@ -966,11 +968,14 @@ export function buildReport(doc: LayerDocument): LayerReport {
       if (formula && formula === mathRootPath(b.path)) continue
       const overlap = a.quad && b.quad ? quadsOverlap(a.quad, b.quad) : inkOverlap(a.ink, b.ink)
       if (overlap) {
+        // 两段都半透明、透明度加起来不过 1：交叉淡化，一段在淡出另一段在淡入。
+        const crossfade = a.opacity < 1 && b.opacity < 1 && a.opacity + b.opacity <= CROSSFADE_SUM
         issues.push({
-          level: 'warn',
+          level: crossfade ? 'info' : 'warn',
           code: 'text-overlap',
           path: a.path,
           message: `文字与 ${b.path} 着墨重叠`,
+          ...(crossfade ? { expected: '交叉淡化' } : {}),
         })
       }
     }
@@ -999,6 +1004,7 @@ export function buildReport(doc: LayerDocument): LayerReport {
     issues,
   }
 }
+
 
 /** 可以写进 expect 的问题码。不含 unused-expect 自己。 */
 const EXPECT_CODES = new Set([
@@ -1110,20 +1116,20 @@ function minFontFloor(doc: LayerDocument): number | null {
   return (Math.min(doc.width, doc.height) / 1080) * ratio
 }
 
-function formatFrameSpan(frames: Array<[number, number]> | undefined, frame: number | undefined): string {
-  if (frames && frames.length > 0) {
-    const text = frames
-      .map(([start, end]) => (start === end ? `第${start}帧` : `第${start}–${end}帧`))
-      .join('、')
-    return `${text}  `
-  }
-  return frame != null ? `第${frame}帧  ` : ''
+function formatFrameSpan(frames: Array<[number, number]> | undefined): string {
+  if (!frames || frames.length === 0) return ''
+  const text = frames
+    .map(([start, end]) => (start === end ? `第${start}帧` : `第${start}–${end}帧`))
+    .join('、')
+  return `${text}  `
 }
 
 export function formatIssueLine(issue: Issue): string {
   const sym = issue.level === 'error' ? '✗ error' : issue.level === 'warn' ? '! warn' : '· info'
   const at = issue.source ? `${issue.source}  ` : ''
-  const frame = formatFrameSpan(issue.frames, issue.frame)
+  const frame = formatFrameSpan(issue.frames)
   const line = `${at}${frame}${sym}  ${issue.code.padEnd(16)} ${issue.path.padEnd(24)} ${issue.message}`
+  // 已经被 expect 或入场、出场、交叉淡化认下来的，写出原因，不再重复改法。
+  if (issue.expected != null) return `${line}  ← ${issue.expected}`
   return issue.hint ? `${line}\n         ${issue.hint}` : line
 }

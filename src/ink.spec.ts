@@ -1,6 +1,7 @@
 import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { describe, expect, it } from 'vitest'
 import { renderLayer } from './render.js'
+import { boxBottom, boxRight, type Box } from './types.js'
 import type { ElementReport } from './types.js'
 
 type Bounds = { left: number; top: number; right: number; bottom: number }
@@ -33,11 +34,11 @@ function expectNear(actual: number, expected: number, label: string) {
   expect(Math.abs(actual - expected), `${label}: ${actual} vs ${expected}`).toBeLessThanOrEqual(1)
 }
 
-function expectSameBounds(ink: Bounds, pixels: Bounds) {
-  expectNear(ink.left, pixels.left, 'left')
-  expectNear(ink.top, pixels.top, 'top')
-  expectNear(ink.right, pixels.right, 'right')
-  expectNear(ink.bottom, pixels.bottom, 'bottom')
+function expectSameBounds(ink: Box, pixels: Bounds) {
+  expectNear(ink.x, pixels.left, 'left')
+  expectNear(ink.y, pixels.top, 'top')
+  expectNear(boxRight(ink), pixels.right, 'right')
+  expectNear(boxBottom(ink), pixels.bottom, 'bottom')
 }
 
 const ANCHORS = [
@@ -92,9 +93,9 @@ describe('字形着墨', () => {
     )
     const h2 = textEl(report, 'h2')
     expectSameBounds(h2.ink, await alphaBounds(png))
-    expect(h2.ink.left).toBeGreaterThan(h2.box.left + 1)
-    expect(h2.ink.top).toBeGreaterThan(h2.box.top + 1)
-    expect(h2.ink.right).toBeLessThan(h2.box.right - 1)
+    expect(h2.ink.x).toBeGreaterThan(h2.box.x + 1)
+    expect(h2.ink.y).toBeGreaterThan(h2.box.y + 1)
+    expect(boxRight(h2.ink)).toBeLessThan(boxRight(h2.box) - 1)
   })
 
   it('竖排文字的报告 ink 与像素误差不超过 1px', async () => {
@@ -125,17 +126,17 @@ describe('outside-safe 按真实着墨', () => {
   it('盒子在安全区外、笔画在安全区内时不误报', async () => {
     const { report } = await renderLayer(scene(56))
     const h2 = textEl(report, 'h2')
-    expect(h2.box.left).toBeCloseTo(56, 3)
-    expect(h2.ink.left).toBeGreaterThanOrEqual(64)
+    expect(h2.box.x).toBeCloseTo(56, 3)
+    expect(h2.ink.x).toBeGreaterThanOrEqual(64)
     expect(report.issues.some((issue) => issue.code === 'outside-safe')).toBe(false)
   })
 
   it('真实笔画推到 60 时仍会报', async () => {
     const first = await renderLayer(scene(56))
-    const inset = textEl(first.report, 'h2').ink.left - 56
+    const inset = textEl(first.report, 'h2').ink.x - 56
     const { report } = await renderLayer(scene(60 - inset))
     const h2 = textEl(report, 'h2')
-    expect(h2.ink.left).toBeCloseTo(60, 3)
+    expect(h2.ink.x).toBeCloseTo(60, 3)
     expect(report.issues.some((issue) => issue.code === 'outside-safe' && issue.path.includes('h2'))).toBe(true)
   })
 })
@@ -155,10 +156,10 @@ describe('anchor-box=ink', () => {
     expectNear(pixels.top, 560, 'top')
     const layer = report.elements.find((el) => el.anchorBox === 'ink')
     expect(layer?.inkOffset).toBeTruthy()
-    expectNear(layer!.ink.left - layer!.box.left, layer!.inkOffset!.left, 'offset-left')
-    expectNear(layer!.box.right - layer!.ink.right, layer!.inkOffset!.right, 'offset-right')
-    expectNear(layer!.ink.top - layer!.box.top, layer!.inkOffset!.top, 'offset-top')
-    expectNear(layer!.box.bottom - layer!.ink.bottom, layer!.inkOffset!.bottom, 'offset-bottom')
+    expectNear(layer!.ink.x - layer!.box.x, layer!.inkOffset!.left, 'offset-left')
+    expectNear(boxRight(layer!.box) - boxRight(layer!.ink), layer!.inkOffset!.right, 'offset-right')
+    expectNear(layer!.ink.y - layer!.box.y, layer!.inkOffset!.top, 'offset-top')
+    expectNear(boxBottom(layer!.box) - boxBottom(layer!.ink), layer!.inkOffset!.bottom, 'offset-bottom')
   })
 
   it.each(ANCHORS.filter((anchor) => anchor !== 'top-left'))('%s 的着墨九宫格点落在 x y', async (anchor) => {
@@ -216,8 +217,8 @@ describe('anchor-box=ink', () => {
     const hit = report.issues.find((issue) => issue.code === 'ink-anchor-empty')
     expect(hit?.level).toBe('info')
     const layer = report.elements.find((el) => el.path.includes('layer['))
-    expect(layer?.box.left).toBeCloseTo(80, 3)
-    expect(layer?.box.top).toBeCloseTo(90, 3)
+    expect(layer?.box.x).toBeCloseTo(80, 3)
+    expect(layer?.box.y).toBeCloseTo(90, 3)
     expect(layer?.anchorBox).toBeUndefined()
   })
 
@@ -229,7 +230,7 @@ describe('anchor-box=ink', () => {
     )
     expect(report.issues.some((issue) => issue.code === 'ink-anchor-empty')).toBe(true)
     const layer = report.elements.find((el) => el.tag === 'layer' && el.path !== 'layer')
-    expect(layer?.box.left).toBeCloseTo(80, 3)
+    expect(layer?.box.x).toBeCloseTo(80, 3)
     expect(layer?.anchorBox).toBeUndefined()
   })
 
