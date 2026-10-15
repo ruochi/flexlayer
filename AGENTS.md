@@ -24,6 +24,36 @@ Three differences from a web page:
 
 HTML, flex, and SVG geometry follow their own standards. Below, only the deviations. Full prose is in [SPEC.md](SPEC.md). One page of syntax is [docs/CHEATSHEET.md](docs/CHEATSHEET.md). Fonts and palettes are in [docs/RESOURCES.md](docs/RESOURCES.md). Sample pictures are in [docs/GALLERY.md](docs/GALLERY.md). Attribute syntax, one name at a time, is [docs/attrs.json](docs/attrs.json).
 
+## What it can do beyond a web page
+
+Plain HTML and CSS work too, so they are not listed here. Reach for these when a picture should look designed, not just laid out.
+
+| Want | Write | Note |
+| --- | --- | --- |
+| Optical alignment | `anchor="bottom" anchor-box="ink"` | Aligns the glyphs' ink, not the line box |
+| Sticker or poster title | `stroke="6 #fff, 14 #c8321e"` | Stacked strokes along the ink, on shapes, images, and a whole `layer`. On text it goes in `style` |
+| Multi-color glyphs | `style="fill:gradient(conic 200 100, #f0f, #0ff, #ff0, #f0f)"` | A color matrix, also `linear` and `radial` mappings, mixed in OKLab |
+| Scattered, tilted letters | `<h1 split="chars">` with `translate`, `rotate`, `opacity` on inline tags | Each character turns around its own center. The line still wraps as text |
+| Frosted or clear glass | `glass="clear"`, `regular`, `thick` | Refraction, specular edge, dispersion. Tune it as `clear, blur 8, tint #fff2` |
+| Neon and light | `glow="40 #7ec8ff"`, `inner-glow`, `blend="screen"` | Glow follows the ink of text and shapes |
+| Film look | `<layer grade="lomo 0.8, vignette 0.3" grade-mask="radial-gradient(...)">` | Also `matte`, `chrome`, `bleach`, `mono`. `noise="0.08"` adds grain |
+| Text behind a person | Photo, then text, then `photo.subject.png` | `flexlayer-select cutout` makes the subject. See SPEC, "Images and cutouts" |
+| Cutouts and knockouts | `<mask>` with `op="subtract"`, `feather`, `invert` | Shapes or image alpha. The layer's shadow follows the cut contour |
+| 3D objects in a 2D page | `depth="40"` on `rect`, `circle`, `path`; `sphere`, `torus`, `tube` | Same coordinates as 2D. `material="metal 0.35"` or `glass` |
+| 3D lettering | `glyph()` outlines into `<path d depth>` | Any catalog font becomes an extruded solid |
+| Product shot | `camera="fov 40, orbit 35 18, aperture 12"` plus `<ground>` | Orbit, soft shadows on the ground, depth of field. `sharp="true"` keeps a layer in focus |
+| Technical line art | Solid with `stroke` and `hidden="#999"` | Visible edges solid, hidden edges in another color |
+| three.js scenes | `<model object={mesh} />` or `src="x.glb"` | Meshes, lines, and points share one depth buffer |
+| Tilted cards and cover flow | `rotateY="-30"`, `z="80"` on a `layer` | Real perspective. `preserve-3d` sorts nested layers by depth |
+| Zoom into a detail | `view="x y w h"` on a `layer` | Crop and enlarge a region of the stage |
+| Formulas | `<math display="block">` | Typeset with STIXTwoMath, aligned to text baselines |
+| Chinese typography | `font-family="Kai"`, `Brush`, `XiaoWei`, `writing-mode:vertical-rl` | Catalog fonts download by name. See [docs/RESOURCES.md](docs/RESOURCES.md) |
+| Generative art | `<canvas>` with `<script>`, `random(seed)`, `noise()` | Deterministic, so every render matches |
+| Measure, then place | `canvas.create(<layer>…</layer>)` returns boxes, lines, and characters | Lay out by real text width, ink, or a character's position |
+| Animation | A `Composition` with `spring`, `interpolate`, `sequence` | Frames render to PNG. `check` samples frames |
+
+Combine two or three per picture. A cover usually needs one strong type treatment, one depth cue (shadow, glass, or a solid), and one finish (`grade` or `noise`).
+
 ## Where it differs
 
 ### Place

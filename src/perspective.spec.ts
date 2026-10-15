@@ -3,6 +3,7 @@ import { h } from './h.js'
 import { checkLayer } from './render.js'
 import { applyPoseMatrix, poseMatrix, poseOffset, posePoint, project } from './perspective.js'
 import { parseOrigin } from './style.js'
+import { boxBottom, boxRight } from './types.js'
 import type { LayoutNode } from './types.js'
 
 function node(partial: Partial<LayoutNode> & Pick<LayoutNode, 'kind'>): LayoutNode {
@@ -84,8 +85,8 @@ describe('perspective', () => {
     )
     const rect = report.elements.find((el) => el.tag === 'rect')
     expect(rect?.quad).toHaveLength(4)
-    expect(rect!.box.left).toBeLessThan(0)
-    expect(rect!.box.right).toBeGreaterThan(300)
+    expect(rect!.box.x).toBeLessThan(0)
+    expect(boxRight(rect!.box)).toBeGreaterThan(300)
     const node = {
       kind: 'shape',
       x: rect!.box.x,
@@ -109,10 +110,10 @@ describe('perspective', () => {
       expect(corner.x).toBeCloseTo(expected[i]!.x, 1)
       expect(corner.y).toBeCloseTo(expected[i]!.y, 1)
     })
-    expect(rect!.ink.left).toBeGreaterThanOrEqual(-0.5)
-    expect(rect!.ink.right).toBeLessThanOrEqual(300.5)
-    expect(rect!.ink.top).toBeGreaterThanOrEqual(-0.5)
-    expect(rect!.ink.bottom).toBeLessThanOrEqual(200.5)
+    expect(rect!.ink.x).toBeGreaterThanOrEqual(-0.5)
+    expect(boxRight(rect!.ink)).toBeLessThanOrEqual(300.5)
+    expect(rect!.ink.y).toBeGreaterThanOrEqual(-0.5)
+    expect(boxBottom(rect!.ink)).toBeLessThanOrEqual(200.5)
     expect(report.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
   })
 

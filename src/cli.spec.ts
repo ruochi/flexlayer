@@ -95,10 +95,10 @@ export const composition: Composition = {
     expect(result.stdout).toContain('第4帧')
     expect(result.stdout).not.toContain('也出现在')
     const report = JSON.parse(readFileSync(reportPath, 'utf8')) as {
-      issues: Array<{ code: string; frame?: number; frames?: Array<[number, number]> }>
+      issues: Array<{ code: string; frames?: Array<[number, number]> }>
     }
     const overflow = report.issues.filter((issue) => issue.code === 'overflow-canvas')
-    expect(overflow).toEqual([expect.objectContaining({ frame: 4, frames: [[4, 4]] })])
+    expect(overflow).toEqual([expect.objectContaining({ frames: [[4, 4]] })])
   })
 
   it('--frames 边写边出，只包含 from 到 to', () => {

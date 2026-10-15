@@ -42,8 +42,8 @@ Color blocks use `<rect fill>`, an HTML `background`, or `<canvas>`. `background
 | `anchor` | Which point of the box `(x, y)` lands on. A 3×3 grid. Default `top-left`. A bad value is placed as `top-left` and reports `invalid-attr` |
 | `anchor-box` | Default `box`, aligned to the layout box. `ink` aligns to the ink's bounding rectangle before rotation and scale. Together with `rotate` it reports `ink-anchor-rotate`. With no ink it reports `ink-anchor-empty` and falls back to the layout box. `overflow="hidden"` clips first, then aligns. Only on `layer` and `use`. When `anchor-box` is omitted, the anchor sits on the left or right edge, and the glyphs sit at least 2px inside the box and at least 4% of the font size, the report is `ink-inset`. A layer with a camera does not report it |
 | `opacity` | 0 to 1. Nested values multiply |
-| `rotate`, `scale`, `origin` | Drawing only. They do not change layout. Rotation is around `origin`, default `center`, and that point stays still on the picture. One number in `scale` applies to both axes. `scale="1.2 0.8"` is per axis. `scale="-1 1"` mirrors horizontally. With two axes, z scale is the square root of the product of the absolute values. With one number, z uses that number, and the sign is kept. `origin` may also be `120 80`, `30% 40%`, `120 40%`, or `top 80`. A parse failure reports `invalid-attr` and falls back to the center |
-| `rotateX`, `rotateY`, `z` | Belong to the same layer as `rotate`. Positive `z` points toward the viewer. They do not change layout |
+| `rotate`, `scale`, `origin` | Drawing only. They do not change layout. Rotation is around `origin`, default `center`, and that point stays still on the picture. `rotate` is degrees, or the same angle as in style: `30deg`, `0.5rad`, `100grad`, `0.25turn`. A bare number does not report `non-canonical`. An invalid value reports `invalid-attr` and is ignored. One number in `scale` applies to both axes. `scale="1.2 0.8"` is per axis. `scale="-1 1"` mirrors horizontally. With two axes, z scale is the square root of the product of the absolute values. With one number, z uses that number, and the sign is kept. `origin` may also be `120 80`, `30% 40%`, `120 40%`, or `top 80`. A parse failure reports `invalid-attr` and falls back to the center |
+| `rotateX`, `rotateY`, `z` | Belong to the same layer as `rotate`, and take the same angle. Positive `z` points toward the viewer. They do not change layout |
 | `overflow` | Default `visible`. `hidden` clips children to this layer's box. This layer's own shadow and blur may still draw outside the box. An ancestor's `hidden` clips a child's shadow and glow along with the child |
 | `view` | `view="x y w h"`. `width` and `height` are the viewport on screen. `view` is the rectangle taken from the stage, stretched to fill the window. Outside the window is clipped, and that does not report `overflow-canvas`. A text edge cut flush with the window does not report `outside-safe`. If the four corners are not covered by the transformed, scaled quadrilaterals of the direct children, the report is `view-outside`. For `<g>`, each shape's quadrilateral is taken after `transform`. When the aspect ratio differs from the viewport by more than 1%, height is recomputed from the width, keeping the center, and a `warn` is issued. `width` and `height` are required. Write it separately from `camera`. Captions that should not scale on screen are written outside this layer. `zoomView(center, zoom, size)` computes `view`. `bleed` is no longer used. Writing it warns |
 | `border`, `border-radius` | Attributes on `layer` |
@@ -88,7 +88,7 @@ These tags are supported. Parameters that already exist in HTML and SVG follow t
 
 `style` accepts `flex-direction`, `gap`, `row-gap`, `column-gap`, `flex-wrap`, `padding`, `align-items`, `align-self`, `align-content`, `justify-content`, `flex`, `flex-grow`, `flex-shrink`, `flex-basis`, `width`, `height`, `max-width`, `background`, `background-color`, `border`, `border-radius`, `font-size`, `font-weight`, `font-family`, `color`, `letter-spacing`, `fill`, `writing-mode`, `line-height`, `text-align`, `white-space`, `text-wrap`, `object-fit`, `object-position`, `opacity`, `rotate`, `rotateX`, `rotateY`, `scale`, `translate`, `transform`, `transform-origin`, and the names in the effects section. An unknown or mistyped property reports `invalid-attr`, and that property falls back to the CSS initial value.
 
-`rotate`, `rotateX`, and `rotateY` in `style` take an angle: `30deg`, `0.5rad`, `100grad`, `0.25turn`, or `-45deg`. Only `0` may omit the unit. A bare nonzero number, such as `30`, is still degrees, and reports `non-canonical`. An invalid value, such as `30px`, reports `invalid-attr` and is ignored. `transform` accepts `translate()`, `translateX()`, `translateY()`, `rotate()`, `scale()`, `scaleX()`, and `scaleY()`, combined from left to right. `rotate()` inside `transform` needs a unit unless the angle is `0`; a bad function drops the whole `transform`. Together with the individual properties, the order is `translate`, then `rotate`, then `scale`, then `transform`. The center is `transform-origin`, default `50% 50%`. `origin` in `style` names the same point; when both are set, `transform-origin` wins. These change drawing only. The layout box stays where it was. Attributes on shapes, lines, and `layer` stay bare degrees, for example `rotate="30"`.
+`rotate`, `rotateX`, and `rotateY` in `style` take an angle: `30deg`, `0.5rad`, `100grad`, `0.25turn`, or `-45deg`. Only `0` may omit the unit. A bare nonzero number, such as `30`, is still degrees, and reports `non-canonical`. An invalid value, such as `30px`, reports `invalid-attr` and is ignored. `transform` accepts `translate()`, `translateX()`, `translateY()`, `rotate()`, `scale()`, `scaleX()`, and `scaleY()`, combined from left to right. `rotate()` inside `transform` needs a unit unless the angle is `0`; a bad function drops the whole `transform`. Together with the individual properties, the order is `translate`, then `rotate`, then `scale`, then `transform`. The center is `transform-origin`, default `50% 50%`. `origin` in `style` names the same point; when both are set, `transform-origin` wins. These change drawing only. The layout box stays where it was. Attributes on shapes, lines, and `layer` take the same angle. `rotate="30"` stays degrees and does not report `non-canonical`. `rotate="30deg"`, `0.5rad`, `100grad`, and `0.25turn` rotate too. An invalid value such as `30px` reports `invalid-attr` and is ignored. The same applies to `rotateX` and `rotateY`.
 
 Where this differs from CSS:
 
@@ -218,12 +218,22 @@ An `img` uses its own alpha by default. `channel="luma"` reads luminance instead
 Generating a mask is `flexlayer-select`, which is not on npm. In the repo, enter `packages/select` and run `npm install && npm run build`.
 
 ```bash
-npx flexlayer-select cutout photo.jpg --preset portrait
-npx flexlayer-select apply photo.jpg --add 2 --subtract 1
-npx flexlayer-select mask photo.jpg --point 820,640 --omit 900,1100 --refine
+npx flexlayer-select cutout photo.jpg
 ```
 
-`cutout` presets are `portrait`, `product`, and `flat`. Beside the photo you get `photo.subject.png`, `photo.mask.png`, `photo.regions.png`, and `photo.cutout.json`. `mask` writes `photo.foreground.png` and `photo.foreground.json`. The fields are `mask`, `x`, `y`, `width`, `height`, `points`, and `omit`. `--point` marks what to keep. `--omit` marks what to drop. In code, call `foregroundMask`. When the package is not installed, `flexlayer select` only says to install it from `packages/select`.
+That writes `photo.subject.png` beside the photo: the same size, only the subject opaque. Stack the photo, the text, then the subject. Both images use the photo's width and height, so they line up. `y` sits a little below the top of the subject. Lower text is covered by more of the subject.
+
+```html
+<layer width="800" height="600" background="#000">
+  <img src="photo.jpg" style="width:800px; height:600px" />
+  <layer x="400" y="335" anchor="bottom" anchor-box="ink">
+    <h1 style="font-size:230px; color:#ffffffee">TITLE</h1>
+  </layer>
+  <img src="photo.subject.png" style="width:800px; height:600px" />
+</layer>
+```
+
+`--full` also writes `photo.mask.png`, `photo.regions.png`, `photo.questions.json`, `photo.cutout.layer`, and, for `product`, `photo.shadow.png`. `derive="mask"`, `derive="regions"`, and `apply` read those files. Presets are `portrait` (default), `product`, and `flat`. When the package is not installed, `flexlayer select` only says to install it from `packages/select`.
 
 ### Outlines
 
@@ -274,7 +284,7 @@ flexlayer check a.tsx b.tsx
 
 ### canvas.create
 
-The argument to `canvas.create` must already be a `<layer>`. It returns that `<layer>` with measured `left`, `top`, `right`, `bottom`, `width`, and `height`. Those six numbers are the layout box. They do not include `rotate` or `scale`. The bounding rectangle after the transform is `rotatedBox`. To keep the next block clear of rotated content, use `rotatedBox.bottom`. `create` is synchronous. Fonts and images it prepared stay in the process.
+The argument to `canvas.create` must already be a `<layer>`. It returns that `<layer>` with measured `left`, `top`, `right`, `bottom`, `width`, and `height`, and also `x` and `y`, the same point as `left` and `top`. Those numbers are the layout box. They do not include `rotate` or `scale`. The bounding rectangle after the transform is `rotatedBox`. To keep the next block clear of rotated content, use `rotatedBox.bottom`. `create` is synchronous. Fonts and images it prepared stay in the process.
 
 `text` is an array of text nodes. Coordinates are relative to the top-left of this layer's layout box. Each item has `path` and `lines`. Each line has `x`, `y`, `width`, `height`, `baseline`, and `chars`. Each character has `text`, `x`, and `width`. When the innermost inline tag that owns those characters has an `id`, the character also has `id`. In vertical text each character is its own line.
 
@@ -314,6 +324,7 @@ Not built yet: encoding a frame sequence as video, layout by ink bounds, and `Ic
 
 Rendering also writes JSON. Each node in `elements` has `path`, `id`, `tag`, `box`, and `ink`. A node that came from `.tsx` may also have `source`, such as `examples/hello.tsx:18:5`.
 
+- A rectangle (`box`, `ink`, `effect`, `mask.ink`) writes only `x`, `y`, `width`, and `height`. The right edge is `x + width`. The bottom edge is `y + height`.
 - `box`: the layout box. Only translation is accumulated.
 - `ink`: the ink's bounding rectangle after transform, scale, and projection, intersected with ancestors' `overflow="hidden"` and `<mask>`. Pixel alignment reads `ink`. When a line's centerline sits on the canvas edge, the stroke radius sticking out does not count as overflow.
 - `effect`: the area a shadow, glow, layer blur, or glass may occupy. Omitted when there is no outset. Drawing outside the canvas reports `effect-clipped`.
@@ -350,7 +361,7 @@ Rendering also writes JSON. Each node in `elements` has `path`, `id`, `tag`, `bo
 | `effect-clipped` | warn | The body is inside the canvas, but a shadow, glow, stroke, or blur extends outside |
 | `view-outside` | error | `view` is not covered by the direct children |
 | `stroke-fill` | warn | An inner stroke reaches about 8% of the font size |
-| `ink-inset` | info | The anchor sits on the left or right edge, and the glyphs sit inside the box. A layer with a camera does not report this |
+| `ink-inset` | info | The anchor sits on the left or right edge, and the glyphs sit inside the box by at least 3px and 5% of the font size. A layer with a camera does not report this |
 | `ink-anchor-empty` | info | `anchor-box="ink"` has no ink |
 | `ink-anchor-rotate` | info | `anchor-box="ink"` and `rotate` are both set |
 | `flatten-3d` | warn | A 3D pose or a solid did not land in a camera |
@@ -365,4 +376,10 @@ Rendering also writes JSON. Each node in `elements` has `path`, `id`, `tag`, `bo
 | `type-error` | error | A TypeScript diagnostic in `.tsx`. Produced by `check` and by `render --typecheck` |
 | `measure-mismatch` | warn | The width and height measured by `canvas.create` do not match the final layout |
 
-Any element may write `expect="overflow-canvas: full bleed; text-overlap"`. A matching issue is lowered to `info` and carries `expected`. A miss reports `unused-expect`. During a multi-frame check, one frame that uses it is enough to avoid the report. Issues sampled from a Composition carry `frame` and `frames`.
+Any element may write `expect="overflow-canvas: full bleed; text-overlap"`. A matching issue is lowered to `info` and carries `expected`. A miss reports `unused-expect`. During a multi-frame check, one frame that uses it is enough to avoid the report. Issues sampled from a Composition carry `frames`, an inclusive range of frames.
+
+Motion an animation is expected to produce is lowered to `info` with `expected` written, without an `expect`:
+
+- `入场` and `出场`: `overflow-canvas`, `outside-safe`, and `effect-clipped` on the frames where an element is just entering or just leaving. The ink is moving, and a neighboring sample shows the element inside the frame or already invisible. An element that stays outside, sits still, or jumps out only on the last frame keeps its original level. Neighboring frames have to be in the sample, for example `--frames all`.
+- `交叉淡化`: two text runs overlap, each effective `opacity` is below 1, and the two add up to at most 1.05. An overlap of two opaque runs stays `warn`.
+- Text that is already outside the canvas does not also report `outside-safe`.

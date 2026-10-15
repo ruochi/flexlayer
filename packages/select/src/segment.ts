@@ -1,9 +1,10 @@
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { explainFetchFailure } from './download.js'
 
 /**
  * BiRefNet 512 的 fp16，大约 470MB。lite 512 在夜里的钟楼上输出全是负的 logits，遮罩是空的，这里不用。
- * 解码器中间结果大约 3GB。修边前先放掉深度会话，不要和这份模型叠在一起。
+ * 解码器中间结果大约 3GB。
  */
 export const MODEL_ID = 'onnx-community/BiRefNet_512x512-ONNX'
 
@@ -58,6 +59,8 @@ async function loadModel(mod: TransformersModule) {
         device: 'cpu',
         // 关掉内存池，前向结束后把中间结果还给系统。线程收成 1，避免每个线程再复制一份工作区。
         session_options: {
+          // 3 是 error。默认 warning 会把几十行 constant folding 刷满输出。
+          logSeverityLevel: 3,
           enableCpuMemArena: false,
           intraOpNumThreads: 1,
           interOpNumThreads: 1,
@@ -69,7 +72,7 @@ async function loadModel(mod: TransformersModule) {
       .then(([model, processor]) => ({ model, processor }))
       .catch((err: unknown) => {
         loaded = null
-        throw err
+        throw explainFetchFailure(err)
       })
   }
   return loaded

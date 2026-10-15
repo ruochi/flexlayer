@@ -1,10 +1,30 @@
 # Changelog
 
-## 0.6.23
+## 0.9.1
 
 Common Chinese categories use Chill faces. 黑体 is 寒蝉端黑体, and it is still the default when `font-family` is omitted. 宋体 and `Song` are 寒蝉端黑宋. 楷体 and `Kai` are 寒蝉楷体. 仿宋 is 寒蝉活仿宋. 圆体 is 寒蝉全圆体. The first use downloads the file to `~/.cache/flexlayer/fonts`. The files are not in the package. 思源宋体, 思源黑体, and 霞鹜文楷 are no longer catalog faces. The recommendation list is unchanged aside from dropping 霞鹜文楷. Names that are not in the catalog still need `<font family src>`.
 
 A new recommendation group, 英文 (`use` 艺术标题), lists nine artistic Latin title faces: Playfair, Fraunces, Instrument, Cormorant, AbrilFatface, Cinzel, Syne, Monoton, and GreatVibes. AbrilFatface, Cinzel, Syne, Monoton, and GreatVibes are new catalog faces. All nine download on first use.
+
+## 0.9.0
+
+Removed `flexlayer-select mask`, the depth model, and `--point`, `--omit`, `--refine`. `foregroundMask`, `splitLayers`, and `estimateDepth` are gone. `cutout` and `cutout --full` stay. `apply` still needs a `--full` run.
+
+## 0.8.0
+
+`flexlayer-select cutout` writes only `photo.subject.png` and `photo.cutout.json` by default. `--full` writes `photo.mask.png`, `photo.regions.png`, `photo.questions.json`, `photo.cutout.layer`, and the `product` shadow as before. `apply`, `derive="mask"`, and `derive="regions"` need a `--full` run. `cutout` now prints a three-layer snippet, photo, text, `subject.png`, so text can sit behind a subject without `<mask>`.
+
+The model session logs only errors, so the onnxruntime constant-folding warnings are gone. A failed model download says to set `NODE_USE_ENV_PROXY=1` instead of only `fetch failed`.
+
+## 0.7.1
+
+`rotate`, `rotateX`, and `rotateY` on a shape, a line, or a `layer` take the same angle as in `style`. `rotate="30deg"`, `0.5rad`, `100grad`, and `0.25turn` rotate. `rotate="30"` is still degrees and does not report `non-canonical`. An invalid value such as `30px` reports `invalid-attr` and is ignored.
+
+## 0.7.0
+
+Reports are shorter. `box`, `ink`, `effect`, and `mask.ink` write only `x`, `y`, `width`, and `height`. They no longer include `left`, `top`, `right`, `bottom`, `centerX`, or `centerY`. Issues drop `frame` and keep `frames`. `canvas.create` still returns `left` through `height`, and also returns `x` and `y`.
+
+Motion that an animation is expected to produce is lowered to `info`, and the reason is written on the issue. `overflow-canvas`, `outside-safe`, and `effect-clipped` while an element slides in or out are `入场` or `出场`. `text-overlap` of two runs during a crossfade is `交叉淡化`. Text that has already left the canvas does not also report `outside-safe`. The `ink-inset` threshold is 3px and 5% of the font size. An issue that already has `expected` prints the reason on the command line and does not repeat the fix.
 
 ## 0.6.22
 

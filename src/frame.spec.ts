@@ -87,7 +87,7 @@ describe('renderComposition', () => {
 
 describe('renderFrames', () => {
   it('from、to、step 含端点，rgba 长度是像素数乘 4', async () => {
-    const seen: Array<{ frame: number; fps: number; t: number }> = []
+    const seen: Array<{ frame: number; fps: number; t: number; now: number }> = []
     const comp: Composition = {
       id: 'clock',
       width: 8,
@@ -179,7 +179,6 @@ describe('抽查帧', () => {
     ])
     expect(merged).toHaveLength(1)
     expect(merged[0]).toMatchObject({
-      frame: 120,
       message: '着墨超出画布',
       frames: [
         [120, 130],
@@ -215,6 +214,46 @@ describe('抽查帧', () => {
     ])
     expect(missed.map((issue) => issue.code)).toEqual(['unused-expect'])
     expect(missed[0]?.frames).toEqual([[0, 1]])
+  })
+})
+
+describe('入场和出场', () => {
+  const overflow = { level: 'error' as const, code: 'overflow-canvas', path: 'layer/h1[0]', message: '着墨超出画布' }
+  const at = (x: number, opacity = 1) => ({ path: 'layer/h1[0]', ink: { x, y: 10, width: 100, height: 40 }, opacity })
+  const part = (frame: number, x: number | null) => ({
+    frame,
+    issues: x != null && x < 0 ? [overflow] : [],
+    elements: x == null ? [] : [at(x)],
+  })
+
+  it('滑入时出界降成 info，写明入场', () => {
+    const merged = mergeFrameIssues([part(0, -80), part(1, -40), part(2, 10), part(3, 10)])
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toMatchObject({ level: 'info', expected: '入场', frames: [[0, 1]] })
+  })
+
+  it('滑出时出界降成 info，写明出场', () => {
+    const merged = mergeFrameIssues([part(0, 10), part(1, -40), part(2, null)])
+    expect(merged[0]).toMatchObject({ level: 'info', expected: '出场', frames: [[1, 1]] })
+  })
+
+  it('静止不动的出界仍是 error', () => {
+    const merged = mergeFrameIssues([part(0, -40), part(1, -40), part(2, 10)])
+    expect(merged[0]).toMatchObject({ level: 'error', frames: [[0, 1]] })
+    expect(merged[0]?.expected).toBeUndefined()
+  })
+
+  it('序列末尾才跳出画面的不算出场', () => {
+    const merged = mergeFrameIssues([part(0, 10), part(1, -40)])
+    expect(merged[0]).toMatchObject({ level: 'error', frames: [[1, 1]] })
+  })
+
+  it('没带元素表时照旧', () => {
+    const merged = mergeFrameIssues([
+      { frame: 0, issues: [overflow] },
+      { frame: 1, issues: [] },
+    ])
+    expect(merged[0]?.level).toBe('error')
   })
 })
 

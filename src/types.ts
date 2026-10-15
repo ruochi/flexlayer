@@ -19,25 +19,25 @@ export type Box = {
   height: number
 }
 
-export type Rect = Box & {
-  left: number
-  top: number
-  right: number
-  bottom: number
-  centerX: number
-  centerY: number
+/** 报告里的矩形只写 x、y、width、height。右边、底边和中心用下面几个函数算。 */
+export function boxToRect(b: Box): Box {
+  return { x: b.x, y: b.y, width: b.width, height: b.height }
 }
 
-export function boxToRect(b: Box): Rect {
-  return {
-    ...b,
-    left: b.x,
-    top: b.y,
-    right: b.x + b.width,
-    bottom: b.y + b.height,
-    centerX: b.x + b.width / 2,
-    centerY: b.y + b.height / 2,
-  }
+export function boxRight(b: Box): number {
+  return b.x + b.width
+}
+
+export function boxBottom(b: Box): number {
+  return b.y + b.height
+}
+
+export function boxCenterX(b: Box): number {
+  return b.x + b.width / 2
+}
+
+export function boxCenterY(b: Box): number {
+  return b.y + b.height / 2
 }
 
 export function unionBoxes(a: Box, b: Box): Box {
@@ -67,8 +67,6 @@ export type Issue = {
   hint?: string
   /** 源码位置，例如 `examples/hello.tsx:18:5`。从 `.tsx` 来的节点才有。 */
   source?: string
-  /** Composition 抽查时，这条问题第一次出现的帧。 */
-  frame?: number
   /** 这条问题出现的帧区间，两端都包含。抽查序列里连续出现的帧合成一段。 */
   frames?: Array<[number, number]>
   /** `expect` 把这条问题降成 info 时，作者写的原因。 */
@@ -96,7 +94,7 @@ export type Origin = { x: OriginAxis; y: OriginAxis }
 
 export type TextLineReport = {
   text: string
-  box: Rect
+  box: Box
 }
 
 /** 景深。aperture 是无限远处的模糊半径，成片像素。focus 是从机位沿视线量的对焦距离。 */
@@ -196,7 +194,7 @@ export type MaskReport = {
   /** 留下的比例，0 到 1。半透明按 alpha 折算。 */
   area: number
   /** 留下来的部分在画布上的外接矩形。全部藏起来时是 null。在透视平面上不写。 */
-  ink?: Rect | null
+  ink?: Box | null
   /** alpha 不低于一半的连通块个数，八连通。 */
   pieces: number
   /** 软边的平均宽度，像素。硬边接近 0 到 1。 */
@@ -219,9 +217,9 @@ export type ElementReport = {
   tag: string
   /** 源码位置，例如 `examples/hello.tsx:18:5`。 */
   source?: string
-  box: Rect
+  box: Box
   /** 变换并裁剪后的着墨外接矩形。有透视时是投影后的范围。 */
-  ink: Rect
+  ink: Box
   /** anchor-box="ink" 生效时为 ink。 */
   anchorBox?: 'box' | 'ink'
   /** 着墨相对布局盒子的四边内缩，取旋转和缩放之前的值。 */
@@ -236,7 +234,7 @@ export type ElementReport = {
    */
   screenScale?: number
   /** 阴影、光晕、图层模糊或玻璃可能占用的范围。没有外扩效果时不写。 */
-  effect?: Rect
+  effect?: Box
   /** 这一层写了 `<mask>` 时，蒙版画成位图之后量出来的数。 */
   mask?: MaskReport
   /** 逐层相乘后的有效透明度。 */

@@ -6,6 +6,7 @@ import { initFontsForMeasure } from './fonts.js'
 import { applyCanvasFont, createCanvas, DEFAULT_FONT_FAMILY, initFonts, loadImage, registerFontPath } from './index.js'
 import { layoutSource } from './layout.js'
 import { checkLayer, renderLayer } from './render.js'
+import { boxBottom } from './types.js'
 import type { TextLayoutNode } from './types.js'
 
 const FONT_DIRS = [join(homedir(), '.cache', 'flexlayer', 'fonts'), '/tmp/flexlayer-test']

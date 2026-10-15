@@ -463,7 +463,7 @@ describe('load .tsx', () => {
     }
     const overflow = mergeFrameIssues(parts).filter((issue) => issue.code === 'overflow-canvas')
     expect(overflow.length).toBeGreaterThan(0)
-    expect(overflow.every((issue) => issue.frame === 4)).toBe(true)
+    expect(overflow.every((issue) => issue.frames?.[0]?.[0] === 4)).toBe(true)
     expect(parts[0]?.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
   })
 

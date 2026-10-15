@@ -3,6 +3,7 @@ import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { layoutSource } from './layout.js'
 import { mathConstant } from './math/font.js'
 import { renderLayer } from './render.js'
+import { boxCenterX, boxCenterY } from './types.js'
 import type { FlexLayoutNode, LayoutNode } from './types.js'
 
 function findByTag(root: LayoutNode, tag: string): LayoutNode[] {
@@ -355,7 +356,7 @@ describe('mathml', () => {
       expect(el, tag).toBeTruthy()
     }
     const rule = report.elements.find((e) => e.tag === 'rule')!
-    const [r, g, b] = await pixelAt(png, Math.round(rule.ink.centerX), Math.round(rule.ink.centerY))
+    const [r, g, b] = await pixelAt(png, Math.round(boxCenterX(rule.ink)), Math.round(boxCenterY(rule.ink)))
     expect(r + g + b).toBeGreaterThan(400)
   })
 })

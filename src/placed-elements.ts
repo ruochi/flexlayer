@@ -68,6 +68,8 @@ function layerBox(visual: Box): LayerBox {
   return {
     left: visual.x,
     top: visual.y,
+    x: visual.x,
+    y: visual.y,
     right: visual.x + visual.width,
     bottom: visual.y + visual.height,
     width: visual.width,

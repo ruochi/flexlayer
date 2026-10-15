@@ -319,10 +319,10 @@ describe('paint containers', () => {
     const centered = await renderLayer(bare)
     const placedBox = placed.report.elements.find((element) => element.tag === 'div')!.box
     const centeredBox = centered.report.elements.find((element) => element.tag === 'div')!.box
-    expect(placedBox.left).toBeCloseTo(20, 0)
-    expect(placedBox.top).toBeCloseTo(30, 0)
-    expect(centeredBox.left).toBeCloseTo(0, 0)
-    expect(centeredBox.top).toBeCloseTo(0, 0)
+    expect(placedBox.x).toBeCloseTo(20, 0)
+    expect(placedBox.y).toBeCloseTo(30, 0)
+    expect(centeredBox.x).toBeCloseTo(0, 0)
+    expect(centeredBox.y).toBeCloseTo(0, 0)
   })
 })
 

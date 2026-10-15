@@ -4,6 +4,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { initFontsForMeasure } from './fonts.js'
 import { checkLayer, renderLayer } from './render.js'
+import { boxBottom, boxCenterY, boxRight } from './types.js'
 
 beforeAll(async () => {
   await initFontsForMeasure({ fontsCacheDir: join(homedir(), '.cache', 'flexlayer', 'fonts') })
@@ -422,8 +423,8 @@ describe('绘制', () => {
     )
     const { at } = await pixels(png)
     const h1 = report.elements.find((el) => el.tag === 'h1')!
-    const aboveStrokeX = Math.round(h1.box.left + h1.box.width / 2 + 20)
-    const aboveStrokeY = Math.round(h1.box.top + 6)
+    const aboveStrokeX = Math.round(h1.box.x + h1.box.width / 2 + 20)
+    const aboveStrokeY = Math.round(h1.box.y + 6)
     const above = at(aboveStrokeX, aboveStrokeY)
     // 横笔上方应仍是白底（字形投影），不能是盒子投下的红块
     expect(above[0]).toBeGreaterThan(240)
@@ -431,8 +432,8 @@ describe('绘制', () => {
     expect(above[2]).toBeGreaterThan(240)
     // 墨迹右侧应能采到红色投影
     let red = 0
-    for (let y = Math.floor(h1.ink.top); y < Math.ceil(h1.ink.bottom); y++) {
-      for (let x = Math.floor(h1.ink.right); x < Math.min(200, Math.ceil(h1.ink.right + 28)); x++) {
+    for (let y = Math.floor(h1.ink.y); y < Math.ceil(boxBottom(h1.ink)); y++) {
+      for (let x = Math.floor(boxRight(h1.ink)); x < Math.min(200, Math.ceil(boxRight(h1.ink) + 28)); x++) {
         const p = at(x, y)
         if (p[0]! > 200 && p[1]! < 80 && p[2]! < 80) red++
       }
@@ -965,10 +966,10 @@ describe('墨迹 spread 与 stroke', () => {
     expect(centered.report.issues.some((issue) => issue.code === 'effect-clipped')).toBe(false)
     const box = centered.report.elements.find((el) => el.tag === 'p')!.box
     const { at } = await pixels(centered.png)
-    const ring = at(Math.round(box.left - 4), Math.round(box.centerY))
+    const ring = at(Math.round(box.x - 4), Math.round(boxCenterY(box)))
     expect(ring[0]).toBeGreaterThan(180)
     expect(ring[1]).toBeLessThan(80)
-    const pad = at(Math.round(box.left + 8), Math.round(box.top + 8))
+    const pad = at(Math.round(box.x + 8), Math.round(box.y + 8))
     expect(pad[0]).toBeGreaterThan(220)
     expect(pad[1]).toBeGreaterThan(200)
     const flush = await renderLayer(`
@@ -978,7 +979,7 @@ describe('墨迹 spread 与 stroke', () => {
     expect(flush.report.issues.some((issue) => issue.code === 'effect-clipped')).toBe(true)
     const edge = flush.report.elements.find((el) => el.tag === 'p')!.box
     const { at: atFlush } = await pixels(flush.png)
-    const right = atFlush(Math.round(edge.right + 4), Math.round(edge.centerY))
+    const right = atFlush(Math.round(boxRight(edge) + 4), Math.round(boxCenterY(edge)))
     expect(right[0]).toBeGreaterThan(180)
     expect(right[1]).toBeLessThan(80)
   })

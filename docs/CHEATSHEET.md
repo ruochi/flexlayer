@@ -65,6 +65,20 @@ In tsx, `<model object={mesh} unit={1} />` puts a mesh in the same layer. Lamber
 </layer>
 ```
 
+Text behind a subject. Run `npx flexlayer-select cutout photo.jpg` once. It writes `photo.subject.png`, the same size as the photo, with only the subject kept. Stack the photo, the text, and `subject.png` in that order. Copy the photo's width and height onto both images, and they line up.
+
+```html
+<layer width="800" height="600" background="#000">
+  <img src="photo.jpg" style="width:800px; height:600px" />
+  <layer x="400" y="335" anchor="bottom" anchor-box="ink">
+    <h1 style="font-size:230px; color:#ffffffee">TITLE</h1>
+  </layer>
+  <img src="photo.subject.png" style="width:800px; height:600px" />
+</layer>
+```
+
+The lower the text sits, the more of it the subject hides. Put its bottom edge a little below the top of the subject.
+
 ```tsx
 const title = canvas.create(
   <layer x={48} y={48}>

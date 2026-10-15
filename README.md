@@ -146,7 +146,7 @@ const root = h(
 await renderLayer(root)
 ```
 
-Subject cutout and the foreground mask live in `packages/select` in this repo. They are not on npm. The renderer only reads the files that package writes. In that directory, run `npm install && npm run build`. `npx flexlayer-select mask photo.jpg` runs the depth model first (about 19MB), writes `photo.foreground.png`, and returns that foreground's `x`, `y`, `width`, and `height`. With no points, the mask grows downward from tips that reach into the distance. `--point x,y` marks what to keep. `--omit x,y` marks what to drop. Both can be repeated. After you look at the mask, add points and run it again. Add `--refine` when the edge should follow the matting model. That pass downloads BiRefNet 512 fp16, about 470MB. The depth model is released before the matting model loads. To cut out only the subject, use `npx flexlayer-select cutout photo.jpg --preset portrait`.
+Subject cutout lives in `packages/select` in this repo. It is not on npm. The renderer only reads the files that package writes. In that directory, run `npm install && npm run build`. `npx flexlayer-select cutout photo.jpg` downloads BiRefNet 512 fp16 (about 470MB) on first use and writes `photo.subject.png`, the same size as the photo with only the subject opaque, and `photo.cutout.json`. To put text behind the subject, stack the photo, the text, then `photo.subject.png`. Both images use the photo's width and height. The presets are `portrait` (default), `product`, and `flat`. `--full` also writes the mask, region ids, and `photo.cutout.layer` for `apply`.
 
 Render a set of PNGs and a contact sheet:
 
