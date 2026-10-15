@@ -1,42 +1,43 @@
 /**
- * 属性注册表。归属检查、序列化顺序和文档里的归属表都从这里来。
- * 不认识的属性不在表里，留给 draw，不报错。
+ * Attribute registry. Ownership checks, serialization order, and the docs'
+ * ownership table all come from here.
+ * Unknown attributes stay out of the table and are left for draw, with no report.
  */
 
 export type DocGroup = 'layer' | 'transform' | 'html' | 'graphic' | 'image' | 'effect' | 'layer-only' | 'data' | 'expect'
 
 export type AttrDef = {
   name: string
-  /** 写在 HTML 标签的属性位（而不是 style）时报 invalid-attr */
+  /** On an HTML tag as an attribute (not in style): report invalid-attr */
   warnOnHtmlAttr?: boolean
-  /** 只允许写在 layer 的属性上；写在别的标签上报 invalid-attr */
+  /** Allowed only as an attribute on layer; other tags report invalid-attr */
   layerOnlyAttr?: boolean
-  /** 写进任何标签的 style 都报 invalid-attr（grade / grade-mask） */
+  /** In any tag's style: report invalid-attr (grade / grade-mask) */
   forbidInStyle?: boolean
-  /** 只在 HTML 的 style 里出现时才报（overlay） */
+  /** Report only when it appears in an HTML style (overlay) */
   forbidInHtmlStyle?: boolean
   docGroup?: DocGroup
-  /** 图库覆盖率要检查的效果名 */
+  /** Effect name the gallery coverage check looks for */
   effect?: boolean
-  /** 语法，效果属性必填 */
+  /** Syntax. Required for effect attributes */
   syntax?: string
-  /** 不写某段时的默认，写进速查 */
+  /** Default when a part is omitted. Shown in the cheat sheet */
   defaultValue?: string
-  /** 最小示例，不含引号 */
+  /** Shortest example, without quotes */
   example?: string
-  /** 放错位置时的问题码 */
+  /** Issue code when the attribute is in the wrong place */
   issue?: 'invalid-attr'
-  /** JSX 字段类型，默认 string */
+  /** JSX field type. Default string */
   jsxType?: string
-  /** 写在非 layer 上时的 hint */
+  /** Hint when written on a tag that is not layer */
   misplacedHint?: string
-  /** 写进 style 时的 hint */
+  /** Hint when written into style */
   styleHint?: string
-  /** 给按属性检索的目录。和 CSS 不一致、或容易放错时写在这里 */
+  /** Catalog note for lookup by name. Use when this differs from CSS, or is easy to misplace */
   note?: string
 }
 
-/** 和 serialize 的属性顺序一致，改顺序会改变生成的 .layer。 */
+/** Same order as serialize. Changing it changes generated .layer files. */
 export const ATTR_ORDER = [
   'id',
   'family',
@@ -97,11 +98,13 @@ export const ATTR_ORDER = [
   'origin',
   'transform',
   'shadow',
+  'box-shadow',
   'glow',
   'inner-shadow',
   'inner-glow',
   'blur',
   'backdrop-blur',
+  'backdrop-filter',
   'noise',
   'overlay',
   'grade',
@@ -129,8 +132,8 @@ export const ATTRS: AttrDef[] = [
     docGroup: 'layer-only',
     jsxType: 'string | Record<string, unknown>',
     example: 'fov 40, orbit 35 18, aperture 12',
-    misplacedHint: '写在取景的 layer 上，例如 <layer camera="900">。不写时视距等于这一层的 height。不要和 view 写在同一层',
-    styleHint: '不要写进 style；写在 layer 的属性上，例如 <layer camera="900">',
+    misplacedHint: 'Put this on the layer that frames the shot, for example <layer camera="900">. When omitted, the viewing distance is that layer\'s height. Do not combine it with view on the same layer',
+    styleHint: 'Do not put this in style. Write it as an attribute on layer, for example <layer camera="900">',
   },
   {
     name: 'shadows',
@@ -140,9 +143,9 @@ export const ATTRS: AttrDef[] = [
     syntax: 'auto | none',
     defaultValue: 'auto',
     example: 'none',
-    note: '写在开了镜头的 layer 上。none 关掉投到 ground 上的影子，深度遮挡还在',
-    misplacedHint: '写在取景的 layer 上，例如 <layer camera="900" shadows="none">',
-    styleHint: '不要写进 style；写在 layer 的属性上',
+    note: 'On a layer that has a camera. none turns off shadows cast onto ground. Depth occlusion stays',
+    misplacedHint: 'Put this on the layer that frames the shot, for example <layer camera="900" shadows="none">',
+    styleHint: 'Do not put this in style. Write it as an attribute on layer',
   },
   {
     name: 'min-font',
@@ -152,23 +155,23 @@ export const ATTRS: AttrDef[] = [
     syntax: 'screen | print | none | px',
     defaultValue: 'screen',
     example: 'print',
-    note: '只写在根上。screen 是 min(宽, 高) / 1080 × 24，print 是 × 12。写成数字就是屏幕像素下限，none 关掉 min-font-size',
-    misplacedHint: '只写在根 layer 上，例如 <layer width="1240" height="1754" min-font="print">',
-    styleHint: '不要写进 style；写在根 layer 的属性上',
+    note: 'Root only. screen is min(width, height) / 1080 × 24. print uses × 12. A number is the minimum size in screen pixels. none turns min-font-size off',
+    misplacedHint: 'Root layer only, for example <layer width="1240" height="1754" min-font="print">',
+    styleHint: 'Do not put this in style. Write it as an attribute on the root layer',
   },
   {
     name: 'preserve-3d',
     forbidInStyle: true,
     example: 'true',
     issue: 'invalid-attr',
-    misplacedHint: '只写在 layer 或 display:flex 的 div 上',
+    misplacedHint: 'Only on layer, or on a div with display:flex',
   },
   {
     name: 'sharp',
     forbidInStyle: true,
     example: 'true',
     issue: 'invalid-attr',
-    misplacedHint: '写在要保持清楚的 layer、flex、形状或实体上',
+    misplacedHint: 'On a layer, flex container, shape, or solid that should stay sharp',
   },
   { name: 'scale', warnOnHtmlAttr: true, docGroup: 'transform' },
   { name: 'origin', warnOnHtmlAttr: true, docGroup: 'transform' },
@@ -176,8 +179,8 @@ export const ATTRS: AttrDef[] = [
     name: 'split',
     syntax: 'chars',
     example: 'chars',
-    note: '写在文字盒子或行内标签上。每个字单独做 translate、rotate、scale、opacity，行宽和折行不变。文字盒子因此不再整块转动、缩放或变透明',
-    misplacedHint: '写在 p、h1 或 span 上，例如 <p split="chars">',
+    note: 'On a text box or an inline tag. Each character gets its own translate, rotate, scale, and opacity. Line width and wrapping stay the same, so the text box no longer rotates, scales, or fades as one piece',
+    misplacedHint: 'On p, h1, or span, for example <p split="chars">',
   },
   { name: 'background', warnOnHtmlAttr: true, docGroup: 'html' },
   { name: 'padding', warnOnHtmlAttr: true, docGroup: 'html' },
@@ -224,7 +227,7 @@ export const ATTRS: AttrDef[] = [
     docGroup: 'graphic',
     syntax: 'px',
     example: '40',
-    note: '写在 rect、circle、ellipse、polygon、path 上就沿 z 挤出，厚度以平面为中心，布局不计。不写就是平面',
+    note: 'On rect, circle, ellipse, polygon, or path, extrude along z. Thickness is centered on the plane and is not part of layout. Omit it for a flat shape',
   },
   {
     name: 'fill-rule',
@@ -232,7 +235,7 @@ export const ATTRS: AttrDef[] = [
     syntax: 'nonzero | evenodd',
     defaultValue: 'nonzero',
     example: 'evenodd',
-    note: '挤出时判断洞。nonzero 要内圈反绕向；evenodd 按嵌套奇偶',
+    note: 'How holes are decided when extruding. nonzero needs the inner contour wound the other way. evenodd uses nesting parity',
   },
   { name: 'tube', docGroup: 'graphic' },
   { name: 'round', docGroup: 'graphic' },
@@ -248,7 +251,7 @@ export const ATTRS: AttrDef[] = [
     syntax: 'true | false',
     defaultValue: 'true',
     example: 'false',
-    note: 'false 时这只实体不把影子投到 ground 上。玻璃本来就不投',
+    note: 'When false, this solid does not cast a shadow onto ground. Glass never casts one',
   },
   {
     name: 'receive-shadow',
@@ -257,7 +260,7 @@ export const ATTRS: AttrDef[] = [
     syntax: 'true | false',
     defaultValue: 'true',
     example: 'false',
-    note: '只写在 ground 上。false 时地面不接影子',
+    note: 'Only on ground. When false, the ground does not receive shadows',
   },
   {
     name: 'shadow-blur',
@@ -290,16 +293,16 @@ export const ATTRS: AttrDef[] = [
     docGroup: 'image',
     syntax: 'px',
     example: '40',
-    note: '只写在 model 上。1 个模型单位对应的像素。写了就保留原始坐标，原点落在外包 layer 的 origin（默认中心），不再 contain 居中',
+    note: 'Only on model. Pixels per model unit. When set, original coordinates are kept and the origin sits on the wrapping layer\'s origin (center by default), instead of contain-centering',
   },
   {
     name: 'object',
     docGroup: 'image',
     jsxType: 'object',
-    note: '只在 tsx 里写在 model 上，传入 three.js 的 Object3D。.layer 里写不了',
+    note: 'Only on model in tsx. Pass a three.js Object3D. A .layer file cannot write this',
   },
   { name: 'data', docGroup: 'data', jsxType: 'unknown', example: '{"values":[3,5,8]}' },
-  { name: 'expect', docGroup: 'expect', example: 'overflow-canvas: 出血图' },
+  { name: 'expect', docGroup: 'expect', example: 'overflow-canvas: full bleed' },
   { name: 'alt', docGroup: 'image' },
   {
     name: 'shadow',
@@ -307,9 +310,20 @@ export const ATTRS: AttrDef[] = [
     docGroup: 'effect',
     effect: true,
     syntax: 'x y [blur] [spread] [color]',
-    defaultValue: '颜色 `#00000066`',
+    defaultValue: 'color `#00000066`',
     example: '0 8 16 #00000055',
     issue: 'invalid-attr',
+  },
+  {
+    name: 'box-shadow',
+    warnOnHtmlAttr: true,
+    docGroup: 'effect',
+    effect: true,
+    syntax: '[inset] x y [blur] [spread] [color], …',
+    defaultValue: 'color `#00000066`',
+    example: '0 8px 16px #00000055',
+    issue: 'invalid-attr',
+    note: 'CSS spelling of shadow. inset is inner-shadow. Several layers paint, the first on top. Lengths are px. When shadow is also set, shadow wins',
   },
   {
     name: 'glow',
@@ -317,7 +331,7 @@ export const ATTRS: AttrDef[] = [
     docGroup: 'effect',
     effect: true,
     syntax: 'blur [spread] [color]',
-    defaultValue: '颜色取本体',
+    defaultValue: 'color from the mark',
     example: '56 #f3ead4',
     issue: 'invalid-attr',
   },
@@ -326,8 +340,8 @@ export const ATTRS: AttrDef[] = [
     warnOnHtmlAttr: true,
     docGroup: 'effect',
     effect: true,
-    syntax: '同 shadow',
-    defaultValue: '同 shadow',
+    syntax: 'same as shadow',
+    defaultValue: 'same as shadow',
     example: '0 8 16 #00000055',
     issue: 'invalid-attr',
   },
@@ -336,8 +350,8 @@ export const ATTRS: AttrDef[] = [
     warnOnHtmlAttr: true,
     docGroup: 'effect',
     effect: true,
-    syntax: '同 glow',
-    defaultValue: '同 glow',
+    syntax: 'same as glow',
+    defaultValue: 'same as glow',
     example: '28 #7ec8ff',
     issue: 'invalid-attr',
   },
@@ -346,7 +360,7 @@ export const ATTRS: AttrDef[] = [
     warnOnHtmlAttr: true,
     docGroup: 'effect',
     effect: true,
-    syntax: '单个非负像素',
+    syntax: 'one non-negative length in px',
     example: '6',
     issue: 'invalid-attr',
     jsxType: 'number | string',
@@ -356,17 +370,27 @@ export const ATTRS: AttrDef[] = [
     warnOnHtmlAttr: true,
     docGroup: 'effect',
     effect: true,
-    syntax: '单个非负像素',
+    syntax: 'one non-negative length in px',
     example: '16',
     issue: 'invalid-attr',
     jsxType: 'number | string',
+  },
+  {
+    name: 'backdrop-filter',
+    warnOnHtmlAttr: true,
+    docGroup: 'effect',
+    effect: true,
+    syntax: 'the same functions as filter',
+    example: 'blur(16px)',
+    issue: 'invalid-attr',
+    note: 'Same functions as filter, sampled from the backdrop. blur() is backdrop-blur. Lengths are px. url() is not accepted. When backdrop-blur is also set, that radius wins',
   },
   {
     name: 'glass',
     warnOnHtmlAttr: true,
     docGroup: 'effect',
     effect: true,
-    syntax: 'clear | regular | thick，或 clear, blur 8, tint #fff2',
+    syntax: 'clear | regular | thick, or clear, blur 8, tint #fff2',
     example: 'clear',
     issue: 'invalid-attr',
   },
@@ -375,7 +399,7 @@ export const ATTRS: AttrDef[] = [
     warnOnHtmlAttr: true,
     docGroup: 'effect',
     effect: true,
-    syntax: '强度，或强度加颜色',
+    syntax: 'amount, or amount plus a color',
     example: '0.08',
     issue: 'invalid-attr',
   },
@@ -384,8 +408,9 @@ export const ATTRS: AttrDef[] = [
     warnOnHtmlAttr: true,
     docGroup: 'effect',
     effect: true,
-    syntax: 'brightness() contrast() saturate() grayscale() sepia() invert() hue-rotate()',
+    syntax: 'blur() brightness() contrast() drop-shadow() grayscale() hue-rotate() invert() opacity() saturate() sepia()',
     example: 'saturate(1.1)',
+    note: 'Lengths are px. url() is not accepted. When blur is also set, that radius wins and blur() is removed. A missing drop-shadow color uses the element color',
     issue: 'invalid-attr',
   },
   {
@@ -405,11 +430,11 @@ export const ATTRS: AttrDef[] = [
     docGroup: 'layer-only',
     effect: true,
     syntax: '<paint> [opacity] [blend]',
-    defaultValue: '透明度 1，`source-over`',
+    defaultValue: 'opacity 1, `source-over`',
     example: '#00000066',
     issue: 'invalid-attr',
-    misplacedHint: '外包一层 layer，例如 <layer overlay="#00000066"><rect …/></layer>',
-    styleHint: '不要写在 HTML style 里；外包 <layer overlay="…">',
+    misplacedHint: 'Wrap a layer, for example <layer overlay="#00000066"><rect …/></layer>',
+    styleHint: 'Do not put this in an HTML style. Wrap <layer overlay="…">',
   },
   {
     name: 'grade',
@@ -417,12 +442,12 @@ export const ATTRS: AttrDef[] = [
     forbidInStyle: true,
     docGroup: 'layer-only',
     effect: true,
-    syntax: '预设 [强度], 参数 值',
-    defaultValue: '强度 1',
+    syntax: 'preset [amount], param value',
+    defaultValue: 'amount 1',
     example: 'lomo 0.8, fade 0.1',
     issue: 'invalid-attr',
-    misplacedHint: '外包一层 layer，例如 <layer grade="lomo"><img src="…" style="width:320px" /></layer>',
-    styleHint: '不要写进 style；外包 <layer grade="…">',
+    misplacedHint: 'Wrap a layer, for example <layer grade="lomo"><img src="…" style="width:320px" /></layer>',
+    styleHint: 'Do not put this in style. Wrap <layer grade="…">',
   },
   {
     name: 'grade-mask',
@@ -430,11 +455,11 @@ export const ATTRS: AttrDef[] = [
     forbidInStyle: true,
     docGroup: 'layer-only',
     effect: true,
-    syntax: '同 fill，alpha 是强度',
+    syntax: 'same as fill; alpha is the amount',
     example: 'radial-gradient(#fff0 30%, #fff)',
     issue: 'invalid-attr',
-    misplacedHint: '外包一层 layer，例如 <layer grade="lomo" grade-mask="radial-gradient(#fff0 30%, #fff)">',
-    styleHint: '不要写进 style；外包 <layer grade="…">',
+    misplacedHint: 'Wrap a layer, for example <layer grade="lomo" grade-mask="radial-gradient(#fff0 30%, #fff)">',
+    styleHint: 'Do not put this in style. Wrap <layer grade="…">',
   },
   {
     name: 'view',
@@ -443,10 +468,10 @@ export const ATTRS: AttrDef[] = [
     docGroup: 'layer-only',
     example: '200 80 960 540',
     issue: 'invalid-attr',
-    misplacedHint: '只写在 layer 上，例如 <layer width="1920" height="1080" view="200 80 960 540">',
-    styleHint: '不要写进 style；写在 layer 的属性上',
+    misplacedHint: 'Only on layer, for example <layer width="1920" height="1080" view="200 80 960 540">',
+    styleHint: 'Do not put this in style. Write it as an attribute on layer',
   },
-  // 不再改变检查。留在表里，避免被当成 blend 的笔误。
+  // No longer changes checks. Kept so it is not treated as a typo for blend.
   { name: 'bleed' },
 ]
 
@@ -454,14 +479,14 @@ export function attrByName(name: string): AttrDef | undefined {
   return ATTRS.find((attr) => attr.name === name)
 }
 
-/** 放错位置时的问题码。没单写的，归属类检查都是 invalid-attr。 */
+/** Issue code when the attribute is in the wrong place. Ownership checks that do not set one use invalid-attr. */
 export function issueFor(attr: AttrDef): 'invalid-attr' | undefined {
   if (attr.issue) return attr.issue
   if (attr.warnOnHtmlAttr || attr.layerOnlyAttr || attr.forbidInStyle || attr.forbidInHtmlStyle) return 'invalid-attr'
   return undefined
 }
 
-/** 这些属性在 HTML 上应写进 style。顺序与历史检查一致。 */
+/** Attributes that belong in style on HTML. Order matches the historical check. */
 export const HTML_STYLE_ATTRS: string[] = ATTRS.filter((attr) => attr.warnOnHtmlAttr).map((attr) => attr.name)
 
 export const LAYER_ONLY_ATTRS: string[] = ATTRS.filter((attr) => attr.layerOnlyAttr).map((attr) => attr.name)
@@ -471,24 +496,24 @@ export const EFFECT_ATTRS: string[] = ATTRS.filter((attr) => attr.effect).map((a
 const DOC_GROUP_ORDER: DocGroup[] = ['layer', 'transform', 'html', 'graphic', 'image', 'effect', 'layer-only', 'data', 'expect']
 
 const DOC_GROUP_LABEL: Record<DocGroup, string> = {
-  layer: '`width`、`height` 以及 `x`、`y`、`anchor`。`x`、`y` 是左上角，默认 0；`anchor` 默认 `top-left`。HTML 上写了报 `warn`',
-  transform: '图形、线条和 `layer` 写属性；文字写在 `style`。HTML 上写成属性报 `warn`',
-  html: 'HTML，按 CSS 渲染，写在 `style` 里。初始值不另写。`layer` 或图形写了 `style` 报 `warn`',
-  graphic: '图形属性，坐标是所在 `layer` 的局部坐标',
-  image: '只写在 `img` 或 `model` 上。`unit`、`object` 只写在 `model` 上。图片宽高仍放进 `style`',
-  effect: '图形和 `layer` 写属性；文字写在 `style`。语法在 attrs.json',
-  'layer-only': '只写在 `layer` 上。写在别处或写进 `style` 报 `warn`',
-  data: '任何元素都可以写。值是 JSON，不进普通属性。程序里直接传对象或数组',
-  expect: '任何元素都可以写。声明预期中的问题码，出现在该节点或子树里时降为 info。没出现报 `unused-expect`',
+  layer: '`width`, `height`, plus `x`, `y`, and `anchor`. `x` and `y` are the top-left corner, default 0; `anchor` defaults to `top-left`. Writing them on HTML warns',
+  transform: 'Shapes, lines, and `layer` use attributes; text uses `style`. Writing them as attributes on HTML warns',
+  html: 'HTML, rendered as CSS, written in `style`. Initial values are not restated. `style` on `layer` or a shape warns',
+  graphic: 'Shape attributes. Coordinates are local to the containing `layer`',
+  image: 'Only on `img` or `model`. `unit` and `object` are only on `model`. Image width and height still go in `style`',
+  effect: 'Shapes and `layer` use attributes; text uses `style`. Syntax is in attrs.json',
+  'layer-only': 'Only on `layer`. Elsewhere, or in `style`, warns',
+  data: 'Any element. The value is JSON and is not a normal attribute. In code, pass an object or array',
+  expect: 'Any element. Names issue codes expected on that node or in its subtree; a match is lowered to info. A miss reports `unused-expect`',
 }
 
 function namesIn(group: DocGroup): string {
   return ATTRS.filter((attr) => attr.docGroup === group)
     .map((attr) => `\`${attr.name}\``)
-    .join('、')
+    .join(', ')
 }
 
-/** 逐个属性，给按需检索。顺序与注册表一致。 */
+/** One entry per attribute, for lookup. Order matches the registry. */
 export function attrCatalog(): Array<Record<string, string | boolean | null>> {
   return ATTRS.map((attr) => ({
     name: attr.name,
@@ -503,30 +528,30 @@ export function attrCatalog(): Array<Record<string, string | boolean | null>> {
   }))
 }
 
-/** SPEC 归属总表（不含表头）。 */
+/** SPEC ownership table, including the header row. */
 export function ownershipTableBody(): string {
   const rows = DOC_GROUP_ORDER.map(
     (group) => `| ${namesIn(group)} | ${DOC_GROUP_LABEL[group]} |`,
   )
-  return ['| 属性 | 写在哪 |', '| --- | --- |', ...rows].join('\n')
+  return ['| Attribute | Where |', '| --- | --- |', ...rows].join('\n')
 }
 
-/** CHEATSHEET 里的效果一行。示例和默认值来自注册表。 */
+/** The effects line in the cheat sheet. Examples and defaults come from the registry. */
 export function effectCheatLine(): string {
   const parts = ATTRS.filter((attr) => attr.effect).map((attr) => {
     const sample = attr.example ? `\`${attr.example}\`` : ''
-    const def = attr.defaultValue ? `（默认 ${attr.defaultValue}）` : ''
+    const def = attr.defaultValue ? ` (default ${attr.defaultValue})` : ''
     return `\`${attr.name}\` ${sample}${def}`.trim()
   })
-  return `效果：${parts.join('、')}。作用于整棵子树的 \`overlay\`、\`grade\`、\`grade-mask\` 只写在 \`layer\` 上。`
+  return `Effects: ${parts.join(', ')}. \`overlay\`, \`grade\`, and \`grade-mask\` apply to the whole subtree and belong only on \`layer\`.`
 }
 
-/** JSX 效果字段。`names` 决定写进哪一个类型。 */
+/** JSX effect fields. `names` picks which type they are written into. */
 export function jsxFieldBlock(names: readonly string[]): string {
   return names
     .map((name) => {
       const attr = attrByName(name)
-      if (!attr) throw new Error(`注册表没有 ${name}`)
+      if (!attr) throw new Error(`registry has no ${name}`)
       const key = name.includes('-') ? `'${name}'` : name
       const note = attr.example ? `  /** ${attr.example} */\n` : ''
       return `${note}  ${key}?: ${attr.jsxType ?? 'string'}`

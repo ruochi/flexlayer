@@ -2,11 +2,11 @@ import { cameraItems } from './camera.js'
 import { circleOfConfusion } from './dof.js'
 import { filtersInPaintOrder, getFilter } from './filter.js'
 import { MESH_TAGS } from './tags.js'
-import { apply, applyToBox, aroundPivot, IDENTITY, intersectBox, matrixScale, multiply, originOffset, translated, type Matrix } from './matrix.js'
+import { absoluteNodeMatrix, apply, applyToBox, IDENTITY, intersectBox, isIdentity, matrixScale, multiply, originOffset, translated, type Matrix } from './matrix.js'
 import { applyPoseMatrix, behindCamera, cameraSceneCustom, has3dPose, hasPerspective, planeDepth, poseMatrix, posePoint, project as projectPoint, splitsForCamera, type Perspective } from './perspective.js'
 import { maskStats } from './mask-stats.js'
-import { innerInkStrokeReach, outerInkStrokeReach } from './style.js'
-import type { Box, ElementReport, LayerDocument, LayerReport, InlineOwner, Issue, LayerLayoutNode, LayoutNode, MeshLayoutNode, MinFontSpec, TextLayoutNode } from './types.js'
+import { cssFilterPad, innerInkStrokeReach, outerInkStrokeReach, shadowLayers } from './style.js'
+import type { Box, ColorFilterSpec, ElementReport, LayerDocument, LayerReport, InlineOwner, Issue, LayerLayoutNode, LayoutNode, MeshLayoutNode, MinFontSpec, TextLayoutNode } from './types.js'
 import { boxToRect, emptyBox, translateBox, unionBoxes } from './types.js'
 import { viewMatrix } from './view.js'
 
@@ -211,9 +211,9 @@ function tighten(clip: Box | undefined, next: Box): Box {
 }
 
 function nodeMatrix(parent: Matrix, node: LayoutNode): Matrix {
-  if (node.rotate === 0 && node.scaleX === 1 && node.scaleY === 1) return parent
-  const o = originOffset(node.origin, node.width, node.height)
-  return multiply(parent, aroundPivot(node.x + o.x, node.y + o.y, node.rotate, node.scaleX, node.scaleY))
+  const pose = absoluteNodeMatrix(node)
+  if (isIdentity(pose)) return parent
+  return multiply(parent, pose)
 }
 
 function cornerList(box: Box): Array<[number, number]> {
@@ -261,19 +261,27 @@ function effectInkLocal(node: LayoutNode): Box {
  */
 function effectPadOf(node: {
   shadow?: LayoutNode['shadow']
+  shadowList?: LayoutNode['shadowList']
   glow?: LayoutNode['glow']
   blur?: number
   glass?: LayoutNode['glass']
   inkStroke?: LayoutNode['inkStroke']
+  colorFilter?: ColorFilterSpec[]
+  filter?: ColorFilterSpec[]
 }): number {
   const visible = 0.55
   const strokeReach = outerInkStrokeReach(node.inkStroke)
+  let shadowPad = 0
+  for (const shadow of shadowLayers(node.shadow, node.shadowList)) {
+    const pad =
+      (shadow.blur + shadow.spread + strokeReach) * visible + Math.max(Math.abs(shadow.x), Math.abs(shadow.y))
+    if (pad > shadowPad) shadowPad = pad
+  }
+  const filterPad = cssFilterPad(node.colorFilter ?? node.filter)
   return Math.max(
-    node.shadow
-      ? (node.shadow.blur + node.shadow.spread + strokeReach) * visible + Math.max(Math.abs(node.shadow.x), Math.abs(node.shadow.y))
-      : 0,
+    shadowPad,
     node.glow ? (node.glow.blur + node.glow.spread + strokeReach) * visible : 0,
-    node.blur != null ? node.blur * 2 : 0,
+    (node.blur != null ? node.blur * 2 : 0) + filterPad,
     node.glass ? node.glass.blur * 2 : 0,
     strokeReach,
   )
@@ -327,8 +335,7 @@ function projectBox(project: Projector, box: Box, cornerRadius = 0): Box {
 }
 
 function placement(plane: PlaneSpace, node: LayoutNode): Matrix {
-  const o = originOffset(node.origin, node.width, node.height)
-  return multiply(plane.toPlane, aroundPivot(node.x + o.x, node.y + o.y, node.rotate, node.scaleX, node.scaleY))
+  return multiply(plane.toPlane, absoluteNodeMatrix(node))
 }
 
 /** 节点局部盒子变成平面局部的轴对齐范围。平面根的局部坐标就是平面坐标。 */
@@ -536,12 +543,18 @@ function walk(
   }
   if (quad) entry.quad = quad
   if (node.shadow) entry.shadow = node.shadow
+  if (node.shadowList && node.shadowList.length > 1) entry.shadowList = node.shadowList
   if (node.glow) entry.glow = node.glow
   if (node.innerShadow) entry.innerShadow = node.innerShadow
+  if (node.innerShadowList && node.innerShadowList.length > 1) entry.innerShadowList = node.innerShadowList
   if (node.innerGlow) entry.innerGlow = node.innerGlow
   if (node.inkStroke) entry.inkStroke = node.inkStroke
   if (node.blur != null) entry.blur = node.blur
   if (node.backdropBlur != null) entry.backdropBlur = node.backdropBlur
+  if (node.backdropFilter) {
+    const color = node.backdropFilter.filter((step) => step.name !== 'blur')
+    if (color.length) entry.backdropFilter = color
+  }
   if (node.noise) entry.noise = node.noise
   if (node.overlay) entry.overlay = node.overlay
   if (node.glass) entry.glass = node.glass

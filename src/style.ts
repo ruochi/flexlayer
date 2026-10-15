@@ -1,4 +1,6 @@
-import type { Origin, OriginAxis } from './types.js'
+import type { BackdropFilterStep, ColorFilterSpec, CssLength, CssTransformStep, Origin, OriginAxis } from './types.js'
+
+export type { BackdropFilterStep }
 
 export type StyleMap = Record<string, string>
 
@@ -39,6 +41,103 @@ export function parseNumber(value: string | undefined): number | undefined {
   if (value == null || value.trim() === '') return undefined
   const n = Number(value)
   return Number.isFinite(n) ? n : undefined
+}
+
+const NUMBER_UNIT = /^([+-]?(?:\d+\.?\d*|\.\d+))([a-z%]+)?$/
+
+/** 角度。`none` 是 0。带单位换成度。裸数字仍是度，`unitless` 为 true。解析失败返回 undefined。 */
+export function parseAngle(value: string | undefined): { degrees: number; unitless: boolean } | undefined {
+  if (value == null) return undefined
+  const token = value.trim().toLowerCase()
+  if (token === '' || token === 'none') return { degrees: 0, unitless: false }
+  const m = NUMBER_UNIT.exec(token)
+  if (!m) return undefined
+  const n = Number(m[1])
+  if (!Number.isFinite(n)) return undefined
+  const unit = m[2]
+  if (!unit) return { degrees: n, unitless: true }
+  if (unit === 'deg') return { degrees: n, unitless: false }
+  if (unit === 'rad') return { degrees: (n * 180) / Math.PI, unitless: false }
+  if (unit === 'grad') return { degrees: n * 0.9, unitless: false }
+  if (unit === 'turn') return { degrees: n * 360, unitless: false }
+  return undefined
+}
+
+/**
+ * 长度。`allowUnitless` 时裸数字当像素，和 `translate: 0 -12` 的旧写法一样。
+ * 否则只有 0 可以不带单位。百分比留给调用方按盒子尺寸换算。
+ */
+export function parseCssLength(token: string, allowUnitless: boolean): CssLength | undefined {
+  const m = NUMBER_UNIT.exec(token.trim().toLowerCase())
+  if (!m) return undefined
+  const n = Number(m[1])
+  if (!Number.isFinite(n)) return undefined
+  const unit = m[2]
+  if (unit === '%') return { unit: 'percent', value: n }
+  if (unit === 'px' || n === 0 || (allowUnitless && !unit)) return { unit: 'px', value: n }
+  return undefined
+}
+
+function parseScaleArg(token: string): number | undefined {
+  const t = token.trim().toLowerCase()
+  if (t.endsWith('%')) {
+    const n = Number(t.slice(0, -1))
+    return Number.isFinite(n) ? n / 100 : undefined
+  }
+  const m = NUMBER_UNIT.exec(t)
+  if (!m || m[2]) return undefined
+  return Number(m[1])
+}
+
+function cssArgs(raw: string): string[] {
+  return raw.split(/[\s,]+/).filter(Boolean)
+}
+
+function parseTransformFunction(name: string, raw: string): CssTransformStep | undefined {
+  const args = cssArgs(raw)
+  if (name === 'translate' || name === 'translatex' || name === 'translatey') {
+    const zero: CssLength = { unit: 'px', value: 0 }
+    if (name === 'translate' && (args.length < 1 || args.length > 2)) return undefined
+    if (name !== 'translate' && args.length !== 1) return undefined
+    const x = name === 'translatey' ? zero : parseCssLength(args[0]!, false)
+    const y = name === 'translatex' ? zero : name === 'translate' ? (args[1] ? parseCssLength(args[1], false) : zero) : parseCssLength(args[0]!, false)
+    if (!x || !y) return undefined
+    return { op: 'translate', x, y }
+  }
+  if (name === 'rotate') {
+    if (args.length !== 1) return undefined
+    const angle = parseAngle(args[0])
+    if (!angle || (angle.unitless && angle.degrees !== 0)) return undefined
+    return { op: 'rotate', degrees: angle.degrees }
+  }
+  if (name === 'scale' || name === 'scalex' || name === 'scaley') {
+    if (name === 'scale' && (args.length < 1 || args.length > 2)) return undefined
+    if (name !== 'scale' && args.length !== 1) return undefined
+    const x = name === 'scaley' ? 1 : parseScaleArg(args[0]!)
+    const y = name === 'scalex' ? 1 : name === 'scale' ? parseScaleArg(args[1] ?? args[0]!) : parseScaleArg(args[0]!)
+    if (x == null || y == null) return undefined
+    return { op: 'scale', x, y }
+  }
+  return undefined
+}
+
+/** CSS `transform`。`none` 是空列表。任一函数写错，整段无效。 */
+export function parseCssTransform(value: string): { ok: true; steps: CssTransformStep[] } | { ok: false } {
+  const text = value.trim().toLowerCase()
+  if (text === 'none') return { ok: true, steps: [] }
+  const steps: CssTransformStep[] = []
+  const re = /([a-z]+)\(([^)]*)\)/g
+  let index = 0
+  let match: RegExpExecArray | null
+  while ((match = re.exec(text))) {
+    if (text.slice(index, match.index).trim() !== '') return { ok: false }
+    const step = parseTransformFunction(match[1]!, match[2]!)
+    if (!step) return { ok: false }
+    steps.push(step)
+    index = match.index + match[0].length
+  }
+  if (index === 0 || text.slice(index).trim() !== '') return { ok: false }
+  return { ok: true, steps }
 }
 
 export type FlexFactors = { grow: number; shrink: number; basis: number | 'auto' }
@@ -235,9 +334,11 @@ export function parseOrigin(raw: string | undefined): Origin {
   return readOrigin(raw).origin
 }
 
-/** `1.2` 两轴相同；`1.2 0.8` 或 `-1 1` 分轴。解析失败时为 1。 */
+/** `1.2` 两轴相同；`1.2 0.8` 或 `-1 1` 分轴。`none` 和解析失败时为 1。 */
 export function parseScale(value: string | undefined): { x: number; y: number } {
-  const parts = value?.trim().split(/[\s,]+/).filter(Boolean) ?? []
+  const text = value?.trim().toLowerCase()
+  if (!text || text === 'none') return { x: 1, y: 1 }
+  const parts = text.split(/[\s,]+/).filter(Boolean)
   const x = parseNumber(parts[0])
   if (x == null) return { x: 1, y: 1 }
   if (parts.length < 2) return { x, y: x }
@@ -295,9 +396,7 @@ export type GlowValue = { blur: number; spread: number; color?: string }
 export type NoiseValue = { amount: number; color?: string }
 /** layer 专用：`overlay="<paint> [opacity] [blend]"` */
 export type OverlayValue = { paint: string; opacity: number; blend: BlendMode }
-export type ColorFilterFn =
-  | { name: 'brightness' | 'contrast' | 'saturate' | 'grayscale' | 'sepia' | 'invert'; value: number }
-  | { name: 'hue-rotate'; value: number }
+export type ColorFilterFn = ColorFilterSpec
 
 export const BLEND_MODES = [
   'source-over',
@@ -332,6 +431,58 @@ export function parseShadow(value: string | undefined): ShadowValue | undefined 
   const [x, y, blur = 0, spread = 0] = parts.lengths as [number, number, number?, number?]
   if (blur < 0) return undefined
   return { x, y, blur, spread, color: parts.color }
+}
+
+export type BoxShadowList = { outer: ShadowValue[]; inset: ShadowValue[] }
+
+/**
+ * CSS `box-shadow`。`inset` 和颜色可以写在长度前面或后面。多层用逗号分开。
+ * `none` 与无法解析都返回 undefined。
+ */
+export function parseBoxShadow(value: string | undefined): BoxShadowList | undefined {
+  if (!value || value.trim().toLowerCase() === 'none') return undefined
+  const layers = splitTopLevelCommas(value)
+  if (layers.length === 0) return undefined
+  const outer: ShadowValue[] = []
+  const inset: ShadowValue[] = []
+  for (const layer of layers) {
+    const parsed = parseBoxShadowLayer(layer)
+    if (!parsed) return undefined
+    ;(parsed.inset ? inset : outer).push(parsed.shadow)
+  }
+  if (outer.length === 0 && inset.length === 0) return undefined
+  return { outer, inset }
+}
+
+function parseBoxShadowLayer(layer: string): { inset: boolean; shadow: ShadowValue } | undefined {
+  const tokens = splitCssTokens(layer)
+  if (tokens.length === 0) return undefined
+  let inset = false
+  let color: string | undefined
+  const lengths: number[] = []
+  for (const token of tokens) {
+    if (token.toLowerCase() === 'inset') {
+      if (inset) return undefined
+      inset = true
+      continue
+    }
+    const px = parsePx(token)
+    if (px !== undefined) {
+      lengths.push(px)
+      continue
+    }
+    if (color !== undefined) return undefined
+    color = token
+  }
+  if (lengths.length < 2 || lengths.length > 4) return undefined
+  const [x, y, blur = 0, spread = 0] = lengths as [number, number, number?, number?]
+  if (blur < 0) return undefined
+  return { inset, shadow: { x, y, blur, spread, color } }
+}
+
+/** 有多层时用完整列表，否则用单独的一层。 */
+export function shadowLayers<T>(single: T | undefined, many: T[] | undefined): T[] {
+  return many && many.length > 0 ? many : single ? [single] : []
 }
 
 /** `blur [spread] [color]`。无法解析返回 undefined。 */
@@ -496,15 +647,8 @@ export function parseOverlay(value: string | undefined): OverlayValue | undefine
   return { paint, opacity, blend }
 }
 
-const COLOR_FILTER_NAMES = new Set([
-  'brightness',
-  'contrast',
-  'saturate',
-  'grayscale',
-  'sepia',
-  'invert',
-  'hue-rotate',
-])
+const RATIO_FILTERS = new Set(['brightness', 'contrast', 'saturate', 'grayscale', 'sepia', 'invert', 'opacity'])
+type RatioFilterName = 'brightness' | 'contrast' | 'saturate' | 'grayscale' | 'sepia' | 'invert' | 'opacity'
 
 function parseFilterArg(raw: string, kind: 'ratio' | 'angle'): number | undefined {
   const t = raw.trim()
@@ -518,35 +662,134 @@ function parseFilterArg(raw: string, kind: 'ratio' | 'angle'): number | undefine
   return Number.isFinite(n) ? n : undefined
 }
 
-/** 色彩滤镜：`brightness(1.1) contrast(1.2) …`，不含 blur / drop-shadow。 */
-export function parseColorFilter(value: string | undefined): ColorFilterFn[] | undefined {
-  if (!value || value.trim() === 'none') return undefined
-  const out: ColorFilterFn[] = []
-  const re = /([a-z-]+)\(\s*([^)]*?)\s*\)/gi
-  let m: RegExpExecArray | null
-  let consumed = 0
-  while ((m = re.exec(value))) {
-    const name = m[1]!.toLowerCase()
-    if (!COLOR_FILTER_NAMES.has(name)) return undefined
-    if (name === 'blur' || name === 'drop-shadow') return undefined
-    const arg = parseFilterArg(m[2]!, name === 'hue-rotate' ? 'angle' : 'ratio')
-    if (arg === undefined) return undefined
-    out.push({ name: name as ColorFilterFn['name'], value: arg })
-    consumed = m.index + m[0].length
+/** 按括号深度切函数。`rgba()` 里的括号和逗号留在参数里。 */
+function scanFilterCalls(value: string): Array<{ name: string; args: string }> | undefined {
+  const calls: Array<{ name: string; args: string }> = []
+  let i = 0
+  const s = value.trim()
+  while (i < s.length) {
+    while (i < s.length && /\s/.test(s[i]!)) i++
+    if (i >= s.length) break
+    let j = i
+    while (j < s.length && /[a-z-]/i.test(s[j]!)) j++
+    if (j === i) return undefined
+    const name = s.slice(i, j).toLowerCase()
+    i = j
+    while (i < s.length && /\s/.test(s[i]!)) i++
+    if (s[i] !== '(') return undefined
+    i++
+    const start = i
+    let depth = 1
+    while (i < s.length && depth > 0) {
+      const ch = s[i]!
+      if (ch === '(') depth++
+      else if (ch === ')') depth--
+      if (depth > 0) i++
+    }
+    if (depth !== 0) return undefined
+    calls.push({ name, args: s.slice(start, i).trim() })
+    i++
   }
-  if (out.length === 0) return undefined
-  if (value.slice(consumed).trim() !== '') return undefined
-  // 拒绝整串里夹了未匹配的标识
-  const stripped = value.replace(/[a-z-]+\(\s*[^)]*?\)/gi, '').trim()
-  if (stripped !== '') return undefined
+  return calls.length > 0 ? calls : undefined
+}
+
+/** `drop-shadow()` 是两到三个长度，颜色可写在任意位置。没有扩展，也没有 inset。 */
+function parseDropShadow(args: string): ColorFilterFn | undefined {
+  const tokens = splitCssTokens(args)
+  if (tokens.length === 0) return undefined
+  const lengths: number[] = []
+  let color: string | undefined
+  for (const token of tokens) {
+    if (token.toLowerCase() === 'inset') return undefined
+    const px = parsePx(token)
+    if (px !== undefined) {
+      lengths.push(px)
+      continue
+    }
+    if (color !== undefined) return undefined
+    color = token
+  }
+  if (lengths.length < 2 || lengths.length > 3) return undefined
+  const [x, y, blur = 0] = lengths as [number, number, number?]
+  if (blur < 0) return undefined
+  return color ? { name: 'drop-shadow', x, y, blur, color } : { name: 'drop-shadow', x, y, blur }
+}
+
+function parseFilterCall(name: string, args: string): ColorFilterFn | undefined {
+  if (name === 'blur') {
+    const radius = parsePx(args)
+    if (radius === undefined || radius < 0) return undefined
+    return { name: 'blur', value: radius }
+  }
+  if (name === 'drop-shadow') return parseDropShadow(args)
+  if (name === 'hue-rotate') {
+    const value = parseFilterArg(args, 'angle')
+    if (value === undefined) return undefined
+    return { name: 'hue-rotate', value }
+  }
+  if (!RATIO_FILTERS.has(name)) return undefined
+  const value = parseFilterArg(args, 'ratio')
+  if (value === undefined) return undefined
+  return { name: name as RatioFilterName, value }
+}
+
+/**
+ * canvas 能画的 CSS filter：`blur()` `brightness()` `contrast()` `drop-shadow()`
+ * `grayscale()` `hue-rotate()` `invert()` `opacity()` `saturate()` `sepia()`。
+ * 不收 `url()`。`none` 与无法解析都返回 undefined。
+ */
+export function parseColorFilter(value: string | undefined): ColorFilterFn[] | undefined {
+  if (!value || value.trim().toLowerCase() === 'none') return undefined
+  const calls = scanFilterCalls(value)
+  if (!calls) return undefined
+  const out: ColorFilterFn[] = []
+  for (const call of calls) {
+    const step = parseFilterCall(call.name, call.args)
+    if (!step) return undefined
+    out.push(step)
+  }
   return out
 }
 
-/** 转成 canvas `filter` 字符串。 */
-export function colorFilterToCss(fns: ColorFilterFn[]): string {
+/** 转成 canvas `filter` 字符串。像素长度乘 `scale`。 */
+export function colorFilterToCss(fns: ColorFilterFn[], scale = 1): string {
   return fns
-    .map((fn) => (fn.name === 'hue-rotate' ? `hue-rotate(${fn.value}deg)` : `${fn.name}(${fn.value})`))
+    .map((fn) => {
+      if (fn.name === 'hue-rotate') return `hue-rotate(${fn.value}deg)`
+      if (fn.name === 'blur') return `blur(${fn.value * scale}px)`
+      if (fn.name === 'drop-shadow') {
+        const color = fn.color ?? '#000000'
+        return `drop-shadow(${fn.x * scale}px ${fn.y * scale}px ${fn.blur * scale}px ${color})`
+      }
+      return `${fn.name}(${fn.value})`
+    })
     .join(' ')
+}
+
+/** `blur()` 与 `drop-shadow()` 会画出盒子。离屏和裁切按这个半径留白。 */
+export function cssFilterPad(steps: ColorFilterFn[] | undefined): number {
+  let pad = 0
+  for (const step of steps ?? []) {
+    if (step.name === 'blur') pad += step.value * 2
+    else if (step.name === 'drop-shadow') pad += step.blur * 2 + Math.abs(step.x) + Math.abs(step.y)
+  }
+  return pad
+}
+
+/**
+ * CSS `backdrop-filter`。函数和 `filter` 同一套。
+ * `none` 与无法解析都返回 undefined。
+ */
+export function parseBackdropFilter(value: string | undefined): BackdropFilterStep[] | undefined {
+  return parseColorFilter(value)
+}
+
+/** 几段 `blur()` 合成一次高斯模糊的半径。 */
+export function backdropBlurRadius(steps: BackdropFilterStep[]): number {
+  const radii = steps.flatMap((step) => (step.name === 'blur' ? [step.value] : []))
+  if (radii.length === 0) return 0
+  if (radii.length === 1) return radii[0]!
+  return Math.hypot(...radii)
 }
 
 export function parseBlend(value: string | undefined): BlendMode | undefined {
@@ -769,6 +1012,8 @@ const QUIET_STYLE = new Set([
   'ink-stroke',
   'blur',
   'backdrop-blur',
+  'backdrop-filter',
+  'box-shadow',
   'noise',
   'blend',
   'glass',
@@ -786,6 +1031,12 @@ function lengthHint(value: string, hint: string): StyleDiagnostic | null {
 
 function numberHint(value: string, hint: string): StyleDiagnostic | null {
   return parseNumber(value) == null ? { hint } : null
+}
+
+const ANGLE_HINT = '写成 30deg、0.5rad、0.25turn。0 可以不带单位'
+
+function angleHint(value: string): StyleDiagnostic | null {
+  return parseAngle(value) ? null : { hint: ANGLE_HINT }
 }
 
 /** 认识的 CSS 属性。返回 null 表示值可用；不在表里的名字由调用方当成不支持。 */
@@ -844,22 +1095,28 @@ const STYLE_CHECKS: Record<string, (value: string) => StyleDiagnostic | null> = 
   background: () => null,
   'background-color': () => null,
   opacity: (value) => numberHint(value, '写成 0 到 1 的数字，例如 0.5'),
-  rotate: (value) => numberHint(value, '写成角度，例如 12'),
-  rotateX: (value) => numberHint(value, '写成角度，例如 20'),
-  rotateY: (value) => numberHint(value, '写成角度，例如 20'),
+  rotate: angleHint,
+  rotatex: angleHint,
+  rotatey: angleHint,
   z: (value) => numberHint(value, '写成像素，例如 40'),
   scale: (value) => {
+    if (value.trim().toLowerCase() === 'none') return null
     const parts = value.trim().split(/[\s,]+/).filter(Boolean)
     if (parts.length === 0 || parts.length > 2) return { hint: '写成 1.2 或 1.2 0.8' }
     if (parts.some((part) => parseNumber(part) == null)) return { hint: '写成 1.2 或 1.2 0.8' }
     return null
   },
   translate: (value) => {
+    if (value.trim().toLowerCase() === 'none') return null
     const parts = value.trim().split(/[\s,]+/).filter(Boolean)
-    if (parts.length === 0 || parts.length > 2) return { hint: '写成 0 -12 或 12 0' }
-    if (parts.some((part) => parsePx(part) == null)) return { hint: '写成 0 -12 或 12px 0' }
+    if (parts.length === 0 || parts.length > 2) return { hint: '写成 0 -12、12px 0 或 50% 0' }
+    if (parts.some((part) => parseCssLength(part, true) == null)) return { hint: '写成 0 -12、12px 0 或 50% 0' }
     return null
   },
+  transform: (value) =>
+    parseCssTransform(value).ok ? null : { hint: '写成 translate(10px, 0) rotate(30deg) scale(1.2)，或 none' },
+  'transform-origin': (value) =>
+    readOrigin(value).invalid ? { hint: '写成 center、0 0、50% 50%，或 top left' } : null,
   origin: (value) => (readOrigin(value).invalid ? { hint: '写成 center、top-left，或 120 80、30% 40%' } : null),
 }
 

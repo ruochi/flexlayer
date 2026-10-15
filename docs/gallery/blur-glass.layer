@@ -69,7 +69,7 @@
   
 
   
-  <rect width="240" height="140" rx="20" fill="#ffffff22" backdrop-blur="16" x="420" y="230" />
+  <rect width="240" height="140" rx="20" fill="#ffffff22" backdrop-blur="16" backdrop-filter="blur(16px)" x="420" y="230" />
   
   
   <layer x="455.07" y="400">

@@ -136,8 +136,12 @@ export type GradeSpec = {
   vignetteColor: string
 }
 export type ColorFilterSpec =
-  | { name: 'brightness' | 'contrast' | 'saturate' | 'grayscale' | 'sepia' | 'invert'; value: number }
+  | { name: 'brightness' | 'contrast' | 'saturate' | 'grayscale' | 'sepia' | 'invert' | 'opacity'; value: number }
   | { name: 'hue-rotate'; value: number }
+  | { name: 'blur'; value: number }
+  | { name: 'drop-shadow'; x: number; y: number; blur: number; color?: string }
+/** `backdrop-filter` 里的一步，和 `filter` 同一套函数。 */
+export type BackdropFilterStep = ColorFilterSpec
 export type BlendMode =
   | 'source-over'
   | 'multiply'
@@ -243,8 +247,12 @@ export type ElementReport = {
    */
   inline?: boolean
   shadow?: ShadowSpec
+  /** `box-shadow` 有多层外阴影时的完整列表，第一层在最上，也写在 `shadow` 里。 */
+  shadowList?: ShadowSpec[]
   glow?: GlowSpec
   innerShadow?: ShadowSpec
+  /** `box-shadow` 有多层 inset 时的完整列表，第一层在最上，也写在 `innerShadow` 里。 */
+  innerShadowList?: ShadowSpec[]
   innerGlow?: GlowSpec
   /** 按墨迹距离描边，从内到外。 */
   inkStroke?: InkStrokeSpec[]
@@ -252,6 +260,8 @@ export type ElementReport = {
   /** 这一层镜头在采样点上的景深模糊半径，成片像素。没开景深或不糊时不写。 */
   defocus?: number
   backdropBlur?: number
+  /** `backdrop-filter` 里除单独一次模糊以外的步骤，顺序和作者写的一样。 */
+  backdropFilter?: BackdropFilterStep[]
   noise?: NoiseSpec
   overlay?: OverlaySpec
   glass?: GlassSpec
@@ -299,6 +309,8 @@ export type TextRunStyle = {
   /** 绘制时绕字心缩放。 */
   scaleX?: number
   scaleY?: number
+  /** `transform` 函数。和 translate、rotate、scale 按规范叠在字心上。 */
+  transform?: CssTransformStep[]
   /** 每个字单独绕自己的字心。 */
   splitChars?: boolean
   /** 不拆字时，同一组绕整段字心画一次。 */
@@ -365,6 +377,28 @@ export type LineGeometry =
   | { kind: 'polyline' | 'polygon'; points: Array<{ x: number; y: number }> }
   | { kind: 'path'; d: string }
 
+/** CSS 长度。百分比相对元素自己的边框盒。 */
+export type CssLength = { unit: 'px' | 'percent'; value: number }
+
+/** `transform` 里的一个函数。从左到右叠成矩阵。 */
+export type CssTransformStep =
+  | { op: 'translate'; x: CssLength; y: CssLength }
+  | { op: 'rotate'; degrees: number }
+  | { op: 'scale'; x: number; y: number }
+
+/**
+ * 个别属性和 `transform` 合在一起，画的时候才按最终宽高换成矩阵。
+ * 设了它，`rotate` 为 0、`scale` 为 1，避免再套一次。
+ */
+export type CssMotion = {
+  translateX: CssLength
+  translateY: CssLength
+  rotate: number
+  scaleX: number
+  scaleY: number
+  steps: CssTransformStep[]
+}
+
 export type LayoutNodeBase = {
   path: string
   id?: string
@@ -392,6 +426,8 @@ export type LayoutNodeBase = {
   scaleY: number
   /** 变换支点，缺省为盒子中心。 */
   origin?: Origin
+  /** 平移、旋转、缩放和 `transform` 合在一起。只影响绘制。 */
+  motion?: CssMotion
   background?: string
   border?: { width: number; color: string }
   borderRadius?: number
@@ -403,12 +439,18 @@ export type LayoutNodeBase = {
   computed: DrawComputedStyle
   text: string
   shadow?: ShadowSpec
+  /** `box-shadow` 有多层外阴影时的完整列表。第一层也在 `shadow`。 */
+  shadowList?: ShadowSpec[]
   glow?: GlowSpec
   innerShadow?: ShadowSpec
+  /** `box-shadow` 有多层 inset 时的完整列表。第一层也在 `innerShadow`。 */
+  innerShadowList?: ShadowSpec[]
   innerGlow?: GlowSpec
   inkStroke?: InkStrokeSpec[]
   blur?: number
   backdropBlur?: number
+  /** `backdrop-filter` 的步骤。只有一次 `blur()` 时不写，半径在 `backdropBlur`。 */
+  backdropFilter?: BackdropFilterStep[]
   noise?: NoiseSpec
   overlay?: OverlaySpec
   glass?: GlassSpec

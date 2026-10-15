@@ -1,41 +1,45 @@
 # Flex Layer
 
-把画面要求和仓库地址 https://github.com/ruochi/flexlayer 发给 Codex、Cursor、Grok、Claude Code、WorkBuddy、GitHub Copilot、Devin、Jules、Google Antigravity、JetBrains Junie、Cline、Replit Agent、CodeBuddy、通义灵码、Qoder、TRAE 或文心快码，就可以等结果。
+**中文：** 用标签描述一帧画面，渲染成 PNG。文字和排布按 HTML，图形按 SVG。本仓库其余说明都是英文。
 
-Flex Layer 用标签描述一帧画面：图形用 SVG 的写法。文字和排布是 HTML，按 HTML 渲染，`style` 的初始值就是 CSS 的。渲染器读入 `.layer`，输出 PNG 和一份布局报告。
+**English:** Describe one frame with tags and render it to PNG. Text and layout follow HTML; shapes follow SVG. The rest of this repository is in English.
 
-规范见 [SPEC.md](SPEC.md)。给模型的入口见 [AGENTS.md](AGENTS.md)，一页写法见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，字体、图片和配色见 [docs/RESOURCES.md](docs/RESOURCES.md)。当前版本是 0.6.12。
+Send the picture you want, and the repo https://github.com/ruochi/flexlayer, to Codex, Cursor, Grok, Claude Code, WorkBuddy, GitHub Copilot, Devin, Jules, Google Antigravity, JetBrains Junie, Cline, Replit Agent, CodeBuddy, Tongyi Lingma, Qoder, TRAE, or Wenxin Kuaima, then wait for the result.
 
-`layer` 上的 `camera` 是这一层的镜头。不写时，有实体、`ground` 或 `rotateX`、`rotateY`、`z` 的最外层用自己的 `height` 当视距。形状写了正的 `depth` 就沿 z 挤出。另有 `sphere`、`torus`、`tube`、`model`。例子：`npx tsx src/cli.ts render examples/perspective.layer -o perspective.png`，`npx tsx src/cli.ts render examples/meshes.layer -o meshes.png`，`npx tsx src/cli.ts render examples/solids.layer -o solids.png`，`npx tsx src/cli.ts render examples/rounded.layer -o rounded.png`。
+Flex Layer describes one frame with tags. Shapes use the SVG form. Text and layout are HTML, rendered as HTML, and the initial values of `style` are the CSS ones. The renderer reads `.layer` and writes a PNG plus a layout report.
 
-## 给别的项目里的 agent
+The spec is [SPEC.md](SPEC.md). The entry point for models is [AGENTS.md](AGENTS.md). A one-page syntax sheet is [docs/CHEATSHEET.md](docs/CHEATSHEET.md). Fonts, images, and palettes are in [docs/RESOURCES.md](docs/RESOURCES.md). The current version is 0.6.15.
 
-把仓库地址发给 agent，它读根目录的 [AGENTS.md](AGENTS.md)。别的项目安装 skill：
+`camera` on a `layer` is that layer's camera. When it is omitted, the outermost layer that has a solid, a `ground`, or `rotateX`, `rotateY`, or `z` uses its own `height` as the viewing distance. A positive `depth` on a shape extrudes it along z. There are also `sphere`, `torus`, `tube`, and `model`. Try `npx tsx src/cli.ts render examples/perspective.layer -o perspective.png`, `npx tsx src/cli.ts render examples/meshes.layer -o meshes.png`, `npx tsx src/cli.ts render examples/solids.layer -o solids.png`, and `npx tsx src/cli.ts render examples/rounded.layer -o rounded.png`.
+
+## For an agent in another project
+
+Send the repo URL to the agent. It reads [AGENTS.md](AGENTS.md) at the root. Install the skill into another project with:
 
 ```bash
 npx skills add ruochi/flexlayer
 ```
 
-Skill 只介绍项目、仓库和文档地址，以及超出 HTML 截图的能力。写法在安装后的 `node_modules/flexlayer/SPEC.md`。正文是 [skills/flexlayer/SKILL.md](skills/flexlayer/SKILL.md)。
+The skill only introduces the project, the repo, the doc URLs, and the features that go beyond an HTML screenshot. The syntax lives in `node_modules/flexlayer/SPEC.md` after install. The skill text is [skills/flexlayer/SKILL.md](skills/flexlayer/SKILL.md).
 
-## 安装
+## Install
 
-需要 Node.js 20 或更高版本。`package.json` 的 `engines` 写了 `>=20`。用 Node 18 跑命令时，入口会直接说明要换版本，而不是抛出 yoga-layout 的 `ERR_REQUIRE_ESM`。
+Node.js 20 or newer. `package.json` sets `engines` to `>=20`. On Node 18 the entry says to switch versions, instead of throwing yoga-layout's `ERR_REQUIRE_ESM`.
 
 ```bash
 npm install
 npm run build
 ```
 
-从 git 安装时会跑 `prepare`，自动编译，不用事先构建：
+Installing from git runs `prepare` and compiles for you. You do not build first:
 
 ```bash
 npm install github:ruochi/flexlayer
 ```
 
-默认字体是寒蝉端黑体。`Song`、`Kai`、`Brush` 和一批 Google 字体也可以直接写名字，第一次用到时下载到 `~/.cache/flexlayer/fonts`。名单见 [docs/RESOURCES.md](docs/RESOURCES.md)。
+The default font is ChillDuanSans (寒蝉端黑体). `Song`, `Kai`, `Brush`, and a set of Google fonts can be named directly. The first use downloads them to `~/.cache/flexlayer/fonts`. The list is in [docs/RESOURCES.md](docs/RESOURCES.md).
 
-## 命令
+## Commands
 
 ```bash
 npx tsx src/cli.ts render examples/hello.layer -o hello.png --report hello.json
@@ -45,19 +49,23 @@ npx tsx src/cli.ts check examples/hello.layer
 npx tsx src/cli.ts render examples/hello.layer -o hello.png --watch
 npx tsx src/cli.ts render examples/hello.tsx -o hello.png --emit hello.out.layer
 npx tsx src/cli.ts render examples/slide.tsx --frame 1 -o slide.png
+npx tsx src/cli.ts render a.tsx b.tsx -o out/ --scale 1 --scale 2
+npx tsx src/cli.ts check a.tsx b.tsx
 ```
 
-构建之后也可以：
+`render` does not type-check. Type checking is `check`. To check while rendering, add `--typecheck`. Several files and several `--scale` values finish in one process. The same `.tsx` runs once. When there are several files or scales, `-o`, `--report`, and `--emit` are directories.
+
+After a build:
 
 ```bash
 node dist/cli.js render examples/hello.layer -o hello.png
 ```
 
-有 error 级别问题时，命令退出码为 1。
+If any issue is at error level, the command exits with code 1.
 
-## 代码调用
+## From code
 
-推荐先量再摆。`canvas.create` 同步准备字体和图片，并在进程里记住。参数是一棵 `<layer>`，返回量好的盒子。子元素的位置在 `elements` 里，和 `text` 用同一套坐标：
+Measure first, then place. `canvas.create` prepares fonts and images synchronously and remembers them for the process. The argument is one `<layer>`. It returns the measured box. Child positions are in `elements`, in the same coordinates as `text`:
 
 ```tsx
 import { canvas } from 'flexlayer'
@@ -76,7 +84,7 @@ export default canvas.create(
 )
 ```
 
-文件头写 `/** @jsxImportSource flexlayer */`。先量再摆见 `examples/poster.tsx`。HTML 里并排放图形见 `examples/html-layer.tsx`：`div` 里放写了宽高的 `layer`，圆和矩形用这一层的局部坐标。也可以直接把节点交给渲染器：
+Put `/** @jsxImportSource flexlayer */` at the top of the file. Measure-then-place is in `examples/poster.tsx`. Shapes beside HTML are in `examples/html-layer.tsx`: a `layer` with a width and height sits inside a `div`, and circles and rectangles use that layer's local coordinates. You can also hand the node to the renderer:
 
 ```ts
 import { renderLayer } from 'flexlayer'
@@ -84,7 +92,7 @@ import { renderLayer } from 'flexlayer'
 const { png, report } = await renderLayer(source, { scale: 0.5 })
 ```
 
-嵌套 `layer` 不填背景，色块写法见 [AGENTS.md](AGENTS.md)。新的像素滤镜用 `registerFilter` 登记，内置的 `grade` 和 `filter` 也在这个接口上，见 [SPEC.md](SPEC.md)「效果」。自定义像素用 `<canvas>` 和 `<script>`：
+A nested `layer` does not take a background. Color blocks are described in [AGENTS.md](AGENTS.md). Register a new pixel filter with `registerFilter`. The built-in `grade` and `filter` use that same interface. See [SPEC.md](SPEC.md), "Effects". Custom pixels use `<canvas>` and `<script>`:
 
 ```html
 <layer width="400" height="300" background="#0f1115">
@@ -100,9 +108,9 @@ const { png, report } = await renderLayer(source, { scale: 0.5 })
 </layer>
 ```
 
-`.tsx` 里的 `<script>` 可以是闭包，排版之后执行。`performance.now()` 是这一帧的毫秒。
+In `.tsx`, `<script>` can be a closure, and it runs after layout. `performance.now()` is this frame's time in milliseconds.
 
-从字体取出某个字的轮廓，调用后直接得到数组。`d` 的原点在字身左上角，字宽和字身高度来自字体：
+`glyph` returns an array of outlines for the characters you ask for. The origin of `d` is the top-left of the glyph box. Width and body height come from the font:
 
 ```ts
 import { glyph, h, renderLayer } from 'flexlayer'
@@ -120,15 +128,15 @@ const root = h(
 await renderLayer(root)
 ```
 
-离屏量字用主入口的 `createCanvas`、`loadImage` 和 `applyCanvasFont`，先 `await initFonts()`。自定义字体文件用 `registerFontPath(family, filePath)`，同名已经登记过就不再换文件。这是排版那一份画布，可变字重写在 `wght` 轴上。没登记的字体名会抛错。
+For offscreen measurement, use `createCanvas`, `loadImage`, and `applyCanvasFont` from the main entry, after `await initFonts()`. Register a custom font file with `registerFontPath(family, filePath)`. A name that is already registered is not swapped for another file. This is the same canvas layout uses. Variable weight is written on the `wght` axis. An unregistered font name throws.
 
-分析一张抠图结果：留下多少、碎成几块、有几个洞、边有多软，并描出轮廓 `d`。坐标是图片像素：
+`analyzeImage` measures a cutout that already exists: how much is left, how many pieces, how many holes, how soft the edge is, and the outline `d`. Coordinates are image pixels:
 
 ```ts
 import { analyzeImage, h, renderLayer } from 'flexlayer'
 
 const cut = analyzeImage('photo.subject.png')
-if (cut.pieces > 1) console.warn(`主体碎成了 ${cut.pieces} 块`, cut.parts)
+if (cut.pieces > 1) console.warn(`subject split into ${cut.pieces} pieces`, cut.parts)
 const root = h(
   'layer',
   { width: String(cut.width), height: String(cut.height) },
@@ -138,9 +146,9 @@ const root = h(
 await renderLayer(root)
 ```
 
-抠主体和前景遮罩都在仓库里的 `packages/select`，不在 npm 上，渲染器只读它写出的文件。进入这个目录执行 `npm install && npm run build`。`npx flexlayer-select mask photo.jpg` 先跑大约 19MB 的深度模型，写出 `photo.foreground.png`，并返回这块前景的 `x`、`y`、`width`、`height`。不写点，从伸进远处的尖往下长。要留下的地方写 `--point x,y`，不要的地方写 `--omit x,y`，都可以写多次，看完遮罩可以再补点重跑。边要跟抠图模型走时加 `--refine`，那一次才下载大约 470MB 的 BiRefNet 512 fp16。深度模型会先放掉，再载入抠图模型。只抠主体时仍用 `npx flexlayer-select cutout photo.jpg --preset portrait`。
+Subject cutout and the foreground mask live in `packages/select` in this repo. They are not on npm. The renderer only reads the files that package writes. In that directory, run `npm install && npm run build`. `npx flexlayer-select mask photo.jpg` runs the depth model first (about 19MB), writes `photo.foreground.png`, and returns that foreground's `x`, `y`, `width`, and `height`. With no points, the mask grows downward from tips that reach into the distance. `--point x,y` marks what to keep. `--omit x,y` marks what to drop. Both can be repeated. After you look at the mask, add points and run it again. Add `--refine` when the edge should follow the matting model. That pass downloads BiRefNet 512 fp16, about 470MB. The depth model is released before the matting model loads. To cut out only the subject, use `npx flexlayer-select cutout photo.jpg --preset portrait`.
 
-按帧生成一组 PNG 和一张联系表：
+Render a set of PNGs and a contact sheet:
 
 ```ts
 import { h, renderComposition, type Composition } from 'flexlayer'
@@ -162,9 +170,9 @@ const scene: Composition = {
 const { frames, contactSheet } = await renderComposition(scene)
 ```
 
-`draw` 里通过 `el.t` 读取秒数（`frame / fps`）。不传 `t` 的单帧渲染里，`el.t` 为 `0`。
+Inside `draw`, read seconds from `el.t` (`frame / fps`). A single frame rendered without `t` has `el.t` of `0`.
 
-嵌套的 `layer` 可以当分组：外层的 `rotate`、`scale`、`opacity` 作用到整棵子树，子元素用组内坐标。
+A nested `layer` can be a group. The outer `rotate`, `scale`, and `opacity` apply to the whole subtree. Children use coordinates inside the group.
 
 ```tsx
 h(
@@ -175,12 +183,12 @@ h(
 )
 ```
 
-## 测试
+## Tests
 
 ```bash
 npm test
 ```
 
-## 许可
+## License
 
-MIT，见 [LICENSE](LICENSE)。
+MIT. See [LICENSE](LICENSE).

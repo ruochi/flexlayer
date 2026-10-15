@@ -1,164 +1,173 @@
-# 实现备注
+# Implementation notes
 
-写法和规则以 [SPEC.md](../SPEC.md) 为准。本文只记效果和公式的实现在哪、为什么这样写。
+Syntax and rules follow [SPEC.md](../SPEC.md). This file only records where effects and formulas are implemented, and why they are written this way.
 
-## 按需加载
+## Load on demand
 
-绘制和排版函数保持同步。模块在进这些函数之前装好，装过一次的进程里后面直接用。
+Paint and layout functions stay synchronous. A module is loaded before those functions run. After the first load, later calls in the same process use it directly.
 
-| 模块 | 什么时候装 | 入口 |
+| Module | When it loads | Entry |
 | --- | --- | --- |
-| 公式 `math/layout.ts`、OpenType、STIX | 树上有公式标签，或源码里写了公式 | `author-features.ts`，在 `prepareAssets` 里。`layoutSync` / `canvas.create` 若还没装，再同步确认 |
-| 调色 `grade.ts` | 树上有 `grade` 或 `grade-mask` | 同上。登记仍进 `filter.ts` 的滤镜表 |
-| 距离场、沿墨迹描边、玻璃、噪点 | 排版结果里真有对应效果 | `paintDocument` 开头的 `ensurePaintFeatures` |
-| 图标码位 | 第一次把图标名换成码位 | `icons.ts` 读 `icon-codepoints.txt`。没有图标字体时不读、也不下载字体文件 |
-| esbuild、TypeScript | 源文件是 `.tsx` / `.ts` / `.jsx` / `.js` | `cli-main.ts` 再去加载。`.layer` 不走这条路 |
-| `frame.ts` | 源文件是 Composition，要渲染多帧或联系表 | 同上 |
-| esbuild 缓存 | 同一份源文件再次执行 | `~/.cache/flexlayer/code/<内容哈希>/entry.mjs`。入口、相对引用和当前 flexlayer 安装路径一起哈希，变了就重打 |
+| Formulas `math/layout.ts`, OpenType, STIX | The tree has a formula tag, or the source wrote a formula | `author-features.ts`, inside `prepareAssets`. If `layoutSync` / `canvas.create` has not loaded it yet, they confirm synchronously |
+| Grade `grade.ts` | The tree has `grade` or `grade-mask` | Same as above. Registration still goes into the filter table in `filter.ts` |
+| Distance field, stroke along ink, glass, noise | The layout result actually has that effect | `ensurePaintFeatures` at the start of `paintDocument` |
+| Icon code points | The first time an icon name is turned into a code point | `icons.ts` reads `icon-codepoints.txt`. With no icon font it does not read the file and does not download a font |
+| esbuild, syntax scan | The source is `.tsx` / `.ts` / `.jsx` / `.js` | `load-source.ts`. The syntax scan uses the TypeScript parser. `.layer` does not take this path |
+| Type check | `check`, or `render --typecheck` | Loaded later from `cli-main.ts` as `typecheck.ts`. A plain `render` does not run it. Several files are checked in the same process |
+| `frame.ts` | The source is a Composition, and several frames or a contact sheet are rendered | Same as above |
+| esbuild cache | The same source runs again | `~/.cache/flexlayer/code/<content hash>/entry.mjs`. The entry, relative imports, and the current flexlayer install path are hashed together. A change rebuilds |
 
-`rules.ts` 只用 `math/rules.ts` 里的标签表，不拉公式排版。
+`rules.ts` uses only the tag table in `math/rules.ts`. It does not pull in formula layout.
 
-## 效果
+## Effects
 
-归属：layer / 图形 / 线条写属性；文字 / flex HTML 写 `style`。`overlay`、`grade`、`grade-mask` 只允许写在 `layer` 上。`<mask>` 是标签，不是属性。绘制顺序见 SPEC「效果」。
+Ownership: layer, shapes, and lines use attributes. Text and flex HTML use `style`. `overlay`, `grade`, and `grade-mask` are allowed only on `layer`. `<mask>` is a tag, not an attribute. Paint order is in SPEC, "Effects".
 
-### 墨迹原则
+### Ink
 
-所有效果跟着墨 alpha，不跟布局 `box`：
+Every effect follows ink alpha, not the layout `box`:
 
-| 元素 | 墨迹是什么 |
+| Element | What the ink is |
 | --- | --- |
-| 文字 | 字形（若有 `background` 则加上背景块） |
-| 形状 / 线 | 填充与描边几何 |
-| layer | `shadow` / `glow` 跟着子树墨迹；这一层是三维场景时跟着已经画好的画面。其余效果只算自身 `border`（无 `background`） |
-| flex | `shadow` / `glow` 跟着子树墨迹（含自身 `background` / `border`）。其余效果只算自身背景和边框 |
-| `blur` / `filter` / `blend` | 该节点已绘制像素（含子树合成） |
+| Text | The glyphs (plus the background block when there is a `background`) |
+| Shape / line | Fill and stroke geometry |
+| layer | `shadow` / `glow` follow the subtree ink. When this layer is a 3D scene they follow the picture already painted. Other effects count only this layer's own `border` (there is no `background`) |
+| flex | `shadow` / `glow` follow the subtree ink (including this node's own `background` / `border`). Other effects count only this node's own background and border |
+| `blur` / `filter` / `blend` | Pixels already painted for that node (including the composited subtree) |
 
-因此文字 `shadow` 是字形投影，不会落成一块矩形雾斑。文字和图片的 `spread`（含 `inner-shadow` / `inner-glow`）按这份 alpha 做距离膨胀或收缩：正数外扩，负数用内侧距离吃进去。形状和盒子背景仍按几何外扩。
+A text `shadow` is therefore a glyph shadow. It does not become a rectangular fog. `spread` on text and images (including `inner-shadow` / `inner-glow`) dilates or erodes that alpha by distance: a positive value grows outward, a negative value eats inward by the inner distance. Shapes and box backgrounds still grow by geometry.
 
-### `stroke` 描边
+### `stroke`
 
-同一个名字两套几何。形状和线条写颜料时走 SVG：描边居中，宽度是 `stroke-width`。第一个词是正的宽度时走距离场：`<宽度> <颜色或渐变> [outside | inside | center]`，逗号分隔多层，从内到外。宽度是到墨迹的总距离，所以 `6 #fff, 14 #f00` 是 0–6 白、6–14 红。默认 `outside`。文字、图片、`layer` 和 flex 没有居中描边，只写颜料时当成外侧距离描边，没写 `stroke-width` 时宽度是 4。渐变坐标按元素盒子，与 `fill` 一样。
+One name, two geometries. A shape or line given a paint uses SVG: the stroke is centered, and the width is `stroke-width`. When the first word is a positive width, the distance field is used: `<width> <color or gradient> [outside | inside | center]`, several layers separated by commas, inner to outer. Width is the total distance from the ink, so `6 #fff, 14 #f00` is white from 0–6 and red from 6–14. The default is `outside`. Text, images, `layer`, and flex have no centered stroke. A paint alone is an outer distance stroke. When `stroke-width` is omitted the width is 4. Gradient coordinates use the element box, the same as `fill`.
 
-文字默认外侧，是因为居中的 `-webkit-text-stroke` 会吃细中文笔画、转角出尖刺。`outline` 按盒子描，留着不用。
+The default for text is outside, because a centered `-webkit-text-stroke` eats thin Chinese strokes and spikes the corners. `outline` strokes the box and is left unused.
 
-距离场只在元素墨迹外框加上最大外描边宽度的范围内计算（Felzenszwalb 二维 EDT，与 `glass`、文字 `spread` 共用）。`outside` 取墨迹外侧 `0 < d ≤ w`，`inside` 取内侧，`center` 两侧各 `w / 2`。外缘在 `d = w` 处约 1px smoothstep。转角是圆角，没有 miter。当前变换带了旋转或错切时，距离场改在屏幕像素里按 4 倍采样，平均缩回后再 1:1 贴上，避免把正的覆盖蒙版最近邻转上去。网格折线画在超采样缓冲上，和填充一起平均缩回，斜边用同一套抗锯齿。
+The distance field is computed only in the ink bounds plus the maximum outer stroke width (Felzenszwalb 2D EDT, shared with `glass` and text `spread`). `outside` takes `0 < d ≤ w` outside the ink. `inside` takes the inside. `center` takes `w / 2` on each side. The outer edge is about a 1px smoothstep at `d = w`. Corners are round. There is no miter. When the current transform has rotation or shear, the distance field is computed in screen pixels at 4×, averaged back, then pasted 1:1, so a positive coverage mask is not nearest-neighbor rotated into place. Mesh polylines are drawn on the supersampled buffer and averaged back with the fill. Slanted edges use the same antialiasing.
 
-写在 layer、flex 或 `<g>` 上时，先把子树墨迹合成一张再求距离，重叠的字只有一圈外轮廓。背景和边框算进这圈。文字盒子和图片有底板时，描边绕着底板。这一层是三维场景时，描边、阴影和发光跟着已经画好的画面。`shadow` / `glow` 的轮廓是本体并上外侧描边，再应用 `spread`。`overlay` 只染本体：蒙版是子树墨迹，内侧描边会从蒙版里挖掉，所以 layer 渐变字加纯色描边时，描边不会被渐变盖住。
+On a layer, flex, or `<g>`, the subtree ink is composited first and then the distance is taken. Overlapping characters get one outer contour. Background and border count in that contour. When a text box or an image has a plate, the stroke goes around the plate. When this layer is a 3D scene, stroke, shadow, and glow follow the picture already painted. The contour of `shadow` / `glow` is the body union the outer stroke, then `spread` is applied. `overlay` tints only the body: the mask is the subtree ink, and an inner stroke is cut out of that mask, so a gradient glyph on a layer plus a solid stroke is not covered by the gradient.
 
-网格折线被可见范围裁断时，光栅在裁掉的那一边多留出线宽。圆头落在窗口外面，贴边的线被窗口裁齐。平面位图里全透明的像素不写深度，父层转了以后，空的地方不会把盒子远侧的棱吃掉。
+When a mesh polyline is cut by the visible range, the raster keeps an extra line-width on the clipped side. A round cap that lands outside the window is cropped flush by the window. Fully transparent pixels in a flat bitmap do not write depth. After a parent rotates, empty space does not eat edges on the far side of the box.
 
-`inside` / `center` 的内侧宽度 ≥ 字号约 8% 时报告 `stroke-fill`。文字 style 里写 `-webkit-text-stroke`，或 HTML 上写 `outline`，报 `non-canonical`，hint 指向 `stroke`。写 `ink-stroke` 报 `invalid-attr`。
+An inner width of `inside` / `center` that is at least about 8% of the font size reports `stroke-fill`. `-webkit-text-stroke` in a text style, or `outline` on HTML, reports `non-canonical`, and the hint points at `stroke`. `ink-stroke` reports `invalid-attr`.
 
-### `glass` 透镜
+### The `glass` lens
 
-参照 iOS 26 Liquid Glass 与社区复刻的共同做法：玻璃是一块中心平坦、边缘凸起的厚片，光线只在边缘弧面发生弯折，中心看到的背景不变形。辨识度来自边缘透镜，不是模糊。
+The shared practice of iOS 26 Liquid Glass and community recreations: glass is a thick slab, flat in the center and raised at the edge. Light bends only on the edge arc. The background seen through the center is not distorted. The look comes from the edge lens, not from blur.
 
-实现（`src/paint.ts` `paintGlass`）：
+Implementation (`paintGlass` in `src/paint.ts`):
 
-1. **距离场**：对墨迹 alpha 做精确欧氏距离变换（Felzenszwalb EDT），得到每个像素到墨迹边缘的距离 `d`；轻微盒式平滑后取梯度作为向内法线。任何墨迹都能用，不依赖形状公式。
-2. **弧面带**：`bezel = min(短边 × 24%, 64px, 内切半径)`。`d ≥ bezel` 的像素原样复制背景；弧面带内按 `t = d / bezel` 查位移表。
-3. **位移曲线**：`shift = S·(1-t)²`，`S = bezel × 0.5 × refraction`。内沿处位移与斜率都归零，和平坦区无缝；`S ≤ bezel/2` 保证 `d + shift` 单调，背景在边缘被连续放大，不会翻折或被拉成一条线。按 squircle 表面加 Snell 定律直接算时，边缘斜率趋于无穷，弧面带几乎取同一条等距线，所以改用这条平滑曲线。
-4. **取样**：沿法线向内偏移后双线性取样。`dispersion` > 0 时 R/G/B 用略不同的位移，边缘出现细微色散。
-5. **高光**：外法线朝左上光源的一侧最亮，对侧有较弱回光；由边缘 1px 亮线加弧面内的柔光组成。
-6. **模糊**：只有 `blur > 0` 才先糊背景再折射；`clear` 预设为 0。
-7. **投影**：先取样背景，再画投影，最后贴玻璃，投影不会被玻璃透出来。
+1. **Distance field.** An exact Euclidean distance transform (Felzenszwalb EDT) of the ink alpha gives each pixel a distance `d` to the ink edge. A light box blur, then the gradient, is the inward normal. Any ink works. It does not depend on a shape formula.
+2. **Bezel band.** `bezel = min(short side × 24%, 64px, inscribed radius)`. Pixels with `d ≥ bezel` copy the background unchanged. Inside the band, displacement is looked up with `t = d / bezel`.
+3. **Displacement curve.** `shift = S·(1-t)²`, `S = bezel × 0.5 × refraction`. Displacement and slope both go to zero at the inner edge, so it meets the flat region with no seam. `S ≤ bezel/2` keeps `d + shift` monotonic. The background is magnified continuously at the edge and does not fold or stretch into a line. Snell's law on a squircle surface sends the edge slope toward infinity, and the band almost samples one isoline, so this smooth curve is used instead.
+4. **Sampling.** Offset inward along the normal, then bilinear sample. When `dispersion` > 0, R/G/B use slightly different shifts, and a fine fringe appears at the edge.
+5. **Highlight.** The side whose outward normal faces the upper-left light is brightest. The opposite side has a weaker return. It is a 1px bright line at the edge plus a soft light inside the arc.
+6. **Blur.** The background is blurred before refraction only when `blur > 0`. The `clear` preset is 0.
+7. **Shadow.** Sample the background first, then paint the shadow, then paste the glass. The shadow does not show through the glass.
 
-| 预设 | blur | refraction | bezel | dispersion | 默认色调 |
+| Preset | blur | refraction | bezel | dispersion | Default tint |
 | --- | --- | --- | --- | --- | --- |
-| `clear` | 0 | 1 | 0.24 | 0.06 | 无 |
+| `clear` | 0 | 1 | 0.24 | 0.06 | none |
 | `regular` | 6 | 0.85 | 0.22 | 0.04 | `#ffffff14` |
 | `thick` | 36 | 0.5 | 0.2 | 0 | `#ffffff2a` |
 
-做不到：设备姿态实时高光、多层玻璃互相折射、系统级自适应明暗。
+Not possible: a highlight that follows the device pose in real time, several panes of glass refracting each other, and system-level adaptive light and dark.
 
-### `grade` 调色
+### `grade`
 
-给调用方的入口只有三样：六个参数（`shadows`、`highlights`、`contrast`、`fade`、`saturate`、`vignette`，加上可选的 `midtones`、`warmth`）、一个预设名、一个遮罩。预设只是参数的一套固定值（`src/grade.ts` `GRADE_PRESETS`），没有单独的算法；报告回显展开后的值。
+The caller gets three things: six parameters (`shadows`, `highlights`, `contrast`, `fade`, `saturate`, `vignette`, plus optional `midtones` and `warmth`), a preset name, and a mask. A preset is only a fixed set of parameter values (`GRADE_PRESETS` in `src/grade.ts`). There is no separate algorithm. The report echoes the expanded values.
 
-`grade` 是登记在 `src/filter.ts` 上的像素滤镜（`includeBackdrop`，遮罩属性 `grade-mask`）。`apply` 调用 `src/grade.ts` 的 `applyGrade`，在离屏缓冲上原地改像素：
+`grade` is a pixel filter registered on `src/filter.ts` (`includeBackdrop`, mask attribute `grade-mask`). `apply` calls `applyGrade` in `src/grade.ts` and edits pixels in place on an offscreen buffer:
 
-1. 像素转 OKLab。
-2. `contrast`：以 L=0.5 为支点缩放 L。`fade`：`L = f + L·(1-f)`，`f = fade × 0.3`。
-3. `saturate`：a、b 乘系数。排在染色之前，黑白也能再染冷暖。
-4. `warmth`：a、b 沿 (0.02, 0.06) 方向平移。
-5. 三段染色：权重 `(1-L)²`、`2L(1-L)`、`L²`，各加一个 a/b 偏移。偏移方向取颜色的色相，大小 = `0.1 × 强度 × 鲜艳度`，鲜艳度 = `min(1, C / L / 0.25)`。深色和浅色写同一色相时偏得差不多；L 不变，颜色只管色相和浓淡。
-6. `vignette`：到盒子中心的椭圆距离（角上为 1），`smoothstep(0.35, 1)` × 强度，混向暗角颜色。
-7. 与原图按 `整体强度 × 遮罩 alpha` 混合；遮罩透明处像素原样保留。
+1. Convert the pixel to OKLab.
+2. `contrast`: scale L around the pivot L=0.5. `fade`: `L = f + L·(1-f)`, `f = fade × 0.3`.
+3. `saturate`: multiply a and b. This comes before tinting, so black and white can still be warmed or cooled.
+4. `warmth`: shift a and b along (0.02, 0.06).
+5. Three-band tint: weights `(1-L)²`, `2L(1-L)`, and `L²`, each adding an a/b offset. The offset direction is the color's hue. The size is `0.1 × amount × vividness`, and vividness is `min(1, C / L / 0.25)`. A dark color and a light color written at the same hue shift by about the same amount. L does not change. The color only sets hue and strength.
+6. `vignette`: elliptic distance to the box center (1 at the corner), `smoothstep(0.35, 1)` × amount, mixed toward the vignette color.
+7. Blend with the original by `overall amount × mask alpha`. Where the mask is transparent, the pixel is kept as it was.
 
-遮罩用 `paintOf` 画到同尺寸离屏后取 alpha，所以纯色、CSS 渐变、`gradient()` 都能用，坐标按 layer 盒子。根 layer 不走离屏：整幅画布画完后直接调色，画布底色也一起调。预设名不用 `fade`，避免和参数 `fade 0.2` 撞名；哑光预设叫 `matte`。按颜色选区和位置不对称的漏光不在 `grade` 里做。
+The mask is painted with `paintOf` to an offscreen buffer of the same size, then alpha is read, so a solid color, a CSS gradient, and `gradient()` all work. Coordinates use the layer box. The root layer does not go offscreen: the whole canvas is graded after it is painted, including the canvas color. The preset name is not `fade`, so it does not collide with the parameter `fade 0.2`. The matte preset is called `matte`. Selection by color, and light leaks that are not symmetric in position, are not done inside `grade`.
 
-### 取舍
+### Tradeoffs
 
-- `backdrop-blur` / `glass` 在主画布上采样，贴回时按墨迹 alpha 裁切。
-- `glass` 与 `backdrop-blur` 同时出现时以 `glass` 为准（`info`）。
-- `filter` 不含 `blur()` / `drop-shadow()`，避免与 `blur` / `shadow` 双通道。
-- 同时写 `blur` 与 `filter`：模糊以 `blur` 为准，报 `info`。
-- 勿占用：`outer-glow`、`drop-shadow`、`backdrop-filter`、`texture`、`outline`。
+- `backdrop-blur` / `backdrop-filter` / `glass` sample the main canvas and clip back by ink alpha when pasted.
+- `backdrop-filter` reuses the canvas filter string from `filter`. `blur()` is stored as `backdrop-blur`. Each other function calls the registered `filter` `canvasFilter`, with lengths scaled by the backdrop transform.
+- `box-shadow` is parsed into `shadow` and `inner-shadow` (`inset`). It is not a canvas `drop-shadow()`, so spread and inset stay on the ink shadow path.
+- When `glass` and `backdrop-blur` or `backdrop-filter` are both set, `glass` wins (`info`).
+- `filter` accepts the canvas CSS functions, including `blur()`, `drop-shadow()`, and `opacity()`. `url()` is rejected. Pixel lengths scale with the supersample. `pad()` is `blur × 2` plus each drop-shadow's `blur × 2 + |x| + |y|`.
+- `shadow` and `filter: drop-shadow()` both paint. `opacity` and `filter: opacity()` both apply.
+- When `blur` and a `blur()` inside `filter` are both set, the attribute wins, that `blur()` is removed, and an `info` is reported. A missing drop-shadow color uses the element color.
+- Do not register: `outer-glow`, `drop-shadow`, `backdrop-filter`, `texture`, `outline`.
 
-### 开放接口
+### Open interface
 
-新滤镜用 `registerFilter`（`src/filter.ts`）。内置的 `grade`（像素）和 `filter`（画布 CSS）也在这个接口上，绘制不再单独分支。
+A new filter uses `registerFilter` (`src/filter.ts`). The built-in `grade` (pixels) and `filter` (canvas CSS) sit on that same interface. Paint no longer special-cases them.
 
-阴影、发光、玻璃、背景模糊、噪点、叠加不走这里：它们要墨迹轮廓或背后的像素，不是这一层画完再改。
+Shadow, glow, glass, backdrop blur, noise, and overlay do not go through here. They need the ink contour or the pixels behind, not a change after the layer is finished.
 
-`pixel` 滤镜的 `apply` 拿到非预乘 RGBA，按满强度改像素，用 `frame` 知道盒子在缓冲里的位置。有遮罩时，引擎在 `apply` 之后用遮罩 alpha 和调用前的像素混合。`includeBackdrop: true` 时，写在根 layer 上会连画布底色一起处理。`canvas` 滤镜只返回一段 CSS filter 字符串。
+A `pixel` filter's `apply` receives unpremultiplied RGBA, edits pixels at full strength, and uses `frame` to know where the box sits in the buffer. When there is a mask, the engine blends with the mask alpha and the pixels from before `apply`. With `includeBackdrop: true`, a filter on the root layer also processes the canvas color. A `canvas` filter only returns a CSS filter string.
 
-规范写法见 [SPEC.md](../SPEC.md)「效果」。
+The canonical form is in [SPEC.md](../SPEC.md), "Effects".
 
-### 实现触点
+### Where to look
 
-- `src/filter.ts` — 滤镜注册、内置 `grade` / `filter`、从属性收集
-- `src/style.ts` — `filter` 的 CSS 函数解析；其余效果的解析
-- `src/grade.ts` — `grade` 的参数和像素算法
-- `src/types.ts` / `src/layout.ts` — 字段与 `readEffects`
-- `src/paint.ts` — 绘制；像素滤镜走 `applyPixelFilters`
-- `src/rules.ts` / `src/jsx-intrinsics.ts` — 归属
-- `src/report.ts` — 报告与 `effect-clipped`
+- `src/filter.ts` — filter registration, built-in `grade` / `filter`, collecting them from attributes
+- `src/style.ts` — parsing CSS functions for `filter`; parsing the other effects
+- `src/grade.ts` — `grade` parameters and the pixel algorithm
+- `src/types.ts` / `src/layout.ts` — fields and `readEffects`
+- `src/paint.ts` — painting; pixel filters go through `applyPixelFilters`
+- `src/rules.ts` / `src/jsx-intrinsics.ts` — ownership
+- `src/report.ts` — the report and `effect-clipped`
 
-## 字体集合
+## Font collections
 
-`registerFromPath` 不能指定集合里的哪一套，不写序号时画布用第 0 套。`src` 末尾的 `#` 加十进制序号先从路径上拆下来，再检查文件在不在。选中的那一套按表拆成独立 sfnt，写进字体缓存后照常注册。表偏移在集合里相对文件开头，共享的表会各抄一份。
+`registerFromPath` cannot choose which face of a collection to use. With no index, the canvas uses face 0. A `#` plus a decimal index at the end of `src` is split off the path before the file is checked. The chosen face is split out of the table into its own sfnt, written into the font cache, and registered as usual. Table offsets in a collection are relative to the start of the file. Shared tables are copied once each.
 
-## 公式
+## Formulas
 
-绘制和报告不认识公式。`src/math/` 把 MathML 排成普通的 `flex`、`text`、`shape`（分数线、横线）和 `line`（伸长的字形路径）节点。
+Paint and the report do not know about formulas. `src/math/` lays MathML out as ordinary `flex`, `text`, `shape` (fraction bars, rules), and `line` (a stretched glyph path) nodes.
 
-| 文件 | 内容 |
+| File | Contents |
 | --- | --- |
-| `src/math/layout.ts` | 每种标签怎么排 |
-| `src/math/rules.ts` | 标签名单、运算符分类、TeX 原子间距表、`mathvariant` 字母表、重音和撇号 |
-| `src/math/font.ts` | 载入 STIX Two Math，MATH 常量换算成像素，挑字形变体，拼接件拼长括号和根号 |
-| `src/math/opentype.ts` | 读 woff / sfnt：`cmap`、`hmtx`、`glyf` 轮廓和 MATH 表 |
+| `src/math/layout.ts` | How each tag is laid out |
+| `src/math/rules.ts` | The tag list, operator classes, the TeX atom spacing table, the `mathvariant` alphabet, accents and primes |
+| `src/math/font.ts` | Load STIX Two Math, convert MATH constants to pixels, pick glyph variants, assemble stretchy brackets and radicals from parts |
+| `src/math/opentype.ts` | Read woff / sfnt: `cmap`, `hmtx`, `glyf` outlines, and the MATH table |
 
-每一块排完是一个盒子，记着宽、基线上方高度 `ascent`、基线下方深度 `descent`、斜体修正和 TeX 原子类别。容器把子块按基线摆好，再把子节点的 `x`、`y` 写成相对容器左上角的坐标。
+Each finished piece is a box. It records width, height above the baseline `ascent`, depth below the baseline `descent`, italic correction, and the TeX atom class. A container places children on the baseline, then writes each child's `x` and `y` relative to the container's top-left.
 
-- 普通记号用画布按 STIX Two Math 绘制，盒子贴着着墨。公式不接受别的字体：间距、斜体修正和伸长字形都从这套字体的 MATH 表来。写了别的 `font-family` 报 `invalid-attr` 并忽略。`mtext` 仍用外面的文字字体。
-- 大号求和、积分、伸长的括号、根号和宽重音不用画布字形，而是从字体里取对应变体或拼接件的轮廓，画成填充路径。画布只能按码位取字，取不到这些变体。
-- 间距和位移来自 MATH 表，算法跟 MathML Core 一致。上标沿用 TeX 的做法：基座是单个记号时不看它的高度，所以 `a²` 和 `b²` 的 2 一样高。
-- 原子间距用 TeX 的 8×8 表。二元运算符在行首或跟在运算符、关系符、左括号、标点后面时改成普通原子。
-- 括号先按栈配对，每对按中间内容的高度伸长。这样 `f(x) = { …表格… }` 里的 `( )` 不会被大括号拉高。
+- Ordinary tokens are drawn by the canvas in STIX Two Math. The box hugs the ink. A formula does not accept another font: spacing, italic correction, and stretched glyphs all come from this font's MATH table. Another `font-family` reports `invalid-attr` and is ignored. `mtext` still uses the surrounding text font.
+- Large sums, integrals, stretched brackets, radicals, and wide accents are not canvas glyphs. The matching variant or assembly parts are taken from the font and drawn as filled paths. The canvas can only fetch a glyph by code point, and it cannot fetch those variants.
+- Spacing and shifts come from the MATH table. The algorithm matches MathML Core. Superscripts follow TeX: when the base is a single token, its height is not consulted, so the 2 in `a²` and `b²` sits at the same height.
+- Atom spacing uses TeX's 8×8 table. A binary operator at the start of a line, or after an operator, relation, left bracket, or punctuation, becomes an ordinary atom.
+- Brackets are paired with a stack first. Each pair stretches to the height of the content between them. That way the `( )` in `f(x) = { …a table… }` are not pulled taller by the braces.
 
-还没做：`menclose`、`mpadded`、`mmultiscripts`、`mfenced`、换行、`maligngroup`，以及 MATH 表里的数学字距（`MathKernInfo`）和重音锚点（`MathTopAccentAttachment`）。
+Not built yet: `menclose`, `mpadded`, `mmultiscripts`, `mfenced`, line breaking, `maligngroup`, and the MATH table's math kerning (`MathKernInfo`) and accent anchors (`MathTopAccentAttachment`).
 
-## 行内绘制
+## Inline paint
 
-`translate`、`rotate`、`scale`、`opacity` 写在行内标签的 `style` 上时，不进 `measureText` 的前进宽度。`planLinePaint` 在排版后把字收成组：没写 `split="chars"` 时，同一 `paintGroup` 绕整段字心；写了就按码位拆开，每个字绕自己的字心。着墨用变换后的四边形，`flowInk` 留着没变换的行盒，报告里的 `box` 用后者。透明度低于 0.01 不并进着墨。避头尾只看 owner 路径；`glueUnits` 拼段时还要求这四项相同，不同角度不会合成一次 `fillText`。
+When `translate`, `rotate`, `scale`, or `opacity` is on an inline tag's `style`, it is not part of the advance width passed to `measureText`. After layout, `planLinePaint` groups characters. Without `split="chars"`, one `paintGroup` rotates around the center of the whole run. With it, characters split by code point, and each rotates around its own center. Ink uses the transformed quadrilateral. `flowInk` keeps the untransformed line box. `box` in the report uses the latter. Opacity below 0.01 is not merged into the ink. Line-break rules look only at the owner path. `glueUnits` also requires those four properties to match when it joins a run, so different angles are not one `fillText`.
 
-文字盒子自己的 `rotate`、`scale`、`opacity` 仍转整块盒子。盒子上写了 `split="chars"` 时，这四项改记到每个字上，盒子的旋转、缩放和透明度收回 0 或 1。
+`rotate` in `style` parses `deg`, `rad`, `grad`, and `turn`. A bare nonzero number is degrees plus `non-canonical`. On a box, `translate`, `rotate`, `scale`, and `transform` become one local matrix, `T(origin) * translate * rotate * scale * transform * T(-origin)`, resolved after the border box size is known. A pure rotation or axis-aligned scale stays on `node.rotate` and `node.scaleX` / `scaleY`, so the old pivot path is unchanged. Anything with a translation, or a scale that does not commute with the rotation, is `node.motion`. Paint, ink, and the report use that matrix. Layout `x` / `y` / `width` / `height` do not. `transform-origin` wins over `origin`. The default is still the center.
 
-发光、描边走 `drawTextNode`，所以跟画出的像素。带 `blur` 或像素滤镜时，离屏范围是布局盒子并上着墨，转出盒子的字不会被裁掉。
+A text box's own `rotate`, `scale`, and `opacity` still turn the whole box. When the box sets `split="chars"`, those four properties are recorded on each character, and the box's rotation, scale, and opacity go back to 0 or 1.
 
-## 模型
+Glow and stroke go through `drawTextNode`, so they follow the pixels that were painted. With `blur` or a pixel filter, the offscreen range is the layout box union the ink. A character that rotates out of the box is not clipped.
 
-外部三角网格和 three.js 的 Object3D 收成同一份图元，后面的光栅、线稿、材质和影子不分支。
+## Script subprocess
 
-- 坐标保持文件和 three 的 y 向上。作者空间 y 向下只发生在 `transformPoint` / `transformNormal`。这里再翻一次，绕序会翻两次，正面变成背面。
-- 负的线性行列式（镜像缩放）在 `fromThree` 里把三角形换回正面。glb 路径不改绕序。
-- `unit` 是 1 个模型单位对应的像素，不减包围盒中心。默认 origin 在盒子中心，所以模型原点落在外包 layer 的中心。多只 `<model>` 写同一个 `unit`，相对位置还在。
-- 不写 `material` 时按 three.js 的材质种类换算。`MeshLambertMaterial` 和 `MeshToonMaterial` 用 `matte`，只有明暗。`MeshPhongMaterial` 用 `plastic`，`roughness = clamp(1 - shininess / 100)`，`shininess` 100 是光滑，环境最清楚。`MeshPhysicalMaterial` 的 `transmission` 不小于 0.5 用 `glass`（假折射：方窗、轮廓光、一层折射）。其余金属度不小于 0.5 用 `metal`，否则 `plastic`，粗糙度来自图元，缺省 0.65。写了 `material` 则整只模型都用它。glb 没有种类标记，仍按金属度分。
-- `map` 的像素已经在内存里时，按 uv 取样，乘上材质色，再进同一套明暗。金属和塑料仍用工作室环境。网址还没解码的贴图当没有。顶点色乘上材质色后按顶点插值。`emissive` 乘上 `emissiveIntensity`，加在明暗之后，不照亮别的物体。`ShaderMaterial` 不执行，从 `color`、`uColor`、`diffuse` 这类 uniform 里取一个颜色当底色。
-- 内存网格的图元放在 `WeakMap` 里，规格上只留内容哈希。场景缓存按这个哈希失效，不把 Object3D 放进键。
-- `src/three.ts` 不 import `three`。类型看 `isMesh` / `isLine`。`flexlayer/three` 是同一份文件。裸包名从导入它的源文件往上找 `node_modules`，按 `package.json` 的 `import` 条件取文件，不走 `require.resolve`。
-- 线段和图元走同一条投影。下标是成对的端点，不进三角形光栅，也不进阴影图。深度测试和实心网格共用，更靠近观众的盖住更远的。`wireframe` 只出边。线宽在超采样缓冲里按输出像素铺开，缩回去仍是大约 1 像素。
+`.layer` script text runs in a child process. The child loads `@napi-rs/canvas`, so it needs a native addon. Node's permission model blocks addons unless `--allow-addons` is passed, and that flag does not exist before Node 20.12 (and the matching 21.x). Passing it earlier makes Node exit before the script runs. Omitting the permission model on those versions is what lets the canvas paint. On later versions the read list includes the package directory, each file in it, the `node_modules` directories the resolver stats, and `package.json` walked upward. An existing directory is not also listed as `directory/*`. After the list is built, the child is started once; a denied module path from `resource:` is added and the start is repeated. `/etc/passwd` and other paths outside the package are not added.
 
+## Models
+
+An external triangle mesh and a three.js Object3D become the same primitives. Later raster, line art, materials, and shadows do not branch.
+
+- Coordinates keep the file's and three's y-up. Author space y-down happens only in `transformPoint` / `transformNormal`. Flipping again here would flip winding twice, and the front would become the back.
+- A negative linear determinant (a mirror scale) swaps triangles back to front-facing in `fromThree`. The glb path does not change winding.
+- `unit` is pixels per model unit. It does not subtract the bounding-box center. The default origin is the center of the box, so the model origin sits at the center of the wrapping layer. Several `<model>` elements with the same `unit` keep their relative positions.
+- When `material` is omitted, the three.js material kind is converted. `MeshLambertMaterial` and `MeshToonMaterial` use `matte`, shading only. `MeshPhongMaterial` uses `plastic`, `roughness = clamp(1 - shininess / 100)`. `shininess` 100 is smooth, and the environment is sharpest. `MeshPhysicalMaterial` with `transmission` of at least 0.5 uses `glass` (fake refraction: a square window, a rim light, one refraction layer). Otherwise metalness of at least 0.5 uses `metal`, and the rest uses `plastic`. Roughness comes from the primitive, default 0.65. A written `material` applies to the whole model. glb has no kind tag and still splits by metalness.
+- When a `map`'s pixels are already in memory, they are sampled by uv, multiplied by the material color, then go through the same shading. Metal and plastic still use the studio environment. A texture whose URL has not been decoded counts as absent. Vertex colors multiply the material color and interpolate per vertex. `emissive` is multiplied by `emissiveIntensity`, added after shading, and does not light other objects. `ShaderMaterial` is not executed. A color is taken from a uniform such as `color`, `uColor`, or `diffuse` and used as the base color.
+- Primitives of an in-memory mesh live in a `WeakMap`. The spec keeps only a content hash. The scene cache invalidates on that hash. The Object3D is not part of the key.
+- Segments, points, and primitives share one projection. Line indices are pairs of endpoints. Point indices are single vertices, drawn as discs. They do not enter triangle raster or the shadow map. The depth test is shared with solid meshes. Whatever is closer to the viewer covers what is farther. `wireframe` emits only edges. Line width and point size are spread in output pixels on the supersampled buffer. After it is scaled back, a width of 1 is still about 1 pixel. `PointsMaterial.size` defaults to 1.
+- `src/three.ts` does not import `three`. Types look at `isMesh` / `isLine` / `isPoints`. `flexlayer/three` is the same file. A bare package name is resolved upward from the source file that imported it, looking for `node_modules`, and the file is taken from the `import` condition in `package.json`. It does not use `require.resolve`.

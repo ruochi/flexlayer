@@ -13,16 +13,17 @@ import { backdropFilters, filtersPad, getFilter, orderedFilters } from './filter
 import { fitImageRect } from './image.js'
 import { canvasPaint, isGradient } from './gradient.js'
 import { gradientStyle, isGradientPaint, type GradientBox } from './gradientField.js'
-import { apply, applyToBox, aroundPivot, IDENTITY, intersectBox, invert, multiply, originOffset, translated, type Matrix } from './matrix.js'
+import { absoluteNodeMatrix, apply, applyToBox, IDENTITY, intersectBox, invert, isIdentity, multiply, originOffset, translated, type Matrix } from './matrix.js'
 import { openSvgPath } from './path.js'
 import { cameraItems, projectOnLayer } from './camera.js'
 import { ownsMeshScene, renderMeshLayer, type MeshFrame } from './mesh.js'
 import { applyPoseMatrix, behindCamera, cameraSceneCustom, drawSolidPolygon, drawTexturedPlane, drawTexturedPolygon, has3dPose, hasPerspective, PERSPECTIVE_AA, planeDepth, posePoint, project, resolveSamples, type Perspective, type ScreenPoint } from './perspective.js'
 import { flatFill, planeBitmapPad, visiblePlaneWindow, type PlaneCorner } from './plane-crop.js'
 import { compositeMask } from './mask-compose.js'
-import { outerInkStrokeReach } from './style.js'
+import { colorFilterToCss, outerInkStrokeReach, shadowLayers } from './style.js'
 import { layoutScale, viewMatrix } from './view.js'
 import { unionBoxes, type AppliedFilter, type Box,
+  type ColorFilterSpec,
   GlassSpec,
   GlowSpec,
   CanvasLayoutNode,
@@ -570,6 +571,12 @@ function drawCanvasNode(ctx: PaintCtx, node: CanvasLayoutNode) {
 
 /** 绕 origin 旋转、缩放。支点用当前坐标系里的绝对位置，子绘制仍使用 node.x/node.y。 */
 function applyNodeTransform(ctx: CanvasRenderingContext2D, node: LayoutNode) {
+  if (node.motion) {
+    const m = absoluteNodeMatrix(node)
+    if (isIdentity(m)) return
+    ctx.transform(m.a, m.b, m.c, m.d, m.e, m.f)
+    return
+  }
   if (node.rotate === 0 && node.scaleX === 1 && node.scaleY === 1) return
   const o = originOffset(node.origin, node.width, node.height)
   const px = node.x + o.x
@@ -1093,17 +1100,53 @@ function nodeDeviceBounds(ctx: PaintCtx, node: LayoutNode, padDevice: number) {
   return { matrix, minX, minY, maxX, maxY, sw: maxX - minX, sh: maxY - minY }
 }
 
-function paintBackdropBlur(ctx: PaintCtx, node: LayoutNode, radius: number) {
-  if (radius <= 0 || node.width <= 0 || node.height <= 0) return
+/** 一步滤镜函数，走已注册的 `filter`。换掉 filter 的实现时，背景滤镜跟着换。 */
+function backdropColorCss(step: ColorFilterSpec, scale: number): string {
+  const render = getFilter('filter')?.canvasFilter
+  const css = render?.([step], scale)
+  if (css) return css
+  return colorFilterToCss([step], scale)
+}
+
+/**
+ * 背景采样用的 canvas filter。
+ * 只有 `backdrop-blur` 时就是 `blur()`。`backdrop-filter` 的色彩函数和 layer `filter` 同一条字符串。
+ */
+function backdropFilterCss(node: LayoutNode, k: number): string {
+  const steps = node.backdropFilter
+  if (steps && steps.length > 0) {
+    const parts: string[] = []
+    let sawBlur = false
+    for (const step of steps) {
+      if (step.name === 'blur') sawBlur = true
+      if (step.name === 'blur' && step.value <= 0) continue
+      const css = backdropColorCss(step, k)
+      if (css) parts.push(css)
+    }
+    if (!sawBlur && (node.backdropBlur ?? 0) > 0) parts.unshift(`blur(${node.backdropBlur! * k}px)`)
+    return parts.join(' ')
+  }
+  if ((node.backdropBlur ?? 0) > 0) return `blur(${node.backdropBlur! * k}px)`
+  return ''
+}
+
+function nodeHasBackdrop(node: LayoutNode): boolean {
+  return backdropFilterCss(node, 1) !== ''
+}
+
+function paintBackdrop(ctx: PaintCtx, node: LayoutNode) {
+  if (node.width <= 0 || node.height <= 0) return
   const { matrix, minX, minY, sw, sh } = nodeDeviceBounds(ctx, node, 0)
   if (sw <= 0 || sh <= 0) return
+  const k = Math.sqrt(Math.abs(matrix.a * matrix.d - matrix.b * matrix.c)) || 1
+  const filter = backdropFilterCss(node, k)
+  if (!filter) return
   const snapshot = ctx.getImageData(minX, minY, sw, sh)
   const src = createCanvas(sw, sh)
   ;(src.getContext('2d') as PaintCtx).putImageData(snapshot, 0, 0)
   const blurred = createCanvas(sw, sh)
   const bctx = blurred.getContext('2d') as PaintCtx
-  const k = Math.sqrt(Math.abs(matrix.a * matrix.d - matrix.b * matrix.c)) || 1
-  bctx.filter = `blur(${radius * k}px)`
+  bctx.filter = filter
   bctx.drawImage(src, 0, 0)
   bctx.filter = 'none'
   // 按墨迹 alpha 贴回，文字/异形不会整块毛玻璃
@@ -1363,9 +1406,9 @@ function leafInkBounds(node: LayoutNode): Box {
 function placedChildInk(node: LayoutNode, state?: PaintState): Box | null {
   const local = groupInkBounds(node, state)
   if (!local) return null
-  if (node.rotate === 0 && node.scaleX === 1 && node.scaleY === 1) return local
-  const origin = originOffset(node.origin, node.width, node.height)
-  return applyToBox(aroundPivot(node.x + origin.x, node.y + origin.y, node.rotate, node.scaleX, node.scaleY), local)
+  const pose = absoluteNodeMatrix(node)
+  if (isIdentity(pose)) return local
+  return applyToBox(pose, local)
 }
 
 /**
@@ -1916,8 +1959,11 @@ function paintNodeEffectsAndBody(
 ) {
   // glass 未写 shadow 时补一层柔和投影，接近系统控件浮起感
   const drawShadow = () => {
-    if (node.shadow) {
-      drawEffect(ctx, state, node, shadowEffect(node.shadow), (spread) => drawEffectInk(ctx, node, spread, state))
+    const shadows = shadowLayers(node.shadow, node.shadowList)
+    if (shadows.length > 0) {
+      for (let i = shadows.length - 1; i >= 0; i--) {
+        drawEffect(ctx, state, node, shadowEffect(shadows[i]!), (spread) => drawEffectInk(ctx, node, spread, state))
+      }
     } else if (node.glass) {
       const depth = node.glass.variant === 'thick' ? 18 : node.glass.variant === 'clear' ? 12 : 14
       drawEffect(
@@ -1933,15 +1979,15 @@ function paintNodeEffectsAndBody(
   if (opts.sampleBackdrop && node.glass) {
     paintGlass(ctx, node, node.glass, drawShadow)
   } else {
-    if (opts.sampleBackdrop && node.backdropBlur) paintBackdropBlur(ctx, node, node.backdropBlur)
+    if (opts.sampleBackdrop && nodeHasBackdrop(node)) paintBackdrop(ctx, node)
     if (!opts.skipOwnOuter) drawShadow()
   }
   if (!opts.skipOwnOuter && node.glow) paintGlow(ctx, state, node, node.glow, (spread) => drawEffectInk(ctx, node, spread, state))
   if (!opts.skipOwnOuter) paintInkStrokes(ctx, node, 'outer', undefined, state)
   paintBody(ctx, node, debug, t, state)
   paintInkStrokes(ctx, node, 'inner', undefined, state)
-  if (node.innerShadow) {
-    paintInnerEffect(ctx, node, node.innerShadow, 'source-over')
+  for (const shadow of shadowLayers(node.innerShadow, node.innerShadowList).slice().reverse()) {
+    paintInnerEffect(ctx, node, shadow, 'source-over')
   }
   if (node.innerGlow) {
     paintInnerEffect(
@@ -2020,14 +2066,14 @@ function canvasFilterCss(node: LayoutNode, samples = 1): string {
   const parts: string[] = []
   if ((node.blur ?? 0) > 0) parts.push(`blur(${node.blur! * samples}px)`)
   for (const item of orderedFilters(node.filters, 'canvas')) {
-    const css = getFilter(item.name)?.canvasFilter?.(item.spec)
+    const css = getFilter(item.name)?.canvasFilter?.(item.spec, samples)
     if (css) parts.push(css)
   }
   return parts.join(' ')
 }
 
 function hasOwnOuter(node: LayoutNode): boolean {
-  if (node.shadow || node.glow) return true
+  if (shadowLayers(node.shadow, node.shadowList).length > 0 || node.glow) return true
   return node.inkStroke?.some((layer) => layer.position === 'outside' || layer.position === 'center') ?? false
 }
 
@@ -2057,7 +2103,9 @@ function compositeMaskedOuter(
     if (Math.abs(spread) < 1e-3) blit(octx)
     else paintDilatedInk(octx, spread, SILHOUETTE, bounds, blit)
   }
-  if (node.shadow) drawEffect(octx, state, node, shadowEffect(node.shadow), drawSil)
+  for (const shadow of shadowLayers(node.shadow, node.shadowList).slice().reverse()) {
+    drawEffect(octx, state, node, shadowEffect(shadow), drawSil)
+  }
   if (node.glow) paintGlow(octx, state, node, node.glow, drawSil)
   paintInkStrokes(octx, node, 'outer', {
     bounds,
@@ -2153,13 +2201,17 @@ function paintWithLayerFilter(ctx: PaintCtx, node: LayoutNode, debug: boolean, t
   const masks = layerMaskOf(node)
   const strokeReach = outerInkStrokeReach(node.inkStroke)
   const pad = Math.ceil(blur * 2 + 4 + filtersPad(node.filters))
-  const shadowPad = node.shadow
-    ? node.shadow.blur * 2 + node.shadow.spread + strokeReach + Math.max(Math.abs(node.shadow.x), Math.abs(node.shadow.y))
-    : 0
+  const shadowPad = shadowLayers(node.shadow, node.shadowList).reduce(
+    (pad, shadow) =>
+      Math.max(pad, shadow.blur * 2 + shadow.spread + strokeReach + Math.max(Math.abs(shadow.x), Math.abs(shadow.y))),
+    0,
+  )
   const glowPad = node.glow ? node.glow.blur * 2 + node.glow.spread + strokeReach : 0
   let effectPad = Math.max(pad, Math.ceil(shadowPad), Math.ceil(glowPad), Math.ceil(strokeReach))
   if (masks && node.glass) effectPad = Math.max(effectPad, Math.ceil(node.glass.blur * 2 + 8))
-  if (masks && node.backdropBlur) effectPad = Math.max(effectPad, Math.ceil(node.backdropBlur * 2 + 4))
+  if (masks && nodeHasBackdrop(node)) {
+    effectPad = Math.max(effectPad, Math.ceil((node.backdropBlur ?? 0) * 2 + 4))
+  }
   const cover = coveredBounds(node)
   const tw = Math.max(1, Math.ceil(cover.width + effectPad * 2))
   const th = Math.max(1, Math.ceil(cover.height + effectPad * 2))
@@ -2175,7 +2227,7 @@ function paintWithLayerFilter(ctx: PaintCtx, node: LayoutNode, debug: boolean, t
   const originX = node.x - crop.x
   const originY = node.y - crop.y
   // 有 mask 时玻璃必须画进离屏，采样仍来自主画布，最后和阴影、模糊一起被裁掉
-  const sampleHere = masks != null && (node.glass != null || node.backdropBlur != null)
+  const sampleHere = masks != null && (node.glass != null || nodeHasBackdrop(node))
   const deferOuter = masks != null && node.glass == null && hasOwnOuter(node)
   if (sampleHere) copyParentUnderlay(ctx, octx)
   // 有像素滤镜时颗粒在调色之后再叠，不被染色。蒙版层自己的外扩效果等裁完再画。
@@ -2240,7 +2292,7 @@ function paintNode(
     // 先在主画布采样玻璃/背景模糊，再把本体效果离屏糊上。有 mask 时改在离屏里采样，好让 mask 一并裁掉。
     if (!hasMask) {
       if (node.glass) paintGlass(pctx, node, node.glass)
-      else if (node.backdropBlur) paintBackdropBlur(pctx, node, node.backdropBlur)
+      else if (nodeHasBackdrop(node)) paintBackdrop(pctx, node)
     }
     paintWithLayerFilter(pctx, node, debug, t, state)
   } else {
@@ -2251,9 +2303,7 @@ function paintNode(
 }
 
 function nodePose(node: LayoutNode): Matrix {
-  if (node.rotate === 0 && node.scaleX === 1 && node.scaleY === 1) return IDENTITY
-  const o = originOffset(node.origin, node.width, node.height)
-  return aroundPivot(node.x + o.x, node.y + o.y, node.rotate, node.scaleX, node.scaleY)
+  return absoluteNodeMatrix(node)
 }
 
 /** 文档画布和沿途裁剪，换算到这一层绘制网格时的坐标。 */
@@ -2361,7 +2411,13 @@ function paintFeatureNeeds(node: LayoutNode): { distance: boolean; stroke: boole
       need.distance = true
     }
     if (current.noise && current.noise.amount > 0) need.noise = true
-    if (spread(current.shadow) || spread(current.glow) || spread(current.innerShadow) || spread(current.innerGlow)) need.distance = true
+    const spreads = [
+      ...shadowLayers(current.shadow, current.shadowList),
+      ...shadowLayers(current.innerShadow, current.innerShadowList),
+      current.glow,
+      current.innerGlow,
+    ]
+    if (spreads.some((spec) => spread(spec))) need.distance = true
     if (current.kind === 'layer' || current.kind === 'flex' || current.kind === 'group') {
       for (const child of current.children) walk(child)
       if (current.kind === 'layer' && current.mask) for (const child of current.mask) walk(child)

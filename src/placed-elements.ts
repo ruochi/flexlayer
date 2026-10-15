@@ -1,4 +1,4 @@
-import { apply, applyToBox, aroundPivot, IDENTITY, multiply, originOffset, translated, type Matrix } from './matrix.js'
+import { absoluteNodeMatrix, apply, applyToBox, aroundPivot, IDENTITY, multiply, originOffset, translated, type Matrix } from './matrix.js'
 import type { LayerBox } from './canvas.js'
 import { maskStats, type MaskStats } from './mask-stats.js'
 import { ownsMeshScene } from './mesh.js'
@@ -79,10 +79,7 @@ function layerBox(visual: Box): LayerBox {
 
 /** 把节点局部盒子变到父级内容坐标，再乘上父级空间。`rotate` 为真时带上这一元素自己的旋转。 */
 function mapLocal(node: LayoutNode, space: Matrix, local: Box, rotate: boolean): LayerBox {
-  const pivot = originOffset(node.origin, node.width, node.height)
-  const pose = rotate
-    ? aroundPivot(node.x + pivot.x, node.y + pivot.y, node.rotate, node.scaleX, node.scaleY)
-    : nodePose(node, node.x, node.y)
+  const pose = rotate ? absoluteNodeMatrix(node) : nodePose(node, node.x, node.y)
   const visual = applyToBox(multiply(space, pose), {
     x: node.x + local.x,
     y: node.y + local.y,

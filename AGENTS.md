@@ -1,53 +1,124 @@
 # Flex Layer
 
-生成和渲染分开，中间交接 `.layer` 文本。`.tsx` 用 `canvas.create` 先量再摆，执行后得到同一棵树；`--emit` 写回 `.layer`。验证只出报告，渲染出 PNG。不接 Vue 或 React。
+TSX describes one frame and renders to a deterministic PNG. HTML, SVG, and solids share one tree. Vue and React are not part of this.
 
-标签、属性和问题码的正文只在 [SPEC.md](SPEC.md)。一页写法见 [docs/CHEATSHEET.md](docs/CHEATSHEET.md)，字体和配色见 [docs/RESOURCES.md](docs/RESOURCES.md)，效果图见 [docs/GALLERY.md](docs/GALLERY.md)。
+`.tsx` runs into a tree. `canvas.create` measures, then you place. The renderer paints that tree. `--emit` writes it back as `.layer`. `check` writes a report. `render` writes a PNG.
 
-## 工作流
+The default export is a root `<layer>`. Attributes are strings. In this repo, `npx tsx src/cli.ts render scene.tsx -o out.png`. After install, `npx flexlayer render scene.tsx -o out.png`.
 
-1. 对照下面的约定写 `.tsx` 或 `.layer`。
-2. `npx tsx src/cli.ts check scene.tsx`。有 **error** 时退出码为 1，按报告里的 `path`、`hint` 改，再查。动画不写 `--frames` 时只抽第 0 帧、中间帧和最后一帧。
-3. 间距不对时 `npx tsx src/cli.ts render scene.tsx -o scene.png --debug --report scene.json`，看 `box`（布局盒）和 `ink`（转完或投影后的着墨）。`.tsx` 还有 `source`（`scene.tsx:18:5`）。
-4. 满意后 `npx tsx src/cli.ts render scene.tsx -o scene.png`。
+```tsx
+export default (
+  <layer width="800" height="600" background="#000">
+    <layer x="400" y="300" anchor="center">
+      <h1 style="font-size:64px; color:#fff">Hello</h1>
+    </layer>
+  </layer>
+)
+```
 
-## 硬性约定
+Three differences from a web page:
 
-| 规则 | 这样写 | 问题码 |
+- `<layer>` places a box with `x`, `y`, and `anchor`. HTML does not take `x` or `y`.
+- HTML writes `style`. `layer` and shapes write attributes.
+- Tags are lowercase. Layout lengths are pixels. The y axis points down.
+
+HTML, flex, and SVG geometry follow their own standards. Below, only the deviations. Full prose is in [SPEC.md](SPEC.md). One page of syntax is [docs/CHEATSHEET.md](docs/CHEATSHEET.md). Fonts and palettes are in [docs/RESOURCES.md](docs/RESOURCES.md). Sample pictures are in [docs/GALLERY.md](docs/GALLERY.md). Attribute syntax, one name at a time, is [docs/attrs.json](docs/attrs.json).
+
+## Where it differs
+
+### Place
+
+- `anchor` is a 3×3 grid, default `top-left`. `(x, y)` is that point of the box. `anchor-box="ink"` aligns to the ink before rotation.
+- A `layer` with width and height inside `display:flex` is a flex item. `x`, `y`, or `anchor` on it reports `invalid-attr`.
+- `background` is the canvas color, on the root only, and solid only. A page gradient is a `<rect fill>`.
+- `color` is a solid, and the default line color. Glyph paint is `fill` in `style`: a solid, `linear-gradient()`, `radial-gradient()`, or `gradient()`. `gradient()` is a color matrix, not CSS. `fill` is not inherited.
+- `rotate`, `scale`, and perspective do not move `box`. `ink` is the mark after transform or projection.
+
+### Text
+
+- A text box holds text, inline tags, and `<img>`. A block child reports `invalid-child`. Several paragraphs are `<div><p>`.
+- `split="chars"` moves `translate`, `rotate`, `scale`, and `opacity` onto each character. `rotate` is a bare number of degrees.
+- Icons are `<span class="material-symbols-outlined">home</span>`. `math` uses only `STIXTwoMath`.
+- The default face is ChillDuanSans. Other catalog names are in [docs/RESOURCES.md](docs/RESOURCES.md). A file you supply is `<font family src>` under the root.
+
+### Stroke and effects
+
+- `stroke="6 #000 outside"` traces the ink. The default side is `outside`. A bare color strokes on center, as in SVG. `outline` and `-webkit-text-stroke` report `non-canonical`.
+- On shapes and `layer`, effects are attributes. On text they go in `style`. Names: `shadow`, `glow`, `inner-shadow`, `inner-glow`, `blur`, `backdrop-blur`, `glass`, `noise`, `filter`, `blend`. `filter` accepts `blur()`, `brightness()`, `contrast()`, `drop-shadow()`, `grayscale()`, `hue-rotate()`, `invert()`, `opacity()`, `saturate()`, and `sepia()`. Lengths are pixels. `url()` is not accepted. When `blur` and `blur()` inside `filter` are both set, `blur` wins.
+- CSS `box-shadow` and `backdrop-filter` paint. `box-shadow` is `shadow`, and `inset` is `inner-shadow`. `backdrop-filter` uses the same functions as `filter`. `blur()` is `backdrop-blur`.
+- `overlay`, `grade`, and `grade-mask` belong only on `layer` and cover the subtree. `grade` presets: `lomo`, `matte`, `chrome`, `bleach`, `mono`.
+
+### Solids
+
+- A positive `depth` extrudes along z. `rect` is a box (`rx` rounds the edges). `circle` is a cylinder. Also `sphere`, `torus`, `tube`, and `model`. `<model object={mesh} />` reads a three.js mesh. `unit` is pixels per model unit. Model space keeps y pointing up.
+- Write `camera` on the layer that frames the shot. A number is the viewing distance. When it is omitted, the outermost layer that has a solid, a `ground`, or `rotateX`, `rotateY`, or `z` uses its own `height`. No positive height and no distance still draws in 2D and reports `flatten-3d`. Do not combine `camera` and `view` on the same layer.
+- `<ground>` receives shadows. With no `fill`, only the shadow is drawn. `shadows="none"` on the camera layer turns shadows off.
+
+### Checks and programs
+
+- `data={{ values: [1, 2] }}` in `.tsx`. In `.layer`, `data='{"values":[1,2]}'`.
+- `expect="overflow-canvas: full bleed"` names an issue you want. On the root it covers the subtree. A match drops to `info`. A miss reports `unused-expect`.
+- On the root, `min-font` is `screen` (default, `min(width, height) / 1080 × 24`), `print` (× 12), a pixel number, or `none`.
+- Repeatable randomness is `random` or `noise`. `Math.random()` and `Date.now()` in `.tsx` report `nondeterministic`.
+
+## Hard rules
+
+| Rule | Write it this way | Issue |
 | --- | --- | --- |
-| HTML 用 `style`，layer 和图形用属性 | `<p style="font-size:40px">`、`<circle fill="#fff">` | `invalid-attr` |
-| 标签一律小写 | `<circle>`、`<div style="display:flex">`。大写或 `fvg` 不渲染 | `unknown-tag` |
-| 嵌套 layer 不写 `background` | 色块用 `<rect fill>`、HTML `background` 或 `<canvas>`。根节点的 `background` 才是画布底色 | `invalid-attr` |
-| 排布 | `<div style="display:flex; flex-direction:column">` | `unknown-tag` |
-| 线条 | `<layer><line x1 y1 x2 y2 /></layer>` | `invalid-child` |
-| 文字位置 | `<layer x="120" y="64"><h1>…</h1></layer>` | `invalid-attr` |
-| 位置 | `layer`、`use`、`rect` 用 `x` `y`。圆、椭圆、球用 `cx` `cy` | `invalid-attr` |
-| 渐变 | 字形 `style="fill:linear-gradient(...)"`。`color` 只写纯色 | `invalid-attr` |
-| 描边 | 只写 `stroke`。形状可加 `stroke-width`；沿墨迹写 `stroke="6 #000 outside"` | `invalid-attr` |
-| 整棵子树的效果 | `<layer grade="lomo" overlay="#00000066">` | `invalid-attr` |
-| 实体 | 形状写 `depth` 就沿 z 挤出。`rect` 是盒子（`rx` 是圆棱），`circle` 是圆柱，`path` 按 `fill-rule` 留洞。另有 `sphere`、`torus`、`tube`、`model` | `flatten-3d` |
-| 地面 | `<ground y="520" rotateX="70" />` 接影子。`shadows="none"` 关掉。不写 `fill` 时只有影子 | `invalid-attr` |
-| 结构化数据 | `data={{ values: [1, 2] }}`。`.layer` 写 `data='{"values":[1,2]}'` | `invalid-attr` |
-| 故意出现的问题 | `expect="overflow-canvas: 出血图"`。写在根上覆盖整棵子树。没出现报 `unused-expect` | `unused-expect` |
-| 最小字号 | 根上 `min-font="print"` 或 `min-font="16"`。不写按屏幕 `min(宽, 高) / 1080 × 24`。多处过小合并成一条 | `min-font-size` |
+| HTML uses `style`. `layer` and shapes use attributes | `<p style="font-size:40px">`, `<circle fill="#fff">` | `invalid-attr` |
+| Tags are lowercase | `<circle>`, `<div style="display:flex">`. Uppercase or `fvg` does not render | `unknown-tag` |
+| A nested layer has no `background` | Color blocks use `<rect fill>`, an HTML `background`, or `<canvas>`. Only the root `background` is the canvas color | `invalid-attr` |
+| Layout | `<div style="display:flex; flex-direction:column">` | `unknown-tag` |
+| Lines | `<layer><line x1 y1 x2 y2 /></layer>` | `invalid-child` |
+| Text position | `<layer x="120" y="64"><h1>…</h1></layer>` | `invalid-attr` |
+| Position | `layer`, `use`, and `rect` use `x` `y`. Circles, ellipses, and spheres use `cx` `cy` | `invalid-attr` |
+| Gradients | Glyphs use `style="fill:linear-gradient(...)"`. `color` is a solid color only | `invalid-attr` |
+| Stroke | Write only `stroke`. Shapes may add `stroke-width`. A stroke along the ink is `stroke="6 #000 outside"` | `invalid-attr` |
+| An effect on a whole subtree | `<layer grade="lomo" overlay="#00000066">` | `invalid-attr` |
+| Solids | A positive `depth` extrudes a shape along z. `rect` is a box (`rx` rounds the edges). `circle` is a cylinder. `path` keeps holes by `fill-rule`. There are also `sphere`, `torus`, `tube`, and `model` | `flatten-3d` |
+| Ground | `<ground y="520" rotateX="70" />` receives shadows. `shadows="none"` turns them off. With no `fill`, only the shadow is drawn | `invalid-attr` |
+| Structured data | `data={{ values: [1, 2] }}`. In `.layer`, `data='{"values":[1,2]}'` | `invalid-attr` |
+| An issue you expect | `expect="overflow-canvas: full bleed"`. On the root it covers the whole subtree. If it never appears, the report is `unused-expect` | `unused-expect` |
+| Minimum type size | On the root, `min-font="print"` or `min-font="16"`. When omitted, screen mode is `min(width, height) / 1080 × 24`. Several too-small spots collapse into one issue | `min-font-size` |
 
-## 按主题去哪一节
+## Common issues
 
-| 要写什么 | 看 |
+Fix from the report's `path` and `hint`. An error exits with code 1. A warn still renders. This table is the frequent cases. The full list is SPEC, "Report".
+
+| Code | Cause | Change |
+| --- | --- | --- |
+| `invalid-attr` | The attribute is on the wrong tag, or the value is bad | Move `x` and `y` onto `<layer>`. Put graphic paint on a shape. A nested `background` becomes `<rect fill>` |
+| `invalid-child` | The child is not allowed there | `<p><div>` becomes `<div><p>`. A line sits in `<layer>`, not in a text box |
+| `unknown-tag` | The tag is unknown, or a known tag is uppercase | `<Circle>` becomes `<circle>`. Uppercase of a known tag is an error |
+| `flatten-3d` | A solid or a 3D pose never entered a camera | Write `camera` on the layer that frames the shot. A number is the viewing distance. If you omit it, that layer needs a positive `height` |
+| `overflow-canvas` | Ink is outside the canvas | Move or shrink it. When the bleed is intentional, add `expect="overflow-canvas"` |
+| `min-font-size` | The on-screen size is under the root minimum | Raise `font-size`, or set root `min-font` to a number, `print`, or `none` |
+| `stroke-fill` | An `inside` or `center` stroke reaches about 8% of the font size | Narrow it, or use `outside` |
+
+## Workflow
+
+1. Write `.tsx` or `.layer` against the rules above.
+2. `npx tsx src/cli.ts check scene.tsx`. An **error** exits with code 1. Fix it from the report's `path` and `hint`, then check again. Type checking happens only in `check`. An animation without `--frames` samples frame 0, the middle frame, and the last frame. Several files can be named in one command.
+3. When spacing is wrong, `npx tsx src/cli.ts render scene.tsx -o scene.png --debug --report scene.json`. Read `box` (the layout box) and `ink` (the mark after transform or projection). `.tsx` also has `source` (`scene.tsx:18:5`).
+4. When it looks right, `npx tsx src/cli.ts render scene.tsx -o scene.png`. `render` does not type-check. Several pictures and scales are written in one command: `npx tsx src/cli.ts render a.tsx b.tsx -o out/ --scale 1 --scale 2`.
+
+## Where to read
+
+| You are writing | Read |
 | --- | --- |
-| `layer` 怎么包、怎么定位 | SPEC「layer」 |
-| 支持哪些 HTML、SVG、颜料、效果 | SPEC「HTML 和 SVG」 |
-| 实体、镜头、地面 | SPEC「实体和镜头」 |
-| 蒙版、抠图、`glyph`、`canvas.create`、动画 | SPEC「蒙版和程序」 |
-| 问题码和报告字段 | SPEC「报告」 |
-| 某个属性怎么写 | [docs/attrs.json](docs/attrs.json)，按名字查 |
-| 按气质选字体 | [docs/RESOURCES.md](docs/RESOURCES.md) 的推荐字体。寒蝉端黑体是默认字体。其余名字自己带字体文件 |
+| How to wrap and place a `layer` | SPEC, "layer" |
+| Which HTML, SVG, paints, and effects exist | SPEC, "HTML and SVG" |
+| Solids, cameras, ground | SPEC, "Solids and cameras" |
+| Masks, cutouts, `glyph`, `canvas.create`, animation | SPEC, "Masks and programs" |
+| Issue codes and report fields | SPEC, "Report" |
+| How one attribute is written | [docs/attrs.json](docs/attrs.json), look up the name |
+| A Chinese face | Recommended fonts in [docs/RESOURCES.md](docs/RESOURCES.md), in the order 最推荐, 推荐, 其他. ChillDuanSans (寒蝉端黑体) is the default. Kai (霞鹜文楷) is already in the catalog. Other names need their own font file |
 
-HTML 和 `display:flex` 按 CSS 渲染，默认值不在这里记。
+HTML and `display:flex` render as CSS. Defaults are not copied here.
 
-## 仓库
+## Repository
 
-- 字体名用 [docs/RESOURCES.md](docs/RESOURCES.md) 里的，不要编造字体文件地址。
-- 实现备注在 [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md)。还没做的点选和作者灯光在 [docs/proposals/3D.md](docs/proposals/3D.md)。three.js 的几何体走 `<model object>`。
-- 自动化：`npm test`，`npm run gallery`。
-- 合并进 `main` 时，把根 `package.json` 和 `package-lock.json` 的 `version` 补丁号加一。删掉还能用的旧写法时升次版本号。
+- Use font names from [docs/RESOURCES.md](docs/RESOURCES.md). Do not invent font-file URLs.
+- Implementation notes are in [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md). Picking and author lights are not built yet. See [docs/proposals/3D.md](docs/proposals/3D.md). three.js geometry goes through `<model object>`.
+- Automation: `npm test`, `npm run gallery`.
+- When merging to `main`, bump the patch version in the root `package.json` and `package-lock.json`. If a still-working old syntax is removed, bump the minor version.

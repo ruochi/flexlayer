@@ -23,6 +23,28 @@ describe('parseGradient', () => {
       at: { x: 0.4, y: 0.35 },
     })
   })
+
+  it('circle 和 at 是形状和位置，不是色标', () => {
+    expect(parseGradient('radial-gradient(circle, #fff, #000)')).toMatchObject({
+      kind: 'radial',
+      at: { x: 0.5, y: 0.5 },
+      extent: 'farthest-corner',
+      stops: [
+        { color: '#fff', offset: 0 },
+        { color: '#000', offset: 1 },
+      ],
+    })
+    expect(parseGradient('radial-gradient(circle at 20% 30%, #fff, #000)')).toMatchObject({
+      at: { x: 0.2, y: 0.3 },
+    })
+    expect(parseGradient('radial-gradient(ellipse at top left, #fff, #000)')).toMatchObject({
+      at: { x: 0, y: 0 },
+    })
+    expect(parseGradient('radial-gradient(closest-side at center, #fff, #000)')).toMatchObject({
+      extent: 'closest-side',
+      at: { x: 0.5, y: 0.5 },
+    })
+  })
 })
 
 const box = { x: 0, y: 0, width: 100, height: 100 }
@@ -48,6 +70,21 @@ async function render(source: string, scale = 1) {
   })
   return { doc, png: canvas.toBuffer('image/png') }
 }
+
+describe('CSS 渐变绘制', () => {
+  it('radial-gradient(circle, …) 出图，圆心比角上亮', async () => {
+    const { png, doc } = await render(
+      `<layer width="64" height="64" background="#000"><rect x="0" y="0" width="64" height="64" fill="radial-gradient(circle, #fff, #000)" /></layer>`,
+    )
+    expect(png[0]).toBe(0x89)
+    expect(doc.issues.filter((issue) => issue.level === 'error')).toEqual([])
+    const center = await pixelAt(png, 32, 32)
+    const corner = await pixelAt(png, 2, 2)
+    expect(center[0]).toBeGreaterThan(200)
+    expect(corner[0]).toBeLessThan(40)
+    expect(center[0]).toBeGreaterThan(corner[0]! + 80)
+  })
+})
 
 describe('gradient()', () => {
   it('一行是从左到右，一列是从上到下，斜杠是矩阵', () => {
@@ -176,6 +213,48 @@ describe('gradient()', () => {
     expect(doc.issues.some((issue) => issue.code === 'invalid-attr' && issue.message.includes('fill'))).toBe(true)
     const shape = doc.root.children[0]
     expect(shape && shape.kind === 'shape' && shape.fill).toBe('#000000')
+  })
+
+  it('画布不认识的色标让整段渐变无效', () => {
+    expect(parseGradient('linear-gradient(#ff0000, notacolor)')).toBeUndefined()
+    expect(parseGradient('linear-gradient(#12345, #fff)')).toBeUndefined()
+    expect(parseGradient('linear-gradient(notacolor, alsobad)')).toBeUndefined()
+    expect(parseGradient('radial-gradient(circle, #fff, nope)')).toBeUndefined()
+    expect(parseGradient('linear-gradient(red, blue)')).toMatchObject({
+      stops: [
+        { color: 'red', offset: 0 },
+        { color: 'blue', offset: 1 },
+      ],
+    })
+  })
+
+  it('写错的色标会报告，绘制不会中途退出', async () => {
+    const bad = await render(
+      `<layer width="40" height="20" background="#00ff00"><rect x="0" y="0" width="40" height="20" fill="linear-gradient(notacolor, alsobad)" /></layer>`,
+    )
+    expect(bad.doc.issues.some((issue) => issue.code === 'invalid-attr' && issue.message.includes('fill'))).toBe(true)
+    const shape = bad.doc.root.children[0]
+    expect(shape && shape.kind === 'shape' && shape.fill).toBe('#000000')
+    const pix = await pixelAt(bad.png, 20, 10)
+    expect(pix[0]).toBeLessThan(10)
+    expect(pix[1]).toBeLessThan(10)
+    expect(pix[2]).toBeLessThan(10)
+
+    const mixed = await render(
+      `<layer width="40" height="20" background="#00ff00"><rect x="0" y="0" width="40" height="20" fill="linear-gradient(#ff0000, notacolor)" /></layer>`,
+    )
+    expect(mixed.doc.issues.some((issue) => issue.code === 'invalid-attr' && issue.message.includes('notacolor'))).toBe(true)
+    const mixedPix = await pixelAt(mixed.png, 4, 10)
+    expect(mixedPix[0]).toBeLessThan(10)
+
+    const named = await render(
+      `<layer width="40" height="20" background="#000000"><rect x="0" y="0" width="40" height="20" fill="linear-gradient(to right, red, blue)" /></layer>`,
+    )
+    expect(named.doc.issues.filter((issue) => issue.code === 'invalid-attr')).toEqual([])
+    const left = await pixelAt(named.png, 2, 10)
+    const right = await pixelAt(named.png, 38, 10)
+    expect(left[0]).toBeGreaterThan(200)
+    expect(right[2]).toBeGreaterThan(200)
   })
 })
 

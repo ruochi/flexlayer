@@ -137,6 +137,7 @@ export function flattenReason(node: LayoutNode): string | null {
   if (node.kind === 'layer' && node.mask != null && node.mask.length > 0) return 'mask'
   if (node.kind === 'layer' && node.overflow === 'hidden') return 'overflow'
   if (node.glass) return 'glass'
+  if (node.backdropFilter != null && node.backdropFilter.length > 0) return 'backdrop-filter'
   if ((node.backdropBlur ?? 0) > 0) return 'backdrop-blur'
   if (node.blend && node.blend !== 'source-over') return 'blend'
   if (node.noise) return 'noise'

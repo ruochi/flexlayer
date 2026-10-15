@@ -28,9 +28,12 @@ import { openSvgPath, translateSvgPath } from './path.js'
 import { cameraAuditIssues, defaultFocal, readPreserve, readSharp, resolveCamera } from './camera.js'
 import { has3dPose, perspectiveIssues } from './perspective.js'
 import {
+  backdropBlurRadius,
+  parseBackdropFilter,
   parseBlend,
   parseBlurRadius,
   parseBorder,
+  parseBoxShadow,
   parseEdges,
   parseFontWeight,
   parseGlass,
@@ -40,6 +43,9 @@ import {
   parseNoise,
   parseLineHeight,
   parseLetterSpacing,
+  parseAngle,
+  parseCssLength,
+  parseCssTransform,
   parseNumber,
   parseOverlay,
   readFlexFactors,
@@ -48,6 +54,7 @@ import {
   parseScale,
   parseShadow,
   parseStyle,
+  readOrigin,
   readAnchor,
   ZERO_EDGES,
   type Edges,
@@ -63,7 +70,7 @@ import {
   isTextBoxTag,
   layoutText,
 } from './text.js'
-import { applyToBox, aroundPivot, IDENTITY, intersectBox, multiply, originOffset, translated } from './matrix.js'
+import { applyToBox, IDENTITY, intersectBox, isIdentity, localNodeMatrix, multiply, translated } from './matrix.js'
 import { layoutMath } from './math/load.js'
 import { asBlockFlow, checkChildAttrs, checkTextBoxChildren, haloAttrIssues, hasTwoPoint, hiddenAttrIssues, isDisplayFlex, isHtmlTag, legacyCenterIssues, materialAttrIssues, originValueIssues, rowColumnHint, splitAttrIssues, styleIssues, typoAttrIssues } from './rules.js'
 import { fitViewAspect, parseView, viewExceeds } from './view.js'
@@ -73,6 +80,9 @@ import type {
   Anchor,
   AppliedFilter,
   Box,
+  CssLength,
+  CssMotion,
+  CssTransformStep,
   CanvasLayoutNode,
   DrawComputedStyle,
   LayerScript,
@@ -84,6 +94,7 @@ import type {
   Issue,
   LayerLayoutNode,
   LayoutNode,
+  BackdropFilterStep,
   BlendMode,
   ColorFilterSpec,
   GlassSpec,
@@ -97,6 +108,7 @@ import type {
   MaskOp,
   MeshMaterial,
   NoiseSpec,
+  Origin,
   PreviewSpec,
   OverlaySpec,
   ShadowSpec,
@@ -208,12 +220,15 @@ const STROKE_HINT = '写成 6 #000 outside，或 stroke="#000" stroke-width="6"'
 
 type EffectFields = {
   shadow?: ShadowSpec
+  shadowList?: ShadowSpec[]
   glow?: GlowSpec
   innerShadow?: ShadowSpec
+  innerShadowList?: ShadowSpec[]
   innerGlow?: GlowSpec
   inkStroke?: InkStrokeSpec[]
   blur?: number
   backdropBlur?: number
+  backdropFilter?: BackdropFilterStep[]
   noise?: NoiseSpec
   glass?: GlassSpec
   colorFilter?: ColorFilterSpec[]
@@ -294,12 +309,132 @@ function readStrokeEffect(src: EffectSource, ctx: LayoutContext, out: EffectFiel
   if (width > 0) out.inkStroke = [{ width, color: raw.trim(), position: 'outside' }]
 }
 
+const CSS_EFFECT_KEYS = ['box-shadow', 'backdrop-filter'] as const
+
+/** 形状和 layer 的效果在属性上。CSS 名字写在 style 里时也收。 */
+function withCssEffects(src: EffectSource): EffectSource {
+  if (src['box-shadow'] != null || src['backdrop-filter'] != null) return src
+  const raw = src.style
+  if (raw == null || !raw.includes(':')) return src
+  const style = parseStyle(raw)
+  let copy: EffectSource | undefined
+  for (const key of CSS_EFFECT_KEYS) {
+    const value = style[key]
+    if (value != null && value.trim() !== '') {
+      copy ??= { ...src }
+      copy[key] = value
+    }
+  }
+  return copy ?? src
+}
+
+function wroteEffect(raw: string | undefined): boolean {
+  return raw != null && raw.trim() !== '' && raw.trim().toLowerCase() !== 'none'
+}
+
+function finishShadow(shadow: { x: number; y: number; blur: number; spread: number; color?: string }, current: string): ShadowSpec {
+  const named = shadow.color?.toLowerCase() === 'currentcolor'
+  const color = !shadow.color || named ? (named ? current : DEFAULT_SHADOW_COLOR) : shadow.color
+  return { x: shadow.x, y: shadow.y, blur: shadow.blur, spread: shadow.spread, color }
+}
+
+function applyBoxShadow(src: EffectSource, ctx: LayoutContext, out: EffectFields, current: string) {
+  const raw = src['box-shadow']
+  if (!wroteEffect(raw)) return
+  const parsed = parseBoxShadow(raw)
+  if (!parsed) {
+    warnInvalid(ctx, 'box-shadow', raw!, '写成 0 8px 16px #00000055，或 inset 0 4px 8px #000。多层用逗号分开')
+    return
+  }
+  const skipOuter = parsed.outer.length > 0 && out.shadow != null
+  const skipInner = parsed.inset.length > 0 && out.innerShadow != null
+  if (skipOuter || skipInner) {
+    const which = skipOuter && skipInner ? 'shadow、inner-shadow' : skipOuter ? 'shadow' : 'inner-shadow'
+    ctx.issues.push({
+      level: 'info',
+      code: 'non-canonical',
+      path: ctx.pathPrefix,
+      message: `同时写了 ${which} 与 box-shadow，以 ${which} 为准`,
+      hint: '投影用 shadow，内阴影用 inner-shadow。box-shadow 的 inset 就是内阴影',
+    })
+  }
+  if (!skipOuter && parsed.outer.length > 0) {
+    const specs = parsed.outer.map((shadow) => finishShadow(shadow, current))
+    out.shadow = specs[0]
+    if (specs.length > 1) out.shadowList = specs
+  }
+  if (!skipInner && parsed.inset.length > 0) {
+    const specs = parsed.inset.map((shadow) => finishShadow(shadow, current))
+    out.innerShadow = specs[0]
+    if (specs.length > 1) out.innerShadowList = specs
+  }
+}
+
+function paintDropShadowColor(steps: ColorFilterSpec[], color: string) {
+  for (const step of steps) {
+    if (step.name !== 'drop-shadow') continue
+    if (!step.color || step.color.toLowerCase() === 'currentcolor') step.color = color
+  }
+}
+
+/** 色彩步骤走 filter 的同一套函数。blur() 收成 backdropBlur，和 backdrop-blur 共用绘制。 */
+function applyBackdropFilter(src: EffectSource, ctx: LayoutContext, out: EffectFields, current: string) {
+  const raw = src['backdrop-filter']
+  if (!wroteEffect(raw)) return
+  const steps = parseBackdropFilter(raw)
+  if (!steps) {
+    warnInvalid(
+      ctx,
+      'backdrop-filter',
+      raw!,
+      '写成 blur(16px)，或 blur(16px) brightness(1.1)。函数和 filter 相同，不收 url()',
+    )
+    return
+  }
+  paintDropShadowColor(steps, current)
+  const cssBlur = backdropBlurRadius(steps)
+  const attrBlur = wroteEffect(src['backdrop-blur']) && out.backdropBlur != null
+  if (cssBlur > 0 && attrBlur) {
+    ctx.issues.push({
+      level: 'info',
+      code: 'non-canonical',
+      path: ctx.pathPrefix,
+      message: '同时写了 backdrop-blur 与 backdrop-filter 的 blur()，模糊以 backdrop-blur 为准',
+      hint: '背景模糊用 backdrop-blur。色彩函数留在 backdrop-filter，和 filter 同一套',
+    })
+  } else if (cssBlur > 0) {
+    out.backdropBlur = cssBlur
+  }
+  if (!steps.some((step) => step.name !== 'blur')) return
+  const blur = out.backdropBlur ?? 0
+  if (attrBlur) {
+    const rebuilt: BackdropFilterStep[] = []
+    let placed = false
+    for (const step of steps) {
+      if (step.name === 'blur') {
+        if (!placed && blur > 0) {
+          rebuilt.push({ name: 'blur', value: blur })
+          placed = true
+        }
+        continue
+      }
+      rebuilt.push(step)
+    }
+    if (!placed && blur > 0) rebuilt.unshift({ name: 'blur', value: blur })
+    if (rebuilt.length) out.backdropFilter = rebuilt
+    return
+  }
+  const kept = steps.filter((step) => step.name !== 'blur' || step.value > 0)
+  if (kept.length) out.backdropFilter = kept
+}
+
 function readEffects(
   src: EffectSource,
   ctx: LayoutContext,
   glowColor: string,
   strokeMode: 'geometric' | 'ink' | 'mesh' = 'geometric',
 ): EffectFields {
+  src = withCssEffects(src)
   const out: EffectFields = {}
   const shadowRaw = src.shadow
   const parsedShadow = parseShadow(shadowRaw)
@@ -357,7 +492,10 @@ function readEffects(
   pushFilterIssues(ctx, shared.issues)
   if (shared.applied.length) out.filters = shared.applied
   const color = shared.applied.find((item) => item.name === 'filter')
-  if (color) out.colorFilter = color.spec as ColorFilterSpec[]
+  if (color) {
+    out.colorFilter = color.spec as ColorFilterSpec[]
+    paintDropShadowColor(out.colorFilter, glowColor)
+  }
 
   const blendRaw = src.blend
   const parsedBlend = parseBlend(blendRaw)
@@ -373,24 +511,42 @@ function readEffects(
     warnInvalid(ctx, 'glass', glassRaw, '写成 clear、regular、thick，或 clear, blur 8, tint #fff2')
   }
 
-  if (out.glass && out.backdropBlur != null) {
+  applyBoxShadow(src, ctx, out, glowColor)
+  applyBackdropFilter(src, ctx, out, glowColor)
+
+  if (out.glass && (out.backdropBlur != null || (out.backdropFilter?.length ?? 0) > 0)) {
+    const viaFilter = wroteEffect(src['backdrop-filter'])
+    const viaBlur = wroteEffect(src['backdrop-blur'])
+    const which = viaFilter && viaBlur ? 'backdrop-blur、backdrop-filter' : viaFilter ? 'backdrop-filter' : 'backdrop-blur'
     ctx.issues.push({
       level: 'info',
       code: 'non-canonical',
       path: ctx.pathPrefix,
-      message: '同时写了 glass 与 backdrop-blur，以 glass 为准',
-      hint: '删掉 backdrop-blur，或只用 backdrop-blur 做简单毛玻璃',
+      message: `同时写了 glass 与 ${which}，以 glass 为准`,
+      hint: viaFilter ? '删掉 backdrop-filter，或只用 backdrop-filter 做背景模糊和色彩' : '删掉 backdrop-blur，或只用 backdrop-blur 做简单毛玻璃',
     })
   }
 
-  if (out.blur != null && out.colorFilter) {
+  if ((out.blur ?? 0) > 0 && out.colorFilter?.some((step) => step.name === 'blur')) {
     ctx.issues.push({
       level: 'info',
       code: 'non-canonical',
       path: ctx.pathPrefix,
       message: '同时写了 blur 与 filter，图层模糊以 blur 为准',
-      hint: '色彩调整继续用 filter；模糊只用 blur 属性',
+      hint: '模糊只用 blur 属性。filter 里的 blur() 会去掉，其余函数保留',
     })
+    const kept = out.colorFilter.filter((step) => step.name !== 'blur')
+    const item = out.filters?.find((entry) => entry.name === 'filter')
+    if (kept.length === 0) {
+      delete out.colorFilter
+      if (out.filters) {
+        out.filters = out.filters.filter((entry) => entry.name !== 'filter')
+        if (out.filters.length === 0) delete out.filters
+      }
+    } else {
+      out.colorFilter = kept
+      if (item) item.spec = kept
+    }
   }
 
   return out
@@ -479,6 +635,103 @@ function scalePair(raw: string | undefined): { scaleX: number; scaleY: number } 
   return { scaleX: scale.x, scaleY: scale.y }
 }
 
+function angleOf(raw: string | undefined): number {
+  if (raw == null) return 0
+  return parseAngle(raw)?.degrees ?? 0
+}
+
+const ZERO_LENGTH: CssLength = { unit: 'px', value: 0 }
+
+function lengthIsZero(len: CssLength): boolean {
+  return len.value === 0
+}
+
+function readBoxTranslate(raw: string | undefined): { x: CssLength; y: CssLength } {
+  const zero = { x: ZERO_LENGTH, y: ZERO_LENGTH }
+  if (raw == null) return zero
+  const text = raw.trim().toLowerCase()
+  if (text === '' || text === 'none') return zero
+  const parts = text.split(/[\s,]+/).filter(Boolean)
+  if (parts.length === 0 || parts.length > 2) return zero
+  const x = parseCssLength(parts[0]!, true)
+  const y = parts[1] ? parseCssLength(parts[1], true) : ZERO_LENGTH
+  if (!x || !y) return zero
+  return { x, y }
+}
+
+/**
+ * 没有平移、且线性部分能写成「先缩放再旋转」时，沿用 rotate / scale。
+ * 否则留给 motion，画的时候再按盒子尺寸算百分比。
+ */
+function foldSimpleMotion(
+  translate: { x: CssLength; y: CssLength },
+  rotate: number,
+  scale: { x: number; y: number },
+  steps: CssTransformStep[],
+): { rotate: number; sx: number; sy: number } | null {
+  if (!lengthIsZero(translate.x) || !lengthIsZero(translate.y)) return null
+  let sx = scale.x
+  let sy = scale.y
+  let extra = 0
+  for (const step of steps) {
+    if (step.op === 'translate') {
+      if (!lengthIsZero(step.x) || !lengthIsZero(step.y)) return null
+      continue
+    }
+    if (step.op === 'rotate') {
+      if (Math.abs(sx - sy) > 1e-9 && Math.abs(step.degrees) > 1e-9) return null
+      extra += step.degrees
+      continue
+    }
+    sx *= step.x
+    sy *= step.y
+  }
+  return { rotate: rotate + extra, sx, sy }
+}
+
+function readMotionOrigin(style: Record<string, string>): { origin?: Origin } {
+  const primary = style['transform-origin']
+  if (primary != null && primary.trim() !== '') {
+    const read = readOrigin(primary)
+    if (!read.invalid) return { origin: read.origin }
+  }
+  const fallback = style.origin
+  if (fallback != null && fallback.trim() !== '') {
+    const read = readOrigin(fallback)
+    if (!read.invalid) return { origin: read.origin }
+  }
+  return {}
+}
+
+/** 把 style 里的平移、旋转、缩放和 transform 记到节点上。只改绘制，不改 x / y / width / height。 */
+function applyCssMotion(node: { rotate: number; scaleX: number; scaleY: number; origin?: Origin; motion?: CssMotion }, style: Record<string, string>) {
+  const rotate = angleOf(style.rotate)
+  const scale = parseScale(style.scale)
+  const translate = readBoxTranslate(style.translate)
+  const parsed = style.transform != null ? parseCssTransform(style.transform) : { ok: true as const, steps: [] }
+  const steps = parsed.ok ? parsed.steps : []
+  const origin = readMotionOrigin(style)
+  if (origin.origin) node.origin = origin.origin
+  const simple = foldSimpleMotion(translate, rotate, scale, steps)
+  if (simple) {
+    node.rotate = simple.rotate
+    node.scaleX = simple.sx
+    node.scaleY = simple.sy
+    return
+  }
+  node.rotate = 0
+  node.scaleX = 1
+  node.scaleY = 1
+  node.motion = {
+    translateX: translate.x,
+    translateY: translate.y,
+    rotate,
+    scaleX: scale.x,
+    scaleY: scale.y,
+    steps,
+  }
+}
+
 /** `color` / `background-color` 只收纯色。渐变返回 undefined，并报 invalid-attr。 */
 function solidColor(raw: string | undefined, ctx: LayoutContext, label: string): string | undefined {
   const value = raw?.trim()
@@ -542,12 +795,12 @@ function readHtmlAppearance(style: Record<string, string>) {
     borderRadius: parsePx(style['border-radius']) ?? 0,
     background: style.background ?? style['background-color'],
     opacity: parseNumber(style.opacity) ?? 1,
-    rotate: parseNumber(style.rotate) ?? 0,
-    rotateX: parseNumber(style.rotateX) ?? 0,
-    rotateY: parseNumber(style.rotateY) ?? 0,
+    rotate: 0,
+    rotateX: angleOf(style.rotatex),
+    rotateY: angleOf(style.rotatey),
     z: parseNumber(style.z) ?? 0,
-    ...scalePair(style.scale),
-    origin: parseOrigin(style.origin),
+    scaleX: 1,
+    scaleY: 1,
   }
 }
 
@@ -1111,7 +1364,7 @@ function layoutTextBox(node: LayerNode, ctx: LayoutContext, contentWidthLimit?: 
     })
   }
 
-  return {
+  const laid: TextLayoutNode = {
     kind: 'text',
     path: ctx.pathPrefix,
     id: node.attrs.id,
@@ -1128,6 +1381,8 @@ function layoutTextBox(node: LayerNode, ctx: LayoutContext, contentWidthLimit?: 
     ...readEffects(style, ctx, color, 'ink'),
     ...layoutDrawMeta(node, ctx),
   }
+  if (node.attrs.split?.trim().toLowerCase() !== 'chars') applyCssMotion(laid, style)
+  return laid
 }
 
 function refitImageNode(node: ImageLayoutNode, x: number, y: number, width: number, height: number): ImageLayoutNode {
@@ -1260,6 +1515,7 @@ function layoutImage(node: LayerNode, ctx: LayoutContext): ImageLayoutNode {
     outer.width,
     outer.height,
   )
+  applyCssMotion(laid, style)
   return laid
 }
 
@@ -2713,7 +2969,7 @@ function layoutFlex(node: LayerNode, ctx: LayoutContext): FlexLayoutNode {
     })
   }
 
-  return {
+  const laid: FlexLayoutNode = {
     kind: 'flex',
     path: ctx.pathPrefix,
     id: node.attrs.id,
@@ -2731,6 +2987,8 @@ function layoutFlex(node: LayerNode, ctx: LayoutContext): FlexLayoutNode {
     ...readEffects(style, ctx, solidPaint(appearance.background, ctx.color), 'ink'),
     ...layoutDrawMeta(node, ctx),
   }
+  applyCssMotion(laid, style)
+  return laid
 }
 
 function layoutUse(node: LayerNode, ctx: LayoutContext): LayerLayoutNode | null {
@@ -3254,11 +3512,8 @@ function addLocalInk(union: Box | null, box: Box | null): Box | null {
 function accumulateInk(node: LayoutNode, parentOpacity: number, matrix: typeof IDENTITY, applyOwnTransform: boolean): Box | null {
   const opacity = parentOpacity * node.opacity
   if (opacity < VISIBLE_OPACITY) return null
-  const origin = originOffset(node.origin, node.width, node.height)
-  const m =
-    applyOwnTransform && (node.rotate !== 0 || node.scaleX !== 1 || node.scaleY !== 1)
-      ? multiply(matrix, aroundPivot(origin.x, origin.y, node.rotate, node.scaleX, node.scaleY))
-      : matrix
+  const local = localNodeMatrix(node)
+  const m = applyOwnTransform && !isIdentity(local) ? multiply(matrix, local) : matrix
 
   if (node.kind === 'layer' || node.kind === 'flex') {
     let union: Box | null = null

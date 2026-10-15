@@ -71,6 +71,8 @@ type LayerEffects = {
   // jsx-effects:begin
   /** 0 8 16 #00000055 */
   shadow?: string
+  /** 0 8px 16px #00000055 */
+  'box-shadow'?: string
   /** 56 #f3ead4 */
   glow?: string
   /** 0 8 16 #00000055 */
@@ -81,6 +83,8 @@ type LayerEffects = {
   blur?: number | string
   /** 16 */
   'backdrop-blur'?: number | string
+  /** blur(16px) */
+  'backdrop-filter'?: string
   /** clear */
   glass?: string
   /** 0.08 */

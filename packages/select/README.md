@@ -1,25 +1,25 @@
 # flexlayer-select
 
-从一张本地图片取出前景遮罩，或者抠出主体。渲染器不跑模型，只读这里写出来的文件。版式由调用方自己写。
+Take a foreground mask from a local picture, or cut out the subject. The renderer does not run a model. It only reads the files written here. The caller writes the layout.
 
-前景遮罩：
+Foreground mask:
 
 ```bash
 npx flexlayer-select mask photo.jpg
 npx flexlayer-select mask photo.jpg --point 820,640 --omit 900,1100 --refine
 ```
 
-默认只跑深度模型 Depth Anything V2 Small 的 q4f16（Apache-2.0，大约 19MB）。不写点，前景从伸进远处的尖往下长，地面留在外面。`--point` 点在要留下的地方，`--omit` 点在不要的地方，都可以写多次。看完遮罩可以再补点重跑。正向点沿着连着的一块长出去，近端和没点时停在同一条地面线上。反向点落在这块里面时，离它更近的那一块去掉。`--refine` 再跑下面的 BiRefNet，边用抠图模型，深度只去掉没点到的那一段。
+By default only the depth model runs: Depth Anything V2 Small, q4f16 (Apache-2.0, about 19MB). With no points, the foreground grows downward from tips that reach into the distance, and the ground stays outside. `--point` marks what to keep. `--omit` marks what to drop. Both can be repeated. After you look at the mask, add points and run it again. A positive point grows along the connected piece. The near end stops on the same ground line as a run with no points. When a negative point falls inside that piece, the part closer to it is removed. `--refine` then runs BiRefNet, below. The edge comes from the matting model. Depth only removes the stretch that no point touched.
 
-写出 `photo.foreground.png` 和 `photo.foreground.json`。遮罩里白的地方是前景。json 带这张遮罩的文件名，前景的 `x`、`y`、`width`、`height`，以及这次的 `points` 和 `omit`。没有前景时位置和大小是 `null`。没写点时这两个数组是 `[]`。
+This writes `photo.foreground.png` and `photo.foreground.json`. White in the mask is foreground. The json carries the mask file name, the foreground `x`, `y`, `width`, and `height`, and this run's `points` and `omit`. When there is no foreground, position and size are `null`. When no points were written, both arrays are `[]`.
 
-程序里用 `foregroundMask('photo.jpg', { points: [{ x: 820, y: 640 }], omit: [{ x: 900, y: 1100 }] })`，返回同一组字段，`mask` 是写出来的路径。标记里用 `<mask><img src="photo.foreground.png" channel="luma" /></mask>` 罩住原图。
+In code, `foregroundMask('photo.jpg', { points: [{ x: 820, y: 640 }], omit: [{ x: 900, y: 1100 }] })` returns the same fields. `mask` is the path that was written. In markup, cover the source with `<mask><img src="photo.foreground.png" channel="luma" /></mask>`.
 
 ---
 
-抠主体：
+Subject cutout:
 
-模型是 [BiRefNet 512](https://huggingface.co/onnx-community/BiRefNet_512x512-ONNX) 的 fp16 ONNX。这个包不在 npm 上，要从本仓库安装。第一次 `cutout` 或 `--refine` 下载 fp16 权重到 `~/.cache/flexlayer/models`，大约 470MB。解码器中间结果大约 3GB，修边前会先放掉深度会话。`@huggingface/transformers` 是可选依赖，`npm install` 会装上。锁文件和 `package.json` 对不上时，`npm ci` 会直接报错，这里用 `npm install`。
+The model is fp16 ONNX of [BiRefNet 512](https://huggingface.co/onnx-community/BiRefNet_512x512-ONNX). This package is not on npm. Install it from this repo. The first `cutout` or `--refine` downloads the fp16 weights to `~/.cache/flexlayer/models`, about 470MB. Decoder intermediates are about 3GB. The depth session is released before the edge is refined. `@huggingface/transformers` is an optional dependency, and `npm install` installs it. When the lockfile and `package.json` disagree, `npm ci` fails, so this package uses `npm install`.
 
 ```bash
 cd packages/select
@@ -28,27 +28,27 @@ npm run build
 npx flexlayer-select cutout photo.jpg --preset portrait
 ```
 
-写到图片旁边：
+Written beside the picture:
 
-| 文件 | 内容 |
+| File | Contents |
 | --- | --- |
-| `photo.subject.png` | 和原图一样大。颜色做过前景去色，alpha 是选区 |
-| `photo.mask.png` | 白底，alpha 是同一块选区 |
-| `photo.regions.png` | 灰度值就是编号，0 是背景 |
-| `photo.questions.json` | 每题有 `id`、`area`、`where`、`now`、`ask` |
-| `photo.cutout.json` | 原图哈希、模型、预设、`analyzeImage` 的自检 |
-| `photo.cutout.layer` | `<mask>` 和 `<preview>` |
+| `photo.subject.png` | The same size as the source. Color is decontaminated against the foreground. Alpha is the selection |
+| `photo.mask.png` | White plate. Alpha is the same selection |
+| `photo.regions.png` | The gray value is the id. 0 is background |
+| `photo.questions.json` | Each question has `id`, `area`, `where`, `now`, and `ask` |
+| `photo.cutout.json` | Source hash, model, preset, and the `analyzeImage` self-check |
+| `photo.cutout.layer` | `<mask>` and `<preview>` |
 
-预设：
+Presets:
 
-- `portrait`：留下头发软边，去掉和背景同色的渗色，丢掉脚下的暗影子。
-- `product`：和人像一样处理，影子另外写成 `photo.shadow.png`。
-- `flat`：按 128 硬切，适合插画和截图。
+- `portrait`: keep the soft edge of hair, remove spill that matches the background, and drop the dark shadow under the feet.
+- `product`: the same treatment as a portrait. The shadow is also written as `photo.shadow.png`.
+- `flat`: a hard cut at 128. Fits illustration and screenshots.
 
-作答后把编号写回标记：
+After answering, write the ids back into the markup:
 
 ```bash
 npx flexlayer-select apply photo.jpg --add 2 --subtract 1
 ```
 
-已经装了这个包时，根上的 `flexlayer select` 会转发到这里。
+When this package is installed, `flexlayer select` at the root forwards here.

@@ -2,7 +2,7 @@ import { isGradient, parseGradient } from './gradient.js'
 import { parseColor } from './gradientField.js'
 import { loadOptional, loadOptionalSync, optionalHref } from './optional.js'
 import { attrByName } from './schema.js'
-import { colorFilterToCss, parseColorFilter } from './style.js'
+import { colorFilterToCss, cssFilterPad, parseColorFilter } from './style.js'
 import type { AppliedFilter, ColorFilterSpec } from './types.js'
 
 /** 滤镜看到的像素。data 是非预乘 RGBA，改它就是改画面。 */
@@ -52,8 +52,8 @@ export type LayerFilter<Spec = unknown> = {
   parse(value: string): FilterParseResult<Spec> | undefined
   /** kind 为 pixel 时必填。原地修改 pixels.data。 */
   apply?(pixels: FilterPixels, spec: Spec): void
-  /** kind 为 canvas 时必填。 */
-  canvasFilter?(spec: Spec): string
+  /** kind 为 canvas 时必填。`scale` 是超采样，像素长度要乘上它。 */
+  canvasFilter?(spec: Spec, scale?: number): string
   /** 离屏缓冲要额外留出的逻辑像素。 */
   pad?(spec: Spec): number
   /** 报告里回显的值。缺省回显 spec。 */
@@ -241,7 +241,7 @@ export function collectFilters(
 }
 
 const FILTER_HINT =
-  '写成 brightness(1.1) contrast(1.2) saturate(0.8) grayscale(0.2) hue-rotate(15) sepia(0.1) invert(0)，不要写 blur/drop-shadow'
+  '写成 blur(4px) brightness(1.1) contrast(1.2) drop-shadow(0 8px 16px #000) grayscale(0.2) hue-rotate(15) invert(0) opacity(0.5) saturate(0.8) sepia(0.1)。不收 url()'
 
 const gradeHref = optionalHref('./grade.js', import.meta.url)
 let gradeLoading: Promise<void> | null = null
@@ -275,7 +275,10 @@ registerFilter<ColorFilterSpec[]>({
     if (!spec) return { error: FILTER_HINT }
     return { spec }
   },
-  canvasFilter(spec) {
-    return colorFilterToCss(spec)
+  canvasFilter(spec, scale = 1) {
+    return colorFilterToCss(spec, scale)
+  },
+  pad(spec) {
+    return cssFilterPad(spec)
   },
 })

@@ -3,10 +3,13 @@ import {
   parseFlexShorthand,
   readFlexFactors,
   colorFilterToCss,
+  cssFilterPad,
   parseOrigin,
   readOrigin,
+  parseBackdropFilter,
   parseBlend,
   parseBlurRadius,
+  parseBoxShadow,
   parseBorder,
   parseColorFilter,
   parseEdges,
@@ -98,9 +101,57 @@ describe('style', () => {
       { name: 'hue-rotate', value: 15 },
       { name: 'grayscale', value: 0.5 },
     ])
-    expect(parseColorFilter('blur(4px)')).toBeUndefined()
+    expect(parseColorFilter('blur(4px)')).toEqual([{ name: 'blur', value: 4 }])
+    expect(parseColorFilter('opacity(50%) drop-shadow(0 8px 16px rgba(0, 0, 0, 0.4))')).toEqual([
+      { name: 'opacity', value: 0.5 },
+      { name: 'drop-shadow', x: 0, y: 8, blur: 16, color: 'rgba(0, 0, 0, 0.4)' },
+    ])
+    expect(parseColorFilter('drop-shadow(#000 2px 3px)')).toEqual([
+      { name: 'drop-shadow', x: 2, y: 3, blur: 0, color: '#000' },
+    ])
+    expect(parseColorFilter('drop-shadow(0 8px)')).toEqual([{ name: 'drop-shadow', x: 0, y: 8, blur: 0 }])
+    expect(parseColorFilter('url(#a)')).toBeUndefined()
+    expect(parseColorFilter('drop-shadow(inset 0 4px 8px #000)')).toBeUndefined()
     expect(colorFilterToCss([{ name: 'hue-rotate', value: 15 }])).toBe('hue-rotate(15deg)')
+    expect(
+      colorFilterToCss(
+        [
+          { name: 'blur', value: 4 },
+          { name: 'drop-shadow', x: 1, y: -2, blur: 3, color: '#fff' },
+        ],
+        2,
+      ),
+    ).toBe('blur(8px) drop-shadow(2px -4px 6px #fff)')
+    expect(
+      cssFilterPad([
+        { name: 'blur', value: 4 },
+        { name: 'drop-shadow', x: 0, y: 10, blur: 3 },
+      ]),
+    ).toBe(24)
     expect(parseShadow('0 8 #00000055')).toEqual({ x: 0, y: 8, blur: 0, spread: 0, color: '#00000055' })
+    expect(parseBoxShadow('0 8px 16px #00000055')).toEqual({
+      outer: [{ x: 0, y: 8, blur: 16, spread: 0, color: '#00000055' }],
+      inset: [],
+    })
+    expect(parseBoxShadow('inset 0 4px 8px rgba(0, 0, 0, 0.4), 0 12px 24px #000')).toEqual({
+      outer: [{ x: 0, y: 12, blur: 24, spread: 0, color: '#000' }],
+      inset: [{ x: 0, y: 4, blur: 8, spread: 0, color: 'rgba(0, 0, 0, 0.4)' }],
+    })
+    expect(parseBoxShadow('#000 0 8px')).toEqual({
+      outer: [{ x: 0, y: 8, blur: 0, spread: 0, color: '#000' }],
+      inset: [],
+    })
+    expect(parseBoxShadow('4px')).toBeUndefined()
+    expect(parseBackdropFilter('blur(16px) brightness(1.1) hue-rotate(15deg)')).toEqual([
+      { name: 'blur', value: 16 },
+      { name: 'brightness', value: 1.1 },
+      { name: 'hue-rotate', value: 15 },
+    ])
+    expect(parseBackdropFilter('drop-shadow(0 8px 16px #000)')).toEqual([
+      { name: 'drop-shadow', x: 0, y: 8, blur: 16, color: '#000' },
+    ])
+    expect(parseBackdropFilter('url(#a)')).toBeUndefined()
+    expect(parseBackdropFilter('none')).toBeUndefined()
     expect(parseGlow('48px #f6f1e7')).toEqual({ blur: 48, spread: 0, color: '#f6f1e7' })
     expect(parseInkStroke('6 #000 outside')).toEqual([{ width: 6, color: '#000', position: 'outside' }])
     expect(parseInkStroke('6px #fff, 14 #f00 inside')).toEqual([

@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { homedir, tmpdir } from 'node:os'
@@ -9,7 +9,7 @@ import { h } from './h.js'
 import { initFontsForMeasure } from './fonts.js'
 import { renderLayer } from './render.js'
 import { emitLayer } from './emit.js'
-import { scriptChildArgs, scriptReadGrants } from './run-scripts.js'
+import { scriptChildArgs, scriptPermissionFlags, scriptReadGrants } from './run-scripts.js'
 
 beforeAll(async () => {
   for (const dir of [join(homedir(), '.cache', 'flexlayer', 'fonts'), '/tmp/flexlayer-test']) {
@@ -240,6 +240,33 @@ describe('canvas 和 script', () => {
     expect(seen).toEqual(['3,5'])
   })
 
+  it('Node 20 读宿主每一级 package.json 时路径已放行', () => {
+    const host = fileURLToPath(new URL('./canvas-dom.mjs', import.meta.url))
+    const grants = scriptReadGrants(host)
+    expect(grants).toContain(join(dirname(host), 'package.json'))
+    expect(grants).toContain(join(dirname(dirname(host)), 'package.json'))
+    expect(grants).toContain(join(dirname(host), 'node_modules'))
+    expect(grants).toContain(`${join(dirname(host), 'node_modules')}/*`)
+    expect(grants.some((grant) => grant.endsWith(`${join('@napi-rs', 'canvas', 'index.js')}`))).toBe(true)
+    expect(grants.some((grant) => grant === '/etc/passwd' || grant.startsWith('/etc/'))).toBe(false)
+  })
+
+  it('没有 --allow-addons 的 Node 不开权限模型', () => {
+    expect(scriptPermissionFlags('20.11.1', false)).toEqual([])
+    expect(scriptPermissionFlags('20.9.0', false)).toEqual([])
+    expect(scriptPermissionFlags('20.12.2', true)).toEqual(['--experimental-permission', '--allow-addons'])
+    expect(scriptPermissionFlags('21.6.2', false)).toEqual([])
+    expect(scriptPermissionFlags('22.14.0', true)).toEqual(['--permission', '--allow-addons'])
+    expect(scriptPermissionFlags('24.10.0', true)).toEqual(['--permission', '--allow-addons'])
+    const args = scriptChildArgs(fileURLToPath(new URL('./canvas-dom.mjs', import.meta.url)))
+    if (scriptPermissionFlags(process.versions.node, args[0]?.startsWith('--') ?? false).length === 0) {
+      expect(args).toEqual([fileURLToPath(new URL('./canvas-dom.mjs', import.meta.url))])
+    } else {
+      expect(args[0]).toMatch(/--(experimental-)?permission/)
+      expect(args).toContain('--allow-addons')
+    }
+  })
+
   it('读权限不会在 Node 20 上把同一条前缀插两次', () => {
     const host = fileURLToPath(new URL('./canvas-dom.mjs', import.meta.url))
     const grants = scriptReadGrants(host)
@@ -275,7 +302,7 @@ describe('canvas 和 script', () => {
       const grants = scriptReadGrants(host)
       expect(grants).toContain(join(app, 'node_modules', '@napi-rs', 'canvas', 'package.json'))
       expect(grants).toContain(join(realRoot, 'canvas', 'package.json'))
-      const nativeFile = grants.find((grant) => grant.endsWith('.node'))
+      const nativeFile = grants.find((grant) => grant.endsWith('.node') && existsSync(grant))
       expect(nativeFile).toBeTruthy()
       const payload = JSON.stringify({
         canvases: [{ path: 'layer/canvas[0]', id: 'bar', width: 4, height: 4, bitmapWidth: 4, bitmapHeight: 4, x: 0, y: 0, style: {}, computed: {}, text: '', attrs: {} }],
@@ -318,7 +345,7 @@ describe('canvas 和 script', () => {
     })
     const paint = (host: string) => {
       const grants = scriptReadGrants(host)
-      const nativeFile = grants.find((grant) => grant.endsWith('.node'))
+      const nativeFile = grants.find((grant) => grant.endsWith('.node') && existsSync(grant))
       return spawnSync(process.execPath, scriptChildArgs(host), {
         input: payload,
         encoding: 'utf8',
@@ -330,8 +357,10 @@ describe('canvas 和 script', () => {
       const app = join(root, 'whole')
       mkdirSync(join(store, '@napi-rs'), { recursive: true })
       mkdirSync(join(app, 'src'), { recursive: true })
+      const nativeName = readdirSync(realRoot).find((name) => name.startsWith('canvas-'))
+      expect(nativeName).toBeTruthy()
       symlinkSync(join(realRoot, 'canvas'), join(store, '@napi-rs', 'canvas'))
-      symlinkSync(join(realRoot, 'canvas-linux-x64-gnu'), join(store, '@napi-rs', 'canvas-linux-x64-gnu'))
+      symlinkSync(join(realRoot, nativeName!), join(store, '@napi-rs', nativeName!))
       symlinkSync(store, join(app, 'node_modules'))
       const host = join(app, 'src', 'canvas-dom.mjs')
       writeFileSync(host, hostSrc)
@@ -341,17 +370,17 @@ describe('canvas 和 script', () => {
 
       const pnpm = join(root, 'pnpm', 'node_modules', '.pnpm')
       const canvasVirt = join(pnpm, '@napi-rs+canvas@1.0.9', 'node_modules', '@napi-rs')
-      const nativeVirt = join(pnpm, '@napi-rs+canvas-linux-x64-gnu@1.0.9', 'node_modules', '@napi-rs')
+      const nativeVirt = join(pnpm, `@napi-rs+${nativeName}@1.0.9`, 'node_modules', '@napi-rs')
       const pnpmApp = join(root, 'pnpm')
       mkdirSync(canvasVirt, { recursive: true })
       mkdirSync(nativeVirt, { recursive: true })
       mkdirSync(join(pnpmApp, 'node_modules', '@napi-rs'), { recursive: true })
       mkdirSync(join(pnpmApp, 'src'), { recursive: true })
       symlinkSync(join(realRoot, 'canvas'), join(canvasVirt, 'canvas'))
-      symlinkSync(join(realRoot, 'canvas-linux-x64-gnu'), join(nativeVirt, 'canvas-linux-x64-gnu'))
+      symlinkSync(join(realRoot, nativeName!), join(nativeVirt, nativeName!))
       symlinkSync(join(canvasVirt, 'canvas'), join(pnpmApp, 'node_modules', '@napi-rs', 'canvas'))
-      symlinkSync(join(nativeVirt, 'canvas-linux-x64-gnu'), join(pnpmApp, 'node_modules', '@napi-rs', 'canvas-linux-x64-gnu'))
-      symlinkSync(join(nativeVirt, 'canvas-linux-x64-gnu'), join(canvasVirt, 'canvas-linux-x64-gnu'))
+      symlinkSync(join(nativeVirt, nativeName!), join(pnpmApp, 'node_modules', '@napi-rs', nativeName!))
+      symlinkSync(join(nativeVirt, nativeName!), join(canvasVirt, nativeName!))
       const pnpmHost = join(pnpmApp, 'src', 'canvas-dom.mjs')
       writeFileSync(pnpmHost, hostSrc)
       const nested = paint(pnpmHost)

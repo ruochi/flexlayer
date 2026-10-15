@@ -58,7 +58,8 @@ export const blends = ['source-over', 'multiply', 'screen', 'overlay', 'soft-lig
 /**
  * 生成画面时可以用的字体、图片、配色和效果名。
  * 字体写 `font-family`，不必再写 `<font src>`。完整表见 docs/RESOURCES.md。
- * `recommendedFonts` 按气质选型。除了已经在目录里的默认字体，这些名字要自己带字体文件。
+ * `recommendedFonts` 按推荐档选型：最推荐、推荐、其他。
+ * 目录里已有的名字不必再带文件。其余要自己带字体文件。
  */
 export const resources = {
   fonts: CATALOG_FONTS,

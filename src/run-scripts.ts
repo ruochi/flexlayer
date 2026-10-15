@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { lstatSync, readlinkSync, readdirSync, realpathSync, statSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join } from 'node:path'
@@ -150,6 +150,14 @@ function isDirectory(target: string): boolean {
   }
 }
 
+function isFile(target: string): boolean {
+  try {
+    return statSync(target).isFile()
+  } catch {
+    return false
+  }
+}
+
 /** 顺着 Node `realpath` 的每一跳，把遇到的符号链接本身放进名单。一跳解析完再走下一截。 */
 function grantSymlinkHops(grants: Set<string>, target: string) {
   if (!isAbsolute(target) || target.includes('*')) return
@@ -221,70 +229,235 @@ function logicalPackages(host: string, name: string): string[] {
 }
 
 /**
+ * Node 20 解析 ESM 时，从宿主文件往上每一级都要读 `package.json`。
+ * 这一级还不存在也要放行：权限检查在 stat 之前，没放行就报
+ * Access to this API has been restricted，子进程退出，画布是空的。
+ * 读到已经存在的那一份就停，再往上不是这个包。
+ */
+function grantPackageScope(grants: Set<string>, startFile: string) {
+  const seen = new Set<string>()
+  const walk = (file: string) => {
+    let dir = dirname(file)
+    while (dir && !seen.has(dir)) {
+      seen.add(dir)
+      const pkg = join(dir, 'package.json')
+      addGrant(grants, pkg)
+      if (isFile(pkg)) break
+      const parent = dirname(dir)
+      if (parent === dir) break
+      dir = parent
+    }
+  }
+  walk(startFile)
+  try {
+    const real = realpathSync(startFile)
+    if (real !== startFile) walk(real)
+  } catch {
+    // 宿主路径可以还没落盘。
+  }
+}
+
+function scriptFailure(stderr: string, code: number | null): string {
+  const text = stderr.trim()
+  const resource = text.match(/resource: '([^']+)'/)?.[1]
+  const message = text.match(/^Error: .+$/m)?.[0]
+  if (message && resource) return `${message}（${resource}）`
+  if (message) return message
+  if (text) return text.slice(0, 500)
+  return `脚本进程退出 ${code}`
+}
+
+/**
+ * `--allow-addons` 从 Node 20.12 / 21.7 才有。更早的版本开了权限模型就不能加载原生库：
+ * 带上这个参数进程直接退出；拿掉它则 `ERR_DLOPEN_DISABLED`，或者在读 `index.js` 时报
+ * Access to this API has been restricted。两种情况画布都是空的。这种 Node 不启用权限模型。
+ */
+export function scriptPermissionFlags(nodeVersion: string, allowAddons: boolean): string[] {
+  if (!allowAddons) return []
+  const major = Number(nodeVersion.split('.')[0])
+  const permission = major >= 22 ? '--permission' : '--experimental-permission'
+  return [permission, '--allow-addons']
+}
+
+let allowAddonsCached: boolean | undefined
+function nodeHasAllowAddons(): boolean {
+  if (allowAddonsCached !== undefined) return allowAddonsCached
+  const help = spawnSync(process.execPath, ['--help'], { encoding: 'utf8' })
+  allowAddonsCached = `${help.stdout ?? ''}\n${help.stderr ?? ''}`.includes('--allow-addons')
+  return allowAddonsCached
+}
+
+/** 解析器会 stat 的目录。已存在的目录不要再写 `目录/*`，否则 Node 20 把同一条前缀插两次。 */
+function grantLookupDir(grants: Set<string>, dir: string) {
+  if (!dir || dir === '/' || dir.includes('*')) return
+  addGrant(grants, dir)
+  if (!isDirectory(dir)) grants.add(`${dir}/*`)
+}
+
+/** 包目录里的文件逐个放行。有的 Node 不会把「目录」展开成目录里的 `index.js`。 */
+function grantPackageFiles(grants: Set<string>, dir: string) {
+  grantLookupDir(grants, dir)
+  addGrant(grants, join(dir, 'package.json'))
+  let names: string[]
+  try {
+    names = readdirSync(dir)
+  } catch {
+    return
+  }
+  for (const name of names) {
+    if (!name || name.includes('*')) continue
+    const file = join(dir, name)
+    if (isFile(file) || isSymlink(file)) addGrant(grants, file)
+  }
+}
+
+function grantResolveCandidates(grants: Set<string>, pkgDir: string) {
+  grantPackageFiles(grants, pkgDir)
+  // `_findPath` 会先 stat `包名.js`、`.json`、`.node`，目录存在也拦不住这一下。
+  for (const ext of ['.js', '.json', '.node', '.mjs', '.cjs']) addGrant(grants, `${pkgDir}${ext}`)
+  const scope = dirname(pkgDir)
+  const modules = basename(scope) === 'node_modules' ? scope : dirname(scope)
+  grantLookupDir(grants, scope)
+  if (basename(modules) === 'node_modules') grantLookupDir(grants, modules)
+}
+
+/**
+ * 子进程启动失败时，只补模块解析会碰到的路径。
+ * 用户脚本读 `/etc/passwd` 是在进程里被捕获的，不会走到这里。
+ */
+function safeDeniedGrant(resource: string): boolean {
+  if (!isAbsolute(resource) || resource.includes('\0') || resource.includes('*') || resource.includes('..')) return false
+  const folded = resource.replace(/\\/g, '/')
+  // 用户脚本读系统文件不会进到这里；这里再挡一次，避免把 `/etc` 或 `ldd` 放进名单。
+  // `/usr/lib/node_modules` 这种安装位置仍然要放行。
+  if (folded.startsWith('/etc/') || folded.startsWith('/private/etc/') || folded.includes('/usr/bin/')) return false
+  if (folded.includes('/node_modules/')) return true
+  if (basename(resource) === 'package.json') return true
+  if (folded.endsWith('.node')) return true
+  return false
+}
+
+function rememberDenied(grants: Set<string>, resource: string) {
+  addGrant(grants, resource)
+  const parent = dirname(resource)
+  const folded = parent.replace(/\\/g, '/')
+  if (!folded.includes('/node_modules') || parent === '/' || folded.startsWith('/etc/')) return
+  grantLookupDir(grants, parent)
+}
+
+const readGrantCache = new Map<string, string[]>()
+
+/**
  * 子进程要读到的路径。`require.resolve` 给的是真实目录，ESM 加载器读的是
  * `node_modules` 上的符号链接。只放行一边时，读 `package.json` 会报
  * Access to this API has been restricted。链接的父目录如果自己也是符号链接，
- * `realpathSync` 同样要先读到那一跳。
+ * `realpathSync` 同样要先读到那一跳。Node 20 还要读宿主往上每一级的 `package.json`，
+ * 以及每一级 `node_modules` 和包里的 `index.js`。
+ * 名单算完会试启动一次：还缺的模块路径补上再试。同一宿主只算一次。
  */
 export function scriptReadGrants(host: string): string[] {
+  const cached = readGrantCache.get(host)
+  if (cached) return cached
   const { canvasDir, nativeDir, nativeFile } = nativeBinding()
   const grants = new Set<string>()
   addGrant(grants, host)
-  for (const dir of [canvasDir, nativeDir, ...logicalPackages(host, '@napi-rs/canvas'), ...logicalPackages(host, join('@napi-rs', basename(nativeDir)))]) {
-    addGrant(grants, dir)
-    addGrant(grants, join(dir, 'package.json'))
-    // 存在的目录 Node 会收成 `dir/*`，文件已经能读。再写 `dir/*` 或 `dir/**`，
-    // Node 20 把同一条前缀插第二次，空前缀打到叶子上，断言 !path_prefix.empty()。
-    // 目录还不存在时不会自动加通配，只补一条 `dir/*`。`**` 不是递归通配。
-    if (dir && dir !== '/' && !isDirectory(dir)) grants.add(`${dir}/*`)
-  }
+  grantPackageScope(grants, host)
+  const packageNames = ['@napi-rs/canvas', join('@napi-rs', basename(nativeDir))]
+  const packageDirs = new Set<string>([canvasDir, nativeDir, ...packageNames.flatMap((name) => logicalPackages(host, name))])
+  for (const dir of packageDirs) grantResolveCandidates(grants, dir)
   addGrant(grants, nativeFile)
-  return orderedGrants(grants)
+  if (scriptPermissionFlags(process.versions.node, nodeHasAllowAddons()).length > 0) widenGrants(host, grants, nativeFile)
+  const list = orderedGrants(grants)
+  readGrantCache.set(host, list)
+  return list
+}
+
+/** 用当前名单试着把宿主拉起来。被拒的模块路径补上再试，避免换一台机器就留白画布。 */
+function widenGrants(host: string, grants: Set<string>, nativeFile: string) {
+  const flags = scriptPermissionFlags(process.versions.node, nodeHasAllowAddons())
+  const payload = JSON.stringify({ canvases: [], scripts: [], timeMs: 0, fps: 0, frame: 0, dpr: 1, seed: 1, sources: {} })
+  const tried = new Set<string>()
+  for (let i = 0; i < 8; i++) {
+    const args = [...flags, ...orderedGrants(grants).map((grant) => `--allow-fs-read=${grant}`), host]
+    const result = spawnSync(process.execPath, args, {
+      input: payload,
+      encoding: 'utf8',
+      timeout: 15_000,
+      env: {
+        PATH: process.env.PATH ?? '',
+        NAPI_RS_NATIVE_LIBRARY_PATH: nativeFile,
+        ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
+        ...(process.env.USERPROFILE ? { USERPROFILE: process.env.USERPROFILE } : {}),
+      },
+    })
+    if (result.status === 0 && (result.stdout ?? '').trim()) return
+    const resource = (result.stderr ?? '').match(/resource: '([^']+)'/)?.[1]
+    if (!resource || !safeDeniedGrant(resource) || tried.has(resource)) return
+    tried.add(resource)
+    rememberDenied(grants, resource)
+  }
 }
 
 export function scriptChildArgs(host: string): string[] {
-  const major = Number(process.versions.node.split('.')[0])
-  const permission = major >= 22 ? '--permission' : '--experimental-permission'
-  return [permission, '--allow-addons', ...scriptReadGrants(host).map((grant) => `--allow-fs-read=${grant}`), host]
+  const flags = scriptPermissionFlags(process.versions.node, nodeHasAllowAddons())
+  if (flags.length === 0) return [host]
+  return [...flags, ...scriptReadGrants(host).map((grant) => `--allow-fs-read=${grant}`), host]
 }
 
 function runChild(payload: unknown): Promise<{ issues: CanvasDomIssue[]; canvases: ExportedCanvas[] }> {
   const host = fileURLToPath(new URL('./canvas-dom.mjs', import.meta.url))
   const { nativeFile } = nativeBinding()
-  const args = scriptChildArgs(host)
-  return new Promise((resolve, reject) => {
-    const env: NodeJS.ProcessEnv = {
-      PATH: process.env.PATH ?? '',
-      NAPI_RS_NATIVE_LIBRARY_PATH: nativeFile,
-    }
-    // 不把整份环境交进去。HOME 只为了 os.homedir；不放行家目录的读权限。
-    if (process.env.HOME) env.HOME = process.env.HOME
-    if (process.env.USERPROFILE) env.USERPROFILE = process.env.USERPROFILE
-    const child = spawn(process.execPath, args, {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      signal: AbortSignal.timeout(15_000),
-      env,
+  const flags = scriptPermissionFlags(process.versions.node, nodeHasAllowAddons())
+  const grants = new Set(flags.length === 0 ? [] : scriptReadGrants(host))
+  const tried = new Set<string>()
+  const env: NodeJS.ProcessEnv = {
+    PATH: process.env.PATH ?? '',
+    NAPI_RS_NATIVE_LIBRARY_PATH: nativeFile,
+  }
+  // 不把整份环境交进去。HOME 只为了 os.homedir；不放行家目录的读权限。
+  if (process.env.HOME) env.HOME = process.env.HOME
+  if (process.env.USERPROFILE) env.USERPROFILE = process.env.USERPROFILE
+  const payloadText = JSON.stringify(payload)
+
+  const attempt = (): Promise<{ issues: CanvasDomIssue[]; canvases: ExportedCanvas[] }> =>
+    new Promise((resolve, reject) => {
+      const args =
+        flags.length === 0
+          ? [host]
+          : [...flags, ...orderedGrants(grants).map((grant) => `--allow-fs-read=${grant}`), host]
+      const child = spawn(process.execPath, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        signal: AbortSignal.timeout(15_000),
+        env,
+      })
+      const stdout: Buffer[] = []
+      const stderr: Buffer[] = []
+      child.stdout.on('data', (chunk) => stdout.push(chunk as Buffer))
+      child.stderr.on('data', (chunk) => stderr.push(chunk as Buffer))
+      child.on('error', reject)
+      child.on('close', (code) => {
+        const text = Buffer.concat(stdout).toString('utf8')
+        const errText = Buffer.concat(stderr).toString('utf8')
+        if (code !== 0 || !text.trim()) {
+          const resource = errText.match(/resource: '([^']+)'/)?.[1]
+          if (resource && safeDeniedGrant(resource) && !tried.has(resource) && tried.size < 8) {
+            tried.add(resource)
+            rememberDenied(grants, resource)
+            attempt().then(resolve, reject)
+            return
+          }
+          reject(new Error(scriptFailure(errText, code)))
+          return
+        }
+        try {
+          resolve(JSON.parse(text) as { issues: CanvasDomIssue[]; canvases: ExportedCanvas[] })
+        } catch (err) {
+          reject(err)
+        }
+      })
+      child.stdin.end(payloadText)
     })
-    const stdout: Buffer[] = []
-    const stderr: Buffer[] = []
-    child.stdout.on('data', (chunk) => stdout.push(chunk as Buffer))
-    child.stderr.on('data', (chunk) => stderr.push(chunk as Buffer))
-    child.on('error', reject)
-    child.on('close', (code) => {
-      const text = Buffer.concat(stdout).toString('utf8')
-      if (code !== 0 || !text.trim()) {
-        const detail = Buffer.concat(stderr).toString('utf8').trim().slice(0, 500)
-        reject(new Error(detail || `脚本进程退出 ${code}`))
-        return
-      }
-      try {
-        resolve(JSON.parse(text) as { issues: CanvasDomIssue[]; canvases: ExportedCanvas[] })
-      } catch (err) {
-        reject(err)
-      }
-    })
-    child.stdin.end(JSON.stringify(payload))
-  })
+  return attempt()
 }
 
 /** 排版之后、绘制之前跑脚本。字符串脚本在子进程里，闭包留在本进程。 */
