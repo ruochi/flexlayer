@@ -9,6 +9,8 @@ export type CatalogFace = {
   url: string
   /** 注册到画布上的名字。常规档与 `family` 相同，粗体加 Bold */
   registeredAs: string
+  /** `url` 是 zip 时，要取出的条目路径 */
+  entry?: string
 }
 
 export type CatalogFont = {
@@ -60,7 +62,7 @@ export const DEFAULT_FONT: CatalogFont = {
   use: '正文默认',
   sample: '春眠不觉晓',
   weights: '可变，轴约 300–800。轮廓只有默认字重 300',
-  aliases: ['寒蝉端黑体'],
+  aliases: ['寒蝉端黑体', '黑体'],
   faces: [
     {
       file: 'ChillDuanSansVF.ttf',
@@ -74,44 +76,85 @@ export const DEFAULT_FONT: CatalogFont = {
 /** 写了名字就会准备的字体。顺序即文档顺序。 */
 export const REGISTERED_FONTS: CatalogFont[] = [
   {
-    family: 'Song',
-    title: '思源宋体',
+    family: 'ChillDuanHeiSong',
+    title: '寒蝉端黑宋',
     role: 'builtin',
-    source: 'Noto Serif SC（Google Fonts，简体子集）',
+    source: 'https://github.com/Warren2060/ChillDuanHeiSong/releases/download/v1.200/ChillDuanHeiSongPro_v1.2.zip',
     license: 'OFL',
     covers: '简体中文',
     use: '正文宋体',
     sample: '春眠不觉晓',
-    weights: '400、700',
-    aliases: ['宋体', '思源宋体', 'sourcehanserif', 'notoserifsc', 'noto serif sc'],
+    weights: '400',
+    aliases: ['宋体', 'Song', '寒蝉端黑宋'],
     faces: [
-      { ...woff('noto-serif-sc', V, 'noto-serif-sc-chinese-simplified-400-normal.woff', 400, 'Song'), file: 'NotoSerifSC-400.woff' },
-      { ...woff('noto-serif-sc', V, 'noto-serif-sc-chinese-simplified-700-normal.woff', 700, 'SongBold'), file: 'NotoSerifSC-700.woff' },
+      {
+        file: 'ChillDuanHeiSongPro_Regular.otf',
+        weight: 400,
+        registeredAs: 'ChillDuanHeiSong',
+        url: 'https://github.com/Warren2060/ChillDuanHeiSong/releases/download/v1.200/ChillDuanHeiSongPro_v1.2.zip',
+        entry: '寒蝉端黑宋Pro v1.2/ChillDuanHeiSongPro_Regular.otf',
+      },
     ],
   },
   {
-    family: 'Kai',
-    title: '霞鹜文楷',
+    family: 'ChillKai',
+    title: '寒蝉楷体',
     role: 'builtin',
-    source: 'LXGW WenKai',
+    source: 'https://github.com/Warren2060/Chillkai/releases/download/v2.000/ChillKai.zip',
     license: 'OFL',
     covers: '简体中文',
     use: '楷体',
     sample: '春眠不觉晓',
-    weights: '400、700',
-    aliases: ['楷体', '霞鹜文楷', 'lxgwwenkai', 'wenkai'],
+    weights: '400',
+    aliases: ['楷体', 'Kai', '寒蝉楷体'],
     faces: [
       {
-        file: 'LXGWWenKai-Regular.ttf',
+        file: 'ChillKai.woff',
         weight: 400,
-        registeredAs: 'Kai',
-        url: 'https://github.com/lxgw/LxgwWenKai/releases/download/v1.330/LXGWWenKai-Regular.ttf',
+        registeredAs: 'ChillKai',
+        url: 'https://github.com/Warren2060/Chillkai/releases/download/v2.000/ChillKai.zip',
+        entry: 'ChillKai/ChillKai.woff',
       },
+    ],
+  },
+  {
+    family: 'ChillHuoFangSong',
+    title: '寒蝉活仿宋',
+    role: 'builtin',
+    source: 'https://github.com/Warren2060/ChillMovableType/releases/download/HuoFangSongv0.100/ChillHuoFangSong.zip',
+    license: 'OFL',
+    covers: '简体中文',
+    use: '仿宋',
+    sample: '春眠不觉晓',
+    weights: '400',
+    aliases: ['仿宋', '寒蝉活仿宋'],
+    faces: [
       {
-        file: 'LXGWWenKai-Bold.ttf',
-        weight: 700,
-        registeredAs: 'KaiBold',
-        url: 'https://github.com/lxgw/LxgwWenKai/releases/download/v1.330/LXGWWenKai-Bold.ttf',
+        file: 'ChillHuoFangSong_Regular.otf',
+        weight: 400,
+        registeredAs: 'ChillHuoFangSong',
+        url: 'https://github.com/Warren2060/ChillMovableType/releases/download/HuoFangSongv0.100/ChillHuoFangSong.zip',
+        entry: 'ChillHuoFangSong_Regular.otf',
+      },
+    ],
+  },
+  {
+    family: 'ChillRoundF',
+    title: '寒蝉全圆体',
+    role: 'builtin',
+    source: 'https://github.com/Warren2060/ChillRound/releases/download/v3.000/ChillRoundF.ttf',
+    license: 'OFL',
+    covers: '简体中文',
+    use: '圆体',
+    sample: '春眠不觉晓',
+    weights: '400',
+    aliases: ['圆体', '寒蝉全圆体'],
+    faces: [
+      {
+        file: 'ChillRoundF.ttf',
+        weight: 400,
+        registeredAs: 'ChillRoundF',
+        url: 'https://github.com/Warren2060/ChillRound/releases/download/v3.000/ChillRoundF.ttf',
       },
     ],
   },
@@ -315,22 +358,6 @@ export const REGISTERED_FONTS: CatalogFont[] = [
     weights: '400',
     aliases: ['stix two math', 'stixmath', 'stix'],
     faces: [woff('stix-two-math', '5.3.0', 'stix-two-math-latin-400-normal.woff', 400, 'STIXTwoMath')],
-  },
-  {
-    family: 'NotoSans',
-    title: '思源黑体',
-    role: 'google',
-    source: 'Noto Sans SC（Google Fonts，简体子集）',
-    license: 'OFL',
-    covers: '简体中文',
-    use: '黑体正文',
-    sample: '春眠不觉晓',
-    weights: '400、700',
-    aliases: ['思源黑体', 'noto sans sc', 'notosanssc'],
-    faces: [
-      woff('noto-sans-sc', V, 'noto-sans-sc-chinese-simplified-400-normal.woff', 400, 'NotoSans'),
-      woff('noto-sans-sc', V, 'noto-sans-sc-chinese-simplified-700-normal.woff', 700, 'NotoSansBold'),
-    ],
   },
   {
     family: 'XiaoWei',

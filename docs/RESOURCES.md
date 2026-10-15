@@ -18,9 +18,11 @@ The Alias column is text you can pass to `font-family`. Those strings are part o
 
 | Name | Aliases | Weights | Coverage | Use | Source |
 | --- | --- | --- | --- | --- | --- |
-| `ChillDuanSans` | 寒蝉端黑体 | variable 300–800 | Simplified Chinese, Latin | Default body text | ChillDuanSans |
-| `Song` | 宋体, 思源宋体 | 400, 700 | Simplified Chinese | Song body text | Noto Serif SC |
-| `Kai` | 楷体, 霞鹜文楷 | 400, 700 | Simplified Chinese | Kai | LXGW WenKai |
+| `ChillDuanSans` | 寒蝉端黑体, 黑体 | variable 300–800 | Simplified Chinese, Latin | Default gothic. Used when `font-family` is omitted | ChillDuanSans |
+| `ChillDuanHeiSong` | 宋体, Song, 寒蝉端黑宋 | 400 | Simplified Chinese | Song body text | 寒蝉端黑宋 |
+| `ChillKai` | 楷体, Kai, 寒蝉楷体 | 400 | Simplified Chinese | Kai | 寒蝉楷体 |
+| `ChillHuoFangSong` | 仿宋, 寒蝉活仿宋 | 400 | Simplified Chinese | Fangsong | 寒蝉活仿宋 |
+| `ChillRoundF` | 圆体, 寒蝉全圆体 | 400 | Simplified Chinese | Rounded | 寒蝉全圆体 |
 | `Brush` | 书法, 毛笔 | 400 | Simplified Chinese | Calligraphic titles | Ma Shan Zheng |
 | `Inter` | | 400, 700 | Latin | English body text | Inter |
 | `JetBrainsMono` | jetbrains mono, 等宽 | 400, 700 | Latin | Code and monospace | JetBrains Mono |
@@ -34,7 +36,6 @@ The Alias column is text you can pass to `font-family`. Those strings are part o
 | `Fraunces` | | 400, 700 | Latin | Soft serif titles | Fraunces |
 | `Instrument` | Instrument Serif | 400 | Latin | Display serif | Instrument Serif |
 | `STIXTwoMath` | STIX Two Math | 400 | Latin, Greek, math symbols | Formulas only. It has a MATH table. Other fonts cannot set formulas | STIX Two Math |
-| `NotoSans` | 思源黑体 | 400, 700 | Simplified Chinese | Gothic body text | Noto Sans SC |
 | `XiaoWei` | 站酷小薇 | 400 | Simplified Chinese | Song-like titles | ZCOOL XiaoWei |
 | `KuaiLe` | 站酷快乐体 | 400 | Simplified Chinese | Lively titles | ZCOOL KuaiLe |
 | `MaoCao` | 刘建毛草 | 400 | Simplified Chinese | Handwriting | Liu Jian Mao Cao |
@@ -53,7 +54,7 @@ The Alias column is text you can pass to `font-family`. Those strings are part o
 
 Pick a Chinese face by tier. 最推荐 comes first. In code, `resources.recommendedFonts`. `resources.recommendedFont('寒蝉端黑宋')` returns that group and the name.
 
-`group` and `title` are the strings the API returns. They stay in Chinese because `recommendedFont` looks them up that way. The group `use` values are 优先选用, 常用, and 备选. `ChillDuanSans` is already in the catalog above and is used when `font-family` is omitted. `Kai` is 霞鹜文楷, also already in the catalog. The other names are for choosing a face. You supply the file under the root. `src` can be a relative path or a URL of a font file.
+`group` and `title` are the strings the API returns. They stay in Chinese because `recommendedFont` looks them up that way. The group `use` values are 优先选用, 常用, and 备选. 黑体, 宋体, 楷体, 仿宋, and 圆体 are the catalog faces above: 寒蝉端黑体, 寒蝉端黑宋, 寒蝉楷体, 寒蝉活仿宋, and 寒蝉全圆体. Writing the category or the family downloads that file. The other names are for choosing a face. You supply the file under the root. `src` can be a relative path or a URL of a font file. None of these files are stored in the package.
 
 | Group | Name | Title you can pass |
 | --- | --- | --- |
@@ -81,7 +82,6 @@ Pick a Chinese face by tier. 最推荐 comes first. In code, `resources.recommen
 | 推荐 | `ChillYunmoGothic` | 寒蝉云墨黑 |
 | 推荐 | `ChillZhuoKai` | 寒蝉拙楷体 |
 | 其他 | `AlimamaShuHeiTi` | 阿里妈妈数黑体 |
-| 其他 | `Kai` | 霞鹜文楷 |
 | 其他 | `JingNanBoBoHei` | 荆南波波黑体 |
 | 其他 | `ZiKuXingQiuFeiYangTi` | 字库星球飞扬体 |
 | 其他 | `DouYuZhuiGuangTi` | 斗鱼追光体 |
@@ -99,7 +99,7 @@ Pick a Chinese face by tier. 最推荐 comes first. In code, `resources.recommen
 | 其他 | `JingNanYuanTi` | 荆南圆体 |
 
 ```html
-<font family="ChillDuanHeiSong" src="fonts/ChillDuanHeiSong.ttf" />
+<font family="ChillReunion" src="fonts/ChillReunion.ttf" />
 ```
 
 Icons use `class="material-symbols-outlined"` and an icon name inside. Set the weight with `font-weight`. When omitted, it follows the surrounding weight. When the size is omitted, it follows the surrounding `font-size`. Set the color in `style`. This is the outlined set.
