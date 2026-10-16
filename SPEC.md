@@ -205,7 +205,7 @@ Shadows fall only on `ground`. `shadows="none"` on the layer that opened the cam
 
 Write `rect`, `circle`, `ellipse`, `polygon`, or `path` directly inside, or an `img` or `<g>`. `line`, `arrow`, `polyline`, `curve`, text, `div`, and a nested `layer` warn and are ignored. An empty mask reports `empty-mask`. When `fill` is omitted it paints as `#fff`, and only alpha is read. `op` defaults to `add`. It may also be `subtract`, `intersect`, or `xor`. `<g>` is composited as a group first, then applied. `op` outside the mask reports `invalid-attr`.
 
-An `img` uses its own alpha by default. `channel="luma"` reads luminance instead. `pick="3 5"` keeps only pixels whose gray value is exactly one of those ids. `derive="subject"`, `derive="mask"`, or `derive="regions"` reads the cache next to the file: `photo.jpg` corresponds to `photo.subject.png` and `photo.cutout.json`. A missing cache reports `missing-mask`. A hash that does not match the source reports `stale-mask`. If the file is still there, it is drawn anyway. A URL or a data URL cannot `derive`.
+An `img` uses its own alpha by default. `channel="luma"` reads luminance instead. `pick="3 5"` keeps only pixels whose gray value is exactly one of those ids.
 
 `<mask feather="8" invert="true">` runs after every step. CSS forms such as `mask-image` report `invalid-attr`.
 
@@ -213,9 +213,9 @@ An `img` uses its own alpha by default. `channel="luma"` reads luminance instead
 
 ### Images and cutouts
 
-`analyzeImage(src, options?)` is synchronous. It measures a picture that already exists. It does not generate a mask. It returns `width`, `height`, `channel`, `hasAlpha`, `area`, `ink`, `pieces`, `parts`, `holes`, `softEdge`, and `d`. `channel` defaults to `auto`, `threshold` to 128, and `tolerance` to 0.5. Putting `d` in `<mask><path d /></mask>` is that same mask.
+A bitmap goes through `cutout` before it is placed. That includes a photo, a screenshot, and an illustration used as a picture. Do not drop the raw file in as the only image when type or another object should sit between the background and the subject.
 
-Generating a mask is `flexlayer-select`, which is not on npm. In the repo, enter `packages/select` and run `npm install && npm run build`.
+Generating the cutout is `flexlayer-select`, which is not on npm. In the repo, enter `packages/select` and run `npm install && npm run build`. The first `cutout` downloads the model.
 
 ```bash
 npx flexlayer-select cutout photo.jpg
@@ -233,7 +233,7 @@ That writes `photo.subject.png` beside the photo: the same size, only the subjec
 </layer>
 ```
 
-`--full` also writes `photo.mask.png`, `photo.regions.png`, `photo.questions.json`, `photo.cutout.layer`, and, for `product`, `photo.shadow.png`. `derive="mask"`, `derive="regions"`, and `apply` read those files. Presets are `portrait` (default), `product`, and `flat`. When the package is not installed, `flexlayer select` only says to install it from `packages/select`.
+Presets are `portrait` (default), `product`, and `flat`. When the package is not installed, `flexlayer select` only says to install it from `packages/select`.
 
 ### Outlines
 
@@ -349,8 +349,6 @@ Rendering also writes JSON. Each node in `elements` has `path`, `id`, `tag`, `bo
 | `invalid-child` | warn | An illegal child. A `div` that contains a block child lays out as a vertical block and does not report this. An `<img>` in a text box does not report this. `<draw>` is an error |
 | `empty-mask` | warn | A `mask` has no usable shape or image |
 | `mask-op-noop` | warn | One mask step did not change the selection |
-| `missing-mask` | error | The `derive` cache does not exist, or `src` is not a local image |
-| `stale-mask` | warn | The cache is still there, but the source hash does not match |
 | `invalid-script` | error / warn / info | The script failed, the content is empty, or `--no-script` skipped it |
 | `missing-image` | warn | An `img` `src` could not be read |
 | `missing-icon` | warn | The icon name does not match |

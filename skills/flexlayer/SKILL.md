@@ -34,7 +34,7 @@ An HTML screenshot paints a page from a browser. Flex Layer lays out text with t
 - **Measure, then place.** Measure one block, then place the next, against the real layout box and against the ink after transform or projection.
 - **Shapes and text in one tree.** Rectangles, circles, lines, paths, and arrows are drawn in a layer with shape attributes.
 - **Solids and a camera.** A shape can be extruded by thickness. There are also spheres, tori, tubes, a ground, and shadows. three.js geometry can share depth with text and line art.
-- **Masks, cutouts, glyph outlines.** A mask clips a layer after it is composited. A subject mask and a single character's outline can be measured and placed back into the picture.
+- **Masks, cutouts, glyph outlines.** A bitmap goes through `cutout` before it is placed. See SPEC, "Images and cutouts". A mask clips a layer after it is composited. A single character's outline can be measured and placed back into the picture.
 - **Layer effects and custom pixels.** Grade, glass, and noise apply to a whole subtree. Pixels can be handed to a canvas script.
 - **Frames.** Each instant is still one Flex Layer tree. Randomness and the clock are fixed per frame. The same input produces the same picture.
 

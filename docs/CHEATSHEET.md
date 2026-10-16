@@ -65,7 +65,7 @@ In tsx, `<model object={mesh} unit={1} />` puts a mesh in the same layer. Lamber
 </layer>
 ```
 
-Text behind a subject. Run `npx flexlayer-select cutout photo.jpg` once. It writes `photo.subject.png`, the same size as the photo, with only the subject kept. Stack the photo, the text, and `subject.png` in that order. Copy the photo's width and height onto both images, and they line up.
+A bitmap goes through `cutout` first. Run `npx flexlayer-select cutout photo.jpg` once. It writes `photo.subject.png`, the same size as the photo, with only the subject kept. Stack the photo, the text, and `subject.png` in that order. Copy the photo's width and height onto both images, and they line up.
 
 ```html
 <layer width="800" height="600" background="#000">

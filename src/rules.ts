@@ -266,8 +266,8 @@ const KNOWN_ATTRS = new Set<string>([...ATTR_ORDER, ...ATTRS.map((attr) => attr.
 const TAG_LOCAL_ATTRS: Record<string, readonly string[]> = {
   preview: ['of', 'show'],
   mask: ['feather', 'invert'],
-  img: ['channel', 'pick', 'derive'],
-  image: ['channel', 'pick', 'derive'],
+  img: ['channel', 'pick'],
+  image: ['channel', 'pick'],
 }
 
 const GROUND_ONLY_ATTRS = ['shadow-blur', 'shadow-opacity', 'shadow-color'] as const

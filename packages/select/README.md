@@ -24,13 +24,6 @@ That writes `photo.subject.png` beside the photo. Stack the photo, the text, the
 
 `y` sits a little below the top of the subject. Lower text is covered by more of the subject.
 
-Presets are `portrait` (default), `product`, and `flat`. `portrait` and `product` keep the soft edge of hair, remove spill that matches the background, and drop the dark shadow under the feet. `flat` is a hard cut at 128. `cutout.json` carries the source hash, model, preset, and the `analyzeImage` self-check.
-
-`--full` also writes the mask, region ids, questions, `photo.cutout.layer`, and, for `product`, the shadow. `apply` needs that run:
-
-```bash
-npx flexlayer-select cutout photo.jpg --full
-npx flexlayer-select apply photo.jpg --add 2 --subtract 1
-```
+Presets are `portrait` (default), `product`, and `flat`. `portrait` and `product` keep the soft edge of hair, remove spill that matches the background, and drop the dark shadow under the feet. `flat` is a hard cut at 128. `cutout.json` carries the source hash, model, and preset.
 
 When this package is installed, `flexlayer select` at the root forwards here.

@@ -1034,8 +1034,6 @@ const EXPECT_CODES = new Set([
   'invalid-child',
   'empty-mask',
   'mask-op-noop',
-  'missing-mask',
-  'stale-mask',
   'invalid-draw',
   'invalid-script',
   'unsupported-dom',

@@ -11,7 +11,6 @@ import {
 } from 'yoga-layout/load'
 import { ensureAuthorFeatures, installAuthorFeaturesSync } from './author-features.js'
 import { collectFilters, mergeFilters, type FilterIssue } from './filter.js'
-import { checkDerive, isDeriveKind } from './derive.js'
 import { imageInk, peekLayerImage, preloadLayerImageSync, preloadLayerImagesSync, parseObjectFit, parseObjectPosition } from './image.js'
 import type { LayerNode } from './parse.js'
 import { parseLayer } from './parse.js'
@@ -1467,7 +1466,6 @@ function layoutImage(node: LayerNode, ctx: LayoutContext): ImageLayoutNode {
       })
     }
   }
-  bitmap = derivedBitmap(node, ctx, bitmap)
   const parsedFit = parseObjectFit(style['object-fit'])
   if (parsedFit.invalid) {
     ctx.issues.push({
@@ -3134,75 +3132,6 @@ function maskImageFields(node: LayerNode, ctx: LayoutContext): { maskChannel?: '
     }
   }
   return out
-}
-
-function derivedBitmap(node: LayerNode, ctx: LayoutContext, bitmap: ImageLayoutNode['bitmap']): ImageLayoutNode['bitmap'] {
-  const derive = node.attrs.derive?.trim()
-  if (!derive) return bitmap
-  if (!ctx.inMask) {
-    ctx.issues.push({
-      level: 'warn',
-      code: 'invalid-attr',
-      path: ctx.pathPrefix,
-      message: 'derive 只写在 mask 里的 img 上',
-      hint: '蒙版写成 <mask><img src="photo.jpg" derive="subject" /></mask>',
-    })
-    return bitmap
-  }
-  if (!isDeriveKind(derive)) {
-    ctx.issues.push({
-      level: 'warn',
-      code: 'invalid-attr',
-      path: ctx.pathPrefix,
-      message: `derive 只能是 subject、mask 或 regions，收到 ${derive}`,
-      hint: '主体写 derive="subject"',
-    })
-    return bitmap
-  }
-  const src = node.attrs.src ?? ''
-  const checked = checkDerive(src, ctx.baseDir, derive)
-  if (checked.status === 'remote') {
-    ctx.issues.push({
-      level: 'error',
-      code: 'missing-mask',
-      path: ctx.pathPrefix,
-      message: 'derive 只接受本地图片',
-      hint: 'src 写成文件路径，再运行 npx flexlayer-select cutout',
-    })
-    return null
-  }
-  if (checked.status === 'missing') {
-    ctx.issues.push({
-      level: 'error',
-      code: 'missing-mask',
-      path: ctx.pathPrefix,
-      message: `没有 ${derive} 的缓存`,
-      hint: checked.command,
-    })
-    return null
-  }
-  if (checked.status === 'stale') {
-    ctx.issues.push({
-      level: 'warn',
-      code: 'stale-mask',
-      path: ctx.pathPrefix,
-      message: '蒙版缓存和原图对不上',
-      hint: checked.command,
-    })
-  }
-  preloadLayerImageSync(checked.file, ctx.baseDir)
-  const peeked = peekLayerImage(checked.file, ctx.baseDir)
-  if (peeked.status !== 'ok') {
-    ctx.issues.push({
-      level: 'error',
-      code: 'missing-mask',
-      path: ctx.pathPrefix,
-      message: `蒙版缓存读不了: ${checked.file}`,
-      hint: '删掉这张缓存，再运行 npx flexlayer-select cutout',
-    })
-    return null
-  }
-  return peeked.image
 }
 
 function applyMaskOp(node: LayerNode, laid: LayoutNode, ctx: LayoutContext) {

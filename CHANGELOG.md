@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.0
+
+A bitmap goes through `cutout` before it is placed. `derive`, `analyzeImage`, `cutout --full`, and `apply` are removed. `cutout` still writes `photo.subject.png` and `photo.cutout.json`, and prints the three-layer stack: photo, text, subject.
+
 ## 0.9.0
 
 Removed `flexlayer-select mask`, the depth model, and `--point`, `--omit`, `--refine`. `foregroundMask`, `splitLayers`, and `estimateDepth` are gone. `cutout` and `cutout --full` stay. `apply` still needs a `--full` run.

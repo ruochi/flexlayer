@@ -1,11 +1,9 @@
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { basename, dirname, isAbsolute, resolve } from 'node:path'
-import { analyzeImage } from 'flexlayer'
-import { applyAnswers, cutoutMarkup, sandwichMarkup, type Answer } from './markup.js'
-import { maskRgba, readRgba, regionsRgba, shadowRgba, writePng } from './pixels.js'
+import { basename, isAbsolute, resolve } from 'node:path'
+import { sandwichMarkup } from './markup.js'
+import { readRgba, writePng } from './pixels.js'
 import { applyPreset, isPreset, type Preset } from './preset.js'
-import { buildRegions, type Question } from './regions.js'
 import { birefnetSegment, MODEL_ID } from './segment.js'
 
 export type Segmenter = (rgba: Uint8ClampedArray, width: number, height: number) => Uint8ClampedArray | Promise<Uint8ClampedArray>
@@ -17,15 +15,6 @@ export type CutoutOptions = {
   segment?: Segmenter
   /** 相对路径从这里找。默认是当前目录。 */
   baseDir?: string
-  /** 默认只写 `photo.subject.png` 和 `photo.cutout.json`。写 true 再多写遮罩、编号图、选择题、影子和 `<mask>` 配方，`apply` 和 `derive="mask|regions"` 要用它们。 */
-  full?: boolean
-}
-
-export type CutoutAnalysis = {
-  area: number
-  pieces: number
-  holes: number
-  softEdge: number
 }
 
 export type CutoutResult = {
@@ -36,18 +25,8 @@ export type CutoutResult = {
   height: number
   subject: string
   meta: string
-  /** 以下四个只在 `full` 时写出。 */
-  mask?: string
-  regions?: string
-  questionsFile?: string
-  layer?: string
-  shadow?: string
-  /** `<mask>` 配方，只在 `full` 时有。 */
-  markup: string
   /** 三层插字写法：原图、留空、主体。 */
   sandwich: string
-  questions: Question[]
-  analysis: CutoutAnalysis
 }
 
 function stemOf(file: string): string {
@@ -56,22 +35,9 @@ function stemOf(file: string): string {
   return dot > slash ? file.slice(0, dot) : file
 }
 
-function outputs(srcFile: string) {
-  const stem = stemOf(srcFile)
-  return {
-    subject: `${stem}.subject.png`,
-    mask: `${stem}.mask.png`,
-    regions: `${stem}.regions.png`,
-    meta: `${stem}.cutout.json`,
-    questions: `${stem}.questions.json`,
-    layer: `${stem}.cutout.layer`,
-    shadow: `${stem}.shadow.png`,
-  }
-}
-
 /**
  * 抠出主体，写到原图旁边。渲染器只读这些文件，不在这里跑模型。
- * `photo.jpg` 默认得到 `photo.subject.png` 和 `photo.cutout.json`。`full` 再多写 `photo.mask.png`、`photo.regions.png` 等。
+ * `photo.jpg` 得到 `photo.subject.png` 和 `photo.cutout.json`。
  */
 export async function cutout(src: string, options: CutoutOptions = {}): Promise<CutoutResult> {
   const preset = options.preset ?? 'portrait'
@@ -87,27 +53,11 @@ export async function cutout(src: string, options: CutoutOptions = {}): Promise<
   const matte = new Uint8ClampedArray(await segment(rgba, width, height))
   if (matte.length !== width * height) throw new Error('分割结果的像素数和原图不一致')
   const processed = applyPreset(preset, rgba, matte, width, height)
-  const { ids, questions } = buildRegions(processed.alpha, width, height)
-  const files = outputs(srcFile)
+  const subject = `${stemOf(srcFile)}.subject.png`
+  const metaPath = `${stemOf(srcFile)}.cutout.json`
   const name = basename(srcFile)
 
-  const full = options.full === true
-  writePng(files.subject, processed.rgba, width, height)
-  if (full) {
-    writePng(files.mask, maskRgba(processed.alpha), width, height)
-    writePng(files.regions, regionsRgba(ids), width, height)
-    if (processed.shadow) writePng(files.shadow, shadowRgba(processed.shadow), width, height)
-  }
-
-  const analysisFull = analyzeImage(files.subject, { channel: 'alpha', baseDir: dirname(srcFile) })
-  const analysis: CutoutAnalysis = {
-    area: analysisFull.area,
-    pieces: analysisFull.pieces,
-    holes: analysisFull.holes,
-    softEdge: analysisFull.softEdge,
-  }
-  const markup = cutoutMarkup({ src: name, width, height, shadow: full && processed.shadow != null })
-  const sandwich = sandwichMarkup({ src: name, subject: basename(files.subject), width, height })
+  writePng(subject, processed.rgba, width, height)
   const model = options.segment ? 'segment' : MODEL_ID
   const meta = {
     src: name,
@@ -117,22 +67,9 @@ export async function cutout(src: string, options: CutoutOptions = {}): Promise<
     params: { preset },
     width,
     height,
-    subject: basename(files.subject),
-    ...(full
-      ? {
-          mask: basename(files.mask),
-          regions: basename(files.regions),
-          questions: basename(files.questions),
-          ...(processed.shadow ? { shadow: basename(files.shadow) } : {}),
-        }
-      : {}),
-    analysis,
+    subject: basename(subject),
   }
-  writeFileSync(files.meta, `${JSON.stringify(meta, null, 2)}\n`)
-  if (full) {
-    writeFileSync(files.questions, `${JSON.stringify({ src: name, regions: basename(files.regions), questions }, null, 2)}\n`)
-    writeFileSync(files.layer, markup)
-  }
+  writeFileSync(metaPath, `${JSON.stringify(meta, null, 2)}\n`)
 
   return {
     src: srcFile,
@@ -140,28 +77,8 @@ export async function cutout(src: string, options: CutoutOptions = {}): Promise<
     model,
     width,
     height,
-    subject: files.subject,
-    meta: files.meta,
-    ...(full
-      ? {
-          mask: files.mask,
-          regions: files.regions,
-          questionsFile: files.questions,
-          layer: files.layer,
-          ...(processed.shadow ? { shadow: files.shadow } : {}),
-        }
-      : {}),
-    markup,
-    sandwich,
-    questions,
-    analysis,
+    subject,
+    meta: metaPath,
+    sandwich: sandwichMarkup({ src: name, subject: basename(subject), width, height }),
   }
-}
-
-export function writeAnswers(result: CutoutResult, answers: Answer[]): string {
-  if (!result.layer) throw new Error('writeAnswers 要用 full: true 跑出的结果')
-  const name = basename(result.src)
-  const markup = applyAnswers(result.markup, answers, { src: name, width: result.width, height: result.height })
-  writeFileSync(result.layer, markup)
-  return markup
 }

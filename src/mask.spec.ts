@@ -1,7 +1,4 @@
 import { createCanvas, loadImage, type CanvasRenderingContext2D } from '@napi-rs/canvas'
-import { createHash } from 'node:crypto'
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -589,33 +586,5 @@ describe('mask', () => {
     const dropped = await pixelAt(sheet!, 30, 20 + 16)
     expect(kept[0]).toBeGreaterThan(200)
     expect(dropped[0]).toBeGreaterThan(dropped[2])
-  })
-
-  it('derive 缺缓存是 error，哈希对不上是 stale-mask', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'flexlayer-derive-'))
-    const photo = pngDataUrl(8, 8, (ctx) => {
-      ctx.fillStyle = '#fff'
-      ctx.fillRect(0, 0, 8, 8)
-    })
-    writeFileSync(join(dir, 'photo.png'), Buffer.from(photo.slice(photo.indexOf(',') + 1), 'base64'))
-    const missing = await checkLayer(`<layer width="8" height="8"><mask><img src="photo.png" derive="subject" style="width:8px; height:8px" /></mask></layer>`, { baseDir: dir })
-    const missingIssue = missing.issues.find((issue) => issue.code === 'missing-mask')
-    expect(missingIssue?.level).toBe('error')
-    expect(missingIssue?.hint).toContain('flexlayer-select cutout')
-
-    const subject = pngDataUrl(8, 8, (ctx) => {
-      ctx.fillStyle = '#fff'
-      ctx.fillRect(0, 0, 4, 8)
-    })
-    writeFileSync(join(dir, 'photo.subject.png'), Buffer.from(subject.slice(subject.indexOf(',') + 1), 'base64'))
-    writeFileSync(join(dir, 'photo.cutout.json'), JSON.stringify({ srcHash: 'nope', preset: 'portrait' }))
-    const stale = await checkLayer(`<layer width="8" height="8"><mask><img src="photo.png" derive="subject" style="width:8px; height:8px" /></mask><rect width="8" height="8" fill="#fff" /></layer>`, { baseDir: dir })
-    expect(stale.issues.some((issue) => issue.code === 'stale-mask')).toBe(true)
-
-    const hash = createHash('sha256').update(readFileSync(join(dir, 'photo.png'))).digest('hex')
-    writeFileSync(join(dir, 'photo.cutout.json'), JSON.stringify({ srcHash: hash, preset: 'portrait' }))
-    const { png } = await renderLayer(`<layer width="8" height="8" background="#00ff00"><mask><img src="photo.png" derive="subject" style="width:8px; height:8px" /></mask><rect width="8" height="8" fill="#ff0000" /></layer>`, { baseDir: dir })
-    expect((await pixelAt(png, 1, 4))[0]).toBeGreaterThan(200)
-    expect((await pixelAt(png, 6, 4))[1]).toBeGreaterThan(200)
   })
 })

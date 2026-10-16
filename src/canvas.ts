@@ -55,7 +55,7 @@ export function resolveLayerBaseDir(stack: string, pinned?: string, cwd = proces
   for (const line of stack.split('\n')) {
     const file = fileFromStack(line)
     if (!file) continue
-    if (/[/\\](src|dist)[/\\](canvas|analyze-image)\.[cm]?[jt]s/.test(file)) continue
+    if (/[/\\](src|dist)[/\\]canvas\.[cm]?[jt]s/.test(file)) continue
     if (file.includes('/node_modules/') || file.includes('\\node_modules\\')) continue
     if (isBundledEntry(file)) continue
     return dirname(file)

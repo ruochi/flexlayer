@@ -130,23 +130,7 @@ await renderLayer(root)
 
 For offscreen measurement, use `createCanvas`, `loadImage`, and `applyCanvasFont` from the main entry, after `await initFonts()`. Register a custom font file with `registerFontPath(family, filePath)`. A name that is already registered is not swapped for another file. This is the same canvas layout uses. Variable weight is written on the `wght` axis. An unregistered font name throws.
 
-`analyzeImage` measures a cutout that already exists: how much is left, how many pieces, how many holes, how soft the edge is, and the outline `d`. Coordinates are image pixels:
-
-```ts
-import { analyzeImage, h, renderLayer } from 'flexlayer'
-
-const cut = analyzeImage('photo.subject.png')
-if (cut.pieces > 1) console.warn(`subject split into ${cut.pieces} pieces`, cut.parts)
-const root = h(
-  'layer',
-  { width: String(cut.width), height: String(cut.height) },
-  h('mask', {}, h('path', { d: cut.d })),
-  h('img', { src: 'photo.jpg', style: `width:${cut.width}px; height:${cut.height}px` }),
-)
-await renderLayer(root)
-```
-
-Subject cutout lives in `packages/select` in this repo. It is not on npm. The renderer only reads the files that package writes. In that directory, run `npm install && npm run build`. `npx flexlayer-select cutout photo.jpg` downloads BiRefNet 512 fp16 (about 470MB) on first use and writes `photo.subject.png`, the same size as the photo with only the subject opaque, and `photo.cutout.json`. To put text behind the subject, stack the photo, the text, then `photo.subject.png`. Both images use the photo's width and height. The presets are `portrait` (default), `product`, and `flat`. `--full` also writes the mask, region ids, and `photo.cutout.layer` for `apply`.
+Subject cutout lives in `packages/select` in this repo. It is not on npm. The renderer only reads the files that package writes. In that directory, run `npm install && npm run build`. `npx flexlayer-select cutout photo.jpg` downloads BiRefNet 512 fp16 (about 470MB) on first use and writes `photo.subject.png`, the same size as the photo with only the subject opaque, and `photo.cutout.json`. To put text behind the subject, stack the photo, the text, then `photo.subject.png`. Both images use the photo's width and height. The presets are `portrait` (default), `product`, and `flat`.
 
 Render a set of PNGs and a contact sheet:
 

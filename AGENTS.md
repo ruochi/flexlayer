@@ -125,9 +125,13 @@ Fix from the report's `path` and `hint`. An error exits with code 1. A warn stil
 | `min-font-size` | The on-screen size is under the root minimum | Raise `font-size`, or set root `min-font` to a number, `print`, or `none` |
 | `stroke-fill` | An `inside` or `center` stroke reaches about 8% of the font size | Narrow it, or use `outside` |
 
+## Photos
+
+A bitmap goes through `cutout` before it is placed. That includes a photo, a screenshot, and an illustration used as a picture. In `packages/select`, run `npm install && npm run build`, then `npx flexlayer-select cutout photo.jpg`. The first run downloads the model. Stack the original, whatever sits in the gap, then `photo.subject.png`. Both images use the photo's width and height.
+
 ## Workflow
 
-1. Write `.tsx` or `.layer` against the rules above.
+1. Cut out each bitmap, then write `.tsx` or `.layer` against the rules above.
 2. `npx tsx src/cli.ts check scene.tsx`. An **error** exits with code 1. Fix it from the report's `path` and `hint`, then check again. Type checking happens only in `check`. An animation without `--frames` samples frame 0, the middle frame, and the last frame. Several files can be named in one command.
 3. When spacing is wrong, `npx tsx src/cli.ts render scene.tsx -o scene.png --debug --report scene.json`. Read `box` (the layout box) and `ink` (the mark after transform or projection). `.tsx` also has `source` (`scene.tsx:18:5`).
 4. When it looks right, `npx tsx src/cli.ts render scene.tsx -o scene.png`. `render` does not type-check. Several pictures and scales are written in one command: `npx tsx src/cli.ts render a.tsx b.tsx -o out/ --scale 1 --scale 2`.
