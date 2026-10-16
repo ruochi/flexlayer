@@ -30,11 +30,11 @@ describe('glyph', () => {
     expect(chun).toBeDefined()
     if (!chun) return
     expect(chun.text).toBe('春')
-    expect(chun.font).toBe('Kai')
+    expect(chun.font).toBe('ChillKai')
     expect(chun.size).toBe(200)
     expect(chun.weight).toBe(400)
     expect(chun.width).toBe(200)
-    expect(chun.height).toBeGreaterThan(chun.size)
+    expect(chun.height).toBeGreaterThanOrEqual(chun.size)
     expect(chun.baseline).toBeGreaterThan(0)
     expect(chun.baseline).toBeLessThan(chun.height)
     expect(chun.missing).toBe(false)
@@ -63,7 +63,8 @@ describe('glyph', () => {
     expect([chun, comma, latin].map((item) => item?.text)).toEqual(['春', '，', 'A'])
     expect(comma!.height).toBe(chun!.height)
     expect(comma!.baseline).toBe(chun!.baseline)
-    expect(comma!.width).toBe(chun!.width)
+    expect(comma!.width).toBeGreaterThan(0)
+    expect(comma!.width).toBeLessThan(chun!.width)
     expect(latin!.width).toBeLessThan(chun!.width)
     expect(comma!.ink!.height).toBeLessThan(chun!.ink!.height / 2)
   })
@@ -78,24 +79,24 @@ describe('glyph', () => {
     expect(space!.height).toBeGreaterThan(0)
   })
 
-  it('春眠可以指定字重', async () => {
+  it('寒蝉楷体请求别的字重时仍用这一档', async () => {
     if (!ready) return
     const chars = glyph('春眠', { font: 'Kai', size: 120, weight: 700 })
-    const [regular] = glyph('春', { font: 'Kai', size: 120 })
+    const [regular] = glyph('春', { font: '楷体', size: 120 })
     expect(chars.map((item) => item.text)).toEqual(['春', '眠'])
-    expect(chars.every((item) => item.font === 'Kai' && item.size === 120 && item.weight === 700)).toBe(true)
-    expect(chars[0]!.d).not.toBe(regular!.d)
+    expect(chars.every((item) => item.font === 'ChillKai' && item.size === 120 && item.weight === 400)).toBe(true)
+    expect(chars[0]!.d).toBe(regular!.d)
     expect(chars[0]!.height).toBe(chars[1]!.height)
   })
 
-  it('粗楷和常规楷的轮廓不同', async () => {
+  it('寒蝉楷体只有一档，请求粗体仍用这一档', async () => {
     if (!ready) return
     const [regular] = glyph('春', { font: '楷体', size: 160 })
     const [bold] = glyph('春', { font: 'Kai', size: 160, weight: 700 })
-    expect(regular!.font).toBe('Kai')
+    expect(regular!.font).toBe('ChillKai')
     expect(regular!.weight).toBe(400)
-    expect(bold!.weight).toBe(700)
-    expect(bold!.d).not.toBe(regular!.d)
+    expect(bold!.weight).toBe(400)
+    expect(bold!.d).toBe(regular!.d)
     expect(bold!.height).toBe(regular!.height)
   })
 
@@ -177,7 +178,7 @@ describe('glyph', () => {
   it('tsx 里只靠 <font> 加载的字体，glyph() 也能用', async () => {
     if (!ready) return
     const dir = await mkdtemp(join(tmpdir(), 'flexlayer-font-'))
-    const src = join(getFontsCacheDir(), 'LXGWWenKai-Regular.ttf')
+    const src = join(getFontsCacheDir(), 'ChillDuanSansVF.ttf')
     const file = join(dir, 'poster.tsx')
     await writeFile(
       file,

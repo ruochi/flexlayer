@@ -37,7 +37,7 @@ Installing from git runs `prepare` and compiles for you. You do not build first:
 npm install github:ruochi/flexlayer
 ```
 
-The default font is ChillDuanSans (寒蝉端黑体). `Song`, `Kai`, `Brush`, and a set of Google fonts can be named directly. The first use downloads them to `~/.cache/flexlayer/fonts`. The list is in [docs/RESOURCES.md](docs/RESOURCES.md).
+The default font is ChillDuanSans (寒蝉端黑体). `黑体`, `宋体` (`Song`), `楷体` (`Kai`), `仿宋`, and `圆体` are Chill faces too. `Brush` and a set of Latin fonts can be named directly. The first use downloads them to `~/.cache/flexlayer/fonts`. The files are not in the package. The list is in [docs/RESOURCES.md](docs/RESOURCES.md).
 
 ## Commands
 

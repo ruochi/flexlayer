@@ -32,7 +32,9 @@ describe('可用资源', () => {
     expect(effectiveFontWeight('Inter', 650)).toBe(700)
     expect(effectiveFontWeight('Inter', 500)).toBe(400)
     expect(effectiveFontWeight('Bebas', 700)).toBe(400)
-    expect(effectiveFontWeight('楷体', 600)).toBe(700)
+    expect(effectiveFontWeight('楷体', 600)).toBe(400)
+    expect(effectiveFontWeight('黑体', 450)).toBe(450)
+    expect(effectiveFontWeight('宋体', 700)).toBe(400)
     expect(effectiveFontWeight('JetBrainsMono', 650)).toBe(700)
     expect(effectiveFontWeight('等宽', 400)).toBe(400)
     expect(effectiveFontWeight('ChillDuanSans', 450)).toBe(450)
@@ -60,6 +62,7 @@ describe('可用资源', () => {
       ['最推荐', '优先选用'],
       ['推荐', '常用'],
       ['其他', '备选'],
+      ['英文', '艺术标题'],
     ])
     expect(resources.recommendedFonts).toBe(RECOMMENDED_FONTS)
     const fonts = RECOMMENDED_FONTS.flatMap((group) => group.fonts)
@@ -67,16 +70,46 @@ describe('可用资源', () => {
     const titles = fonts.map((font) => font.title.trim().toLowerCase())
     expect(new Set(families).size).toBe(families.length)
     expect(new Set(titles).size).toBe(titles.length)
-    expect(fonts.filter((font) => font.builtin).map((font) => font.family)).toEqual([DEFAULT_FONT.family, 'Kai'])
+    expect(fonts.filter((font) => font.builtin).map((font) => font.family)).toEqual([
+      DEFAULT_FONT.family,
+      'ChillDuanHeiSong',
+      'ChillKai',
+      'ChillHuoFangSong',
+      'ChillRoundF',
+      'Playfair',
+      'Fraunces',
+      'Instrument',
+      'Cormorant',
+      'AbrilFatface',
+      'Cinzel',
+      'Syne',
+      'Monoton',
+      'GreatVibes',
+    ])
+    const english = RECOMMENDED_FONTS.find((group) => group.name === '英文')!
+    for (const font of english.fonts) {
+      expect(CATALOG_FONTS.find((item) => item.family === font.family)?.covers).toBe('拉丁')
+    }
+    expect(resources.recommendedFont('Great Vibes')).toEqual({
+      group: '英文',
+      font: { family: 'GreatVibes', title: 'Great Vibes', builtin: true },
+    })
     expect(resources.recommendedFont('寒蝉端黑体')?.group).toBe('最推荐')
     expect(resources.recommendedFont('ChillDuanHeiSong')).toEqual({
       group: '最推荐',
-      font: { family: 'ChillDuanHeiSong', title: '寒蝉端黑宋' },
+      font: { family: 'ChillDuanHeiSong', title: '寒蝉端黑宋', builtin: true },
     })
-    expect(resources.recommendedFont('霞鹜文楷')).toEqual({
-      group: '其他',
-      font: { family: 'Kai', title: '霞鹜文楷', builtin: true },
-    })
+    expect(resources.font('黑体')?.family).toBe('ChillDuanSans')
+    expect(resources.font('宋体')?.family).toBe('ChillDuanHeiSong')
+    expect(resources.font('Song')?.family).toBe('ChillDuanHeiSong')
+    expect(resources.font('楷体')?.family).toBe('ChillKai')
+    expect(resources.font('Kai')?.family).toBe('ChillKai')
+    expect(resources.font('仿宋')?.family).toBe('ChillHuoFangSong')
+    expect(resources.font('圆体')?.family).toBe('ChillRoundF')
+    expect(resources.font('思源宋体')).toBeUndefined()
+    expect(resources.font('思源黑体')).toBeUndefined()
+    expect(resources.font('霞鹜文楷')).toBeUndefined()
+    expect(resources.recommendedFont('霞鹜文楷')).toBeUndefined()
     for (const group of RECOMMENDED_FONTS) {
       expect(doc).toContain(group.name)
       expect(doc).toContain(group.use)

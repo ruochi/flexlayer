@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { GlobalFonts } from '@napi-rs/canvas'
 import { DEFAULT_FONT, REGISTERED_FONTS } from './font-catalog.js'
 import { extractCollectionFace } from './ttc.js'
+import { extractZipEntry } from './zip-entry.js'
 
 export const DEFAULT_FONT_FAMILY = DEFAULT_FONT.family
 const DEFAULT_FONT_URL = DEFAULT_FONT.faces[0]!.url
@@ -50,6 +51,14 @@ function downloadSync(url: string, dest: string): void {
     throw new Error(`字体下载失败 ${url}: ${status || '网络错误'}`)
   }
   writeFileSync(dest, buf)
+}
+
+/** 没写字体时的那一款，以及它的别名，例如「黑体」。 */
+export function isDefaultFontName(family: string): boolean {
+  const key = family.trim().toLowerCase()
+  if (!key) return false
+  if (key === DEFAULT_FONT_FAMILY.toLowerCase()) return true
+  return DEFAULT_FONT.aliases.some((alias) => alias.trim().toLowerCase() === key)
 }
 
 export function ensureDefaultFontSync(): string {
@@ -161,7 +170,7 @@ export async function registerFontsFromDocument(
   registerFontsFromDocumentSync(fontNodes, baseDir)
 }
 
-type FontFace = { file: string; weight: number; url: string; registeredAs: string }
+type FontFace = { file: string; weight: number; url: string; registeredAs: string; entry?: string }
 
 type BuiltinFont = { cssFamily: string; faces: FontFace[] }
 
@@ -215,22 +224,21 @@ export function primaryFontFamily(raw: string | undefined): string | null {
 export function fontReady(family: string): boolean {
   const name = family.trim()
   if (!name) return true
+  if (isDefaultFontName(name)) return registered.has(DEFAULT_FONT_FAMILY) || GlobalFonts.has(DEFAULT_FONT_FAMILY)
   const builtin = builtinFont(name)
   if (builtin) return registered.has(builtin.cssFamily) || GlobalFonts.has(builtin.cssFamily)
-  if (name.toLowerCase().includes('chillduan')) return GlobalFonts.has(DEFAULT_FONT_FAMILY)
   return GlobalFonts.has(name)
 }
 
 function isVariableFamily(family: string): boolean {
-  const norm = family.trim().toLowerCase()
-  return norm === 'chillduansans' || norm.includes('chillduan')
+  return isDefaultFontName(family)
 }
 
 function nearestFace(font: BuiltinFont, weight: number): FontFace {
   return font.faces.reduce((best, face) => (Math.abs(face.weight - weight) < Math.abs(best.weight - weight) ? face : best))
 }
 
-/** 可变字体保留字重。内置宋体、楷体按最近的字重文件选，书法只有一档。其它静态字体按 400。 */
+/** 可变的默认黑体保留字重。目录里的静态字体按最近的一档，只有一档就用那一档。 */
 export function effectiveFontWeight(family: string, weight: number): number {
   if (isVariableFamily(family)) return weight
   const builtin = builtinFont(family)
@@ -291,8 +299,9 @@ export function applyCanvasFont(
   sizePx: number,
   fontStyle?: 'normal' | 'italic',
 ): void {
-  ctx.font = buildFontString(family, weight, sizePx, fontStyle)
-  const axis = wghtAxis(family)
+  const resolved = isDefaultFontName(family) ? DEFAULT_FONT_FAMILY : family
+  ctx.font = buildFontString(resolved, weight, sizePx, fontStyle)
+  const axis = wghtAxis(resolved)
   if (!axis) {
     ctx.fontVariationSettings = 'normal'
     return
@@ -301,17 +310,45 @@ export function applyCanvasFont(
   ctx.fontVariationSettings = `'wght' ${value}`
 }
 
+function materializeFace(face: FontFace): string {
+  const dest = join(getFontsCacheDir(), face.file)
+  if (existsSync(dest)) return dest
+  mkdirSync(dirname(dest), { recursive: true })
+  if (!face.entry) {
+    downloadSync(face.url, dest)
+    return dest
+  }
+  const zipPath = join(getFontsCacheDir(), `${createHash('sha256').update(face.url).digest('hex').slice(0, 16)}.zip`)
+  if (!existsSync(zipPath)) downloadSync(face.url, zipPath)
+  const bytes = extractZipEntry(readFileSync(zipPath), face.entry)
+  const tmp = `${dest}.${process.pid}.tmp`
+  try {
+    writeFileSync(tmp, bytes)
+    renameSync(tmp, dest)
+  } catch (err) {
+    try {
+      unlinkSync(tmp)
+    } catch {
+      // 临时文件可能还没写出来。
+    }
+    throw err
+  }
+  return dest
+}
+
 function ensureFaceSync(face: FontFace): void {
   if (registered.has(face.registeredAs)) return
-  const dest = join(getFontsCacheDir(), face.file)
-  if (!existsSync(dest)) downloadSync(face.url, dest)
-  registerFontPath(face.registeredAs, dest)
+  registerFontPath(face.registeredAs, materializeFace(face))
 }
 
 /** 按字体名准备目录里的字体。已经记住的名字直接跳过。 */
 export function ensureBuiltinFontsSync(families: Iterable<string>): void {
   const seen = new Set<string>()
   for (const family of families) {
+    if (isDefaultFontName(family)) {
+      ensureDefaultFontSync()
+      continue
+    }
     const font = builtinFont(family)
     if (!font || seen.has(font.cssFamily) || registered.has(font.cssFamily)) continue
     seen.add(font.cssFamily)
@@ -325,7 +362,7 @@ export async function ensureBuiltinFonts(families: Iterable<string>): Promise<vo
 }
 
 export type OutlineFont = {
-  /** 调用方认识的名字，如 Kai */
+  /** 调用方认识的名字，如 ChillKai */
   family: string
   /** 写进 SVG 的字体名。粗楷是 KaiBold 这种已经注册的文件名 */
   canvasFamily: string
@@ -345,18 +382,25 @@ function variationWeight(family: string): { def: number } | null {
 
 /**
  * 轮廓用哪一个字体文件。
- * 内置宋体、楷体按最近的字重文件选。可变字体的轮廓只在默认字重上，请求其它字重会抛错。
+ * 目录里的静态字体按最近的一档。默认黑体的轮廓只在默认字重上，请求其它字重会抛错。
  */
 export function resolveOutlineFont(family: string | undefined, weight: number | undefined): OutlineFont {
   ensureDefaultFontSync()
   const requested = family?.trim() || DEFAULT_FONT_FAMILY
+  if (isDefaultFontName(requested)) {
+    const axis = variationWeight(DEFAULT_FONT_FAMILY)
+    if (axis && weight != null && weight !== axis.def) {
+      throw new Error(`可变字体 ${DEFAULT_FONT_FAMILY} 的轮廓只能取默认字重 ${axis.def}，请求的是 ${weight}`)
+    }
+    return { family: DEFAULT_FONT_FAMILY, canvasFamily: DEFAULT_FONT_FAMILY, weight: axis?.def ?? 300 }
+  }
   const builtin = builtinFont(requested)
   if (builtin) {
     ensureBuiltinFontsSync([requested])
     const face = nearestFace(builtin, weight ?? 400)
     return { family: builtin.cssFamily, canvasFamily: face.registeredAs, weight: face.weight }
   }
-  const name = requested.toLowerCase().includes('chillduan') ? DEFAULT_FONT_FAMILY : requested
+  const name = requested
   if (!GlobalFonts.has(name)) {
     throw new Error(`字体未注册: ${requested}。可用字体见 resources.fonts，默认字体是 ${DEFAULT_FONT_FAMILY}`)
   }
@@ -378,7 +422,7 @@ export async function initFonts(families?: Iterable<string>): Promise<void> {
   ensureDefaultFontSync()
   if (!families) return
   const names = [...families].map((family) => family.trim()).filter((family) => family.length > 0)
-  const missing = names.filter((family) => family !== DEFAULT_FONT_FAMILY && !builtinFont(family))
+  const missing = names.filter((family) => !isDefaultFontName(family) && !builtinFont(family))
   if (missing.length > 0) {
     throw new Error(`字体未登记: ${missing.join('、')}。可用字体见 resources.fonts，默认字体是 ${DEFAULT_FONT_FAMILY}`)
   }

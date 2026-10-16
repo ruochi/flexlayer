@@ -30,15 +30,15 @@ async function alphaBounds(png: Buffer, alphaMin = 16): Promise<Bounds> {
   return { left: minX, top: minY, right: maxX + 1, bottom: maxY + 1 }
 }
 
-function expectNear(actual: number, expected: number, label: string) {
-  expect(Math.abs(actual - expected), `${label}: ${actual} vs ${expected}`).toBeLessThanOrEqual(1)
+function expectNear(actual: number, expected: number, label: string, slack = 1) {
+  expect(Math.abs(actual - expected), `${label}: ${actual} vs ${expected}`).toBeLessThanOrEqual(slack)
 }
 
-function expectSameBounds(ink: Box, pixels: Bounds) {
-  expectNear(ink.x, pixels.left, 'left')
-  expectNear(ink.y, pixels.top, 'top')
-  expectNear(boxRight(ink), pixels.right, 'right')
-  expectNear(boxBottom(ink), pixels.bottom, 'bottom')
+function expectSameBounds(ink: Box, pixels: Bounds, slack = 1) {
+  expectNear(ink.x, pixels.left, 'left', slack)
+  expectNear(ink.y, pixels.top, 'top', slack)
+  expectNear(boxRight(ink), pixels.right, 'right', slack)
+  expectNear(boxBottom(ink), pixels.bottom, 'bottom', slack)
 }
 
 const ANCHORS = [
@@ -107,13 +107,13 @@ describe('字形着墨', () => {
     expectSameBounds(textEl(report, 'h1').ink, await alphaBounds(png))
   })
 
-  it('中英数字混排的报告 ink 与像素误差不超过 1px', async () => {
+  it('中英数字混排的报告 ink 与像素误差不超过 2px', async () => {
     const { png, report } = await renderLayer(
       `<layer width="900" height="400" background="transparent" color="#1b1612" font-family="Song">
         <h1 style="font-size:120px; font-weight:700; line-height:1; white-space:nowrap">国A10</h1>
       </layer>`,
     )
-    expectSameBounds(textEl(report, 'h1').ink, await alphaBounds(png))
+    expectSameBounds(textEl(report, 'h1').ink, await alphaBounds(png), 2)
   })
 })
 

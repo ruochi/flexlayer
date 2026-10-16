@@ -146,7 +146,7 @@ A bitmap goes through `cutout` before it is placed. That includes a photo, a scr
 | Masks, cutouts, `glyph`, `canvas.create`, animation | SPEC, "Masks and programs" |
 | Issue codes and report fields | SPEC, "Report" |
 | How one attribute is written | [docs/attrs.json](docs/attrs.json), look up the name |
-| A Chinese face | Recommended fonts in [docs/RESOURCES.md](docs/RESOURCES.md), in the order 最推荐, 推荐, 其他. ChillDuanSans (寒蝉端黑体) is the default. Kai (霞鹜文楷) is already in the catalog. Other names need their own font file |
+| A Chinese face | 黑体, 宋体, 楷体, 仿宋, and 圆体 are Chill faces in the catalog: 寒蝉端黑体, 寒蝉端黑宋, 寒蝉楷体, 寒蝉活仿宋, 寒蝉全圆体. They download on first use and are not packaged. The wider list is in [docs/RESOURCES.md](docs/RESOURCES.md), in the order 最推荐, 推荐, 其他. Other names need their own font file |
 
 HTML and `display:flex` render as CSS. Defaults are not copied here.
 

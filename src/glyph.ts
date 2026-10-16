@@ -30,7 +30,7 @@ export type GlyphOptions = {
   font?: string
   /** 字号，像素。默认 40。 */
   size?: number
-  /** 字重。宋体、楷体取最近的 400 或 700。可变字体只能用默认字重。 */
+  /** 字重。目录里的静态字体取最近的一档。默认黑体只能用默认字重。 */
   weight?: number
 }
 
