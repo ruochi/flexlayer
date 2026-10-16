@@ -209,6 +209,22 @@ export const REGISTERED_FONTS: CatalogFont[] = [
     ],
   },
   {
+    family: 'SpaceMono',
+    title: 'Space Mono',
+    role: 'google',
+    source: 'Space Mono（Google Fonts，拉丁子集）',
+    license: 'OFL',
+    covers: '拉丁',
+    use: '宽体等宽',
+    sample: 'const n = 1',
+    weights: '400、700',
+    aliases: ['space mono', 'space-mono'],
+    faces: [
+      woff('space-mono', V, 'space-mono-latin-400-normal.woff', 400, 'SpaceMono'),
+      woff('space-mono', V, 'space-mono-latin-700-normal.woff', 700, 'SpaceMonoBold'),
+    ],
+  },
+  {
     family: 'Playfair',
     title: 'Playfair Display',
     role: 'google',

@@ -26,6 +26,7 @@ The Alias column is text you can pass to `font-family`. Those strings are part o
 | `Brush` | 书法, 毛笔 | 400 | Simplified Chinese | Calligraphic titles | Ma Shan Zheng |
 | `Inter` | | 400, 700 | Latin | English body text | Inter |
 | `JetBrainsMono` | jetbrains mono, 等宽 | 400, 700 | Latin | Code and monospace | JetBrains Mono |
+| `SpaceMono` | Space Mono | 400, 700 | Latin | Wide geometric monospace | Space Mono |
 | `Playfair` | Playfair Display | 400, 700 | Latin | English titles | Playfair Display |
 | `Baskerville` | Libre Baskerville | 400, 700 | Latin | English body serif | Libre Baskerville |
 | `Oswald` | | 400, 700 | Latin | Condensed titles | Oswald |
@@ -57,7 +58,7 @@ The Alias column is text you can pass to `font-family`. Those strings are part o
 
 ## Recommended fonts
 
-Pick a Chinese face by tier. 最推荐 comes first. Artistic Latin faces are the 英文 group at the end. In code, `resources.recommendedFonts`. `resources.recommendedFont('寒蝉端黑宋')` returns that group and the name.
+Pick a Chinese face by tier. 最推荐 comes first. Artistic Latin faces are the 英文 group. Monospace faces are the 等宽 group. In code, `resources.recommendedFonts`. `resources.recommendedFont('寒蝉端黑宋')` returns that group and the name.
 
 `group` and `title` are the strings the API returns. They stay in Chinese because `recommendedFont` looks them up that way. The group `use` values are 优先选用, 常用, and 备选. 黑体, 宋体, 楷体, 仿宋, and 圆体 are the catalog faces above: 寒蝉端黑体, 寒蝉端黑宋, 寒蝉楷体, 寒蝉活仿宋, and 寒蝉全圆体. Writing the category or the family downloads that file. The other names are for choosing a face. You supply the file under the root. `src` can be a relative path or a URL of a font file. None of these files are stored in the package.
 
@@ -123,6 +124,17 @@ The 英文 group is for artistic Latin titles. API `use` is 艺术标题. Every 
 
 ```html
 <h1 style="font-family:Playfair; font-size:120px">Spring</h1>
+```
+
+The 等宽 group is for Latin monospace. API `use` is 代码. Both names are in the catalog above. `等宽` as a `font-family` is JetBrains Mono. These are Latin-only. Han characters fall back to `ChillDuanSans`.
+
+| Group | Name | Character | Use |
+| --- | --- | --- | --- |
+| 等宽 | `JetBrainsMono` | Compact coding mono | Code, terminals, tables |
+| 等宽 | `SpaceMono` | Wide geometric mono | Technical titles and short labels |
+
+```html
+<p style="font-family:JetBrainsMono; font-size:28px">const n = 1</p>
 ```
 
 Icons use `class="material-symbols-outlined"` and an icon name inside. Set the weight with `font-weight`. When omitted, it follows the surrounding weight. When the size is omitted, it follows the surrounding `font-size`. Set the color in `style`. This is the outlined set.

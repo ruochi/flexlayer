@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.1
+
+A new recommendation group, 等宽 (`use` 代码), lists two Latin monospace faces: JetBrains Mono and Space Mono. JetBrains Mono was already in the catalog, and `等宽` still names it. Space Mono is new. Both download on first use.
+
 ## 0.10.0
 
 A bitmap goes through `cutout` before it is placed. `derive`, `analyzeImage`, `cutout --full`, and `apply` are removed. `cutout` still writes `photo.subject.png` and `photo.cutout.json`, and prints the three-layer stack: photo, text, subject.

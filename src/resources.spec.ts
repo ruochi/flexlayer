@@ -37,6 +37,7 @@ describe('可用资源', () => {
     expect(effectiveFontWeight('宋体', 700)).toBe(400)
     expect(effectiveFontWeight('JetBrainsMono', 650)).toBe(700)
     expect(effectiveFontWeight('等宽', 400)).toBe(400)
+    expect(effectiveFontWeight('SpaceMono', 650)).toBe(700)
     expect(effectiveFontWeight('ChillDuanSans', 450)).toBe(450)
   })
 
@@ -63,6 +64,7 @@ describe('可用资源', () => {
       ['推荐', '常用'],
       ['其他', '备选'],
       ['英文', '艺术标题'],
+      ['等宽', '代码'],
     ])
     expect(resources.recommendedFonts).toBe(RECOMMENDED_FONTS)
     const fonts = RECOMMENDED_FONTS.flatMap((group) => group.fonts)
@@ -85,11 +87,19 @@ describe('可用资源', () => {
       'Syne',
       'Monoton',
       'GreatVibes',
+      'JetBrainsMono',
+      'SpaceMono',
     ])
     const english = RECOMMENDED_FONTS.find((group) => group.name === '英文')!
-    for (const font of english.fonts) {
+    const mono = RECOMMENDED_FONTS.find((group) => group.name === '等宽')!
+    for (const font of [...english.fonts, ...mono.fonts]) {
       expect(CATALOG_FONTS.find((item) => item.family === font.family)?.covers).toBe('拉丁')
     }
+    expect(resources.recommendedFont('Space Mono')).toEqual({
+      group: '等宽',
+      font: { family: 'SpaceMono', title: 'Space Mono', builtin: true },
+    })
+    expect(resources.font('等宽')?.family).toBe('JetBrainsMono')
     expect(resources.recommendedFont('Great Vibes')).toEqual({
       group: '英文',
       font: { family: 'GreatVibes', title: 'Great Vibes', builtin: true },
@@ -124,6 +134,24 @@ describe('可用资源', () => {
       }
       expect(builtinFont(font.family)).toBeUndefined()
       expect(inCatalog).toBe(false)
+    }
+  })
+
+  it('等宽两款的 i 和 m 一样宽', async () => {
+    const width = async (family: string, text: string) => {
+      const doc = await layoutSource(
+        `<layer width="320" height="80" font-family="${family}"><p style="font-size:40px; white-space:nowrap">${text}</p></layer>`,
+        process.cwd(),
+      )
+      expect(doc.issues.filter((issue) => issue.level === 'error')).toEqual([])
+      const node = doc.root.children.find((child) => child.kind === 'text')
+      return node && node.kind === 'text' ? node.textLayout.contentWidth : 0
+    }
+    for (const family of ['JetBrainsMono', 'SpaceMono']) {
+      const narrow = await width(family, 'i')
+      const wide = await width(family, 'm')
+      expect(narrow, family).toBeGreaterThan(10)
+      expect(Math.abs(narrow - wide), family).toBeLessThanOrEqual(1)
     }
   })
 
