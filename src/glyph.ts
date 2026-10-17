@@ -1,4 +1,4 @@
-import { convertSVGTextToPath, Path2D } from '@napi-rs/canvas'
+import { convertSVGTextToPath, createCanvas, Path2D, SvgExportFlag } from '@napi-rs/canvas'
 import { applyCanvasFont, resolveOutlineFont, type OutlineFont } from './fonts.js'
 import { getMeasureCtx } from './measureCtx.js'
 import { parseSvgPath, serializeSvgPath, translateSvgPath } from './path.js'
@@ -30,7 +30,7 @@ export type GlyphOptions = {
   font?: string
   /** 字号，像素。默认 40。 */
   size?: number
-  /** 字重。目录里的静态字体取最近的一档。默认黑体只能用默认字重。 */
+  /** 字重。静态字体取最近的一档。可变字体按 wght 轴，超出轴的两端会夹住。 */
   weight?: number
 }
 
@@ -139,11 +139,28 @@ function notdefOutline(face: OutlineFont, size: number): string {
   return found
 }
 
-function outlineOf(ch: string, face: OutlineFont, size: number): string {
+/** 默认实例。这条转换不认字重轴，所以只用于轴上的默认档，已有轮廓保持原样。 */
+function svgOutline(ch: string, face: OutlineFont, size: number): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size * 4}" height="${size * 4}"><text x="0" y="0" font-size="${size}" font-family="${face.canvasFamily}">${xmlChar(ch)}</text></svg>`
   const out = convertSVGTextToPath(svg).toString()
-  const d = out.match(/\sd="([^"]*)"/)?.[1] ?? ''
-  return d
+  return out.match(/\sd="([^"]*)"/)?.[1] ?? ''
+}
+
+/** 非默认字重。画布导出会应用 wght 轴。锚点在基线上，和 svgOutline 同一个坐标系。 */
+function variedOutline(ch: string, face: OutlineFont, size: number): string {
+  const span = Math.max(1, Math.ceil(size * 4))
+  const canvas = createCanvas(span, span, SvgExportFlag.ConvertTextToPaths)
+  const ctx = canvas.getContext('2d')
+  applyCanvasFont(ctx, face.family, face.weight, size)
+  ctx.fillStyle = '#000'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillText(ch, 0, 0)
+  const out = canvas.getContent().toString()
+  return [...out.matchAll(/\sd="([^"]*)"/g)].map((match) => match[1] ?? '').join(' ')
+}
+
+function outlineOf(ch: string, face: OutlineFont, size: number): string {
+  return face.variation ? variedOutline(ch, face, size) : svgOutline(ch, face, size)
 }
 
 function inkOf(d: string): GlyphInk | null {

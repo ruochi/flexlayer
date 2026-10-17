@@ -368,50 +368,58 @@ export type OutlineFont = {
   canvasFamily: string
   /** 轮廓实际对应的字重 */
   weight: number
+  /** 这一档不在默认实例上，取轮廓时要写 wght 轴 */
+  variation: boolean
 }
 
-function variationWeight(family: string): { def: number } | null {
+type WghtAxis = { min: number; max: number; def: number }
+
+function variationWeight(family: string): WghtAxis | null {
   try {
     if (!GlobalFonts.hasVariations(family, 400, 5, 0)) return null
     const found = GlobalFonts.getVariationAxes(family, 400, 5, 0).find((item) => item.tag === WGHT_TAG)
-    return found ? { def: found.def } : null
+    return found ? { min: found.min, max: found.max, def: found.def } : null
   } catch {
     return null
   }
 }
 
+/** 没写字重用默认实例。写出了轴外的值就夹到两端，和绘制一样。 */
+function clampAxis(axis: WghtAxis, weight: number | undefined): number {
+  const requested = weight ?? axis.def
+  return Math.min(axis.max, Math.max(axis.min, requested))
+}
+
+function variableFace(family: string, canvasFamily: string, axis: WghtAxis, weight: number | undefined): OutlineFont {
+  const clamped = clampAxis(axis, weight)
+  return { family, canvasFamily, weight: clamped, variation: clamped !== axis.def }
+}
+
 /**
  * 轮廓用哪一个字体文件。
- * 目录里的静态字体按最近的一档。默认黑体的轮廓只在默认字重上，请求其它字重会抛错。
+ * 目录里的静态字体按最近的一档。可变字体按 wght 轴，超出轴的两端会夹住。
  */
 export function resolveOutlineFont(family: string | undefined, weight: number | undefined): OutlineFont {
   ensureDefaultFontSync()
   const requested = family?.trim() || DEFAULT_FONT_FAMILY
   if (isDefaultFontName(requested)) {
     const axis = variationWeight(DEFAULT_FONT_FAMILY)
-    if (axis && weight != null && weight !== axis.def) {
-      throw new Error(`可变字体 ${DEFAULT_FONT_FAMILY} 的轮廓只能取默认字重 ${axis.def}，请求的是 ${weight}`)
-    }
-    return { family: DEFAULT_FONT_FAMILY, canvasFamily: DEFAULT_FONT_FAMILY, weight: axis?.def ?? 300 }
+    if (axis) return variableFace(DEFAULT_FONT_FAMILY, DEFAULT_FONT_FAMILY, axis, weight)
+    return { family: DEFAULT_FONT_FAMILY, canvasFamily: DEFAULT_FONT_FAMILY, weight: 300, variation: false }
   }
   const builtin = builtinFont(requested)
   if (builtin) {
     ensureBuiltinFontsSync([requested])
     const face = nearestFace(builtin, weight ?? 400)
-    return { family: builtin.cssFamily, canvasFamily: face.registeredAs, weight: face.weight }
+    return { family: builtin.cssFamily, canvasFamily: face.registeredAs, weight: face.weight, variation: false }
   }
   const name = requested
   if (!GlobalFonts.has(name)) {
     throw new Error(`字体未注册: ${requested}。可用字体见 resources.fonts，默认字体是 ${DEFAULT_FONT_FAMILY}`)
   }
   const axis = variationWeight(name)
-  if (axis) {
-    if (weight != null && weight !== axis.def) {
-      throw new Error(`可变字体 ${name} 的轮廓只能取默认字重 ${axis.def}，请求的是 ${weight}`)
-    }
-    return { family: name, canvasFamily: name, weight: axis.def }
-  }
-  return { family: name, canvasFamily: name, weight: effectiveFontWeight(name, weight ?? 400) }
+  if (axis) return variableFace(name, name, axis, weight)
+  return { family: name, canvasFamily: name, weight: effectiveFontWeight(name, weight ?? 400), variation: false }
 }
 
 /**

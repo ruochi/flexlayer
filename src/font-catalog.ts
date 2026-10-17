@@ -61,7 +61,7 @@ export const DEFAULT_FONT: CatalogFont = {
   covers: '简体中文、拉丁',
   use: '正文默认',
   sample: '春眠不觉晓',
-  weights: '可变，轴约 300–800。轮廓只有默认字重 300',
+  weights: '可变，轴约 300–800',
   aliases: ['寒蝉端黑体', '黑体'],
   faces: [
     {
