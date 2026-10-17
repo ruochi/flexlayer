@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.2
+
+`glyph()` follows the weight axis of a variable font. For ChillDuanSans the axis is about 300 to 800. Omitting `weight` still uses 300. A weight outside the axis is clamped to the ends. Static faces still use the nearest registered face.
+
 ## 0.10.1
 
 A new recommendation group, 等宽 (`use` 代码), lists two Latin monospace faces: JetBrains Mono and Space Mono. JetBrains Mono was already in the catalog, and `等宽` still names it. Space Mono is new. Both download on first use.

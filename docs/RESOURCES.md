@@ -10,7 +10,7 @@ Write `font-family="Song"` or `style="font-family:Inter"`. The default is `Chill
 
 `.ttc` and `.otc` are collections with several faces. With no index, face 0 is used. For Source Han and Noto CJK, face 0 is Japanese, so a character that differs between simplified, traditional, and Japanese (such as 复) comes out wrong. Simplified Chinese is `src="SourceHanSans.ttc#2"`. The number after `#` is a zero-based index, not part of the file name.
 
-When both 400 and 700 are registered, the nearest one is used. A family with only one face keeps that face for a bold title. `Symbols` is the icon font. Weight snaps to the nearest hundred from 100 to 700. Write `<span class="material-symbols-outlined">home</span>` and set the weight with `font-weight`. `ChillDuanSans` is a variable font, with a weight axis of about 300 to 800. Its outlines exist only at the default weight 300.
+When both 400 and 700 are registered, the nearest one is used. A family with only one face keeps that face for a bold title. `Symbols` is the icon font. Weight snaps to the nearest hundred from 100 to 700. Write `<span class="material-symbols-outlined">home</span>` and set the weight with `font-weight`. `ChillDuanSans` is a variable font, with a weight axis of about 300 to 800. `glyph()` follows that axis. Omitting `weight` uses 300. A weight outside the axis is clamped to the ends.
 
 When a simplified-Chinese subset has no complete Latin glyphs, missing characters fall back to `ChillDuanSans`. Latin subsets do not contain Han characters.
 

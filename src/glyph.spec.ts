@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Path2D } from '@napi-rs/canvas'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { applyCanvasFont, ensureBuiltinFonts, ensureDefaultFont, getFontsCacheDir } from './fonts.js'
+import { applyCanvasFont, ensureBuiltinFonts, ensureDefaultFont, getFontsCacheDir, registerFontPath } from './fonts.js'
 import { glyph } from './glyph.js'
 import { loadLayerFile } from './load-source.js'
 import { getMeasureCtx } from './measureCtx.js'
@@ -109,12 +109,49 @@ describe('glyph', () => {
     expect(second!.d).toBe(first!.d)
   })
 
-  it('可变字体只出默认字重', async () => {
+  it('可变字体按字重轴取轮廓，轴外夹到两端', async () => {
     if (!ready) return
-    const [chun] = glyph('春')
-    expect(chun!.font).toBe('ChillDuanSans')
-    expect(chun!.weight).toBe(300)
-    expect(() => glyph('春', { weight: 800 })).toThrow(/默认字重 300/)
+    const [regular] = glyph('春', { size: 120 })
+    const [named] = glyph('春', { size: 120, weight: 300 })
+    const [mid] = glyph('春', { size: 120, weight: 500 })
+    const [bold] = glyph('春', { size: 120, weight: 800 })
+    const [low] = glyph('春', { size: 120, weight: 100 })
+    const [high] = glyph('春', { size: 120, weight: 900 })
+    expect(regular!.font).toBe('ChillDuanSans')
+    expect(regular!.weight).toBe(300)
+    expect(named!.d).toBe(regular!.d)
+    expect(mid!.weight).toBe(500)
+    expect(bold!.weight).toBe(800)
+    expect(mid!.d).not.toBe(regular!.d)
+    expect(bold!.d).not.toBe(regular!.d)
+    expect(bold!.d).not.toBe(mid!.d)
+    expect(bold!.ink!.width * bold!.ink!.height).toBeGreaterThan(regular!.ink!.width * regular!.ink!.height)
+    expect(low!.weight).toBe(300)
+    expect(low!.d).toBe(regular!.d)
+    expect(high!.weight).toBe(800)
+    expect(high!.d).toBe(bold!.d)
+
+    const ctx = getMeasureCtx()
+    applyCanvasFont(ctx, 'ChillDuanSans', 800, 120)
+    const measured = ctx.measureText('春')
+    const atBaseline = translateSvgPath(bold!.d, 0, -bold!.baseline)
+    const [left, top, right, bottom] = new Path2D(atBaseline).computeTightBounds()
+    const near = (actual: number, expected: number) => expect(Math.abs(actual - expected)).toBeLessThanOrEqual(2)
+    near(left, -measured.actualBoundingBoxLeft)
+    near(top, -measured.actualBoundingBoxAscent)
+    near(right, measured.actualBoundingBoxRight)
+    near(bottom, measured.actualBoundingBoxDescent)
+  })
+
+  it('用 <font> 注册的可变字体也按轴取轮廓', async () => {
+    if (!ready) return
+    registerFontPath('PosterSans', join(getFontsCacheDir(), 'ChillDuanSansVF.ttf'))
+    const [regular] = glyph('春', { font: 'PosterSans', size: 80 })
+    const [bold] = glyph('春', { font: 'PosterSans', size: 80, weight: 800 })
+    expect(regular!.weight).toBe(300)
+    expect(bold!.weight).toBe(800)
+    expect(bold!.d).not.toBe(regular!.d)
+    expect(bold!.missing).toBe(false)
   })
 
   it('不认识的字体直接报错', async () => {

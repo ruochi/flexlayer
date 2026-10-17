@@ -237,7 +237,7 @@ Presets are `portrait` (default), `product`, and `flat`. When the package is not
 
 ### Outlines
 
-`glyph(text, { font, size, weight })` returns an array, one entry per code point. Each character has `text`, `d`, `font`, `size`, `weight`, `width`, `height`, `baseline`, `ink`, and `missing`. The origin of `d` is the top-left of the glyph box, and y points down. When `size` is omitted it is 40. `ChillDuanSans` outlines exist only at the default weight 300. Requesting another weight throws. A space has an empty `d`. A character missing from the font has `missing` of `true`, and `d` is the missing-glyph box.
+`glyph(text, { font, size, weight })` returns an array, one entry per code point. Each character has `text`, `d`, `font`, `size`, `weight`, `width`, `height`, `baseline`, `ink`, and `missing`. The origin of `d` is the top-left of the glyph box, and y points down. When `size` is omitted it is 40. `ChillDuanSans` outlines follow its weight axis, about 300 to 800. Omitting `weight` uses 300. A weight outside the axis is clamped. Other variable fonts do the same. A static family uses the nearest face. A space has an empty `d`. A character missing from the font has `missing` of `true`, and `d` is the missing-glyph box.
 
 To place it back in layout: `x` is `x` from `chars` on the value returned by `canvas.create`. `y` is `line.baseline - glyph.baseline`.
 
