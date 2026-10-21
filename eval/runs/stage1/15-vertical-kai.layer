@@ -1,0 +1,5 @@
+<layer width="600" height="900" background="#f7f1e6">
+  <layer x="360" y="80">
+    <h1 id="title" style="font-family:Kai; font-size:72px; writing-mode:vertical-rl; color:#2a2118">春水初生</h1>
+  </layer>
+</layer>

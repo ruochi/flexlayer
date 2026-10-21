@@ -1,0 +1,5 @@
+<layer width="600" height="900" background="#f3efe4" color="#1c140c" font-family="Kai">
+  <layer x="300" y="450" anchor="center">
+    <h1 id="title" style="font-family:Kai; font-size:108px; writing-mode:vertical-rl; color:#1c140c">春风</h1>
+  </layer>
+</layer>

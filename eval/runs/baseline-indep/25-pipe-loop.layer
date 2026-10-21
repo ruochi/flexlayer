@@ -1,0 +1,5 @@
+<layer width="640" height="640" background="#12161c" camera="640">
+  <layer x="102" y="102">
+    <tube id="frame" d="M 120 120 L 520 120 L 520 520 L 120 520 Z" r="18" fill="#d5dde6" />
+  </layer>
+</layer>

@@ -1,0 +1,9 @@
+<layer width="640" height="400" background="#14181f">
+  <layer id="panel" x="48" y="36" width="544" height="328">
+    <rect x="0" y="0" width="544" height="328" fill="#f4efe4" />
+    <mask>
+      <rect x="0" y="0" width="544" height="328" />
+      <circle cx="272" cy="164" r="78" op="subtract" />
+    </mask>
+  </layer>
+</layer>

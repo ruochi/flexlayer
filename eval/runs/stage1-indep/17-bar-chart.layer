@@ -1,0 +1,19 @@
+<layer width="800" height="480" background="#f7f4ee" color="#1a1408" data='{"values":[120,200,160,240]}'>
+  <rect x="70" y="360" width="640" height="4" fill="#1a1408" />
+  <rect id="bar" x="90" y="240" width="80" height="120" fill="#2f6fed" />
+  <rect x="250" y="160" width="80" height="200" fill="#3ecfc4" />
+  <rect x="410" y="200" width="80" height="160" fill="#e8b04a" />
+  <rect x="570" y="120" width="80" height="240" fill="#c23b22" />
+  <layer x="130" y="400" anchor="center">
+    <p style="font-size:24px; color:#1a1408">120</p>
+  </layer>
+  <layer x="290" y="400" anchor="center">
+    <p style="font-size:24px; color:#1a1408">200</p>
+  </layer>
+  <layer x="450" y="400" anchor="center">
+    <p style="font-size:24px; color:#1a1408">160</p>
+  </layer>
+  <layer x="610" y="400" anchor="center">
+    <p style="font-size:24px; color:#1a1408">240</p>
+  </layer>
+</layer>

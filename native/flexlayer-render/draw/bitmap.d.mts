@@ -1,0 +1,15 @@
+export declare const SOLID: any
+export type SOLID = any
+export declare const round: any
+export type round = any
+export type BitmapSummary = any
+export declare const summarize: any
+export type summarize = any
+export type BitmapPart = any
+export declare const labelParts: any
+export type labelParts = any
+export type Contour = any
+export declare const traceContours: any
+export type traceContours = any
+export declare const contoursToPath: any
+export type contoursToPath = any

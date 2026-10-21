@@ -1,0 +1,7 @@
+<layer width="900" height="400" background="#14181f" color="#f4f1ea">
+  <layer x="450" y="200" anchor="center">
+    <h1 id="word" split="chars" style="font-size:104px; color:#f4f1ea; letter-spacing:8px">
+      <span style="rotate: -6deg">W</span><span style="rotate: 5deg">A</span><span style="rotate: -4deg">V</span><span style="rotate: 7deg">E</span>
+    </h1>
+  </layer>
+</layer>

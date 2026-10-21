@@ -1,0 +1,5 @@
+<layer width="900" height="400" background="#c8321e">
+  <layer x="450" y="200" anchor="center">
+    <h1 id="title" style="font-size:120px; color:#1c1915; stroke:6 #fff, 14 #1c1915">市集</h1>
+  </layer>
+</layer>

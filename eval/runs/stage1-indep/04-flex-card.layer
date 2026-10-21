@@ -1,0 +1,11 @@
+<layer width="880" height="420" background="#1b1f27" color="#f4f1ea">
+  <layer x="440" y="210" anchor="center">
+    <div id="card" style="display:flex; flex-direction:row; align-items:center; gap:28px">
+      <div style="display:flex; width:96px; height:96px; border-radius:48px; background:#3ecfc4; align-items:center; justify-content:center">
+        <span class="material-symbols-outlined" style="font-size:48px; color:#08332f">home</span>
+      </div>
+      <h2 style="font-size:40px; color:#ffffff">Harbor</h2>
+      <p style="font-size:28px; color:#c8c4bb">One line of body copy</p>
+    </div>
+  </layer>
+</layer>

@@ -1,0 +1,10 @@
+export declare const NEUTRAL_GRADE: any
+export type NEUTRAL_GRADE = any
+export declare const GRADE_PRESETS: any
+export type GRADE_PRESETS = any
+export type GradeParseResult = any
+export declare const parseGrade: any
+export type parseGrade = any
+export type GradeFrame = any
+export declare const applyGrade: any
+export type applyGrade = any

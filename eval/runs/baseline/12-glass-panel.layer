@@ -1,0 +1,6 @@
+<layer width="800" height="480" background="#1d4e89">
+  <rect x="0" y="0" width="800" height="480" fill="#1d4e89" />
+  <layer x="180" y="90" width="440" height="300" glass="clear, blur 8, tint #fff2">
+    <h1 style="font-size:64px; color:#fff">玻璃</h1>
+  </layer>
+</layer>

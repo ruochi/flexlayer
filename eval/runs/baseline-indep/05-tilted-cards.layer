@@ -1,0 +1,20 @@
+<layer width="1200" height="700" background="#0e1218" color="#f7f4ee" camera="900">
+  <layer x="140" y="130" width="300" height="440" rotateY="32" z="-80">
+    <rect x="0" y="0" width="300" height="440" rx="20" fill="#243044" />
+    <layer x="32" y="48">
+      <h2 style="font-size:40px">Dawn</h2>
+    </layer>
+  </layer>
+  <layer id="card" x="450" y="90" width="300" height="500" z="90">
+    <rect x="0" y="0" width="300" height="500" rx="20" fill="#f0e2c4" />
+    <layer x="32" y="48">
+      <h2 style="font-size:40px; color:#1a1a1a">Noon</h2>
+    </layer>
+  </layer>
+  <layer x="760" y="130" width="300" height="440" rotateY="-32" z="-80">
+    <rect x="0" y="0" width="300" height="440" rx="20" fill="#3a2a38" />
+    <layer x="32" y="48">
+      <h2 style="font-size:40px">Dusk</h2>
+    </layer>
+  </layer>
+</layer>

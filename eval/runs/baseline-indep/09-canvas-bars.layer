@@ -1,0 +1,13 @@
+<layer width="480" height="240" background="#101418">
+  <canvas id="bars" width="480" height="240"></canvas>
+  <script>
+    const canvas = document.querySelector('#bars')
+    const ctx = canvas.getContext('2d')
+    const heights = [72, 150, 110]
+    const colors = ['#f5c16c', '#3ecfc4', '#ef6f4a']
+    heights.forEach((h, i) => {
+      ctx.fillStyle = colors[i]
+      ctx.fillRect(70 + i * 130, 190 - h, 84, h)
+    })
+  </script>
+</layer>

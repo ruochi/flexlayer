@@ -1,0 +1,8 @@
+<layer width="800" height="600" background="#071018">
+  <layer x="400" y="300" anchor="center" width="166" height="144">
+    <g id="crescent">
+      <circle cx="72" cy="72" r="72" fill="#f3edd9" />
+      <circle cx="110" cy="72" r="56" fill="#071018" />
+    </g>
+  </layer>
+</layer>

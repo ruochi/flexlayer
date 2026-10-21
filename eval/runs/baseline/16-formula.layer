@@ -1,0 +1,8 @@
+<layer width="800" height="360" background="#f7f4ee">
+  <layer x="48" y="80">
+    <math display="block" style="font-size:48px">a^2 + b^2 = c^2</math>
+  </layer>
+  <layer x="48" y="220">
+    <p style="font-size:28px; color:#3d3832">勾股定理</p>
+  </layer>
+</layer>

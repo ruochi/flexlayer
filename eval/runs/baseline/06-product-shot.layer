@@ -1,0 +1,5 @@
+<layer width="900" height="900" background="#ece6dc" camera="fov 40, orbit 35 18, aperture 12">
+  <sphere cx="360" cy="420" r="90" fill="#c4552a" />
+  <rect x="500" y="360" width="160" height="120" rx="16" depth="70" fill="#2f5d50" />
+  <ground y="620" rotateX="70" />
+</layer>

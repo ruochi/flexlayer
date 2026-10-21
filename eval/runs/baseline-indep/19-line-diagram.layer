@@ -1,0 +1,22 @@
+<layer width="720" height="480" background="#f7f4ec" color="#1a1a1a">
+  <line x1="140" y1="186" x2="360" y2="186" stroke="#2c2c2c" stroke-width="4" />
+  <line x1="360" y1="186" x2="580" y2="186" stroke="#2c2c2c" stroke-width="4" />
+  <layer id="node" x="104" y="150">
+    <circle cx="36" cy="36" r="36" fill="#2f6fed" />
+    <layer x="36" y="96" anchor="center">
+      <p style="font-size:24px">Alpha</p>
+    </layer>
+  </layer>
+  <layer x="324" y="150">
+    <circle cx="36" cy="36" r="36" fill="#e2b04a" />
+    <layer x="36" y="96" anchor="center">
+      <p style="font-size:24px">Beta</p>
+    </layer>
+  </layer>
+  <layer x="544" y="150">
+    <circle cx="36" cy="36" r="36" fill="#c4492a" />
+    <layer x="36" y="96" anchor="center">
+      <p style="font-size:24px">Gamma</p>
+    </layer>
+  </layer>
+</layer>

@@ -1,0 +1,5 @@
+<layer width="900" height="400" background="#0e1219">
+  <layer x="450" y="200" anchor="center">
+    <h1 id="word" style="font-size:120px; fill:gradient(#ff4d6d, #ffd166, #4cc9f0)">IRIS</h1>
+  </layer>
+</layer>

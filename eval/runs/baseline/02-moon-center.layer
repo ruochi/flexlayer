@@ -1,0 +1,5 @@
+<layer width="800" height="600" background="#0c1220">
+  <layer x="400" y="300" anchor="center" width="400" height="400">
+    <circle cx="0" cy="0" r="80" fill="#f3e6c0" />
+  </layer>
+</layer>

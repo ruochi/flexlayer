@@ -1,0 +1,1017 @@
+import { filterIsLayerOnly, listFilters } from './filter.js'
+import type { LayerChild, LayerNode } from './parse.js'
+import { ATTRS, ATTR_ORDER, HTML_STYLE_ATTRS, attrByName, issueFor } from './schema.js'
+import { cssPropertyNames, diagnoseStyle, parseAngle, parseNumber, parseStyle, readOrigin } from './style.js'
+import { MATH_TAGS } from './math/rules.js'
+import { isInlineTag, isTextBoxTag } from './text.js'
+import type { Issue, IssueLevel } from './types.js'
+import { isGroundTag, isImageTag, isLineTag, isMeshTag, isShapeTag, solidDepth } from './tags.js'
+import { parseSvgTransform } from './svg-transform.js'
+
+const BLOCK_IN_TEXT = new Set(['h1', 'h2', 'h3', 'p', 'div'])
+
+const LAYER_ONLY_ATTR_NAMES = ATTRS.filter((attr) => attr.layerOnlyAttr).map((attr) => attr.name)
+const GRAPHIC_ATTRS = ATTRS.filter((attr) => attr.docGroup === 'graphic').map((attr) => attr.name)
+const FORBID_IN_STYLE = new Set(ATTRS.filter((attr) => attr.forbidInStyle).map((attr) => attr.name))
+const FORBID_IN_HTML_STYLE = new Set(ATTRS.filter((attr) => attr.forbidInHtmlStyle).map((attr) => attr.name))
+
+/** 后注册的滤镜。grade / grade-mask 已经在属性表里，这里不再报第二次。 */
+function registeredLayerOnlyNames(): string[] {
+  const known = new Set(LAYER_ONLY_ATTR_NAMES)
+  const names: string[] = []
+  for (const def of listFilters()) {
+    if (!filterIsLayerOnly(def)) continue
+    if (!known.has(def.name)) names.push(def.name)
+    if (def.maskAttr && !known.has(def.maskAttr)) names.push(def.maskAttr)
+  }
+  return names
+}
+
+function flagged(level: IssueLevel, code: string, path: string, message: string, hint: string): Issue {
+  return { level, code, path, message, hint }
+}
+
+function present(attrs: Record<string, string>, key: string): boolean {
+  return attrs[key] != null && attrs[key] !== ''
+}
+
+export function hasTwoPoint(attrs: Record<string, string>): boolean {
+  return ['x1', 'y1', 'x2', 'y2'].every((key) => present(attrs, key))
+}
+
+export function isDisplayFlex(style: string | undefined): boolean {
+  const display = parseStyle(style).display?.trim().toLowerCase()
+  return display === 'flex' || display === 'inline-flex'
+}
+
+const FLOW_TEXT_KEYS = [
+  'font-size',
+  'font-weight',
+  'font-family',
+  'color',
+  'letter-spacing',
+  'line-height',
+  'text-align',
+  'writing-mode',
+  'white-space',
+  'text-wrap',
+  'max-width',
+  'max-height',
+] as const
+
+/** 没写 display:flex 的 div，只要放了行内标签容不下的子元素，就按块级容器排。 */
+export function divHasFlowBreak(node: LayerNode): boolean {
+  if (node.tag.toLowerCase() !== 'div') return false
+  if (isDisplayFlex(node.attrs.style)) return false
+  return node.children.some((child) => typeof child !== 'string' && !isInlineTag(child.tag))
+}
+
+function inheritedTextStyle(style: string | undefined): string {
+  const parsed = parseStyle(style)
+  const parts: string[] = []
+  for (const key of FLOW_TEXT_KEYS) {
+    const value = parsed[key]
+    if (value) parts.push(`${key}:${value}`)
+  }
+  return parts.join(';')
+}
+
+function blockFlowStyle(style: string | undefined): string {
+  const parsed = parseStyle(style)
+  const extra = ['display:flex', 'flex-direction:column']
+  if (!parsed['align-items']) extra.push('align-items:stretch')
+  const base = style?.trim().replace(/;+\s*$/, '')
+  return [base, ...extra].filter((part) => part).join(';')
+}
+
+function anonymousTextBox(run: LayerChild[], style: string): LayerNode {
+  const attrs: Record<string, string> = {}
+  if (style) attrs.style = style
+  return { tag: 'div', attrs, children: run }
+}
+
+function blockFlowChildren(node: LayerNode): LayerChild[] {
+  const textStyle = inheritedTextStyle(node.attrs.style)
+  const out: LayerChild[] = []
+  let run: LayerChild[] = []
+  const flush = () => {
+    if (run.length === 0) return
+    const blank = run.every((child) => typeof child === 'string' && child.trim() === '')
+    if (!blank) out.push(anonymousTextBox(run, textStyle))
+    run = []
+  }
+  for (const child of node.children) {
+    if (typeof child !== 'string' && !isInlineTag(child.tag)) {
+      flush()
+      out.push(child)
+      continue
+    }
+    run.push(child)
+  }
+  flush()
+  return out
+}
+
+/** 文字盒子里直接放了 img 时，改成横向排布，文字和图片并排。 */
+export function textBoxNeedsInlineRow(node: LayerNode): boolean {
+  if (!isTextBoxTag(node.tag) || isDisplayFlex(node.attrs.style)) return false
+  let image = false
+  for (const child of node.children) {
+    if (typeof child === 'string') continue
+    const tag = child.tag.toLowerCase()
+    if (isImageTag(tag)) image = true
+    else if (!isInlineTag(tag)) return false
+  }
+  return image
+}
+
+export function asInlineRow(node: LayerNode): LayerNode {
+  if (!textBoxNeedsInlineRow(node)) return node
+  const textStyle = inheritedTextStyle(node.attrs.style)
+  const children: LayerChild[] = []
+  let run: LayerChild[] = []
+  const flush = () => {
+    if (run.length === 0) return
+    const blank = run.every((child) => typeof child === 'string' && child.trim() === '')
+    if (!blank) {
+      const attrs: Record<string, string> = {}
+      if (textStyle) attrs.style = textStyle
+      children.push({ tag: 'span', attrs, children: run })
+    }
+    run = []
+  }
+  for (const child of node.children) {
+    if (typeof child !== 'string' && isImageTag(child.tag)) {
+      flush()
+      children.push(child)
+      continue
+    }
+    run.push(child)
+  }
+  flush()
+  const extra = ['display:flex', 'flex-direction:row']
+  const base = node.attrs.style?.trim().replace(/;+\s*$/, '')
+  return {
+    ...node,
+    attrs: { ...node.attrs, style: [base, ...extra].filter((part) => part).join(';') },
+    children,
+  }
+}
+
+/**
+ * 把含块级子元素的 div 收成竖排容器。
+ * 等同于补上 display:flex、flex-direction:column，没写 align-items 时把文字块拉到这一列的宽度。
+ * 只含文字和行内标签的 div 原样返回，仍是文字盒子。
+ */
+export function asBlockFlow(node: LayerNode): LayerNode {
+  if (!divHasFlowBreak(node)) return node
+  return {
+    ...node,
+    attrs: { ...node.attrs, style: blockFlowStyle(node.attrs.style) },
+    children: blockFlowChildren(node),
+  }
+}
+
+function styleHasFlex(style: string | undefined): boolean {
+  if (!style) return false
+  return /(?:^|;)\s*(?:flex-grow|flex-shrink|flex)\s*:/.test(style)
+}
+
+function hasStyle(attrs: Record<string, string>): boolean {
+  return present(attrs, 'style') && attrs.style.trim() !== ''
+}
+
+/** 文字和图片都按 HTML：视觉属性进 style，位置写在外包的 layer 上。 */
+export function isHtmlTag(tag: string): boolean {
+  return isTextBoxTag(tag) || isImageTag(tag)
+}
+
+function usesAttributes(node: LayerNode): boolean {
+  return (
+    node.tag === 'layer' ||
+    node.tag === 'symbol' ||
+    node.tag === 'use' ||
+    node.tag === 'g' ||
+    isShapeTag(node.tag) ||
+    isLineTag(node.tag) ||
+    isMeshTag(node.tag) ||
+    isGroundTag(node.tag)
+  )
+}
+
+const LEGACY_CENTER_TAGS = new Set(['layer', 'use', 'rect', 'box', 'extrude', 'tube'])
+
+function fmtHint(n: number): string {
+  const rounded = Math.round(n * 1000) / 1000
+  return String(Object.is(rounded, -0) ? 0 : rounded)
+}
+
+function topLeftFromPoint(x: number, y: number, w: number, h: number, anchor: string): { x: number; y: number } | null {
+  switch (anchor) {
+    case 'top-left':
+      return { x, y }
+    case 'top':
+      return { x: x - w / 2, y }
+    case 'top-right':
+      return { x: x - w, y }
+    case 'left':
+      return { x, y: y - h / 2 }
+    case 'center':
+      return { x: x - w / 2, y: y - h / 2 }
+    case 'right':
+      return { x: x - w, y: y - h / 2 }
+    case 'bottom-left':
+      return { x, y: y - h }
+    case 'bottom':
+      return { x: x - w / 2, y: y - h }
+    case 'bottom-right':
+      return { x: x - w, y: y - h }
+    default:
+      return null
+  }
+}
+
+function legacyCenterHint(attrs: Record<string, string>, tag: string): string {
+  if (tag === 'tube') return 'd 已经写在 layer 坐标里'
+  const cx = parseNumber(attrs.cx)
+  const cy = parseNumber(attrs.cy)
+  const w = parseNumber(attrs.width)
+  const h = parseNumber(attrs.height)
+  const anchor = (attrs.anchor ?? 'center').trim().toLowerCase()
+  if (cx != null && cy != null && anchor === 'top-left') return `改成 x="${fmtHint(cx)}" y="${fmtHint(cy)}"`
+  if (cx != null && cy != null && w != null && h != null && w > 0 && h > 0) {
+    const tl = topLeftFromPoint(cx, cy, w, h, anchor)
+    if (tl) return `改成 x="${fmtHint(tl.x)}" y="${fmtHint(tl.y)}"`
+  }
+  return '改成 x、y，表示左上角。原先的 cx、cy 是定位点，anchor 默认 center'
+}
+
+/** layer、use、rect、box、extrude、tube 上的 cx、cy 已忽略。hint 给出等价的 x、y。 */
+export function legacyCenterIssues(node: LayerNode, path: string): Issue[] {
+  if (!LEGACY_CENTER_TAGS.has(node.tag)) return []
+  if (!present(node.attrs, 'cx') && !present(node.attrs, 'cy')) return []
+  return [
+    flagged(
+      'warn',
+      'invalid-attr',
+      path,
+      'cx、cy 已不再使用，已忽略',
+      legacyCenterHint(node.attrs, node.tag),
+    ),
+  ]
+}
+
+const KNOWN_ATTRS = new Set<string>([...ATTR_ORDER, ...ATTRS.map((attr) => attr.name), 'style'])
+
+/** 这些属性只在对应标签上合法，不进总表，也不要被当成别的属性的笔误。 */
+const TAG_LOCAL_ATTRS: Record<string, readonly string[]> = {
+  preview: ['of', 'show'],
+  mask: ['feather', 'invert'],
+  img: ['channel', 'pick'],
+  image: ['channel', 'pick'],
+}
+
+const GROUND_ONLY_ATTRS = ['shadow-blur', 'shadow-opacity', 'shadow-color'] as const
+
+/** 超过 2 的距离直接记成 3，调用方只关心是否落在阈值里。 */
+function editDistance(a: string, b: string): number {
+  if (a === b) return 0
+  if (Math.abs(a.length - b.length) > 2) return 3
+  const m = a.length
+  const n = b.length
+  let prev = Array.from({ length: n + 1 }, (_, j) => j)
+  let cur = new Array<number>(n + 1)
+  for (let i = 1; i <= m; i++) {
+    cur[0] = i
+    let rowMin = cur[0]!
+    for (let j = 1; j <= n; j++) {
+      const cost = a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1
+      cur[j] = Math.min(prev[j]! + 1, cur[j - 1]! + 1, prev[j - 1]! + cost)
+      if (cur[j]! < rowMin) rowMin = cur[j]!
+    }
+    if (rowMin > 2) return 3
+    const swap = prev
+    prev = cur
+    cur = swap
+  }
+  return prev[n]! > 2 ? 3 : prev[n]!
+}
+
+function sharesPrefix(a: string, b: string): boolean {
+  return a.length >= 2 && b.length >= 2 && a.startsWith(b.slice(0, 2))
+}
+
+/** 在给定名字里找编辑距离不超过 2 的候选。比较前都转成小写，过短或没有共同开头的不推荐。 */
+export function suggestNames(raw: string, candidates: Iterable<string>): string[] {
+  const name = raw.trim().toLowerCase()
+  if (!name) return []
+  let best = 3
+  let hits: string[] = []
+  for (const known of candidates) {
+    const folded = known.toLowerCase()
+    if (folded === name) return []
+    const dist = editDistance(name, folded)
+    if (dist === 0 || dist > 2) continue
+    if (known.length <= 2) continue
+    if (dist === 2 && (name.length < 4 || !sharesPrefix(name, folded))) continue
+    if (dist === 1 && name.length < 4 && !sharesPrefix(name, folded)) continue
+    if (dist < best) {
+      best = dist
+      hits = [known]
+    } else if (dist === best) hits.push(known)
+  }
+  if (best > 2 || hits.length === 0 || hits.length > 3) return []
+  return hits
+}
+
+function attrCandidates(node: LayerNode): Iterable<string> {
+  if (isHtmlTag(node.tag) || isTextBoxTag(node.tag)) return [...HTML_STYLE_ATTRS, 'style', 'id', 'src', 'alt', 'class']
+  return KNOWN_ATTRS
+}
+
+/** 和这个标签上可能出现的属性编辑距离不超过 2 时，返回最近的名字。并列超过 3 个就不当成拼写。 */
+export function suggestAttrs(raw: string, node?: LayerNode): string[] {
+  if (!raw.trim() || KNOWN_ATTRS.has(raw)) return []
+  const local = node ? TAG_LOCAL_ATTRS[node.tag.toLowerCase()] : undefined
+  if (local?.includes(raw.trim())) return []
+  return suggestNames(raw, node ? attrCandidates(node) : KNOWN_ATTRS)
+}
+
+function meshSurface(node: LayerNode): boolean {
+  return isMeshTag(node.tag) || solidDepth(node.tag, node.attrs.depth)
+}
+
+/** `material` 是实体在固定灯光下的表面，不写在平面上。层上的 `glass` 仍是透镜。 */
+export function materialAttrIssues(node: LayerNode, path: string): Issue[] {
+  if (!present(node.attrs, 'material')) return []
+  if (meshSurface(node)) return []
+  return [
+    flagged(
+      'warn',
+      'invalid-attr',
+      path,
+      'material 只写在实体上',
+      'matte、plastic、metal 或 glass。不写是磨砂，例如 material="metal 0.35"',
+    ),
+  ]
+}
+
+/** `halo` 是网格可见线在交叉处留出的断开，不写在平面、线条或文字上。 */
+export function haloAttrIssues(node: LayerNode, path: string): Issue[] {
+  if (!present(node.attrs, 'halo')) return []
+  if (meshSurface(node)) return []
+  return [
+    flagged(
+      'warn',
+      'invalid-attr',
+      path,
+      'halo 只写在实体上',
+      '可见线会在交叉处把更远的线断开，例如 halo="3"',
+    ),
+  ]
+}
+
+/** `hidden` 是网格被挡住的棱，不写在平面、线条或文字上。 */
+export function hiddenAttrIssues(node: LayerNode, path: string): Issue[] {
+  if (!present(node.attrs, 'hidden')) return []
+  if (meshSurface(node)) return []
+  return [
+    flagged(
+      'warn',
+      'invalid-attr',
+      path,
+      'hidden 只写在实体上',
+      '和 stroke 一起写。不写就不画隐藏线，例如 hidden="#8a8175"',
+    ),
+  ]
+}
+
+/** 拼写接近已知属性时报 warn。完全对不上的名字仍留给 draw。 */
+export function typoAttrIssues(node: LayerNode, path: string): Issue[] {
+  const out: Issue[] = []
+  for (const key of Object.keys(node.attrs)) {
+    if (!present(node.attrs, key)) continue
+    if (key === 'perspective') {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-attr',
+          path,
+          'perspective 已经换成 camera',
+          'perspective 已经换成 camera。在取景的 layer 上写 camera，例如 camera="900"',
+        ),
+      )
+      continue
+    }
+    const suggestions = suggestAttrs(key, node)
+    if (suggestions.length === 0) continue
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        `不认识的属性 ${key}`,
+        `是不是想写 ${suggestions.join('、')}？`,
+      ),
+    )
+  }
+  return out
+}
+
+/**
+ * 样式表里不认识或写错的声明。布局仍按默认值排，这里只负责报出来。
+ * 属性表已经规定「不能写进 style」的名字由归属检查报，这里不再报第二次。
+ */
+/** `split="chars"` 只写在文字上。别的值不拆。 */
+export function splitAttrIssues(node: LayerNode, path: string): Issue[] {
+  if (!present(node.attrs, 'split')) return []
+  const raw = node.attrs.split ?? ''
+  const textual = isTextBoxTag(node.tag) || isInlineTag(node.tag)
+  if (!textual) {
+    return [
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        'split 只写在文字上',
+        '写在 p、h1 或 span 上，例如 <p split="chars">',
+      ),
+    ]
+  }
+  if (raw.trim().toLowerCase() !== 'chars') {
+    return [flagged('warn', 'invalid-attr', path, `无法解析 split: ${raw}`, '写成 split="chars"')]
+  }
+  return []
+}
+
+export function styleIssues(node: LayerNode, path: string): Issue[] {
+  if (!present(node.attrs, 'style')) return []
+  const style = parseStyle(node.attrs.style)
+  const owned = new Set<string>([...FORBID_IN_STYLE, ...registeredLayerOnlyNames()])
+  if (isHtmlTag(node.tag)) for (const key of FORBID_IN_HTML_STYLE) owned.add(key)
+  const out: Issue[] = []
+  for (const [key, value] of Object.entries(style)) {
+    if (owned.has(key)) continue
+    const diag = diagnoseStyle(key, value)
+    if (diag == null) {
+      const label = key === 'rotate' ? 'rotate' : key === 'rotatex' ? 'rotateX' : key === 'rotatey' ? 'rotateY' : ''
+      if (label) {
+        const parsed = parseAngle(value)
+        if (parsed?.unitless && parsed.degrees !== 0) {
+          const shown = value.trim()
+          out.push(flagged('info', 'non-canonical', path, `${label} 的 ${shown} 不带单位`, `改成 ${shown}deg。0 可以不带单位`))
+        }
+      }
+      continue
+    }
+    if (diag === 'unknown') {
+      const suggestions = suggestNames(key, cssPropertyNames())
+      out.push(
+        flagged(
+          'warn',
+          'invalid-attr',
+          path,
+          `不支持的样式 ${key}`,
+          suggestions.length > 0 ? `是不是想写 ${suggestions.join('、')}？` : '这个样式不会生效',
+        ),
+      )
+      continue
+    }
+    out.push(flagged('warn', 'invalid-attr', path, `无法解析 ${key}: ${value}`, diag.hint))
+  }
+  return out
+}
+
+export function originValueIssues(raw: string | undefined, path: string): Issue[] {
+  if (raw == null || raw.trim() === '') return []
+  if (!readOrigin(raw).invalid) return []
+  return [
+    flagged(
+      'warn',
+      'invalid-attr',
+      path,
+      `无法解析 origin: ${raw}`,
+      '九宫格如 center、top-left；或相对盒子左上角写 120 80、30% 40%。只写一个数时另一轴是中心',
+    ),
+  ]
+}
+
+/** `shadow-blur` 这三项只写在 ground 上。`angle` 不是地面的旋转。 */
+export function groundAttrIssues(node: LayerNode, path: string): Issue[] {
+  const out: Issue[] = []
+  if (isGroundTag(node.tag) && present(node.attrs, 'angle')) {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        'ground 不用 angle',
+        '倾斜和 box 一样，写 rotate、rotateX、rotateY。正的 rotateX 让平面上边远离观众',
+      ),
+    )
+  }
+  if (isGroundTag(node.tag) && present(node.attrs, 'shadow')) {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        'ground 不使用 shadow',
+        '影子写 shadow-blur、shadow-opacity、shadow-color。地面颜色写 fill',
+      ),
+    )
+  }
+  if (!isGroundTag(node.tag)) {
+    const used = GROUND_ONLY_ATTRS.filter((key) => present(node.attrs, key))
+    if (used.length > 0) {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-attr',
+          path,
+          `${used.join('、')} 只写在 ground 上`,
+          '例如 <ground y="520" rotateX="70" shadow-blur="16" shadow-opacity="0.45" />',
+        ),
+      )
+    }
+  }
+  return out
+}
+
+/** 只检查归属表里的已知属性。拼写接近已知属性的名字会 warn，其余留给 draw。 */
+export function checkChildAttrs(node: LayerNode, parent: 'layer' | 'flex', path: string): Issue[] {
+  const out: Issue[] = []
+  const attrs = node.attrs
+  const positioned =
+    present(attrs, 'x') || present(attrs, 'y') || present(attrs, 'cx') || present(attrs, 'cy') || present(attrs, 'anchor')
+  const html = isHtmlTag(node.tag)
+  out.push(...legacyCenterIssues(node, path))
+
+  if (html) {
+    if (positioned) {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-attr',
+          path,
+          '定位写在外包的 layer 上',
+          '例如 <layer x="120" y="64"><h1>…</h1></layer>',
+        ),
+      )
+    }
+    const misplaced = HTML_STYLE_ATTRS.filter((key) => present(attrs, key))
+    if (misplaced.length > 0) {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-attr',
+          path,
+          `${misplaced.join('、')} 应写在 style 里`,
+          'HTML 只用 style，例如 <p style="opacity:0.5; font-size:40px">',
+        ),
+      )
+    }
+    if (present(attrs, 'ink-stroke')) {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-attr',
+          path,
+          'ink-stroke 已并入 stroke',
+          '改成 style="stroke:6 #000 outside"',
+        ),
+      )
+    }
+    const graphic = GRAPHIC_ATTRS.filter((key) => key !== 'cx' && key !== 'cy' && present(attrs, key))
+    if (graphic.length > 0) {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-attr',
+          path,
+          `${graphic.join('、')} 是图形属性，写在 HTML 上不会画出来`,
+          '文字颜色写在 style 里；形状用 circle、rect、path 的属性，例如 <circle fill="#fff">',
+        ),
+      )
+    }
+  }
+
+  if (present(attrs, 'anchor-box') && node.tag !== 'layer' && node.tag !== 'use') {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        'anchor-box 只写在 layer 和 use 上',
+        '外包一层 layer，例如 <layer x="76" y="40" anchor="top-left" anchor-box="ink"><h1>标题</h1></layer>',
+      ),
+    )
+  }
+
+  if (parent === 'flex' && !html && positioned) {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+          '定位写在外层 layer 上',
+          'flex 子元素跟着排布走，不要写 x、y、cx、cy、anchor',
+      ),
+    )
+  }
+
+  if (node.tag === 'model' && (present(attrs, 'cx') || present(attrs, 'cy') || present(attrs, 'anchor'))) {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        'model 不用 cx、cy、anchor',
+        '位置写 x、y。盒子写 width、height，或写 unit',
+      ),
+    )
+  }
+
+  const modelOnly = [present(attrs, 'unit') ? 'unit' : '', present(attrs, 'object') || node.modelObject !== undefined ? 'object' : ''].filter(
+    (name) => name,
+  )
+  if (node.tag !== 'model' && modelOnly.length > 0) {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        `${modelOnly.join('、')} 只写在 model 上`,
+        '例如 <model object={mesh} unit="40" />',
+      ),
+    )
+  }
+  if (node.tag === 'model' && present(attrs, 'object')) {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        'object 要在 tsx 里传入网格对象',
+        '例如 <model object={mesh} unit="40" />。.layer 里用 src',
+      ),
+    )
+  }
+
+  if (parent === 'flex' && isMeshTag(node.tag)) {
+    out.push(
+      flagged(
+        'info',
+        'non-canonical',
+        path,
+        '网格放在 flex 里不是规范写法',
+        '包一层写了 camera 的 layer，例如 <layer width="200" height="200" camera="200"><sphere cx="80" cy="80" r="40" /></layer>',
+      ),
+    )
+  }
+
+  if (parent === 'flex' && isShapeTag(node.tag)) {
+    const circlePoints = node.tag === 'circle' && (present(attrs, 'x1') || present(attrs, 'y1'))
+    if (hasTwoPoint(attrs) || circlePoints) {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-attr',
+          path,
+          '形状的坐标只能写在 layer 里',
+          '包一层 <layer width height>，或改用 <div style="width:…; height:…; background:…">',
+        ),
+      )
+    } else if (!positioned) {
+      out.push(
+        flagged(
+          'info',
+          'non-canonical',
+          path,
+          '形状放在 flex 里不是规范写法',
+          '包一层 <layer width height>，或改用 div 盒子',
+        ),
+      )
+    }
+  }
+
+  if (parent === 'layer') {
+    if (styleHasFlex(attrs.style)) {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-attr',
+          path,
+          'flex、flex-grow、flex-shrink 只在 display:flex 的子元素上有效',
+          '把该元素放进 <div style="display:flex">',
+        ),
+      )
+    }
+    if (isLineTag(node.tag) && positioned) {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-attr',
+          path,
+          '线条用自身坐标定位，x、y、cx、cy、anchor 无效',
+          '删掉这些属性，直接写 x1、y1 或 points',
+        ),
+      )
+    }
+    if (isShapeTag(node.tag) && present(attrs, 'anchor')) {
+      out.push(
+        flagged(
+          'info',
+          'non-canonical',
+          path,
+          '形状不用 anchor',
+          'rect 用 x、y 表示左上角；circle、ellipse 用 cx、cy 表示圆心',
+        ),
+      )
+    }
+    if ((node.tag === 'rect' || node.tag === 'ellipse') && (present(attrs, 'x1') || present(attrs, 'y1') || present(attrs, 'x2') || present(attrs, 'y2'))) {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-attr',
+          path,
+          node.tag === 'rect' ? 'rect 用 x、y、width、height' : 'ellipse 用 cx、cy、rx、ry',
+          node.tag === 'rect' ? '删掉 x1、y1、x2、y2，写成 x、y、width、height' : '删掉 x1、y1、x2、y2，写成 cx、cy、rx、ry',
+        ),
+      )
+    }
+    if (node.tag === 'circle' && (present(attrs, 'x1') || present(attrs, 'y1') || present(attrs, 'x2') || present(attrs, 'y2'))) {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-attr',
+          path,
+          'circle 只支持 cx、cy、r',
+          '删掉 x1、y1、x2、y2',
+        ),
+      )
+    }
+  }
+
+  if (present(attrs, 'transform') && node.tag !== 'g') {
+    const parsed = parseSvgTransform(attrs.transform)
+    const graphic = isShapeTag(node.tag) || isLineTag(node.tag) || isMeshTag(node.tag) || isGroundTag(node.tag)
+    if (parsed.error || !graphic) {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-attr',
+          path,
+          parsed.error ? `无法解析 transform: ${attrs.transform}` : 'transform 的二维函数只写在 g 上',
+          '二维用 <g transform="translate(12,8)">。rotateX、rotateY、translateZ 可以写在形状上',
+        ),
+      )
+    } else if (parsed.saw2d) {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-attr',
+          path,
+          'transform 里的平移、旋转、缩放只写在 g 上',
+          '二维用 <g transform="translate(12,8)">。这个元素上留 rotateX、rotateY、translateZ',
+        ),
+      )
+    }
+  }
+
+  if (attrs.bleed != null) {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        'bleed 已不再使用',
+        '舞台写得比成片大，用 view="x y w h" 取出要出的那一块',
+      ),
+    )
+  }
+
+  if ((node.tag === 'layer' || node.tag === 'use') && present(attrs, 'background')) {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        'layer 不使用 background',
+        '色块用 <rect fill="...">、HTML 的 style="background:..."，或 <canvas> 自己画。画布底色只写在根 <layer background>',
+      ),
+    )
+  }
+
+  const layerOnlyKeys = LAYER_ONLY_ATTR_NAMES.filter((key) => present(attrs, key))
+  if (node.tag !== 'layer' && layerOnlyKeys.length > 0) {
+    const first = attrByName(layerOnlyKeys[0]!)
+    out.push(
+      flagged(
+        'warn',
+        first ? (issueFor(first) ?? 'invalid-attr') : 'invalid-attr',
+        path,
+        `${layerOnlyKeys.join('、')} 只写在 layer 上`,
+        first?.misplacedHint ?? '外包一层 layer',
+      ),
+    )
+  }
+  const styleMap = parseStyle(attrs.style)
+  const originRaw = html ? styleMap.origin : attrs.origin
+  out.push(...originValueIssues(originRaw, path))
+  const styleKeys = Object.keys(styleMap)
+  const registeredOnly = registeredLayerOnlyNames()
+  const misplacedRegistered = registeredOnly.filter((key) => present(attrs, key))
+  if (node.tag !== 'layer' && misplacedRegistered.length > 0) {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        `${misplacedRegistered.join('、')} 只写在 layer 上`,
+        `外包一层 layer，例如 <layer ${misplacedRegistered[0]}="…">`,
+      ),
+    )
+  }
+  const registeredInStyle = styleKeys.filter((key) => registeredOnly.includes(key))
+  if (registeredInStyle.length > 0) {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        `${registeredInStyle.join('、')} 只写在 layer 的属性上`,
+        `不要写进 style；外包 <layer ${registeredInStyle[0]}="…">`,
+      ),
+    )
+  }
+  const forbiddenStyle = styleKeys.filter((key) => FORBID_IN_STYLE.has(key))
+  if (forbiddenStyle.length > 0) {
+    const first = attrByName(forbiddenStyle[0]!)
+    out.push(
+      flagged(
+        'warn',
+        first ? (issueFor(first) ?? 'invalid-attr') : 'invalid-attr',
+        path,
+        `${forbiddenStyle.join('、')} 只写在 layer 的属性上`,
+        first?.styleHint ?? '不要写进 style；外包 <layer grade="…">',
+      ),
+    )
+  }
+  if (html) {
+    const webkitStroke = styleMap['-webkit-text-stroke']
+    const outline = styleMap.outline ?? (present(attrs, 'outline') ? attrs.outline : undefined)
+    const wantsBrowserStroke =
+      (webkitStroke != null && webkitStroke.trim() !== '' && webkitStroke.trim().toLowerCase() !== 'none') ||
+      (outline != null && outline.trim() !== '' && outline.trim().toLowerCase() !== 'none' && outline.trim() !== '0')
+    if (wantsBrowserStroke) {
+      out.push(
+        flagged(
+          'info',
+          'non-canonical',
+          path,
+          'outline 与 -webkit-text-stroke 不会按墨迹描边',
+          '改用 stroke，例如 style="stroke:6 #000 outside"',
+        ),
+      )
+    }
+    const htmlStyleForbidden = styleKeys.filter((key) => FORBID_IN_HTML_STYLE.has(key))
+    if (htmlStyleForbidden.length > 0) {
+      const first = attrByName(htmlStyleForbidden[0]!)
+      out.push(
+        flagged(
+          'warn',
+          first ? (issueFor(first) ?? 'invalid-attr') : 'invalid-attr',
+          path,
+          `${htmlStyleForbidden.join('、')} 只写在 layer 上`,
+          first?.styleHint ?? '不要写在 HTML style 里；外包 <layer overlay="…">',
+        ),
+      )
+    }
+  }
+
+  if (node.tag !== 'layer' && present(attrs, 'mask')) {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        '遮罩要写成 <mask> 标签，不要写成属性',
+        '在 layer 里写 <mask><circle cx="160" cy="90" r="90" /></mask>',
+      ),
+    )
+  }
+  const cssMaskKeys = [
+    'mask-image',
+    'mask-mode',
+    'mask-composite',
+    'mask-size',
+    'mask-position',
+    'mask-repeat',
+    'mask-clip',
+    'mask-origin',
+    'mask-type',
+  ]
+  const cssMask = cssMaskKeys.filter((key) => present(attrs, key) || (styleMap[key] != null && styleMap[key]!.trim() !== ''))
+  if (cssMask.length > 0) {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        `${cssMask.join('、')} 是 CSS 蒙版，这里不使用`,
+        '蒙版写成 <mask>。加减用 op，读黑白图用 channel="luma"',
+      ),
+    )
+  }
+  const styleMask = styleMap.mask
+  if (node.tag !== 'layer' && styleMask != null && styleMask.trim() !== '') {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        'mask 不要写在 style 里',
+        '在 layer 里写 <mask>…</mask>，不要写进 style',
+      ),
+    )
+  }
+
+  out.push(...groundAttrIssues(node, path))
+
+  if (usesAttributes(node) && hasStyle(attrs)) {
+    out.push(
+      flagged(
+        'warn',
+        'invalid-attr',
+        path,
+        'layer 和图形不使用 style',
+        '把 width、opacity 写成属性。色块用 rect、HTML 或 canvas',
+      ),
+    )
+  }
+
+  return out
+}
+
+export function checkTextBoxChildren(node: LayerNode, path: string): Issue[] {
+  const out: Issue[] = []
+  for (const child of node.children) {
+    if (typeof child === 'string') continue
+    const tag = child.tag.toLowerCase()
+    if (tag === 'g') {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-child',
+          path,
+          'g 不能放在文字盒子里',
+          '包一层 layer，例如 <layer><g>…</g></layer>',
+        ),
+      )
+      continue
+    }
+    if (tag === 'layer') {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-child',
+          path,
+          '文字盒子里不能放 layer',
+          '和文字并排放进 <div>，例如 <div style="display:flex"><layer width="120" height="120">…</layer><p>…</p></div>',
+        ),
+      )
+      continue
+    }
+    if (MATH_TAGS.has(tag)) {
+      out.push(
+        flagged(
+          'warn',
+          'invalid-child',
+          path,
+          '文字盒子里不能放 math',
+          '上下排放进 <div>，和文字并排再写 display:flex',
+        ),
+      )
+      continue
+    }
+    if (isImageTag(tag)) continue
+    if (!BLOCK_IN_TEXT.has(tag)) continue
+    out.push(
+      flagged(
+        'warn',
+        'invalid-child',
+        path,
+        `文字盒子里不能放 <${tag}>`,
+        '改成 <div>。要横排或间距再写 display:flex',
+      ),
+    )
+  }
+  return out
+}
+
+export function rowColumnHint(tag: string): string {
+  return tag === 'Column'
+    ? '<div style="display:flex; flex-direction:column">'
+    : '<div style="display:flex">'
+}

@@ -1,0 +1,8 @@
+<layer width="800" height="1000" background="#16130f" color="#f3ecdf" noise="0.08">
+  <layer x="400" y="420" anchor="center">
+    <h1 id="title" style="font-size:88px; color:#f3ecdf">North Wind</h1>
+  </layer>
+  <layer x="400" y="540" anchor="center">
+    <p style="font-size:32px; color:#d9c7a6">Late October</p>
+  </layer>
+</layer>

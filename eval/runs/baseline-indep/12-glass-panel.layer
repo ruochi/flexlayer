@@ -1,0 +1,6 @@
+<layer width="800" height="480" background="#1e4d6b">
+  <rect x="0" y="0" width="800" height="480" fill="#2f7ea8" />
+  <layer id="panel" x="160" y="80" width="480" height="320" glass="thick" border-radius="24">
+    <rect x="0" y="0" width="480" height="320" rx="24" fill="#ffffff55" />
+  </layer>
+</layer>

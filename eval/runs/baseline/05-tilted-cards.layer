@@ -1,0 +1,11 @@
+<layer width="1200" height="700" background="#1a120e">
+  <layer x="180" y="140" width="280" height="400" rotateY="-28" z="40">
+    <rect x="0" y="0" width="280" height="400" rx="18" fill="#c4552a" />
+  </layer>
+  <layer x="460" y="120" width="280" height="440" z="120">
+    <rect x="0" y="0" width="280" height="440" rx="18" fill="#e6d3a3" />
+  </layer>
+  <layer x="760" y="140" width="280" height="400" rotateY="28" z="40">
+    <rect x="0" y="0" width="280" height="400" rx="18" fill="#2f5d50" />
+  </layer>
+</layer>

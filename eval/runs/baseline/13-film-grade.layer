@@ -1,0 +1,6 @@
+<layer width="800" height="800" background="#c4552a" grade="lomo 0.8, vignette 0.3" noise="0.08">
+  <circle cx="400" cy="360" r="140" fill="#f3e6c0" />
+  <layer x="400" y="620" anchor="center">
+    <h1 style="font-size:72px; color:#1c1915">夏末</h1>
+  </layer>
+</layer>
