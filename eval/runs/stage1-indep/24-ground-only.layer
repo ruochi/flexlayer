@@ -1,0 +1,4 @@
+<layer width="800" height="600" background="#d8d2c8" camera="fov 40, orbit 25 18">
+  <rect id="box" x="300" y="210" width="200" height="220" depth="140" fill="#c23b22" />
+  <ground y="430" rotateX="70" shadow-blur="18" shadow-opacity="0.35" />
+</layer>

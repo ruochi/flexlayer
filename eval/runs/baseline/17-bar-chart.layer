@@ -1,0 +1,10 @@
+<layer width="800" height="480" background="#f7f4ee" data='{"values":[40,70,55,90]}'>
+  <rect x="80" y="300" width="80" height="80" fill="#1f6f5b" />
+  <rect x="220" y="240" width="80" height="140" fill="#1f6f5b" />
+  <rect x="360" y="270" width="80" height="110" fill="#1f6f5b" />
+  <rect x="500" y="200" width="80" height="180" fill="#1f6f5b" />
+  <layer x="90" y="400"><p style="font-size:24px; color:#3d3832">一</p></layer>
+  <layer x="230" y="400"><p style="font-size:24px; color:#3d3832">二</p></layer>
+  <layer x="370" y="400"><p style="font-size:24px; color:#3d3832">三</p></layer>
+  <layer x="510" y="400"><p style="font-size:24px; color:#3d3832">四</p></layer>
+</layer>

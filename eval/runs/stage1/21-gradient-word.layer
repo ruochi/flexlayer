@@ -1,0 +1,5 @@
+<layer width="900" height="400" background="#101418">
+  <layer x="450" y="200" anchor="center">
+    <h1 id="word" style="font-size:120px; fill:gradient(conic 200 100, #f0f, #0ff, #ff0, #f0f)">色谱</h1>
+  </layer>
+</layer>

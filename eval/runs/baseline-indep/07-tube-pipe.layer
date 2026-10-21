@@ -1,0 +1,5 @@
+<layer width="640" height="480" background="#12161c" camera="480">
+  <layer x="124" y="34">
+    <tube id="pipe" d="M 140 50 L 300 50 L 300 210" r="16" fill="#c5ced8" />
+  </layer>
+</layer>

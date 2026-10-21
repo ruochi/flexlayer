@@ -1,0 +1,18 @@
+<layer width="800" height="360" background="#10141c" color="#f4f1ea">
+  <layer x="64" y="140">
+    <div style="display:flex; flex-direction:row; gap:40px; align-items:center">
+      <math id="formula" display="block">
+        <mrow>
+          <mi>E</mi>
+          <mo>=</mo>
+          <mi>m</mi>
+          <msup>
+            <mi>c</mi>
+            <mn>2</mn>
+          </msup>
+        </mrow>
+      </math>
+      <p style="font-size:40px">Rest energy</p>
+    </div>
+  </layer>
+</layer>

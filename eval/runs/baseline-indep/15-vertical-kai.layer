@@ -1,0 +1,5 @@
+<layer width="600" height="900" background="#f3efe4" color="#1a1612">
+  <layer x="300" y="450" anchor="center">
+    <h1 id="title" style="font-family:Kai; font-size:96px; writing-mode:vertical-rl; color:#1a1612">春江花月</h1>
+  </layer>
+</layer>

@@ -1,0 +1,5 @@
+<layer width="800" height="600" background="#0c1220">
+  <layer x="400" y="300" anchor="center">
+    <circle id="moon" cx="80" cy="80" r="80" fill="#f3e6c4" />
+  </layer>
+</layer>

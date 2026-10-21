@@ -1,0 +1,10 @@
+export type PlaneCorner = any
+export type PlaneWindow = any
+export declare const visiblePlaneWindow: any
+export type visiblePlaneWindow = any
+export declare const planeBitmapPad: any
+export type planeBitmapPad = any
+export declare const opaqueCss: any
+export type opaqueCss = any
+export declare const flatFill: any
+export type flatFill = any

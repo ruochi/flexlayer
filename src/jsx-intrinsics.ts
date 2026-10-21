@@ -1,0 +1,486 @@
+import type { LayerNode } from './parse.js'
+
+/** HTML 用 style；layer 和图形用属性。 */
+type LayerStyle = string | Record<string, string | number | undefined>
+
+type JsxChild = string | number | boolean | null | undefined | LayerNode | JsxChild[] | (() => void)
+
+/**
+ * 不认识的属性名和 .layer 一样保留。
+ * 属性该写在哪由检查报 invalid-attr，不在这里再用类型禁一遍。
+ */
+type JsxAttr = string | number | boolean | undefined | LayerStyle | JsxChild
+
+type LayerNodeBase = {
+  id?: string
+  /** 结构化数据。值是 JSON，不进普通属性。 */
+  data?: unknown
+  /** 预期中的问题码，例如 `overflow-canvas: 出血图`。 */
+  expect?: string
+  children?: JsxChild
+  [name: string]: JsxAttr | unknown
+}
+
+/** 文字和图片。视觉属性写 style。`split="chars"` 让每个字单独做 translate、rotate、scale、opacity。 */
+type LayerHtml = LayerNodeBase & {
+  style?: LayerStyle
+  split?: 'chars' | string
+}
+
+type LayerGraphic = LayerNodeBase & {
+  /** 只在 mask 里：add、subtract、intersect、xor */
+  op?: string
+}
+
+type LayerPositioned = LayerGraphic & {
+  x?: number | string
+  y?: number | string
+  anchor?: string
+  /** ink 时按子树着墨对齐，box 时按布局盒子。 */
+  'anchor-box'?: string
+  /** 不吃景深 */
+  sharp?: boolean | string
+  /** 不写时投影子。false 时不写入主光阴影图 */
+  'cast-shadow'?: boolean | string
+  /** 不写时接影子。false 时主光被挡住也不变暗 */
+  'receive-shadow'?: boolean | string
+}
+
+/** circle、ellipse、sphere、cylinder、torus 的圆心。 */
+type LayerCenter = {
+  cx?: number | string
+  cy?: number | string
+}
+
+/** 线条类。stroke-width 默认 4，fill 默认 none。 */
+type LayerLinePaint = {
+  fill?: string
+  stroke?: string
+  strokeWidth?: number | string
+  'stroke-width'?: number | string
+  'stroke-dasharray'?: string
+  /** 虚线相位，像素 */
+  'stroke-dashoffset'?: string
+  'stroke-linecap'?: string
+  'stroke-linejoin'?: string
+  opacity?: number | string
+  rotate?: number | string
+  scale?: number | string
+  origin?: string
+}
+
+type LayerEffects = {
+  // jsx-effects:begin
+  /** 0 8 16 #00000055 */
+  shadow?: string
+  /** 0 8px 16px #00000055 */
+  'box-shadow'?: string
+  /** 56 #f3ead4 */
+  glow?: string
+  /** 0 8 16 #00000055 */
+  'inner-shadow'?: string
+  /** 28 #7ec8ff */
+  'inner-glow'?: string
+  /** 6 */
+  blur?: number | string
+  /** 16 */
+  'backdrop-blur'?: number | string
+  /** blur(16px) */
+  'backdrop-filter'?: string
+  /** clear */
+  glass?: string
+  /** 0.08 @t */
+  noise?: string
+  /** saturate(1.1) */
+  filter?: string
+  /** multiply */
+  blend?: string
+// jsx-effects:end
+}
+
+/** 仅 layer：纯色/渐变叠加 */
+type LayerOverlay = {
+  // jsx-overlay:begin
+  /** #00000066 */
+  overlay?: string
+// jsx-overlay:end
+}
+
+/** 仅 layer：调色。例如 grade="lomo 0.8, fade 0.1"，grade-mask 的 alpha 是强度 */
+type LayerGrade = {
+  // jsx-grade:begin
+  /** lomo 0.8, fade 0.1 */
+  grade?: string
+  /** radial-gradient(#fff0 30%, #fff) */
+  'grade-mask'?: string
+// jsx-grade:end
+}
+
+type LayerShape = LayerPositioned &
+  LayerEffects & {
+    r?: number | string
+    rx?: number | string
+    ry?: number | string
+    width?: number | string
+    height?: number | string
+    fill?: string
+    /** 正数时沿 z 挤出。rect 的 rx 是圆棱 */
+    depth?: number | string
+    /** nonzero | evenodd。挤出时判断洞，不写是 nonzero */
+    'fill-rule'?: string
+    /** 被挡住的棱。要和 stroke 一起写 */
+    hidden?: string
+    /** matte、plastic、metal、glass。不写是磨砂 */
+    material?: string
+    /** rotateX()、rotateY()、translateZ()，和同名属性同一套姿态 */
+    transform?: string
+    stroke?: string
+    strokeWidth?: number | string
+    'stroke-width'?: number | string
+    'stroke-dasharray'?: string
+    /** 虚线相位，像素 */
+    'stroke-dashoffset'?: string
+    opacity?: number | string
+    rotate?: number | string
+    rotateX?: number | string
+    rotateY?: number | string
+    scale?: number | string
+    origin?: string
+  }
+
+export namespace JSX {
+  export type Element = LayerNode
+  export interface ElementChildrenAttribute {
+    children: {}
+  }
+  export interface IntrinsicAttributes {
+    key?: string | number
+  }
+  export interface IntrinsicElements {
+    font: { family?: string; src?: string }
+    /**
+     * 根画布与定位容器。`x`、`y` 是左上角，没写是 0。
+     * `background` 只在根上当画布底色；嵌套 layer 不填背景，色块用 rect / HTML / draw。
+     */
+    layer: LayerPositioned &
+      LayerEffects &
+      LayerOverlay &
+      LayerGrade & {
+        width?: number | string
+        height?: number | string
+        /** 仅根节点：画布底色。嵌套 layer 写了会 warn 并忽略 */
+        background?: string
+        color?: string
+        'font-family'?: string
+        safe?: number | string
+        /** 舞台坐标里被取的矩形 `x y w h`。这一层的宽高是屏幕上的取景窗 */
+        view?: string
+        opacity?: number | string
+        rotate?: number | string
+        rotateX?: number | string
+        rotateY?: number | string
+        /** 像素，正方向朝观众 */
+        z?: number | string
+        /**
+         * 镜头。字符串按逗号分段，或传对象。不写时，需要投影的层用自己的 height 当视距。
+         * camera="900" 等于 focal 900，camera="parallel" 是平行投影。
+         */
+        camera?:
+          | string
+          | {
+              focal?: number
+              parallel?: boolean
+              fov?: number
+              lens?: number
+              at?: [number, number, number]
+              orbit?: [number, number]
+              roll?: number
+              distance?: number
+              from?: [number, number, number]
+              vanish?: [number, number]
+              /** 无限远处的模糊半径，成片像素 */
+              aperture?: number
+              /** 对焦距离，或镜头局部坐标 */
+              focus?: number | [number, number, number]
+              /** 模糊半径上限，成片像素。不写是 aperture 的 3 倍 */
+              max?: number
+            }
+        /** 子元素沿父链进入外层镜头 */
+        'preserve-3d'?: boolean | string
+        /** 这台镜头的主光影子。none 关掉硬边影子，深度遮挡还在 */
+        shadows?: 'none' | 'auto' | string
+        /** 只在根上。screen、print、none，或最小像素 */
+        'min-font'?: number | string
+        scale?: number | string
+        /** 支点。九宫格，或 `120 80`、`30% 40%` */
+        origin?: string
+        overflow?: string
+        border?: string
+        'border-radius'?: string | number
+      }
+    /** 位图画布。width、height 属性是位图尺寸，也是默认布局尺寸。style 里的宽高只改布局。 */
+    canvas: LayerPositioned & {
+      width?: number | string
+      height?: number | string
+      style?: LayerStyle
+    }
+    /** 正文是 JavaScript。排版之后、绘制之前执行。 */
+    script: LayerGraphic
+    symbol: LayerGraphic & { width?: number | string; height?: number | string }
+    /**
+     * 蒙版。只作为 layer 的直接子元素。
+     * 里面写 rect / circle / ellipse / polygon / path / img / g。运算用 op，不沿用 CSS。
+     */
+    mask: LayerGraphic & {
+      /** 羽化半径，像素 */
+      feather?: number | string
+      /** true 时反选 */
+      invert?: string | boolean
+    }
+    /** 正常渲染不画。render --preview 才出选区预览 */
+    preview: LayerGraphic & {
+      /** #id，指向要预览的 layer */
+      of?: string
+      /** overlay checker black white edges */
+      show?: string
+    }
+    use: LayerPositioned & {
+      href?: string
+      rotate?: number | string
+      scale?: number | string
+      /** 忽略；色块用 rect、HTML 或 canvas */
+      background?: string
+    }
+    rect: LayerShape
+    circle: LayerShape & LayerCenter
+    ellipse: LayerShape & LayerCenter
+    g: LayerGraphic & {
+      transform?: string
+      fill?: string
+      stroke?: string
+      opacity?: number | string
+      'stroke-width'?: number | string
+    }
+    line: LayerGraphic &
+      LayerLinePaint & {
+        x1?: number | string
+        y1?: number | string
+        x2?: number | string
+        y2?: number | string
+      }
+    arrow: LayerGraphic &
+      LayerLinePaint & {
+        x1?: number | string
+        y1?: number | string
+        x2?: number | string
+        y2?: number | string
+        head?: number | string
+      }
+    polyline: LayerGraphic & LayerLinePaint & { points?: string }
+    polygon: LayerGraphic & LayerLinePaint & { points?: string; depth?: number | string; 'fill-rule'?: string; hidden?: string; material?: string; transform?: string }
+    path: LayerGraphic & LayerLinePaint & { d?: string; depth?: number | string; 'fill-rule'?: string; hidden?: string; material?: string; transform?: string }
+    sphere: LayerPositioned &
+      LayerCenter &
+      LayerEffects & {
+        r?: number | string
+        fill?: string
+        /** 可见折棱和轮廓。球只画轮廓圆 */
+        stroke?: string
+        'stroke-width'?: number | string
+        /** 被这只球自己挡住的棱。要和 stroke 一起写 */
+        hidden?: string
+        /** 可见线在交叉处把更远的线断开，屏幕像素 */
+        halo?: number | string
+        /** matte、plastic、metal、glass。不写是磨砂。粗糙度跟在名字后面 */
+        material?: string
+        rotate?: number | string
+        rotateX?: number | string
+        rotateY?: number | string
+        z?: number | string
+        scale?: number | string
+        opacity?: number | string
+      }
+    /** 竖直圆柱。轴沿画面上下，圆截面朝镜头鼓出 r。 */
+    cylinder: LayerPositioned &
+      LayerCenter &
+      LayerEffects & {
+        r?: number | string
+        /** 沿画面竖直方向的长度 */
+        height?: number | string
+        /** 上下圆口的圆角半径。不写 round 时两端都圆 */
+        rx?: number | string
+        /** top、bottom 或 all。不写是两端 */
+        round?: string
+        fill?: string
+        stroke?: string
+        'stroke-width'?: number | string
+        hidden?: string
+        /** 可见线在交叉处把更远的线断开，屏幕像素 */
+        halo?: number | string
+        /** matte、plastic、metal、glass。不写是磨砂。粗糙度跟在名字后面 */
+        material?: string
+        rotate?: number | string
+        rotateX?: number | string
+        rotateY?: number | string
+        z?: number | string
+        scale?: number | string
+        opacity?: number | string
+      }
+    /** 躺在所在平面里的圆环。r 是环心到管心，tube 是管半径。 */
+    torus: LayerPositioned &
+      LayerCenter &
+      LayerEffects & {
+        r?: number | string
+        tube?: number | string
+        fill?: string
+        stroke?: string
+        'stroke-width'?: number | string
+        hidden?: string
+        /** 可见线在交叉处把更远的线断开，屏幕像素 */
+        halo?: number | string
+        /** matte、plastic、metal、glass。不写是磨砂。粗糙度跟在名字后面 */
+        material?: string
+        rotate?: number | string
+        rotateX?: number | string
+        rotateY?: number | string
+        z?: number | string
+        scale?: number | string
+        opacity?: number | string
+      }
+    /** 沿路径扫出的圆管。d 是中心线，r 是管半径。 */
+    tube: LayerPositioned &
+      LayerEffects & {
+        d?: string
+        r?: number | string
+        fill?: string
+        stroke?: string
+        'stroke-width'?: number | string
+        hidden?: string
+        /** 可见线在交叉处把更远的线断开，屏幕像素 */
+        halo?: number | string
+        /** matte、plastic、metal、glass。不写是磨砂。粗糙度跟在名字后面 */
+        material?: string
+        rotate?: number | string
+        rotateX?: number | string
+        rotateY?: number | string
+        z?: number | string
+        scale?: number | string
+        opacity?: number | string
+      }
+    box: LayerPositioned &
+      LayerEffects & {
+        width?: number | string
+        height?: number | string
+        depth?: number | string
+        /** 棱的圆角半径。不写 round 时 12 条棱都圆 */
+        rx?: number | string
+        /** 哪些棱。front、x、front-top；不写是全部 */
+        round?: string
+        fill?: string
+        stroke?: string
+        'stroke-width'?: number | string
+        /** 被挡住的棱。要和 stroke 一起写 */
+        hidden?: string
+        /** 可见线在交叉处把更远的线断开，屏幕像素 */
+        halo?: number | string
+        material?: string
+        rotate?: number | string
+        rotateX?: number | string
+        rotateY?: number | string
+        z?: number | string
+        scale?: number | string
+        opacity?: number | string
+      }
+    /** 无限平面，只接影子。旋转和 box 一样。不写 fill 时地面透明。 */
+    ground: LayerPositioned & {
+      fill?: string
+      /** 影子模糊，像素。默认 0 */
+      'shadow-blur'?: number | string
+      /** 影子不透明度，0 到 1。默认 0.4 */
+      'shadow-opacity'?: number | string
+      /** 影子颜色。默认 #000000 */
+      'shadow-color'?: string
+      rotate?: number | string
+      rotateX?: number | string
+      rotateY?: number | string
+      z?: number | string
+      scale?: number | string
+      opacity?: number | string
+    }
+    extrude: LayerPositioned &
+      LayerEffects & {
+        d?: string
+        depth?: number | string
+        fill?: string
+        stroke?: string
+        'stroke-width'?: number | string
+        hidden?: string
+        /** 可见线在交叉处把更远的线断开，屏幕像素 */
+        halo?: number | string
+        material?: string
+        rotate?: number | string
+        rotateX?: number | string
+        rotateY?: number | string
+        z?: number | string
+        scale?: number | string
+        opacity?: number | string
+      }
+    /** 外部网格。`src` 是 .glb；tsx 里 `object` 是 three.js 的 Object3D。`unit` 保留原始坐标。位置和宽高写在外包的 layer 上。 */
+    model: LayerGraphic & {
+      src?: string
+      /** 1 个模型单位对应的像素。写了就不再 contain 居中 */
+      unit?: number | string
+      /** 内存中的网格，不进 .layer */
+      object?: object
+      fill?: string
+      stroke?: string
+      'stroke-width'?: number | string
+      hidden?: string
+      /** 可见线在交叉处把更远的线断开，屏幕像素 */
+      halo?: number | string
+      material?: string
+    }
+    curve: LayerGraphic & LayerLinePaint & { points?: string; closed?: boolean | string }
+    h1: LayerHtml
+    h2: LayerHtml
+    h3: LayerHtml
+    p: LayerHtml
+    /** 排布容器。可以直接放文字、图片，以及写了宽高的 layer。 */
+    div: LayerHtml & { 'preserve-3d'?: boolean | string; sharp?: boolean | string }
+    span: LayerHtml
+    strong: LayerHtml
+    b: LayerHtml
+    em: LayerHtml
+    i: LayerHtml
+    u: LayerHtml
+    br: LayerHtml
+    /** HTML 图片。src、alt 是属性，宽高写 style。`image` 与 `img` 相同。 */
+    img: LayerHtml & {
+      src?: string
+      alt?: string
+      /** 只在 mask 里：alpha 或 luma */
+      channel?: string
+      /** 只在 mask 里：编号，例如 "3 5" */
+      pick?: string
+    }
+    image: LayerHtml & { src?: string; alt?: string }
+    math: LayerHtml
+    mrow: LayerHtml
+    mi: LayerHtml
+    mn: LayerHtml
+    mo: LayerHtml
+    mtext: LayerHtml
+    mfrac: LayerHtml
+    msub: LayerHtml
+    msup: LayerHtml
+    msubsup: LayerHtml
+    msqrt: LayerHtml
+    mroot: LayerHtml
+    munder: LayerHtml
+    mover: LayerHtml
+    munderover: LayerHtml
+    mtable: LayerHtml
+    mtr: LayerHtml
+    mtd: LayerHtml
+  }
+}

@@ -1,0 +1,3 @@
+<layer width="700" height="360" background="#0b1020">
+  <circle id="shape" cx="350" cy="180" r="90" fill="#16233a" inner-glow="28 #7ec8ff" />
+</layer>

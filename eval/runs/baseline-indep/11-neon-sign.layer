@@ -1,0 +1,5 @@
+<layer width="800" height="360" background="#07080d">
+  <layer x="400" y="180" anchor="center">
+    <h1 id="word" style="font-size:96px; color:#d7f6ff; glow: 40 #7ec8ff">NEON</h1>
+  </layer>
+</layer>

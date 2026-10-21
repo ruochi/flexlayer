@@ -1,0 +1,5 @@
+<layer width="1080" height="1350" background="#14110e">
+  <layer x="540" y="675" anchor="center">
+    <h1 style="font-size:120px; color:#f4efe6">夜航</h1>
+  </layer>
+</layer>

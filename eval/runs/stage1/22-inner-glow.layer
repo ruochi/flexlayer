@@ -1,0 +1,5 @@
+<layer width="700" height="360" background="#101418">
+  <layer x="350" y="180" anchor="center">
+    <rect id="shape" x="0" y="0" width="280" height="160" rx="24" fill="#1b2433" inner-glow="28 #7ec8ff" />
+  </layer>
+</layer>

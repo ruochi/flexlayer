@@ -1,0 +1,7 @@
+<layer width="900" height="400" background="#f4efe6">
+  <layer x="80" y="140">
+    <h1 id="word" split="chars" style="font-size:96px; color:#1c1915">
+      <span style="rotate: -8deg">S</span><span style="rotate: 4deg">a</span><span style="rotate: -3deg">i</span><span style="rotate: 7deg">l</span>
+    </h1>
+  </layer>
+</layer>

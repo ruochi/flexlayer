@@ -1,0 +1,95 @@
+{
+  "01-poster-title": [
+    { "op": "inkCenter", "id": "title", "x": 540, "y": 675, "tol": 120 },
+    { "op": "inCanvas", "id": "title" }
+  ],
+  "02-moon-center": [
+    { "op": "inkCenter", "id": "moon", "x": 400, "y": 300, "tol": 24 },
+    { "op": "pixel", "x": 400, "y": 300, "is": "ink" },
+    { "op": "pixel", "x": 16, "y": 16, "is": "background" },
+    { "op": "inCanvas", "id": "moon" }
+  ],
+  "03-icon-center": [
+    { "op": "inkCenter", "id": "icon", "x": 400, "y": 300, "tol": 80 },
+    { "op": "inCanvas", "id": "icon" }
+  ],
+  "04-flex-card": [
+    { "op": "inCanvas", "id": "card" }
+  ],
+  "05-tilted-cards": [
+    { "op": "drawn3d", "id": "card" },
+    { "op": "inCanvas", "id": "card" }
+  ],
+  "06-product-shot": [
+    { "op": "drawn3d", "id": "product" },
+    { "op": "inCanvas", "id": "product" }
+  ],
+  "07-tube-pipe": [
+    { "op": "pixel", "x": 140, "y": 50, "is": "ink" },
+    { "op": "pixel", "x": 140, "y": 20, "is": "background" },
+    { "op": "inCanvas", "id": "pipe" },
+    { "op": "drawn3d", "id": "pipe" }
+  ],
+  "08-mask-knockout": [
+    { "op": "inCanvas", "id": "panel" }
+  ],
+  "09-canvas-bars": [
+    { "op": "inCanvas", "id": "bars" }
+  ],
+  "10-sticker-title": [
+    { "op": "inkCenter", "id": "title", "x": 450, "y": 200, "tol": 120 },
+    { "op": "inCanvas", "id": "title" }
+  ],
+  "11-neon-sign": [
+    { "op": "inkCenter", "id": "word", "x": 400, "y": 180, "tol": 100 },
+    { "op": "inCanvas", "id": "word" }
+  ],
+  "12-glass-panel": [
+    { "op": "inCanvas", "id": "panel" }
+  ],
+  "13-film-grade": [
+    { "op": "inCanvas", "id": "mark" }
+  ],
+  "14-scattered-type": [
+    { "op": "inCanvas", "id": "word" }
+  ],
+  "15-vertical-kai": [
+    { "op": "inCanvas", "id": "title" }
+  ],
+  "16-formula": [
+    { "op": "inCanvas", "id": "formula" }
+  ],
+  "17-bar-chart": [
+    { "op": "inCanvas", "id": "bar" }
+  ],
+  "18-extruded-badge": [
+    { "op": "drawn3d", "id": "badge" },
+    { "op": "inCanvas", "id": "badge" }
+  ],
+  "19-line-diagram": [
+    { "op": "inCanvas", "id": "node" }
+  ],
+  "20-noise-poster": [
+    { "op": "inCanvas", "id": "title" }
+  ],
+  "21-gradient-word": [
+    { "op": "inkCenter", "id": "word", "x": 450, "y": 200, "tol": 120 },
+    { "op": "inCanvas", "id": "word" }
+  ],
+  "22-inner-glow": [
+    { "op": "inkCenter", "id": "shape", "x": 350, "y": 180, "tol": 40 },
+    { "op": "inCanvas", "id": "shape" }
+  ],
+  "23-anchor-group": [
+    { "op": "inkCenter", "id": "crescent", "x": 400, "y": 300, "tol": 80 },
+    { "op": "inCanvas", "id": "crescent" }
+  ],
+  "24-ground-only": [
+    { "op": "drawn3d", "id": "box" },
+    { "op": "inCanvas", "id": "box" }
+  ],
+  "25-pipe-loop": [
+    { "op": "drawn3d", "id": "frame" },
+    { "op": "inCanvas", "id": "frame" }
+  ]
+}

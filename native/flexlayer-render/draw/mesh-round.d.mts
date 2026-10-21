@@ -1,0 +1,11 @@
+export type RoundIssue = any
+export declare const BOX_EDGES: any
+export type BOX_EDGES = any
+export declare const readBoxFillet: any
+export type readBoxFillet = any
+export declare const readCylinderFillet: any
+export type readCylinderFillet = any
+export declare const roundedBoxGeometry: any
+export type roundedBoxGeometry = any
+export declare const roundedCylinderGeometry: any
+export type roundedCylinderGeometry = any

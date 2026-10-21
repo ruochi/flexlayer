@@ -1,0 +1,5 @@
+<layer width="900" height="400" background="#1a120e" color="#111111">
+  <layer x="450" y="200" anchor="center">
+    <h1 id="title" style="font-size:128px; color:#f6e27a; stroke:6 #fff, 14 #c8321e">POP</h1>
+  </layer>
+</layer>

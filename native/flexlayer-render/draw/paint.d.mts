@@ -1,0 +1,11 @@
+export type PaintOptions = any
+export type PaintState = any
+export type MaskRaster = any
+export declare const rasterizeMask: any
+export type rasterizeMask = any
+export declare const paintLayerIsolated: any
+export type paintLayerIsolated = any
+export declare const ensurePaintFeatures: any
+export type ensurePaintFeatures = any
+export declare const paintDocument: any
+export type paintDocument = any

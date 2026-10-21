@@ -1,0 +1,9 @@
+<layer width="800" height="1000" background="#14110e" color="#f4f1ea" noise="0.08">
+  <rect x="0" y="0" width="800" height="1000" fill="#14110e" />
+  <layer x="400" y="420" anchor="center">
+    <h1 id="title" style="font-size:96px; color:#f4f1ea">Quiet</h1>
+  </layer>
+  <layer x="400" y="540" anchor="center">
+    <p style="font-size:32px; color:#d4c4a8">a night edition</p>
+  </layer>
+</layer>

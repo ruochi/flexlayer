@@ -1,0 +1,3 @@
+<layer width="640" height="480" background="#12161c" camera="700">
+  <tube id="pipe" d="M 140 50 H 300 V 210" r="16" fill="#c4784a" material="metal 0.3" />
+</layer>

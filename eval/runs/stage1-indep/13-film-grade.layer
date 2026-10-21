@@ -1,0 +1,5 @@
+<layer width="800" height="800" background="#1a120c" grade="lomo 0.8, vignette 0.3" noise="0.08">
+  <rect x="0" y="0" width="800" height="800" fill="#6b2d3c" />
+  <circle id="mark" cx="400" cy="380" r="150" fill="#f0d2a0" />
+  <rect x="160" y="600" width="480" height="18" fill="#f4f1ea" />
+</layer>

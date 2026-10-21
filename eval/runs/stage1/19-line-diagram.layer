@@ -1,0 +1,11 @@
+<layer width="720" height="480" background="#f7f4ee">
+  <line x1="120" y1="240" x2="300" y2="120" stroke="#1c1915" stroke-width="3" />
+  <line x1="300" y1="120" x2="560" y2="240" stroke="#1c1915" stroke-width="3" />
+  <line x1="120" y1="240" x2="560" y2="240" stroke="#1c1915" stroke-width="3" />
+  <circle id="node" cx="120" cy="240" r="16" fill="#c4552a" />
+  <circle cx="300" cy="120" r="16" fill="#c4552a" />
+  <circle cx="560" cy="240" r="16" fill="#c4552a" />
+  <layer x="90" y="270"><p style="font-size:24px">甲</p></layer>
+  <layer x="280" y="70"><p style="font-size:24px">乙</p></layer>
+  <layer x="540" y="270"><p style="font-size:24px">丙</p></layer>
+</layer>

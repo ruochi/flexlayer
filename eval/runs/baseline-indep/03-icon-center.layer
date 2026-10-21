@@ -1,0 +1,5 @@
+<layer width="800" height="600" background="#070b14" color="#f4f0e6">
+  <layer x="400" y="300" anchor="center">
+    <span id="icon" class="material-symbols-outlined" style="font-size:128px; color:#f4f0e6">dark_mode</span>
+  </layer>
+</layer>

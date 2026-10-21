@@ -1,0 +1,4528 @@
+import './assert-node.js'
+import {
+  Align,
+  Edge,
+  FlexDirection,
+  Gutter,
+  Justify,
+  MeasureMode,
+  Wrap,
+  type Node as YogaNode,
+} from 'yoga-layout/load'
+import { ensureAuthorFeatures, installAuthorFeaturesSync } from './author-features.js'
+import { collectFilters, mergeFilters, type FilterIssue } from './filter.js'
+import { imageInk, peekLayerImage, preloadLayerImageSync, preloadLayerImagesSync, parseObjectFit, parseObjectPosition } from './image.js'
+import type { LayerNode } from './parse.js'
+import { parseLayer } from './parse.js'
+import { DEFAULT_FONT_FAMILY, ensureBuiltinFontsSync, primaryFontFamily, registerFontsFromDocumentSync } from './fonts.js'
+import { classAttr, ICON_FONT_FAMILY, symbolsClassOf } from './icons.js'
+import { materialize } from './components.js'
+import { catmullRomPath } from './curve.js'
+import { isGradient, parseGradient, solidPaint } from './gradient.js'
+import { isGradientPaint } from './gradientField.js'
+import { glbBounds, glbSpan, primitiveBounds, primitiveSpan, resolveModelFile } from './glb.js'
+import { fromThree, holdModelPrims, modelRevision } from './three.js'
+import { readBoxFillet, readCylinderFillet } from './mesh-round.js'
+import { openSvgPath, translateSvgPath } from './path.js'
+import { cameraAuditIssues, readPreserve, readSharp, resolveCamera } from './camera.js'
+import { perspectiveIssues } from './perspective.js'
+import {
+  backdropBlurRadius,
+  parseBackdropFilter,
+  parseBlend,
+  parseBlurRadius,
+  parseBorder,
+  parseBoxShadow,
+  parseCornerRadii,
+  borderBox,
+  borderPaintColor,
+  contentInsets,
+  flexContentInset,
+  hasBorder,
+  overflowAppearance,
+  overflowClips,
+  radiusAppearance,
+  readBorderStyle,
+  readPaddingStyle,
+  readRadiusStyle,
+  parseFontWeight,
+  parseGlass,
+  parseGlow,
+  parseInkStroke,
+  strokeTakesInk,
+  parseNoise,
+  parseLineHeight,
+  parseLetterSpacing,
+  parseAngle,
+  parseCssLength,
+  parseCssTransform,
+  parseNumber,
+  parseOverlay,
+  readFlexFactors,
+  parsePx,
+  parseOrigin,
+  parseScale,
+  parseShadow,
+  parseStyle,
+  readOrigin,
+  readAnchor,
+  ZERO_EDGES,
+  ZERO_RADII,
+  type Edges,
+  type LineHeight,
+} from './style.js'
+import {
+  alignLineOffset,
+  alignedTextInk,
+  MEDIUM_FONT_SIZE,
+  defaultFontSizeForTag,
+  defaultFontWeightForTag,
+  extractTextSegments,
+  isTextBoxTag,
+  layoutText,
+} from './text.js'
+import { applyToBox, IDENTITY, intersectBox, isIdentity, localNodeMatrix, multiply, translated } from './matrix.js'
+import { layoutMath } from './math/load.js'
+import { asBlockFlow, checkChildAttrs, checkTextBoxChildren, haloAttrIssues, hasTwoPoint, hiddenAttrIssues, isDisplayFlex, isHtmlTag, legacyCenterIssues, materialAttrIssues, originValueIssues, rowColumnHint, splitAttrIssues, styleIssues, typoAttrIssues } from './rules.js'
+import { fitViewAspect, parseView, viewExceeds } from './view.js'
+import { FONT_TAG, isGroundTag, isImageTag, isLineTag, isMaskContentTag, isMeshTag, isShapeTag, solidDepth, tagSpellingHint } from './tags.js'
+import { boundsOf, parseSvgTransform } from './svg-transform.js'
+import type {
+  Anchor,
+  AppliedFilter,
+  Box,
+  CssLength,
+  CssMotion,
+  CssTransformStep,
+  CanvasLayoutNode,
+  DrawComputedStyle,
+  LayerScript,
+  FlexLayoutNode,
+  LayerDocument,
+  MinFontSpec,
+  GroupLayoutNode,
+  ImageLayoutNode,
+  Issue,
+  LayerLayoutNode,
+  LayoutNode,
+  BackdropFilterStep,
+  BlendMode,
+  BoxBorder,
+  ColorFilterSpec,
+  GlassSpec,
+  GlowSpec,
+  InkStrokeSpec,
+  GradeSpec,
+  LineGeometry,
+  LineLayoutNode,
+  MeshLayoutNode,
+  GroundLayoutNode,
+  MaskOp,
+  MeshMaterial,
+  NoiseSpec,
+  Origin,
+  PreviewSpec,
+  OverlaySpec,
+  ShadowSpec,
+  ShapeLayoutNode,
+  TextLayoutNode,
+  TextSegment,
+} from './types.js'
+import { emptyBox, unionBoxes } from './types.js'
+import { formatSourceLoc } from './source-loc.js'
+import { getYoga } from './yoga.js'
+
+export type LayoutContext = {
+  color: string
+  fontFamily: string
+  /** 祖先写过才有。没有时文字用标签默认字号。 */
+  fontSize?: number
+  fontWeight?: number
+  letterSpacing?: number
+  textAlign?: 'left' | 'center' | 'right'
+  /** 祖先写过的行高。像素行高按像素继承，倍数按倍数继承。 */
+  lineHeight?: LineHeight
+  maxContentWidth: number
+  issues: Issue[]
+  pathPrefix: string
+  symbols: Map<string, LayerNode>
+  useStack: string[]
+  /** 解析 img 的相对路径。 */
+  baseDir: string
+  /** path → `file:line:column`，给报告里的 source。 */
+  sources: Map<string, string>
+  /** 设了之后，省略的 fill 用这个值，省略的 stroke 为 none。mask 里用 #ffffff。 */
+  fillDefault?: string
+  /** `<g>` 上传下来的 fill / stroke。子元素自己写了的优先。 */
+  paintFill?: string
+  paintStroke?: string
+  /** 正在排 mask 里面的内容。 */
+  inMask?: boolean
+  previews: PreviewSpec[]
+  /** 祖先已经打开镜头。这一层不写 camera 时不再另开默认镜头。 */
+  ancestorCamera?: boolean
+}
+
+function isClosedFlag(raw: string | undefined): boolean {
+  if (raw == null) return false
+  const text = raw.trim().toLowerCase()
+  return text !== 'false' && text !== '0' && text !== 'no'
+}
+
+function anchorOf(raw: string | undefined, ctx: LayoutContext, tag: string): Anchor {
+  const read = readAnchor(raw, 'top-left')
+  if (read.invalid && !isShapeTag(tag)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 anchor: ${raw}`,
+      hint: '九宫格：top-left（默认）、top、bottom、left、right、center、top-right、bottom-left、bottom-right',
+    })
+  }
+  return read.anchor
+}
+
+function anchorTopLeft(cx: number, cy: number, w: number, h: number, anchor: Anchor): { x: number; y: number } {
+  switch (anchor) {
+    case 'top-left':
+      return { x: cx, y: cy }
+    case 'top':
+      return { x: cx - w / 2, y: cy }
+    case 'top-right':
+      return { x: cx - w, y: cy }
+    case 'left':
+      return { x: cx, y: cy - h / 2 }
+    case 'right':
+      return { x: cx - w, y: cy - h / 2 }
+    case 'bottom-left':
+      return { x: cx, y: cy - h }
+    case 'bottom':
+      return { x: cx - w / 2, y: cy - h }
+    case 'bottom-right':
+      return { x: cx - w, y: cy - h }
+    default:
+      return { x: cx - w / 2, y: cy - h / 2 }
+  }
+}
+
+export function parseSafe(raw: string | undefined, w: number, h: number): Edges {
+  const def = Math.round(Math.min(w, h) * 0.04)
+  if (!raw?.trim()) return { top: def, right: def, bottom: def, left: def }
+  const parts = raw.trim().split(/\s+/).map((p) => parsePx(p) ?? def)
+  if (parts.length === 1) return { top: parts[0]!, right: parts[0]!, bottom: parts[0]!, left: parts[0]! }
+  if (parts.length === 2) return { top: parts[0]!, right: parts[1]!, bottom: parts[0]!, left: parts[1]! }
+  if (parts.length === 3) return { top: parts[0]!, right: parts[1]!, bottom: parts[2]!, left: parts[1]! }
+  return { top: parts[0]!, right: parts[1]!, bottom: parts[2]!, left: parts[3]! }
+}
+
+function nodePath(prefix: string, tag: string, index: number): string {
+  return `${prefix}/${tag}[${index}]`
+}
+
+function track(ctx: LayoutContext, path: string, node: LayerNode) {
+  if (!node.loc || ctx.sources.has(path)) return
+  ctx.sources.set(path, formatSourceLoc(node.loc))
+}
+
+const DEFAULT_SHADOW_COLOR = '#00000066'
+/** 文字、图片、layer 只写了颜料、没写宽度时，沿墨迹外侧描这么宽。 */
+const INK_PAINT_WIDTH = 4
+const STROKE_HINT = '写成 6 #000 outside，或 stroke="#000" stroke-width="6"'
+
+type EffectFields = {
+  shadow?: ShadowSpec
+  shadowList?: ShadowSpec[]
+  glow?: GlowSpec
+  innerShadow?: ShadowSpec
+  innerShadowList?: ShadowSpec[]
+  innerGlow?: GlowSpec
+  inkStroke?: InkStrokeSpec[]
+  blur?: number
+  backdropBlur?: number
+  backdropFilter?: BackdropFilterStep[]
+  noise?: NoiseSpec
+  glass?: GlassSpec
+  colorFilter?: ColorFilterSpec[]
+  blend?: BlendMode
+  filters?: AppliedFilter[]
+}
+
+type EffectSource = Record<string, string | undefined>
+
+function warnInvalid(ctx: LayoutContext, label: string, raw: string, hint: string) {
+  ctx.issues.push({
+    level: 'warn',
+    code: 'invalid-attr',
+    path: ctx.pathPrefix,
+    message: `无法解析 ${label}: ${raw}`,
+    hint,
+  })
+}
+
+function pushFilterIssues(ctx: LayoutContext, issues: FilterIssue[]) {
+  for (const issue of issues) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: issue.message,
+      hint: issue.hint,
+    })
+  }
+}
+
+function rejectLegacyInkStroke(src: EffectSource, ctx: LayoutContext) {
+  const legacy = src['ink-stroke']
+  if (legacy == null || legacy.trim() === '' || legacy.trim().toLowerCase() === 'none') return
+  ctx.issues.push({
+    level: 'warn',
+    code: 'invalid-attr',
+    path: ctx.pathPrefix,
+    message: 'ink-stroke 已并入 stroke',
+    hint: '改成 stroke="6 #000 outside"。文字写 style="stroke:6 #000 outside"',
+  })
+}
+
+function readStrokeEffect(src: EffectSource, ctx: LayoutContext, out: EffectFields, mode: 'geometric' | 'ink' | 'mesh') {
+  rejectLegacyInkStroke(src, ctx)
+  const raw = src.stroke
+  if (raw == null || raw.trim() === '' || raw.trim().toLowerCase() === 'none') return
+  if (mode === 'mesh') {
+    if (strokeTakesInk(raw)) warnInvalid(ctx, 'stroke', raw, '网格的 stroke 是折线颜色，例如 stroke="#1c1915" stroke-width="2"')
+    return
+  }
+  const parsed = parseInkStroke(raw)
+  if (parsed) {
+    const badGradient = parsed.some((layer) => isGradient(layer.color) && !parseGradient(layer.color))
+    if (badGradient) warnInvalid(ctx, 'stroke', raw, STROKE_HINT)
+    else out.inkStroke = parsed
+    return
+  }
+  if (strokeTakesInk(raw)) {
+    warnInvalid(ctx, 'stroke', raw, STROKE_HINT)
+    return
+  }
+  if (mode !== 'ink') return
+  if (isGradient(raw) && !parseGradient(raw)) {
+    warnInvalid(ctx, 'stroke', raw, STROKE_HINT)
+    return
+  }
+  const widthRaw = src['stroke-width']
+  let width = INK_PAINT_WIDTH
+  if (widthRaw != null && widthRaw.trim() !== '') {
+    const parsedWidth = parsePx(widthRaw)
+    if (parsedWidth == null || parsedWidth < 0) {
+      warnInvalid(ctx, 'stroke-width', widthRaw, '写成 6 或 6px')
+      return
+    }
+    width = parsedWidth
+  }
+  if (width > 0) out.inkStroke = [{ width, color: raw.trim(), position: 'outside' }]
+}
+
+const CSS_EFFECT_KEYS = ['box-shadow', 'backdrop-filter'] as const
+
+/** 形状和 layer 的效果在属性上。CSS 名字写在 style 里时也收。 */
+function withCssEffects(src: EffectSource): EffectSource {
+  if (src['box-shadow'] != null || src['backdrop-filter'] != null) return src
+  const raw = src.style
+  if (raw == null || !raw.includes(':')) return src
+  const style = parseStyle(raw)
+  let copy: EffectSource | undefined
+  for (const key of CSS_EFFECT_KEYS) {
+    const value = style[key]
+    if (value != null && value.trim() !== '') {
+      copy ??= { ...src }
+      copy[key] = value
+    }
+  }
+  return copy ?? src
+}
+
+function wroteEffect(raw: string | undefined): boolean {
+  return raw != null && raw.trim() !== '' && raw.trim().toLowerCase() !== 'none'
+}
+
+function finishShadow(shadow: { x: number; y: number; blur: number; spread: number; color?: string }, current: string): ShadowSpec {
+  const named = shadow.color?.toLowerCase() === 'currentcolor'
+  const color = !shadow.color || named ? (named ? current : DEFAULT_SHADOW_COLOR) : shadow.color
+  return { x: shadow.x, y: shadow.y, blur: shadow.blur, spread: shadow.spread, color }
+}
+
+function applyBoxShadow(src: EffectSource, ctx: LayoutContext, out: EffectFields, current: string) {
+  const raw = src['box-shadow']
+  if (!wroteEffect(raw)) return
+  const parsed = parseBoxShadow(raw)
+  if (!parsed) {
+    warnInvalid(ctx, 'box-shadow', raw!, '写成 0 8px 16px #00000055，或 inset 0 4px 8px #000。多层用逗号分开')
+    return
+  }
+  const skipOuter = parsed.outer.length > 0 && out.shadow != null
+  const skipInner = parsed.inset.length > 0 && out.innerShadow != null
+  if (skipOuter || skipInner) {
+    const which = skipOuter && skipInner ? 'shadow、inner-shadow' : skipOuter ? 'shadow' : 'inner-shadow'
+    ctx.issues.push({
+      level: 'info',
+      code: 'non-canonical',
+      path: ctx.pathPrefix,
+      message: `同时写了 ${which} 与 box-shadow，以 ${which} 为准`,
+      hint: '投影用 shadow，内阴影用 inner-shadow。box-shadow 的 inset 就是内阴影',
+    })
+  }
+  if (!skipOuter && parsed.outer.length > 0) {
+    const specs = parsed.outer.map((shadow) => finishShadow(shadow, current))
+    out.shadow = specs[0]
+    if (specs.length > 1) out.shadowList = specs
+  }
+  if (!skipInner && parsed.inset.length > 0) {
+    const specs = parsed.inset.map((shadow) => finishShadow(shadow, current))
+    out.innerShadow = specs[0]
+    if (specs.length > 1) out.innerShadowList = specs
+  }
+}
+
+function paintDropShadowColor(steps: ColorFilterSpec[], color: string) {
+  for (const step of steps) {
+    if (step.name !== 'drop-shadow') continue
+    if (!step.color || step.color.toLowerCase() === 'currentcolor') step.color = color
+  }
+}
+
+/** 色彩步骤走 filter 的同一套函数。blur() 收成 backdropBlur，和 backdrop-blur 共用绘制。 */
+function applyBackdropFilter(src: EffectSource, ctx: LayoutContext, out: EffectFields, current: string) {
+  const raw = src['backdrop-filter']
+  if (!wroteEffect(raw)) return
+  const steps = parseBackdropFilter(raw)
+  if (!steps) {
+    warnInvalid(
+      ctx,
+      'backdrop-filter',
+      raw!,
+      '写成 blur(16px)，或 blur(16px) brightness(1.1)。函数和 filter 相同，不收 url()',
+    )
+    return
+  }
+  paintDropShadowColor(steps, current)
+  const cssBlur = backdropBlurRadius(steps)
+  const attrBlur = wroteEffect(src['backdrop-blur']) && out.backdropBlur != null
+  if (cssBlur > 0 && attrBlur) {
+    ctx.issues.push({
+      level: 'info',
+      code: 'non-canonical',
+      path: ctx.pathPrefix,
+      message: '同时写了 backdrop-blur 与 backdrop-filter 的 blur()，模糊以 backdrop-blur 为准',
+      hint: '背景模糊用 backdrop-blur。色彩函数留在 backdrop-filter，和 filter 同一套',
+    })
+  } else if (cssBlur > 0) {
+    out.backdropBlur = cssBlur
+  }
+  if (!steps.some((step) => step.name !== 'blur')) return
+  const blur = out.backdropBlur ?? 0
+  if (attrBlur) {
+    const rebuilt: BackdropFilterStep[] = []
+    let placed = false
+    for (const step of steps) {
+      if (step.name === 'blur') {
+        if (!placed && blur > 0) {
+          rebuilt.push({ name: 'blur', value: blur })
+          placed = true
+        }
+        continue
+      }
+      rebuilt.push(step)
+    }
+    if (!placed && blur > 0) rebuilt.unshift({ name: 'blur', value: blur })
+    if (rebuilt.length) out.backdropFilter = rebuilt
+    return
+  }
+  const kept = steps.filter((step) => step.name !== 'blur' || step.value > 0)
+  if (kept.length) out.backdropFilter = kept
+}
+
+function readEffects(
+  src: EffectSource,
+  ctx: LayoutContext,
+  glowColor: string,
+  strokeMode: 'geometric' | 'ink' | 'mesh' = 'geometric',
+): EffectFields {
+  src = withCssEffects(src)
+  const out: EffectFields = {}
+  const shadowRaw = src.shadow
+  const parsedShadow = parseShadow(shadowRaw)
+  if (parsedShadow) out.shadow = { ...parsedShadow, color: parsedShadow.color ?? DEFAULT_SHADOW_COLOR }
+  else if (shadowRaw && shadowRaw.trim() !== 'none') {
+    warnInvalid(ctx, 'shadow', shadowRaw, '写成 0 8 16 #00000055，顺序是 x y blur spread color')
+  }
+
+  const glowRaw = src.glow
+  const parsedGlow = parseGlow(glowRaw)
+  if (parsedGlow) out.glow = { ...parsedGlow, color: parsedGlow.color ?? glowColor }
+  else if (glowRaw && glowRaw.trim() !== 'none') {
+    warnInvalid(ctx, 'glow', glowRaw, '写成 48 #f6f1e7，顺序是 blur spread color')
+  }
+
+  const innerShadowRaw = src['inner-shadow']
+  const parsedInnerShadow = parseShadow(innerShadowRaw)
+  if (parsedInnerShadow) {
+    out.innerShadow = { ...parsedInnerShadow, color: parsedInnerShadow.color ?? DEFAULT_SHADOW_COLOR }
+  } else if (innerShadowRaw && innerShadowRaw.trim() !== 'none') {
+    warnInvalid(ctx, 'inner-shadow', innerShadowRaw, '写成 0 8 16 #00000088，顺序是 x y blur spread color')
+  }
+
+  const innerGlowRaw = src['inner-glow']
+  const parsedInnerGlow = parseGlow(innerGlowRaw)
+  if (parsedInnerGlow) out.innerGlow = { ...parsedInnerGlow, color: parsedInnerGlow.color ?? glowColor }
+  else if (innerGlowRaw && innerGlowRaw.trim() !== 'none') {
+    warnInvalid(ctx, 'inner-glow', innerGlowRaw, '写成 24 #f3ead4，顺序是 blur spread color')
+  }
+
+  readStrokeEffect(src, ctx, out, strokeMode)
+
+  const blurRaw = src.blur
+  const parsedBlur = parseBlurRadius(blurRaw)
+  if (parsedBlur !== undefined) out.blur = parsedBlur
+  else if (blurRaw && blurRaw.trim() !== 'none') {
+    warnInvalid(ctx, 'blur', blurRaw, '写成单个非负像素，例如 8 或 8px')
+  }
+
+  const backdropRaw = src['backdrop-blur']
+  const parsedBackdrop = parseBlurRadius(backdropRaw)
+  if (parsedBackdrop !== undefined) out.backdropBlur = parsedBackdrop
+  else if (backdropRaw && backdropRaw.trim() !== 'none') {
+    warnInvalid(ctx, 'backdrop-blur', backdropRaw, '写成单个非负像素，例如 16 或 16px')
+  }
+
+  const noiseRaw = src.noise
+  const parsedNoise = parseNoise(noiseRaw)
+  if (parsedNoise) out.noise = parsedNoise
+  else if (noiseRaw && noiseRaw.trim() !== 'none') {
+    warnInvalid(ctx, 'noise', noiseRaw, '写成 0.08、0.08 #ffffff，或再加 @t。强度 0 到 1')
+  }
+
+  const shared = collectFilters(src, 'shared')
+  pushFilterIssues(ctx, shared.issues)
+  if (shared.applied.length) out.filters = shared.applied
+  const color = shared.applied.find((item) => item.name === 'filter')
+  if (color) {
+    out.colorFilter = color.spec as ColorFilterSpec[]
+    paintDropShadowColor(out.colorFilter, glowColor)
+  }
+
+  const blendRaw = src.blend
+  const parsedBlend = parseBlend(blendRaw)
+  if (parsedBlend) out.blend = parsedBlend
+  else if (blendRaw && blendRaw.trim() !== 'none') {
+    warnInvalid(ctx, 'blend', blendRaw, '写成 multiply、screen、overlay、soft-light、lighten、darken 或 source-over')
+  }
+
+  const glassRaw = src.glass
+  const parsedGlass = parseGlass(glassRaw)
+  if (parsedGlass) out.glass = parsedGlass
+  else if (glassRaw && glassRaw.trim() !== 'none') {
+    warnInvalid(ctx, 'glass', glassRaw, '写成 clear、regular、thick，或 clear, blur 8, tint #fff2')
+  }
+
+  applyBoxShadow(src, ctx, out, glowColor)
+  applyBackdropFilter(src, ctx, out, glowColor)
+
+  if (out.glass && (out.backdropBlur != null || (out.backdropFilter?.length ?? 0) > 0)) {
+    const viaFilter = wroteEffect(src['backdrop-filter'])
+    const viaBlur = wroteEffect(src['backdrop-blur'])
+    const which = viaFilter && viaBlur ? 'backdrop-blur、backdrop-filter' : viaFilter ? 'backdrop-filter' : 'backdrop-blur'
+    ctx.issues.push({
+      level: 'info',
+      code: 'non-canonical',
+      path: ctx.pathPrefix,
+      message: `同时写了 glass 与 ${which}，以 glass 为准`,
+      hint: viaFilter ? '删掉 backdrop-filter，或只用 backdrop-filter 做背景模糊和色彩' : '删掉 backdrop-blur，或只用 backdrop-blur 做简单毛玻璃',
+    })
+  }
+
+  if ((out.blur ?? 0) > 0 && out.colorFilter?.some((step) => step.name === 'blur')) {
+    ctx.issues.push({
+      level: 'info',
+      code: 'non-canonical',
+      path: ctx.pathPrefix,
+      message: '同时写了 blur 与 filter，图层模糊以 blur 为准',
+      hint: '模糊只用 blur 属性。filter 里的 blur() 会去掉，其余函数保留',
+    })
+    const kept = out.colorFilter.filter((step) => step.name !== 'blur')
+    const item = out.filters?.find((entry) => entry.name === 'filter')
+    if (kept.length === 0) {
+      delete out.colorFilter
+      if (out.filters) {
+        out.filters = out.filters.filter((entry) => entry.name !== 'filter')
+        if (out.filters.length === 0) delete out.filters
+      }
+    } else {
+      out.colorFilter = kept
+      if (item) item.spec = kept
+    }
+  }
+
+  return out
+}
+
+/** 仅 layer：解析 overlay，校验 paint。 */
+function readLayerOverlay(attrs: Record<string, string>, ctx: LayoutContext): OverlaySpec | undefined {
+  const raw = attrs.overlay
+  if (raw == null || raw.trim() === '' || raw.trim() === 'none') return undefined
+  const parsed = parseOverlay(raw)
+  if (!parsed) {
+    warnInvalid(
+      ctx,
+      'overlay',
+      raw,
+      '写成 #00000066、#ff8800 0.4 multiply，或 linear-gradient(...) soft-light。仅 layer 可用',
+    )
+    return undefined
+  }
+  if (isGradient(parsed.paint)) {
+    if (!parseGradient(parsed.paint)) {
+      warnInvalid(
+        ctx,
+        'overlay',
+        raw,
+        '例如 overlay="linear-gradient(to bottom, #fff0, #0008) multiply"',
+      )
+      return undefined
+    }
+  }
+  return parsed
+}
+
+/** 仅 layer：解析 grade 以及 registerFilter 登记的像素滤镜。 */
+function readLayerFilters(
+  attrs: Record<string, string>,
+  ctx: LayoutContext,
+): { grade?: GradeSpec; gradeMask?: string; filters?: AppliedFilter[] } {
+  const { applied, issues } = collectFilters(attrs, 'layer')
+  pushFilterIssues(ctx, issues)
+  const grade = applied.find((item) => item.name === 'grade')
+  return {
+    ...(applied.length ? { filters: applied } : {}),
+    ...(grade ? { grade: grade.spec as GradeSpec, ...(grade.mask ? { gradeMask: grade.mask } : {}) } : {}),
+  }
+}
+
+/** SVG 虚线。奇数段会再重复一遍，和描边相位对齐。非法值警告并当成实线。 */
+function readDash(raw: string | undefined, ctx: LayoutContext): number[] | undefined {
+  if (raw == null) return undefined
+  const text = raw.trim()
+  if (text === '' || text === 'none') return undefined
+  const parts = text.split(/[\s,]+/).filter((part) => part.length > 0)
+  const nums: number[] = []
+  for (const part of parts) {
+    const n = Number(part)
+    if (!Number.isFinite(n) || n < 0) {
+      warnInvalid(ctx, 'stroke-dasharray', raw, '写成像素长度，例如 8 8 或 12,4,2,4')
+      return undefined
+    }
+    nums.push(n)
+  }
+  if (nums.length === 0 || nums.every((n) => n === 0)) {
+    warnInvalid(ctx, 'stroke-dasharray', raw, '写成像素长度，例如 8 8 或 12,4,2,4')
+    return undefined
+  }
+  if (nums.length % 2 === 1) nums.push(...nums)
+  return nums
+}
+
+/** 虚线相位。负值往反方向移。 */
+function readDashOffset(raw: string | undefined, ctx: LayoutContext): number | undefined {
+  if (raw == null) return undefined
+  const text = raw.trim()
+  if (text === '' || text === 'none') return undefined
+  const n = Number(text)
+  if (!Number.isFinite(n)) {
+    warnInvalid(ctx, 'stroke-dashoffset', raw, '写成像素，例如 12')
+    return undefined
+  }
+  return n
+}
+
+function readPaint(raw: string, fallback: string, ctx: LayoutContext, label: string): string {
+  if (!isGradient(raw)) return raw
+  if (parseGradient(raw)) return raw
+  ctx.issues.push({
+    level: 'warn',
+    code: 'invalid-attr',
+    path: ctx.pathPrefix,
+    message: `无法解析 ${label}: ${raw}`,
+    hint: '例如 gradient(#112233, #ff8800)、linear-gradient(to bottom, #0b1026, #d5ddd4) 或 radial-gradient(at 35% 30%, #fff, #fff0)',
+  })
+  return fallback
+}
+
+function scalePair(raw: string | undefined): { scaleX: number; scaleY: number } {
+  const scale = parseScale(raw)
+  return { scaleX: scale.x, scaleY: scale.y }
+}
+
+function angleOf(raw: string | undefined): number {
+  if (raw == null) return 0
+  return parseAngle(raw)?.degrees ?? 0
+}
+
+const ANGLE_ATTR_HINT = '写成 30、30deg、0.5rad 或 0.25turn'
+
+/** 属性上的角度。纯数字仍是度，不报 non-canonical。带 deg、rad、grad、turn 也转。写错报 invalid-attr，当成 0。 */
+function readAngleAttr(raw: string | undefined, ctx: LayoutContext, label: string): number {
+  if (raw == null || raw.trim() === '') return 0
+  const parsed = parseAngle(raw)
+  if (!parsed) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 ${label}: ${raw}`,
+      hint: ANGLE_ATTR_HINT,
+    })
+    return 0
+  }
+  return parsed.degrees
+}
+
+const ZERO_LENGTH: CssLength = { unit: 'px', value: 0 }
+
+function lengthIsZero(len: CssLength): boolean {
+  return len.value === 0
+}
+
+function readBoxTranslate(raw: string | undefined): { x: CssLength; y: CssLength } {
+  const zero = { x: ZERO_LENGTH, y: ZERO_LENGTH }
+  if (raw == null) return zero
+  const text = raw.trim().toLowerCase()
+  if (text === '' || text === 'none') return zero
+  const parts = text.split(/[\s,]+/).filter(Boolean)
+  if (parts.length === 0 || parts.length > 2) return zero
+  const x = parseCssLength(parts[0]!, true)
+  const y = parts[1] ? parseCssLength(parts[1], true) : ZERO_LENGTH
+  if (!x || !y) return zero
+  return { x, y }
+}
+
+/**
+ * 没有平移、且线性部分能写成「先缩放再旋转」时，沿用 rotate / scale。
+ * 否则留给 motion，画的时候再按盒子尺寸算百分比。
+ */
+function foldSimpleMotion(
+  translate: { x: CssLength; y: CssLength },
+  rotate: number,
+  scale: { x: number; y: number },
+  steps: CssTransformStep[],
+): { rotate: number; sx: number; sy: number } | null {
+  if (!lengthIsZero(translate.x) || !lengthIsZero(translate.y)) return null
+  let sx = scale.x
+  let sy = scale.y
+  let extra = 0
+  for (const step of steps) {
+    if (step.op === 'translate') {
+      if (!lengthIsZero(step.x) || !lengthIsZero(step.y)) return null
+      continue
+    }
+    if (step.op === 'rotate') {
+      if (Math.abs(sx - sy) > 1e-9 && Math.abs(step.degrees) > 1e-9) return null
+      extra += step.degrees
+      continue
+    }
+    sx *= step.x
+    sy *= step.y
+  }
+  return { rotate: rotate + extra, sx, sy }
+}
+
+function readMotionOrigin(style: Record<string, string>): { origin?: Origin } {
+  const primary = style['transform-origin']
+  if (primary != null && primary.trim() !== '') {
+    const read = readOrigin(primary)
+    if (!read.invalid) return { origin: read.origin }
+  }
+  const fallback = style.origin
+  if (fallback != null && fallback.trim() !== '') {
+    const read = readOrigin(fallback)
+    if (!read.invalid) return { origin: read.origin }
+  }
+  return {}
+}
+
+/** 把 style 里的平移、旋转、缩放和 transform 记到节点上。只改绘制，不改 x / y / width / height。 */
+function applyCssMotion(node: { rotate: number; scaleX: number; scaleY: number; origin?: Origin; motion?: CssMotion }, style: Record<string, string>) {
+  const rotate = angleOf(style.rotate)
+  const scale = parseScale(style.scale)
+  const translate = readBoxTranslate(style.translate)
+  const parsed = style.transform != null ? parseCssTransform(style.transform) : { ok: true as const, steps: [] }
+  const steps = parsed.ok ? parsed.steps : []
+  const origin = readMotionOrigin(style)
+  if (origin.origin) node.origin = origin.origin
+  const simple = foldSimpleMotion(translate, rotate, scale, steps)
+  if (simple) {
+    node.rotate = simple.rotate
+    node.scaleX = simple.sx
+    node.scaleY = simple.sy
+    return
+  }
+  node.rotate = 0
+  node.scaleX = 1
+  node.scaleY = 1
+  node.motion = {
+    translateX: translate.x,
+    translateY: translate.y,
+    rotate,
+    scaleX: scale.x,
+    scaleY: scale.y,
+    steps,
+  }
+}
+
+/** `color` / `background-color` 只收纯色。渐变返回 undefined，并报 invalid-attr。 */
+function solidColor(raw: string | undefined, ctx: LayoutContext, label: string): string | undefined {
+  const value = raw?.trim()
+  if (!value) return undefined
+  if (!isGradient(value)) return value
+  ctx.issues.push({
+    level: 'warn',
+    code: 'invalid-attr',
+    path: ctx.pathPrefix,
+    message: `${label} 只收纯色`,
+    hint:
+      label === 'background-color'
+        ? '渐变写 background: linear-gradient(to right, #ff0000, #0000ff)'
+        : '写成 #112233。字形渐变写 fill: linear-gradient(to right, #ff0000, #0000ff)',
+  })
+  return undefined
+}
+
+/**
+ * HTML `background` 收纯色和 CSS 渐变。`background-color` 只收纯色。
+ * 矩阵 `gradient()` 不进这两个属性。
+ */
+function cssBackground(style: Record<string, string>, ctx: LayoutContext): string | undefined {
+  const shorthand = style.background?.trim()
+  if (shorthand) {
+    if (isGradientPaint(shorthand)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `background 不收矩阵渐变: ${shorthand}`,
+        hint: '盒子用 linear-gradient(...) 或 radial-gradient(...)。矩阵渐变写 fill',
+      })
+      return undefined
+    }
+    if (isGradient(shorthand) && !parseGradient(shorthand)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `无法解析 background: ${shorthand}`,
+        hint: '写成 #ffe08a，或 linear-gradient(to right, #ff0000, #0000ff)',
+      })
+      return undefined
+    }
+    return shorthand
+  }
+  return solidColor(style['background-color'], ctx, 'background-color')
+}
+
+function applyCssBackground(appearance: { background?: string }, style: Record<string, string>, ctx: LayoutContext) {
+  const background = cssBackground(style, ctx)
+  if (background) appearance.background = background
+  else delete appearance.background
+}
+
+function readHtmlAppearance(style: Record<string, string>) {
+  return {
+    padding: readPaddingStyle(style),
+    border: readBorderStyle(style),
+    ...radiusAppearance(readRadiusStyle(style)),
+    ...overflowAppearance(style),
+    background: style.background ?? style['background-color'],
+    opacity: parseNumber(style.opacity) ?? 1,
+    rotate: 0,
+    rotateX: angleOf(style.rotatex),
+    rotateY: angleOf(style.rotatey),
+    z: parseNumber(style.z) ?? 0,
+    scaleX: 1,
+    scaleY: 1,
+  }
+}
+
+function readAttrAppearance(attrs: Record<string, string>, ctx: LayoutContext) {
+  const pose = parseSvgTransform(attrs.transform).pose
+  const radiusRaw = attrs['border-radius']
+  let radii = ZERO_RADII
+  if (radiusRaw != null && radiusRaw.trim() !== '') {
+    const parsed = parseCornerRadii(radiusRaw)
+    if (parsed) radii = parsed
+    else {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `无法解析 border-radius: ${radiusRaw}`,
+        hint: '写成 12、12 0，或 16 16 0 0。每个角一个半径',
+      })
+    }
+  }
+  return {
+    padding: ZERO_EDGES,
+    border: borderBox(parseBorder(attrs.border)),
+    ...radiusAppearance(radii),
+    background: attrs.background as string | undefined,
+    opacity: parseNumber(attrs.opacity) ?? 1,
+    rotate: readAngleAttr(attrs.rotate, ctx, 'rotate') + pose.rotateZ,
+    rotateX: readAngleAttr(attrs.rotateX, ctx, 'rotateX') + pose.rotateX,
+    rotateY: readAngleAttr(attrs.rotateY, ctx, 'rotateY') + pose.rotateY,
+    z: (parseNumber(attrs.z) ?? 0) + pose.z,
+    ...scalePair(attrs.scale),
+    origin: parseOrigin(attrs.origin),
+  }
+}
+
+function sharpOf(attrs: Record<string, string>, ctx: LayoutContext): { sharp?: true } {
+  const sharp = readSharp(attrs.sharp)
+  if (sharp.invalid) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 sharp: ${attrs.sharp}`,
+      hint: '写成 sharp="true"。不写或 false 表示照常吃景深',
+    })
+  }
+  return sharp.value ? { sharp: true } : {}
+}
+
+function flexDirectionOf(style: Record<string, string>): 'row' | 'column' {
+  return style['flex-direction']?.trim().toLowerCase() === 'column' ? 'column' : 'row'
+}
+
+function directTextContent(node: LayerNode): string {
+  const parts: string[] = []
+  for (const c of node.children) {
+    if (typeof c === 'string') {
+      const t = c.replace(/\s+/g, ' ').trim()
+      if (t) parts.push(t)
+    }
+  }
+  return parts.join(' ')
+}
+
+function isHeadingTag(tag: string): boolean {
+  return tag === 'h1' || tag === 'h2' || tag === 'h3'
+}
+
+function textAlignOf(raw: string | undefined, fallback: 'left' | 'center' | 'right'): 'left' | 'center' | 'right' {
+  const value = raw?.trim()
+  if (value === 'center' || value === 'right' || value === 'left') return value
+  if (value === 'start') return 'left'
+  if (value === 'end') return 'right'
+  return fallback
+}
+
+/** 容器上写了的文字样式传给子元素。标题字号是父级的 em，字重是 bold。 */
+function inheritTextContext(ctx: LayoutContext, tag: string, style: Record<string, string>): LayoutContext {
+  const next: LayoutContext = { ...ctx }
+  const family = style['font-family']?.trim()
+  if (family) next.fontFamily = family
+  const color = solidColor(style.color, ctx, 'color')
+  if (color) next.color = color
+  const fontSize = parsePx(style['font-size'])
+  if (fontSize != null) next.fontSize = fontSize
+  else if (isHeadingTag(tag)) next.fontSize = defaultFontSizeForTag(tag, ctx.fontSize)
+  const fontWeight = parseFontWeight(style['font-weight'])
+  if (fontWeight != null) next.fontWeight = fontWeight
+  else if (isHeadingTag(tag)) next.fontWeight = defaultFontWeightForTag(tag)
+  const letterSpacing = parseLetterSpacing(style['letter-spacing'], next.fontSize ?? MEDIUM_FONT_SIZE)
+  if (letterSpacing != null) next.letterSpacing = letterSpacing
+  if (style['text-align']) next.textAlign = textAlignOf(style['text-align'], ctx.textAlign ?? 'left')
+  const lineHeight = parseLineHeight(style['line-height'])
+  if (lineHeight) next.lineHeight = lineHeight
+  return next
+}
+
+/** 嵌套 layer 上的颜色和字体，和根上的写法同一条继承路径。 */
+function withLayerText(ctx: LayoutContext, node: LayerNode): LayoutContext {
+  const next: LayoutContext = { ...ctx }
+  const family = node.attrs['font-family']?.trim()
+  if (family) next.fontFamily = family
+  const color = solidColor(node.attrs.color, ctx, 'color')
+  if (color) next.color = color
+  const fontSize = parsePx(node.attrs['font-size'])
+  if (fontSize != null) next.fontSize = fontSize
+  const fontWeight = parseFontWeight(node.attrs['font-weight'])
+  if (fontWeight != null) next.fontWeight = fontWeight
+  const letterSpacing = parseLetterSpacing(node.attrs['letter-spacing'], next.fontSize ?? MEDIUM_FONT_SIZE)
+  if (letterSpacing != null) next.letterSpacing = letterSpacing
+  const lineHeight = parseLineHeight(node.attrs['line-height'])
+  if (lineHeight) next.lineHeight = lineHeight
+  return next
+}
+
+function computeDrawStyle(node: LayerNode, ctx: LayoutContext, style: Record<string, string>): DrawComputedStyle {
+  const tag = node.tag.toLowerCase()
+  const fontSize = parsePx(style['font-size']) ?? defaultFontSizeForTag(tag, ctx.fontSize)
+  const fontWeight =
+    parseFontWeight(style['font-weight']) ??
+    (isHeadingTag(tag) || tag === 'strong' || tag === 'b'
+      ? 700
+      : ctx.fontWeight ?? (isTextBoxTag(node.tag) ? defaultFontWeightForTag(tag) : 400))
+  const fontFamily = style['font-family']?.trim() || ctx.fontFamily
+  const fromStyle = style.color?.trim()
+  const color = fromStyle && !isGradient(fromStyle) ? fromStyle : isGradient(ctx.color) ? '#111111' : ctx.color
+  const opacity =
+    node.tag === 'canvas' || isHtmlTag(node.tag)
+      ? parseNumber(style.opacity) ?? parseNumber(node.attrs.opacity) ?? 1
+      : parseNumber(node.attrs.opacity) ?? 1
+  return { color, fontFamily, fontSize, fontWeight, opacity }
+}
+
+function readOnOff(raw: string | undefined): { off: boolean; invalid: boolean } {
+  if (raw == null || raw.trim() === '') return { off: false, invalid: false }
+  const text = raw.trim().toLowerCase()
+  if (text === 'true' || text === '1' || text === 'yes') return { off: false, invalid: false }
+  if (text === 'false' || text === '0' || text === 'no') return { off: true, invalid: false }
+  return { off: false, invalid: true }
+}
+
+/** 不写时会把影子投到 ground 上。只有写成 false 才记下来。 */
+function shadowToggles(node: LayerNode, ctx: LayoutContext): { castShadow?: false; receiveShadow?: false } {
+  const out: { castShadow?: false; receiveShadow?: false } = {}
+  const pairs = [
+    ['cast-shadow', 'castShadow'],
+    ['receive-shadow', 'receiveShadow'],
+  ] as const
+  for (const [key, field] of pairs) {
+    const raw = node.attrs[key]
+    if (key === 'receive-shadow' && raw != null && raw.trim() !== '' && !isGroundTag(node.tag)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'receive-shadow 只写在 ground 上',
+        hint: '影子只落在 ground 上。不接就在 ground 上写 receive-shadow="false"',
+      })
+    }
+    const read = readOnOff(raw)
+    if (read.invalid) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `无法解析 ${key}: ${raw}`,
+        hint: key === 'receive-shadow'
+          ? '写成 true 或 false，只写在 ground 上'
+          : '写成 true 或 false。不写时这只实体会把影子投到 ground 上',
+      })
+    }
+    if (read.off && (key !== 'receive-shadow' || isGroundTag(node.tag))) out[field] = false
+  }
+  return out
+}
+
+function layoutDrawMeta(node: LayerNode, ctx: LayoutContext) {
+  const style = parseStyle(node.attrs.style)
+  const loc = node.loc
+  return {
+    data: node.data,
+    attr: { ...node.attrs },
+    style,
+    computed: computeDrawStyle(node, ctx, style),
+    text: directTextContent(node),
+    ...shadowToggles(node, ctx),
+    ...(loc ? { source: formatSourceLoc(loc) } : {}),
+  }
+}
+
+const CANVAS_WIDTH = 300
+const CANVAS_HEIGHT = 150
+
+function layoutCanvas(node: LayerNode, ctx: LayoutContext): CanvasLayoutNode {
+  const style = parseStyle(node.attrs.style)
+  const attrW = parseNumber(node.attrs.width)
+  const attrH = parseNumber(node.attrs.height)
+  const styleW = parsePx(style.width)
+  const styleH = parsePx(style.height)
+  const width = styleW ?? attrW ?? CANVAS_WIDTH
+  const height = styleH ?? attrH ?? CANVAS_HEIGHT
+  const bitmapWidth = Math.max(1, Math.round(attrW ?? CANVAS_WIDTH))
+  const bitmapHeight = Math.max(1, Math.round(attrH ?? CANVAS_HEIGHT))
+  const appearance = readAttrAppearance(node.attrs, ctx)
+  const meta = layoutDrawMeta(node, ctx)
+  appearance.opacity = parseNumber(style.opacity) ?? appearance.opacity
+  return {
+    kind: 'canvas',
+    path: ctx.pathPrefix,
+    id: node.attrs.id,
+    tag: 'canvas',
+    x: 0,
+    y: 0,
+    width,
+    height,
+    ink: { x: 0, y: 0, width, height },
+    bitmapWidth,
+    bitmapHeight,
+    bitmap: null,
+    ...appearance,
+    ...readEffects(node.attrs, ctx, solidPaint(appearance.background, ctx.color), 'ink'),
+    ...meta,
+  }
+}
+
+function layoutUnknownOrCustom(node: LayerNode, ctx: LayoutContext): LayoutNode | null {
+  if (node.tag === 'preview') {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-child',
+      path: ctx.pathPrefix,
+      message: 'preview 只能作为 layer 的直接子元素',
+      hint: '写在 <layer> 里，例如 <preview of="#person" />',
+    })
+    return null
+  }
+  warnNestedMasks(node, ctx)
+  ctx.issues.push(unknownTagIssue(node.tag, ctx.pathPrefix))
+  return null
+}
+
+function outerFromContent(
+  contentW: number,
+  contentH: number,
+  padding: Edges,
+  border?: BoxBorder,
+): { width: number; height: number; contentOffsetX: number; contentOffsetY: number } {
+  const inset = contentInsets(padding, border)
+  const width = contentW + inset.left + inset.right
+  const height = contentH + inset.top + inset.bottom
+  return { width, height, contentOffsetX: inset.left, contentOffsetY: inset.top }
+}
+
+function mapJustify(v: string | undefined): Justify {
+  switch ((v ?? 'start').trim()) {
+    case 'center':
+      return Justify.Center
+    case 'end':
+    case 'flex-end':
+      return Justify.FlexEnd
+    case 'start':
+    case 'flex-start':
+      return Justify.FlexStart
+    case 'space-between':
+      return Justify.SpaceBetween
+    case 'space-around':
+      return Justify.SpaceAround
+    case 'space-evenly':
+      return Justify.SpaceEvenly
+    default:
+      return Justify.FlexStart
+  }
+}
+
+function mapAlign(v: string | undefined): Align {
+  switch ((v ?? 'stretch').trim().toLowerCase()) {
+    case 'start':
+    case 'flex-start':
+      return Align.FlexStart
+    case 'end':
+    case 'flex-end':
+      return Align.FlexEnd
+    case 'center':
+      return Align.Center
+    case 'stretch':
+      return Align.Stretch
+    case 'baseline':
+      // 竖排没有文字基线，横排也先按起点排，再在后面把基线对齐。
+      return Align.FlexStart
+    default:
+      return Align.Stretch
+  }
+}
+
+function isBaselineAlign(v: string | undefined): boolean {
+  return (v ?? '').trim().toLowerCase() === 'baseline'
+}
+
+function mapWrap(v: string | undefined): Wrap {
+  switch ((v ?? 'nowrap').trim()) {
+    case 'wrap':
+      return Wrap.Wrap
+    case 'wrap-reverse':
+      return Wrap.WrapReverse
+    default:
+      return Wrap.NoWrap
+  }
+}
+
+/** 缺省 stretch，和 CSS 的 align-content 初始值一致。 */
+function mapAlignContent(v: string | undefined): Align {
+  switch ((v ?? 'stretch').trim().toLowerCase()) {
+    case 'start':
+    case 'flex-start':
+      return Align.FlexStart
+    case 'center':
+      return Align.Center
+    case 'end':
+    case 'flex-end':
+      return Align.FlexEnd
+    case 'stretch':
+      return Align.Stretch
+    case 'space-between':
+      return Align.SpaceBetween
+    case 'space-around':
+      return Align.SpaceAround
+    case 'space-evenly':
+      return Align.SpaceEvenly
+    default:
+      return Align.Stretch
+  }
+}
+
+function chromeX(padding: Edges, border: BoxBorder | undefined): number {
+  const inset = contentInsets(padding, border)
+  return inset.left + inset.right
+}
+
+function chromeY(padding: Edges, border: BoxBorder | undefined): number {
+  const inset = contentInsets(padding, border)
+  return inset.top + inset.bottom
+}
+
+/** 纯几何范围，不含描边。水平或垂直线的高或宽可以是 0。 */
+function lineBounds(geom: LineGeometry, ctx?: LayoutContext): Box {
+  if (geom.kind === 'line') {
+    const x = Math.min(geom.x1, geom.x2)
+    const y = Math.min(geom.y1, geom.y2)
+    return { x, y, width: Math.abs(geom.x2 - geom.x1), height: Math.abs(geom.y2 - geom.y1) }
+  }
+  if (geom.kind === 'polyline' || geom.kind === 'polygon') {
+    if (geom.points.length === 0) return { x: 0, y: 0, width: 0, height: 0 }
+    const xs = geom.points.map((p) => p.x)
+    const ys = geom.points.map((p) => p.y)
+    const minX = Math.min(...xs)
+    const minY = Math.min(...ys)
+    return { x: minX, y: minY, width: Math.max(...xs) - minX, height: Math.max(...ys) - minY }
+  }
+  if (geom.kind === 'path') return pathBoundsOf(geom.d, ctx)
+  return { x: 0, y: 0, width: 0, height: 0 }
+}
+
+/** 相对几何盒子的着墨：半个描边。 */
+function lineInk(box: Box, strokeWidth: number): Box {
+  const pad = Math.max(0, strokeWidth) / 2
+  return {
+    x: -pad,
+    y: -pad,
+    width: box.width + pad * 2,
+    height: box.height + pad * 2,
+  }
+}
+
+function usesOwnCoords(node: LayerNode, kind: LayoutNode['kind']): boolean {
+  if (kind === 'line' || kind === 'group') return true
+  if (node.tag === 'tube' || node.tag === 'model') return true
+  if (node.tag === 'circle' || node.tag === 'ellipse' || node.tag === 'sphere' || node.tag === 'cylinder' || node.tag === 'torus') return true
+  if (node.tag === 'rect') return true
+  if ((node.tag === 'path' || node.tag === 'polygon') && kind === 'mesh') return true
+  return kind === 'custom' && hasTwoPoint(node.attrs)
+}
+
+function normalizeLineGeometry(geom: LineGeometry, box: Box): LineGeometry {
+  const ox = box.x
+  const oy = box.y
+  if (geom.kind === 'line') {
+    return { ...geom, x1: geom.x1 - ox, y1: geom.y1 - oy, x2: geom.x2 - ox, y2: geom.y2 - oy }
+  }
+  if (geom.kind === 'polyline' || geom.kind === 'polygon') {
+    return { ...geom, points: geom.points.map((p) => ({ x: p.x - ox, y: p.y - oy })) }
+  }
+  if (geom.kind === 'path') return { ...geom, d: translateSvgPath(geom.d, -ox, -oy) }
+  return geom
+}
+
+function sanitizeTextPaints(segments: TextSegment[], ctx: LayoutContext): TextSegment[] {
+  return segments.map((seg) => {
+    let color = seg.style.color
+    let fill = seg.style.fill
+    let background = seg.style.background
+    const prop = seg.style.backgroundProp
+    if (isGradient(color)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `color 只收纯色: ${color}`,
+        hint: '写成 #112233。字形渐变写 fill: linear-gradient(to right, #ff0000, #0000ff)',
+      })
+      color = isGradient(ctx.color) ? '#111111' : ctx.color
+    }
+    if (fill && isGradient(fill) && !parseGradient(fill)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `无法解析 fill: ${fill}`,
+        hint: '写成 #112233、linear-gradient(to right, #ff0000, #0000ff)，或 gradient(#112233, #ff8800)',
+      })
+      fill = undefined
+    }
+    if (background && background !== 'transparent' && background !== 'none') {
+      if (prop === 'background-color' && isGradient(background)) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: ctx.pathPrefix,
+          message: `background-color 只收纯色: ${background}`,
+          hint: '渐变写 background: linear-gradient(to right, #ff0000, #0000ff)',
+        })
+        background = undefined
+      } else if (isGradientPaint(background)) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: ctx.pathPrefix,
+          message: `background 不收矩阵渐变: ${background}`,
+          hint: '盒子用 linear-gradient(...) 或 radial-gradient(...)。矩阵渐变写 fill',
+        })
+        background = undefined
+      } else if (isGradient(background) && !parseGradient(background)) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: ctx.pathPrefix,
+          message: `无法解析 background: ${background}`,
+          hint: '写成 #ffe08a，或 linear-gradient(to right, #ff0000, #0000ff)',
+        })
+        background = undefined
+      }
+    }
+    if (color === seg.style.color && fill === seg.style.fill && background === seg.style.background && !prop) return seg
+    const style = { ...seg.style, color }
+    delete style.backgroundProp
+    if (fill) style.fill = fill
+    else delete style.fill
+    if (background) style.background = background
+    else delete style.background
+    return { ...seg, style }
+  })
+}
+
+function layoutTextBox(node: LayerNode, ctx: LayoutContext, contentWidthLimit?: number): TextLayoutNode {
+  warnNestedMasks(node, ctx)
+  const style = parseStyle(node.attrs.style)
+  const tag = node.tag.toLowerCase()
+  const symbols = symbolsClassOf(classAttr(node.attrs))
+  const fontSize = parsePx(style['font-size']) ?? defaultFontSizeForTag(tag, ctx.fontSize)
+  const fontWeight =
+    parseFontWeight(style['font-weight']) ??
+    (isHeadingTag(tag) || tag === 'strong' || tag === 'b' ? 700 : ctx.fontWeight ?? defaultFontWeightForTag(tag))
+  const fontFamily = style['font-family']?.trim() || (symbols ? ICON_FONT_FAMILY : ctx.fontFamily)
+  const declaredColor = style.color?.trim()
+  const color = declaredColor && !isGradient(declaredColor) ? declaredColor : isGradient(ctx.color) ? '#111111' : ctx.color
+  const letterSpacing = parseLetterSpacing(style['letter-spacing'], fontSize) ?? ctx.letterSpacing ?? 0
+  const images: ImageLayoutNode[] = []
+  const segments = extractTextSegments(
+    node,
+    {
+      fontFamily,
+      fontSize,
+      fontWeight,
+      color,
+      letterSpacing,
+      lineHeightRatio: 1.2,
+    },
+    ctx.pathPrefix,
+    (img, imgPath) => {
+      const laid = layoutImage(img, { ...ctx, pathPrefix: imgPath })
+      const key = images.length
+      images.push(laid)
+      return { width: laid.width, height: laid.height, key }
+    },
+    (notes, notePath) => {
+      for (const note of notes) ctx.issues.push({ ...note, path: notePath })
+    },
+  )
+  const paintedSegments = sanitizeTextPaints(segments, ctx)
+  const nowrap = style['white-space'] === 'nowrap' || (symbols != null && !style['white-space'])
+  const textWrap = style['text-wrap']?.trim().toLowerCase() === 'balance' ? 'balance' : 'wrap'
+  const fixedW = parsePx(style.width)
+  const fixedH = parsePx(style.height)
+  const maxW = parsePx(style['max-width']) ?? contentWidthLimit
+  const maxH = parsePx(style['max-height'])
+  const writingMode = style['writing-mode']?.trim().toLowerCase()
+  const vertical = writingMode === 'vertical-rl'
+  if (writingMode && writingMode !== 'horizontal-tb' && writingMode !== 'vertical-rl') {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `不支持的 writing-mode: ${writingMode}`,
+      hint: '竖排用 writing-mode:vertical-rl',
+    })
+  }
+  const specifiedLine = parseLineHeight(style['line-height']) ?? (symbols && !style['line-height'] ? { unit: 'ratio' as const, value: 1 } : ctx.lineHeight)
+  const fallbackRatio = 1.2
+  const lineHeightPx = specifiedLine?.unit === 'px' ? specifiedLine.value : undefined
+  const lineHeightRatio = specifiedLine == null ? fallbackRatio : specifiedLine.unit === 'ratio' ? specifiedLine.value : fontSize > 0 ? specifiedLine.value / fontSize : fallbackRatio
+
+  const appearance = readHtmlAppearance(style)
+  applyCssBackground(appearance, style, ctx)
+  // split="chars" 把 translate、rotate、scale、opacity 挪到每个字上，整块盒子留在原位。
+  if (node.attrs.split?.trim().toLowerCase() === 'chars') {
+    appearance.opacity = 1
+    appearance.rotate = 0
+    appearance.scaleX = 1
+    appearance.scaleY = 1
+  }
+
+  const textLayout = layoutText({
+    segments: paintedSegments,
+    fixedWidth: fixedW,
+    fixedHeight: fixedH,
+    maxWidth: vertical ? undefined : maxW,
+    maxHeight: maxH,
+    nowrap: vertical ? false : nowrap,
+    textWrap,
+    lineHeightRatio,
+    lineHeightPx,
+    fontSize,
+    writingMode: vertical ? 'vertical-rl' : 'horizontal-tb',
+  })
+
+  let contentW = textLayout.contentWidth
+  let contentH = textLayout.contentHeight
+  if (fixedW != null) contentW = Math.max(contentW, fixedW)
+  if (fixedH != null) contentH = Math.max(contentH, fixedH)
+
+  const outer = outerFromContent(contentW, contentH, appearance.padding, appearance.border)
+  const textAlign = textAlignOf(style['text-align'], ctx.textAlign ?? 'left')
+  const innerW = contentW
+  for (const line of textLayout.lines) {
+    const shift = alignLineOffset(textAlign, innerW, line.width)
+    for (const atom of line.atoms ?? []) {
+      const image = images[atom.key]
+      if (!image) continue
+      image.x = outer.contentOffsetX + shift + atom.x
+      image.y = outer.contentOffsetY + atom.y
+    }
+  }
+  const ink = alignedTextInk(textLayout.lines, textAlign, innerW, outer.contentOffsetX, outer.contentOffsetY)
+  ctx.issues.push(...checkTextBoxChildren(node, ctx.pathPrefix))
+
+  if (textLayout.overflowFixed) {
+    ctx.issues.push({
+      level: 'error',
+      code: 'text-overflow',
+      path: ctx.pathPrefix,
+      message: '文字超出写死的 width/height',
+    })
+  }
+  if (textLayout.autoWrap) {
+    ctx.issues.push({
+      level: 'info',
+      code: 'auto-wrap',
+      path: ctx.pathPrefix,
+      message: '文字超出可用宽度，已自动换行',
+    })
+  }
+
+  const laid: TextLayoutNode = {
+    kind: 'text',
+    path: ctx.pathPrefix,
+    id: node.attrs.id,
+    tag: node.tag,
+    x: 0,
+    y: 0,
+    width: outer.width,
+    height: outer.height,
+    ink,
+    ...appearance,
+    textLayout,
+    textAlign,
+    ...(images.length ? { inlines: images } : {}),
+    ...readEffects(style, ctx, color, 'ink'),
+    ...layoutDrawMeta(node, ctx),
+  }
+  if (node.attrs.split?.trim().toLowerCase() !== 'chars') applyCssMotion(laid, style)
+  return laid
+}
+
+function refitImageNode(node: ImageLayoutNode, x: number, y: number, width: number, height: number): ImageLayoutNode {
+  const inset = contentInsets(node.padding, node.border)
+  const contentW = Math.max(0, width - inset.left - inset.right)
+  const contentH = Math.max(0, height - inset.top - inset.bottom)
+  const ink = imageInk(
+    contentW,
+    contentH,
+    node.bitmap?.width ?? 0,
+    node.bitmap?.height ?? 0,
+    node.objectFit,
+    node.objectPosition,
+    inset.left,
+    inset.top,
+  )
+  return { ...node, x, y, width, height, ink }
+}
+
+function displaySrc(src: string): string {
+  if (/^data:/i.test(src)) return 'data URL'
+  return src.length > 160 ? `${src.slice(0, 157)}…` : src
+}
+
+function layoutImage(node: LayerNode, ctx: LayoutContext): ImageLayoutNode {
+  warnNestedMasks(node, ctx)
+  const style = parseStyle(node.attrs.style)
+  const appearance = readHtmlAppearance(style)
+  applyCssBackground(appearance, style, ctx)
+  if (isDisplayFlex(node.attrs.style)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: '图片不能当作 flex 容器',
+      hint: '排布用 <div style="display:flex">，把 <img src="…"> 放进去',
+    })
+  }
+  if (!node.attrs.src?.trim()) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: style.src ? `${node.tag} 的 src 要写成属性` : `${node.tag} 缺少 src`,
+      hint: '写成 <img src="cover.png" style="width:320px; height:180px" />。src 是属性，不要写进 style',
+    })
+  }
+  let bitmap: ImageLayoutNode['bitmap'] = null
+  if (node.attrs.src?.trim()) {
+    const peeked = peekLayerImage(node.attrs.src, ctx.baseDir)
+    if (peeked.status === 'ok') bitmap = peeked.image
+    else {
+      const shown = displaySrc(node.attrs.src.trim())
+      ctx.issues.push({
+        level: 'warn',
+        code: 'missing-image',
+        path: ctx.pathPrefix,
+        message: `图片无法加载: ${shown}`,
+        hint:
+          peeked.status === 'missing'
+            ? 'src 要能在排版前读到。写在 layer 里的图会自动准备'
+            : 'src 相对 .layer 所在目录，也可以写 http(s) 或 data URL',
+      })
+    }
+  }
+  const parsedFit = parseObjectFit(style['object-fit'])
+  if (parsedFit.invalid) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `不支持的 object-fit: ${style['object-fit']}`,
+      hint: '用 fill、contain、cover 或 none',
+    })
+  }
+  const parsedPos = parseObjectPosition(style['object-position'])
+  if (!parsedPos) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `不支持的 object-position: ${style['object-position']}`,
+      hint: '用 center、top-left、left top，或 50% 0%',
+    })
+  }
+  const objectFit = parsedFit.fit
+  const objectPosition = parsedPos ?? { x: 0.5, y: 0.5 }
+  const natW = bitmap?.width ?? 0
+  const natH = bitmap?.height ?? 0
+  const fixedW = parsePx(style.width)
+  const fixedH = parsePx(style.height)
+  let contentW: number
+  let contentH: number
+  if (fixedW != null && fixedH != null) {
+    contentW = Math.max(0, fixedW)
+    contentH = Math.max(0, fixedH)
+  } else if (fixedW != null) {
+    contentW = Math.max(0, fixedW)
+    contentH = natW > 0 ? (contentW * natH) / natW : 0
+  } else if (fixedH != null) {
+    contentH = Math.max(0, fixedH)
+    contentW = natH > 0 ? (contentH * natW) / natH : 0
+  } else {
+    contentW = natW
+    contentH = natH
+  }
+  const outer = outerFromContent(contentW, contentH, appearance.padding, appearance.border)
+  const laid = refitImageNode(
+    {
+      kind: 'image',
+      path: ctx.pathPrefix,
+      id: node.attrs.id,
+      tag: node.tag,
+      x: 0,
+      y: 0,
+      width: outer.width,
+      height: outer.height,
+      ink: { x: 0, y: 0, width: 0, height: 0 },
+      bitmap,
+      objectFit,
+      objectPosition,
+      ...maskImageFields(node, ctx),
+      ...appearance,
+      ...readEffects(style, ctx, ctx.color, 'ink'),
+      ...layoutDrawMeta(node, ctx),
+    },
+    0,
+    0,
+    outer.width,
+    outer.height,
+  )
+  applyCssMotion(laid, style)
+  return laid
+}
+
+function warnNestedMasks(node: LayerNode, ctx: LayoutContext) {
+  node.children.forEach((child, index) => {
+    if (typeof child === 'string' || child.tag !== 'mask') return
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-child',
+      path: nodePath(ctx.pathPrefix, 'mask', index),
+      message: 'mask 只作为 layer 的直接子元素',
+      hint: '把 <mask> 写在 <layer> 里，和要裁的内容并列',
+    })
+  })
+}
+
+function layoutShape(node: LayerNode, ctx: LayoutContext, _defaultStroke: string): ShapeLayoutNode {
+  noteStrayDepth(node, ctx)
+  warnNestedMasks(node, ctx)
+  const appearance = readAttrAppearance(node.attrs, ctx)
+  let x = 0
+  let y = 0
+  let w = parseNumber(node.attrs.width) ?? 0
+  let h = parseNumber(node.attrs.height) ?? 0
+  if (node.tag === 'circle') {
+    const r = parseNumber(node.attrs.r) ?? 0
+    const cx = parseNumber(node.attrs.cx) ?? 0
+    const cy = parseNumber(node.attrs.cy) ?? 0
+    w = h = r * 2
+    x = cx - r
+    y = cy - r
+  } else if (node.tag === 'ellipse') {
+    const rx = parseNumber(node.attrs.rx) ?? 0
+    const ry = parseNumber(node.attrs.ry) ?? 0
+    const cx = parseNumber(node.attrs.cx) ?? 0
+    const cy = parseNumber(node.attrs.cy) ?? 0
+    w = rx * 2
+    h = ry * 2
+    x = cx - rx
+    y = cy - ry
+  } else if (node.tag === 'rect') {
+    x = parseNumber(node.attrs.x) ?? 0
+    y = parseNumber(node.attrs.y) ?? 0
+    w = parseNumber(node.attrs.width) ?? w
+    h = parseNumber(node.attrs.height) ?? h
+  }
+  const fillFallback = ctx.fillDefault ?? ctx.paintFill ?? '#000000'
+  const fill = readPaint(node.attrs.fill ?? fillFallback, fillFallback, ctx, 'fill')
+  const distanceStroke = strokeTakesInk(node.attrs.stroke)
+  const strokeFallback = ctx.fillDefault != null ? 'none' : (distanceStroke ? (ctx.paintStroke ?? 'none') : (node.attrs.stroke ?? ctx.paintStroke ?? 'none'))
+  const stroke = distanceStroke ? 'none' : readPaint(node.attrs.stroke ?? strokeFallback, strokeFallback, ctx, 'stroke')
+  const strokeWidth = distanceStroke ? 0 : (parseNumber(node.attrs['stroke-width']) ?? 1)
+  const dash = readDash(node.attrs['stroke-dasharray'], ctx)
+  const dashOffset = readDashOffset(node.attrs['stroke-dashoffset'], ctx)
+  const ink = { x: 0, y: 0, width: w, height: h }
+  const rx = parseNumber(node.attrs.rx)
+  const ry = parseNumber(node.attrs.ry)
+  return {
+    kind: 'shape',
+    path: ctx.pathPrefix,
+    id: node.attrs.id,
+    tag: node.tag,
+    x,
+    y,
+    width: w,
+    height: h,
+    ink,
+    ...appearance,
+    ...sharpOf(node.attrs, ctx),
+    shape: node.tag === 'rect' ? 'rect' : node.tag === 'circle' ? 'circle' : 'ellipse',
+    fill,
+    stroke,
+    strokeWidth,
+    ...(dash ? { dash } : {}),
+    ...(dashOffset !== undefined ? { dashOffset } : {}),
+    rx,
+    r: parseNumber(node.attrs.r),
+    rxEllipse: parseNumber(node.attrs.rx),
+    ry: ry ?? rx,
+    ...readEffects(node.attrs, ctx, solidPaint(fill !== 'none' ? fill : stroke, ctx.color)),
+    ...layoutDrawMeta(node, ctx),
+  }
+}
+
+function pathBoundsOf(d: string, ctx: LayoutContext | undefined): Box {
+  if (!d.trim()) return { x: 0, y: 0, width: 0, height: 0 }
+  const opened = openSvgPath(d)
+  if ('error' in opened) {
+    ctx?.issues.push({
+      level: 'error',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析路径: ${opened.error}`,
+      hint: '检查 d 的 SVG 路径语法。这一笔会跳过，其余内容继续画',
+    })
+    return { x: 0, y: 0, width: 0, height: 0 }
+  }
+  const b = opened.path.getBounds?.() ?? opened.path.computeTightBounds?.()
+  if (b && b.length >= 4) return { x: b[0], y: b[1], width: Math.max(0, b[2] - b[0]), height: Math.max(0, b[3] - b[1]) }
+  return { x: 0, y: 0, width: 0, height: 0 }
+}
+
+/** 不写就用 width、height 做 contain。写了非正数则警告，并按没写处理。 */
+function readModelUnit(raw: string | undefined, ctx: LayoutContext): number | undefined {
+  if (raw == null || raw.trim() === '') return undefined
+  const parsed = parseNumber(raw)
+  if (parsed == null || !(parsed > 0)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 unit: ${raw}`,
+      hint: 'unit 是 1 个模型单位对应的像素，例如 unit="40"',
+    })
+    return undefined
+  }
+  return parsed
+}
+
+function readPositiveAttr(
+  raw: string | undefined,
+  fallback: number,
+  ctx: LayoutContext,
+  tag: string,
+  attr: string,
+  example: string,
+): number {
+  const fb = fallback > 0 ? fallback : 1
+  if (raw == null || raw.trim() === '') {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `${tag} 缺少 ${attr}，已用 ${fb}`,
+      hint: example,
+    })
+    return fb
+  }
+  const parsed = parseNumber(raw)
+  if (parsed == null || !(parsed > 0)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 ${attr}: ${raw}`,
+      hint: example,
+    })
+    return fb
+  }
+  return parsed
+}
+
+function readDepth(raw: string | undefined, fallback: number, ctx: LayoutContext, tag: string): number {
+  const fb = fallback > 0 ? fallback : 1
+  if (raw == null || raw.trim() === '') {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `${tag} 缺少 depth，已用 ${fb}`,
+      hint: '写成像素厚度，例如 depth="40"',
+    })
+    return fb
+  }
+  const parsed = parseNumber(raw)
+  if (parsed == null || !(parsed > 0)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 depth: ${raw}`,
+      hint: '写成正的像素厚度，例如 depth="40"',
+    })
+    return fb
+  }
+  return parsed
+}
+
+function readMeshLines(node: LayerNode, ctx: LayoutContext): { stroke: string; strokeWidths: [number, number, number]; hidden: string; halo: number } {
+  const rawStroke = strokeTakesInk(node.attrs.stroke) ? undefined : node.attrs.stroke
+  const rawHidden = node.attrs.hidden
+  const rawWidth = node.attrs['stroke-width']
+  const strokeWritten = rawStroke != null && rawStroke.trim() !== '' && rawStroke.trim() !== 'none'
+  let stroke = 'none'
+  if (strokeWritten) {
+    if (isGradient(rawStroke)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${node.tag} 的 stroke 不支持渐变，只使用第一个颜色`,
+        hint: '改成纯色，例如 stroke="#1c1915"',
+      })
+    }
+    stroke = solidPaint(readPaint(rawStroke, '#000000', ctx, 'stroke'), '#000000')
+  }
+  const hiddenWritten = rawHidden != null && rawHidden.trim() !== '' && rawHidden.trim() !== 'none'
+  let hidden = 'none'
+  if (hiddenWritten) {
+    if (!strokeWritten) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${node.tag} 的 hidden 要和 stroke 一起写`,
+        hint: '例如 stroke="#1c1915" hidden="#8a8175"',
+      })
+    } else {
+      if (isGradient(rawHidden)) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: ctx.pathPrefix,
+          message: `${node.tag} 的 hidden 不支持渐变，只使用第一个颜色`,
+          hint: '改成纯色，例如 hidden="#8a8175"',
+        })
+      }
+      hidden = solidPaint(readPaint(rawHidden!, '#000000', ctx, 'hidden'), '#000000')
+    }
+  }
+  const fallbackWidths: [number, number, number] = [2, 2, 2]
+  let strokeWidths = fallbackWidths
+  if (rawWidth != null && rawWidth.trim() !== '') {
+    const parts = rawWidth.trim().split(/\s+/)
+    const nums = parts.map((part) => parseNumber(part))
+    if (parts.length > 3 || nums.some((n) => n == null || n < 0)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message:
+          parts.length > 3
+            ? `${node.tag} 的 stroke-width 最多三个数：轮廓、折棱、隐藏线`
+            : `${node.tag} 的 stroke-width 需要非负像素`,
+        hint: '例如 stroke-width="3 2 1"。写一个数时三档相同，写两个数时隐藏线用折棱的宽度',
+      })
+    } else {
+      const outline = nums[0]!
+      const crease = nums[1] ?? outline
+      const hiddenWidth = nums[2] ?? crease
+      strokeWidths = [outline, crease, hiddenWidth]
+    }
+    if (!strokeWritten) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${node.tag} 的 stroke-width 要和 stroke 一起写`,
+        hint: '例如 stroke="#1c1915" stroke-width="2"',
+      })
+    }
+  }
+  let halo = 0
+  const rawHalo = node.attrs.halo
+  if (rawHalo != null && rawHalo.trim() !== '') {
+    const parsed = parseNumber(rawHalo)
+    if (parsed == null || parsed < 0) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${node.tag} 的 halo 需要非负像素`,
+        hint: '例如 halo="3"',
+      })
+    } else {
+      halo = parsed
+    }
+    if (!strokeWritten) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${node.tag} 的 halo 要和 stroke 一起写`,
+        hint: '例如 stroke="#1c1915" halo="3"',
+      })
+    }
+  }
+  return { stroke, strokeWidths, hidden, halo }
+}
+
+const MESH_MATERIALS = new Set(['matte', 'plastic', 'metal', 'glass'])
+const MESH_ROUGHNESS = { matte: 1, plastic: 0.4, metal: 0.25, glass: 0.08 }
+
+function readMeshMaterial(raw: string | undefined, ctx: LayoutContext, tag: string): MeshMaterial | undefined {
+  if (raw == null) return undefined
+  const text = raw.trim().toLowerCase()
+  if (text === '' || text === 'none') return undefined
+  const parts = text.split(/[\s,]+/).filter((part) => part.length > 0 && part !== 'rough')
+  const name = parts[0] ?? ''
+  if (!MESH_MATERIALS.has(name)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `${tag} 不认识的 material: ${raw.trim()}`,
+      hint: '写成 matte、plastic、metal 或 glass。不写是磨砂。粗糙度跟在后面，例如 material="metal 0.35"',
+    })
+    return undefined
+  }
+  const kind = name as MeshMaterial['kind']
+  let roughness = MESH_ROUGHNESS[kind]
+  if (parts.length > 1) {
+    const value = Number(parts[1])
+    if (!Number.isFinite(value)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${tag} 的 material 粗糙度无法解析: ${parts[1]}`,
+        hint: '粗糙度是 0 到 1，例如 material="plastic 0.4"',
+      })
+    } else {
+      if (value < 0 || value > 1) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: ctx.pathPrefix,
+          message: `${tag} 的 material 粗糙度要在 0 到 1`,
+          hint: '例如 material="metal 0.35"',
+        })
+      }
+      roughness = Math.min(1, Math.max(0, value))
+    }
+  }
+  return { kind, roughness }
+}
+
+function readFillRule(raw: string | undefined, ctx: LayoutContext): 'nonzero' | 'evenodd' {
+  const text = raw?.trim() ?? ''
+  if (text === '' || text === 'nonzero') return 'nonzero'
+  if (text === 'evenodd') return 'evenodd'
+  ctx.issues.push({
+    level: 'warn',
+    code: 'invalid-attr',
+    path: ctx.pathPrefix,
+    message: `无法解析 fill-rule: ${raw}`,
+    hint: '写成 nonzero 或 evenodd。不写是 nonzero',
+  })
+  return 'nonzero'
+}
+
+function ellipseOutline(rx: number, ry: number): string {
+  return `M ${-rx} 0 A ${rx} ${ry} 0 1 0 ${rx} 0 A ${rx} ${ry} 0 1 0 ${-rx} 0 Z`
+}
+
+function polygonOutline(points: string): string {
+  const pairs = points
+    .trim()
+    .split(/\s+/)
+    .map((pair) => pair.split(','))
+    .filter((pair) => pair.length >= 2 && Number.isFinite(Number(pair[0])) && Number.isFinite(Number(pair[1])))
+  if (pairs.length < 3) return ''
+  const [first, ...rest] = pairs
+  return `M ${first![0]} ${first![1]} ${rest.map((pair) => `L ${pair[0]} ${pair[1]}`).join(' ')} Z`
+}
+
+function noteMeshAlias(node: LayerNode, ctx: LayoutContext) {
+  const hint =
+    node.tag === 'box'
+      ? '改成 <rect width="…" height="…" depth="…" />。rx 是圆棱'
+      : node.tag === 'cylinder'
+        ? '改成 <circle r="…" depth="…" />。轴沿 z，要竖着放写 rotateX="90"'
+        : node.tag === 'extrude'
+          ? '改成 <path d="…" depth="…" />。洞用 fill-rule'
+          : ''
+  if (!hint) return
+  ctx.issues.push({
+    level: 'info',
+    code: 'non-canonical',
+    path: ctx.pathPrefix,
+    message: `${node.tag} 是别名`,
+    hint,
+  })
+}
+
+function layoutMesh(node: LayerNode, ctx: LayoutContext): MeshLayoutNode {
+  warnNestedMasks(node, ctx)
+  noteMeshAlias(node, ctx)
+  const appearance = readAttrAppearance(node.attrs, ctx)
+  const fill = readPaint(node.attrs.fill ?? '#000000', '#000000', ctx, 'fill')
+  let x = 0
+  let y = 0
+  let width = 0
+  let height = 0
+  let mesh: MeshLayoutNode['mesh']
+  if (node.tag === 'sphere') {
+    const r = parseNumber(node.attrs.r) ?? 0
+    if (!(r > 0)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'sphere 需要正的 r',
+        hint: '例如 <sphere cx="220" cy="340" r="90" />',
+      })
+    }
+    const radius = Math.max(0, r)
+    const cx = parseNumber(node.attrs.cx) ?? 0
+    const cy = parseNumber(node.attrs.cy) ?? 0
+    width = height = radius * 2
+    x = cx - radius
+    y = cy - radius
+    mesh = { type: 'sphere', r: radius }
+  } else if (node.tag === 'box' || node.tag === 'rect') {
+    width = parseNumber(node.attrs.width) ?? 0
+    height = parseNumber(node.attrs.height) ?? 0
+    if (!(width > 0) || !(height > 0)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${node.tag} 需要正的 width 和 height`,
+        hint: '例如 <rect x="40" y="30" width="150" height="100" depth="60" />',
+      })
+    }
+    const depth =
+      node.tag === 'rect'
+        ? Math.max(0, parseNumber(node.attrs.depth) ?? 0)
+        : readDepth(node.attrs.depth, Math.min(width, height), ctx, 'box')
+    const fillet = readBoxFillet(node.attrs.rx, node.attrs.round, width, height, depth)
+    for (const issue of fillet.issues) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: issue.message,
+        hint: issue.hint,
+      })
+    }
+    mesh = { type: 'box', depth, rx: fillet.rx, edges: fillet.edges }
+    if (node.tag === 'rect') {
+      x = parseNumber(node.attrs.x) ?? 0
+      y = parseNumber(node.attrs.y) ?? 0
+    }
+  } else if (node.tag === 'extrude' || node.tag === 'path' || node.tag === 'polygon' || node.tag === 'ellipse') {
+    let d = node.attrs.d ?? ''
+    if (node.tag === 'ellipse') {
+      const rx = Math.max(0, parseNumber(node.attrs.rx) ?? 0)
+      const ry = Math.max(0, parseNumber(node.attrs.ry) ?? 0)
+      d = rx > 0 && ry > 0 ? ellipseOutline(rx, ry) : ''
+      if (!d) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: ctx.pathPrefix,
+          message: 'ellipse 需要正的 rx 和 ry',
+          hint: '例如 <ellipse cx="80" cy="60" rx="40" ry="24" depth="16" />',
+        })
+      }
+    } else if (node.tag === 'polygon') {
+      d = polygonOutline(node.attrs.points ?? '')
+      if (!d) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: ctx.pathPrefix,
+          message: 'polygon 至少要三个点',
+          hint: 'points="x,y x,y x,y"，写了 depth 就沿 z 挤出',
+        })
+      }
+    } else if (!d.trim()) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${node.tag} 缺少 d`,
+        hint: 'd 是 y 向下的 SVG 路径。写了 depth 就沿 z 挤出',
+      })
+    } else if (!/[zZ]/.test(d)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${node.tag} 写了 depth，但路径没有闭合`,
+        hint: '子路径用 Z 闭合。开口的线不要写 depth',
+      })
+    }
+    const box = pathBoundsOf(d, ctx)
+    width = box.width
+    height = box.height
+    const depth =
+      node.tag === 'extrude'
+        ? readDepth(node.attrs.depth, Math.min(width, height), ctx, 'extrude')
+        : Math.max(0, parseNumber(node.attrs.depth) ?? 0)
+    const fillRule = readFillRule(node.attrs['fill-rule'], ctx)
+    mesh = { type: 'extrude', d: translateSvgPath(d, -box.x, -box.y), depth, fillRule }
+    if (node.tag === 'path' || node.tag === 'polygon') {
+      x = box.x + (parseNumber(node.attrs.x) ?? 0)
+      y = box.y + (parseNumber(node.attrs.y) ?? 0)
+    } else if (node.tag === 'ellipse') {
+      const cx = parseNumber(node.attrs.cx) ?? 0
+      const cy = parseNumber(node.attrs.cy) ?? 0
+      x = cx + box.x
+      y = cy + box.y
+    }
+  } else if (node.tag === 'circle') {
+    const r = parseNumber(node.attrs.r) ?? 0
+    if (!(r > 0)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'circle 需要正的 r',
+        hint: '例如 <circle cx="80" cy="60" r="30" depth="20" />',
+      })
+    }
+    const radius = Math.max(0, r)
+    const depth = Math.max(0, parseNumber(node.attrs.depth) ?? 0)
+    const cx = parseNumber(node.attrs.cx) ?? 0
+    const cy = parseNumber(node.attrs.cy) ?? 0
+    width = height = radius * 2
+    x = cx - radius
+    y = cy - radius
+    mesh = { type: 'cylinder', r: radius, height: depth, rx: 0, rims: [], axis: 'z' }
+  } else if (node.tag === 'cylinder') {
+    const r = parseNumber(node.attrs.r) ?? 0
+    if (!(r > 0)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'cylinder 需要正的 r',
+        hint: '例如 <cylinder cx="180" cy="260" r="40" height="120" />',
+      })
+    }
+    const radius = Math.max(0, r)
+    const length = readPositiveAttr(
+      node.attrs.height,
+      radius * 2,
+      ctx,
+      'cylinder',
+      'height',
+      '例如 <cylinder cx="180" cy="260" r="40" height="120" />',
+    )
+    const cx = parseNumber(node.attrs.cx) ?? 0
+    const cy = parseNumber(node.attrs.cy) ?? 0
+    width = radius * 2
+    height = length
+    x = cx - radius
+    y = cy - length / 2
+    const fillet = readCylinderFillet(node.attrs.rx, node.attrs.round, radius, length)
+    for (const issue of fillet.issues) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: issue.message,
+        hint: issue.hint,
+      })
+    }
+    mesh = { type: 'cylinder', r: radius, height: length, rx: fillet.rx, rims: fillet.rims }
+  } else if (node.tag === 'torus') {
+    const r = parseNumber(node.attrs.r) ?? 0
+    if (!(r > 0)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'torus 需要正的 r',
+        hint: '例如 <torus cx="200" cy="200" r="70" tube="16" />',
+      })
+    }
+    const radius = Math.max(0, r)
+    const fallback = radius > 0 ? radius / 4 : 1
+    const rawTube = node.attrs.tube
+    const parsedTube = rawTube == null || rawTube.trim() === '' ? null : parseNumber(rawTube)
+    const missingTube = rawTube == null || rawTube.trim() === ''
+    const badTube = !missingTube && (parsedTube == null || !(parsedTube > 0))
+    const tooBig = parsedTube != null && parsedTube > 0 && radius > 0 && parsedTube >= radius
+    let tube = parsedTube != null && parsedTube > 0 ? parsedTube : fallback
+    if (missingTube || badTube || tooBig) {
+      const message = tooBig
+        ? 'torus 的 tube 要小于 r，否则没有孔'
+        : missingTube
+          ? `torus 缺少 tube，已用 ${fallback}`
+          : `无法解析 tube: ${rawTube}`
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message,
+        hint: 'r 是环心到管心的半径，tube 是管半径，例如 tube="16"',
+      })
+      tube = fallback
+    }
+    const outer = radius + tube
+    const cx = parseNumber(node.attrs.cx) ?? 0
+    const cy = parseNumber(node.attrs.cy) ?? 0
+    width = height = outer * 2
+    x = cx - outer
+    y = cy - outer
+    mesh = { type: 'torus', r: radius, tube }
+  } else if (node.tag === 'tube') {
+    const d = node.attrs.d ?? ''
+    if (!d.trim()) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'tube 缺少 d',
+        hint: 'd 是中心线，和 path 一样，例如 <tube d="M0 40 C80 40 80 120 160 80" r="8" />',
+      })
+    }
+    const box = pathBoundsOf(d, ctx)
+    if (d.trim() && box.width <= 0 && box.height <= 0) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'tube 的路径至少要有一段',
+        hint: 'd 写成有长度的中心线，闭合的管子加上 Z',
+      })
+    }
+    const radius = readPositiveAttr(node.attrs.r, 8, ctx, 'tube', 'r', '例如 <tube d="M0 0 H120" r="8" />')
+    width = box.width + radius * 2
+    height = box.height + radius * 2
+    x = box.x - radius + (parseNumber(node.attrs.x) ?? 0)
+    y = box.y - radius + (parseNumber(node.attrs.y) ?? 0)
+    mesh = { type: 'tube', d: translateSvgPath(d, -box.x + radius, -box.y + radius), r: radius }
+  } else {
+    const src = node.attrs.src ?? ''
+    const unit = readModelUnit(node.attrs.unit, ctx)
+    const memory = node.modelObject
+    if (memory != null && src.trim()) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'model 同时写了 src 和 object，使用 object',
+        hint: '文件和内存网格二选一',
+      })
+    }
+    if (memory != null) {
+      const prims = fromThree(memory)
+      if (prims.length === 0) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'missing-model',
+          path: ctx.pathPrefix,
+          message: 'object 里没有三角形或线段',
+          hint: '传入 Mesh 或 Line，或带这些子节点的对象。点、隐藏的节点不会画',
+        })
+      }
+      const span = primitiveSpan(prims) ?? undefined
+      const bounds = primitiveBounds(prims) ?? undefined
+      const revision = modelRevision(prims)
+      mesh = {
+        type: 'model',
+        src: '',
+        ...(span ? { span } : {}),
+        ...(unit != null ? { unit } : {}),
+        ...(unit != null && bounds ? { bounds } : {}),
+        revision,
+      }
+      holdModelPrims(mesh, prims)
+    } else {
+      const resolved = resolveModelFile(src, ctx.baseDir)
+      if (resolved.reason !== 'ok') {
+        const message =
+          resolved.reason === 'empty' ? 'model 缺少 src' : resolved.reason === 'type' ? 'model 只接受 .glb' : `模型无法加载: ${src.trim()}`
+        ctx.issues.push({
+          level: 'warn',
+          code: 'missing-model',
+          path: ctx.pathPrefix,
+          message,
+          hint: 'src 相对 .layer 所在目录，例如 <model src="hero.glb" />。tsx 里也可以写 object={mesh}',
+        })
+      }
+      const span = resolved.file ? glbSpan(resolved.file) ?? undefined : undefined
+      const bounds = unit != null && resolved.file ? glbBounds(resolved.file) ?? undefined : undefined
+      mesh = {
+        type: 'model',
+        src,
+        ...(resolved.file ? { file: resolved.file } : {}),
+        ...(span ? { span } : {}),
+        ...(unit != null ? { unit } : {}),
+        ...(bounds ? { bounds } : {}),
+      }
+    }
+  }
+  if (node.tag === 'model' && mesh.type === 'model') {
+    const ax = parseNumber(node.attrs.x) ?? 0
+    const ay = parseNumber(node.attrs.y) ?? 0
+    const fitted = mesh.unit != null && mesh.unit > 0 && mesh.bounds
+    if (fitted && mesh.bounds && mesh.unit) {
+      x = ax + mesh.bounds.minX * mesh.unit
+      y = ay - mesh.bounds.maxY * mesh.unit
+      width = Math.max(0, (mesh.bounds.maxX - mesh.bounds.minX) * mesh.unit)
+      height = Math.max(0, (mesh.bounds.maxY - mesh.bounds.minY) * mesh.unit)
+    } else if (!(mesh.unit != null && mesh.unit > 0)) {
+      const aw = parseNumber(node.attrs.width)
+      const ah = parseNumber(node.attrs.height)
+      if (aw != null && aw > 0 && ah != null && ah > 0) {
+        x = ax
+        y = ay
+        width = aw
+        height = ah
+      }
+    }
+  }
+  const effects = readEffects(node.attrs, ctx, solidPaint(fill, ctx.color), 'mesh')
+  if (isGradient(node.attrs.fill)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `${node.tag} 的 fill 不支持渐变，只使用第一个颜色`,
+      hint: '改成纯色，或把渐变画在平面上',
+    })
+  }
+  if (effects.shadow) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `${node.tag} 不支持 shadow`,
+      hint: 'shadow 写在平面上；网格用 fill 和 stroke',
+    })
+  }
+  if (effects.glow) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `${node.tag} 不支持 glow`,
+      hint: 'glow 写在平面上；网格用 fill 和 stroke',
+    })
+  }
+  const material = readMeshMaterial(node.attrs.material, ctx, node.tag)
+  return {
+    kind: 'mesh',
+    path: ctx.pathPrefix,
+    id: node.attrs.id,
+    tag: node.tag,
+    x,
+    y,
+    width,
+    height,
+    ink: { x: 0, y: 0, width, height },
+    ...appearance,
+    ...sharpOf(node.attrs, ctx),
+    mesh,
+    fill,
+    ...(material ? { material } : {}),
+    ...readMeshLines(node, ctx),
+    ...effects,
+    ...layoutDrawMeta(node, ctx),
+  }
+}
+
+function layoutGround(node: LayerNode, ctx: LayoutContext): GroundLayoutNode {
+  warnNestedMasks(node, ctx)
+  const appearance = readAttrAppearance(node.attrs, ctx)
+  let fill: string | null = null
+  const rawFill = node.attrs.fill?.trim()
+  if (rawFill && rawFill !== 'none' && rawFill !== 'transparent') {
+    if (isGradient(rawFill)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'ground 的 fill 不支持渐变，只使用第一个颜色',
+        hint: '改成纯色，或把渐变画在别的平面上',
+      })
+    }
+    fill = solidPaint(rawFill, '#000000')
+  }
+  const shadowBlur = readNonNegative(node.attrs['shadow-blur'], 0, ctx, 'shadow-blur', '例如 shadow-blur="16"')
+  const shadowOpacity = readUnitInterval(node.attrs['shadow-opacity'], 0.4, ctx, 'shadow-opacity', '例如 shadow-opacity="0.45"')
+  const rawShadow = node.attrs['shadow-color']?.trim()
+  if (rawShadow && isGradient(rawShadow)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: 'shadow-color 只收纯色',
+      hint: '写成 #000000',
+    })
+  }
+  const shadowColor = solidPaint(rawShadow, '#000000')
+  return {
+    kind: 'ground',
+    path: ctx.pathPrefix,
+    id: node.attrs.id,
+    tag: node.tag,
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+    ink: { x: 0, y: 0, width: 0, height: 0 },
+    ...appearance,
+    fill,
+    shadowBlur,
+    shadowOpacity,
+    shadowColor,
+    ...layoutDrawMeta(node, ctx),
+  }
+}
+
+function readNonNegative(raw: string | undefined, fallback: number, ctx: LayoutContext, label: string, hint: string): number {
+  if (raw == null || raw.trim() === '') return fallback
+  const value = parseNumber(raw)
+  if (value == null || value < 0) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 ${label}: ${raw}`,
+      hint,
+    })
+    return fallback
+  }
+  return value
+}
+
+function readUnitInterval(raw: string | undefined, fallback: number, ctx: LayoutContext, label: string, hint: string): number {
+  if (raw == null || raw.trim() === '') return fallback
+  const value = parseNumber(raw)
+  if (value == null) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 ${label}: ${raw}`,
+      hint,
+    })
+    return fallback
+  }
+  if (value < 0 || value > 1) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `${label} 要在 0 到 1 之间`,
+      hint,
+    })
+  }
+  return Math.min(1, Math.max(0, value))
+}
+
+function noteStrayDepth(node: LayerNode, ctx: LayoutContext) {
+  const raw = node.attrs.depth
+  if (raw == null || raw.trim() === '') return
+  if (solidDepth(node.tag, raw)) return
+  const open = node.tag === 'line' || node.tag === 'polyline' || node.tag === 'curve'
+  ctx.issues.push({
+    level: 'warn',
+    code: 'invalid-attr',
+    path: ctx.pathPrefix,
+    message: open ? `${node.tag} 不能写 depth` : `无法解析 depth: ${raw}`,
+    hint: open ? 'depth 写在 rect、circle、ellipse、polygon、path 上，沿 z 挤出' : '写成正的像素厚度，例如 depth="40"。不写就是平面',
+  })
+}
+
+function layoutLineNode(node: LayerNode, ctx: LayoutContext, defaultStroke: string): LineLayoutNode {
+  noteStrayDepth(node, ctx)
+  warnNestedMasks(node, ctx)
+  let geom: LineGeometry
+  if (node.tag === 'line') {
+    geom = {
+      kind: 'line',
+      x1: parseNumber(node.attrs.x1) ?? 0,
+      y1: parseNumber(node.attrs.y1) ?? 0,
+      x2: parseNumber(node.attrs.x2) ?? 0,
+      y2: parseNumber(node.attrs.y2) ?? 0,
+    }
+  } else if (node.tag === 'polyline' || node.tag === 'polygon' || node.tag === 'curve') {
+    const pts = (node.attrs.points ?? '')
+      .trim()
+      .split(/\s+/)
+      .map((pair) => {
+        const [xs, ys] = pair.split(',')
+        return { x: Number(xs), y: Number(ys) }
+      })
+      .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
+    if (node.tag === 'curve') {
+      const closed = isClosedFlag(node.attrs.closed)
+      geom = { kind: 'path', d: catmullRomPath(pts, closed) }
+    } else {
+      geom = { kind: node.tag === 'polygon' ? 'polygon' : 'polyline', points: pts }
+    }
+  } else {
+    geom = { kind: 'path', d: node.attrs.d ?? '' }
+  }
+  const distanceStroke = strokeTakesInk(node.attrs.stroke)
+  const strokeWidth = distanceStroke ? 0 : (parseNumber(node.attrs['stroke-width']) ?? 4)
+  const dash = readDash(node.attrs['stroke-dasharray'], ctx)
+  const dashOffset = readDashOffset(node.attrs['stroke-dashoffset'], ctx)
+  const strokeOmitted = node.attrs.stroke == null || node.attrs.stroke.trim() === ''
+  const inheritedStroke = ctx.paintStroke != null && ctx.paintStroke.trim() !== ''
+  let strokeFallback = ctx.fillDefault != null ? 'none' : (ctx.paintStroke ?? defaultStroke)
+  const fillFallback = ctx.fillDefault ?? ctx.paintFill ?? 'none'
+  const fillRaw = node.attrs.fill === 'inherit' ? (distanceStroke ? strokeFallback : (node.attrs.stroke ?? strokeFallback)) : (node.attrs.fill ?? fillFallback)
+  let fill = readPaint(fillRaw, fillFallback, ctx, 'fill')
+  const curveClosed = node.tag === 'curve' && isClosedFlag(node.attrs.closed)
+  if (node.tag === 'curve' && !curveClosed && fill !== 'none') {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'open-curve-fill',
+      path: ctx.pathPrefix,
+      message: '开口的 Curve 不填充，避免首尾被连成一块色',
+      hint: '要色块就加 closed，只要线条就去掉 fill',
+    })
+    fill = 'none'
+  }
+  if (strokeOmitted && !inheritedStroke && ctx.fillDefault == null && !distanceStroke && fill.trim() !== 'none' && fill.trim() !== '') {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'implicit-stroke',
+      path: ctx.pathPrefix,
+      message: `${node.tag} 写了填充却没写描边，不再用文字颜色描一圈`,
+      hint: '只要填充就写 stroke="none"。要描边就写上颜色，例如 stroke="#111111"',
+    })
+    strokeFallback = 'none'
+  }
+  const stroke = distanceStroke ? 'none' : readPaint(node.attrs.stroke ?? strokeFallback, strokeFallback, ctx, 'stroke')
+  const paintedWidth = stroke === 'none' ? 0 : strokeWidth
+  const box = lineBounds(geom, ctx)
+  const ink = lineInk(box, paintedWidth)
+  const localGeom = normalizeLineGeometry(geom, box)
+  return {
+    kind: 'line',
+    path: ctx.pathPrefix,
+    id: node.attrs.id,
+    tag: node.tag,
+    x: box.x,
+    y: box.y,
+    width: box.width,
+    height: box.height,
+    ink,
+    opacity: parseNumber(node.attrs.opacity) ?? 1,
+    rotate: readAngleAttr(node.attrs.rotate, ctx, 'rotate'),
+    ...scalePair(node.attrs.scale),
+    origin: parseOrigin(node.attrs.origin),
+    padding: ZERO_EDGES,
+    geometry: localGeom,
+    stroke,
+    strokeWidth: paintedWidth,
+    fill,
+    ...(dash ? { dash } : {}),
+    ...(dashOffset !== undefined ? { dashOffset } : {}),
+    ...readEffects(node.attrs, ctx, solidPaint(fill !== 'none' ? fill : stroke, defaultStroke)),
+    ...layoutDrawMeta(node, ctx),
+  }
+}
+
+type FlexMeasure = {
+  node: LayoutNode
+  minMain: number
+  minCross: number
+  preferredMain: number
+  preferredCross: number
+  isText: boolean
+  /** 最终按分配宽度重排时用的源节点。 */
+  source?: LayerNode
+  /** `align-self`，没写就用这一层的 `align-items`。量的时候还没有，排进去之后才写上。 */
+  crossAlign?: string
+}
+
+function fontDecl(node: LayerNode): { family: string; src: string } | null {
+  if (node.tag.toLowerCase() !== FONT_TAG) return null
+  return { family: node.attrs.family ?? '', src: node.attrs.src ?? '' }
+}
+
+function warnMisplacedFont(ctx: LayoutContext, path: string) {
+  ctx.issues.push({
+    level: 'warn',
+    code: 'invalid-child',
+    path,
+    message: '<font> 只能写在根 Layer 下',
+    hint: '写成根 <layer> 的直接子元素：<font family="…" src="…" />',
+  })
+}
+
+function prepareHtmlBox(node: LayerNode): LayerNode {
+  return asBlockFlow(node)
+}
+
+function measureFlexChild(raw: LayerNode, ctx: LayoutContext, direction: 'row' | 'column', crossAlign?: string): FlexMeasure | null {
+  const node = prepareHtmlBox(materialize(raw))
+  if (node.tag === 'symbol' || node.tag === 'draw' || node.tag === 'script' || node.tag === 'preview') {
+    if (node.tag === 'preview') {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-child',
+        path: ctx.pathPrefix,
+        message: 'preview 只能作为 layer 的直接子元素',
+        hint: '写在 <layer> 里，例如 <preview of="#person" />',
+      })
+    }
+    return null
+  }
+  if (node.tag === 'g') {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-child',
+      path: ctx.pathPrefix,
+      message: 'g 不能放在 flex 里',
+      hint: '包一层 layer，例如 <layer><g>…</g></layer>',
+    })
+    return null
+  }
+  if (node.tag === 'mask') {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-child',
+      path: ctx.pathPrefix,
+      message: 'mask 只作为 layer 的直接子元素',
+      hint: '把 <mask> 写在 <layer> 里，和要裁的内容并列',
+    })
+    return null
+  }
+  if (node.tag.toLowerCase() === FONT_TAG) {
+    warnMisplacedFont(ctx, ctx.pathPrefix)
+    return null
+  }
+  ctx.issues.push(...checkChildAttrs(node, 'flex', ctx.pathPrefix))
+  if (node.tag === 'use') {
+    const used = layoutUse(node, ctx)
+    if (!used) return null
+    return {
+      node: used,
+      minMain: direction === 'row' ? used.width : used.height,
+      minCross: direction === 'row' ? used.height : used.width,
+      preferredMain: direction === 'row' ? used.width : used.height,
+      preferredCross: direction === 'row' ? used.height : used.width,
+      isText: false,
+    }
+  }
+  if (solidDepth(node.tag, node.attrs.depth)) {
+    const laid = layoutMesh(node, ctx)
+    return {
+      node: laid,
+      minMain: direction === 'row' ? laid.width : laid.height,
+      minCross: direction === 'row' ? laid.height : laid.width,
+      preferredMain: direction === 'row' ? laid.width : laid.height,
+      preferredCross: direction === 'row' ? laid.height : laid.width,
+      isText: false,
+    }
+  }
+  if (isLineTag(node.tag)) {
+    noteStrayDepth(node, ctx)
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-child',
+      path: ctx.pathPrefix,
+      message: '线条不能放在 flex 容器内',
+      hint: `包一层 layer，例如 <layer><${node.tag} …/></layer>`,
+    })
+    return null
+  }
+  if (isShapeTag(node.tag) && (hasTwoPoint(node.attrs) || (node.tag === 'circle' && node.attrs.x1 != null))) {
+    return null
+  }
+  if (isDisplayFlex(node.attrs.style) && isTextBoxTag(node.tag)) {
+    const nested = layoutFlex(node, ctx)
+    return {
+      node: nested,
+      minMain: direction === 'row' ? nested.width : nested.height,
+      minCross: direction === 'row' ? nested.height : nested.width,
+      preferredMain: direction === 'row' ? nested.width : nested.height,
+      preferredCross: direction === 'row' ? nested.height : nested.width,
+      isText: false,
+    }
+  }
+  if (isImageTag(node.tag)) {
+    const laid = layoutImage(node, ctx)
+    return {
+      node: laid,
+      minMain: direction === 'row' ? laid.width : laid.height,
+      minCross: direction === 'row' ? laid.height : laid.width,
+      preferredMain: direction === 'row' ? laid.width : laid.height,
+      preferredCross: direction === 'row' ? laid.height : laid.width,
+      isText: false,
+    }
+  }
+  if (isTextBoxTag(node.tag)) {
+    const laid = layoutTextBox(node, { ...ctx, issues: [] }, ctx.maxContentWidth)
+    return {
+      node: laid,
+      minMain: direction === 'row' ? laid.textLayout.minWidth : laid.height,
+      minCross: direction === 'row' ? laid.height : laid.textLayout.minWidth,
+      preferredMain: direction === 'row' ? laid.width : laid.height,
+      preferredCross: direction === 'row' ? laid.height : laid.width,
+      isText: true,
+      source: node,
+    }
+  }
+  if (isGroundTag(node.tag)) {
+    const laid = layoutGround(node, ctx)
+    return {
+      node: laid,
+      minMain: 0,
+      minCross: 0,
+      preferredMain: 0,
+      preferredCross: 0,
+      isText: false,
+    }
+  }
+  if (isMeshTag(node.tag)) {
+    const laid = layoutMesh(node, ctx)
+    if (modelNeedsBox(laid)) noteModelBox(laid, ctx)
+    return {
+      node: laid,
+      minMain: direction === 'row' ? laid.width : laid.height,
+      minCross: direction === 'row' ? laid.height : laid.width,
+      preferredMain: direction === 'row' ? laid.width : laid.height,
+      preferredCross: direction === 'row' ? laid.height : laid.width,
+      isText: false,
+    }
+  }
+  if (node.tag === 'canvas') {
+    const laid = layoutCanvas(node, ctx)
+    return {
+      node: laid,
+      minMain: direction === 'row' ? laid.width : laid.height,
+      minCross: direction === 'row' ? laid.height : laid.width,
+      preferredMain: direction === 'row' ? laid.width : laid.height,
+      preferredCross: direction === 'row' ? laid.height : laid.width,
+      isText: false,
+    }
+  }
+  if (isShapeTag(node.tag)) {
+    const s = solidDepth(node.tag, node.attrs.depth) ? layoutMesh(node, ctx) : layoutShape(node, ctx, ctx.color)
+    return {
+      node: s,
+      minMain: direction === 'row' ? s.width : s.height,
+      minCross: direction === 'row' ? s.height : s.width,
+      preferredMain: direction === 'row' ? s.width : s.height,
+      preferredCross: direction === 'row' ? s.height : s.width,
+      isText: false,
+    }
+  }
+  if (node.tag === 'math') {
+    const laid = layoutMath(node, ctx, direction === 'row' ? crossAlign : undefined)
+    return {
+      node: laid,
+      minMain: direction === 'row' ? laid.width : laid.height,
+      minCross: direction === 'row' ? laid.height : laid.width,
+      preferredMain: direction === 'row' ? laid.width : laid.height,
+      preferredCross: direction === 'row' ? laid.height : laid.width,
+      isText: false,
+    }
+  }
+  if (node.tag === 'layer') {
+    const nested = layoutLayer(node, ctx)
+    return {
+      node: nested,
+      minMain: direction === 'row' ? nested.width : nested.height,
+      minCross: direction === 'row' ? nested.height : nested.width,
+      preferredMain: direction === 'row' ? nested.width : nested.height,
+      preferredCross: direction === 'row' ? nested.height : nested.width,
+      isText: false,
+    }
+  }
+  ctx.issues.push(unknownTagIssue(node.tag, ctx.pathPrefix))
+  return null
+}
+
+/** 边框盒顶部到对齐用的基线。文字用第一行，公式用自己的基线，其余用下边缘。 */
+function contentBaseline(node: LayoutNode): number {
+  if (node.kind === 'flex' && node.baseline != null) return node.baseline
+  const edge = contentInsets(node.padding, node.border).top
+  if (node.kind === 'text') {
+    const line = node.textLayout.lines[0]
+    return line ? edge + line.baselineY : node.height
+  }
+  if (node.kind === 'flex' && node.children.length > 0) {
+    const first = node.children[0]!
+    return edge + first.y + contentBaseline(first)
+  }
+  return node.height
+}
+
+function crossPlace(align: string | undefined): 'start' | 'center' | 'end' {
+  switch ((align ?? 'stretch').trim().toLowerCase()) {
+    case 'start':
+    case 'flex-start':
+    case 'stretch':
+      return 'start'
+    case 'end':
+    case 'flex-end':
+      return 'end'
+    default:
+      return 'center'
+  }
+}
+
+/**
+ * 横排里写了 baseline 的子项，按第一行基线对齐。
+ * Yoga 先把它们排在行的起点，这里再挪。行被撑高时，后面的行一起下移。
+ * 同一行里居中或靠底的子项按新的行盒重排，靠起点的仍贴着行顶。
+ */
+function alignFlexBaselines(children: LayoutNode[], baseline: boolean[], crossAlign: Array<string | undefined>) {
+  const originY = children.map((child) => child.y)
+  const originBottom = children.map((child, i) => originY[i]! + child.height)
+  const groups: number[][] = []
+  for (let i = 0; i < children.length; i++) {
+    if (!baseline[i]) continue
+    const y = originY[i]!
+    const group = groups.find((indices) => Math.abs(originY[indices[0]!]! - y) < 1)
+    if (group) group.push(i)
+    else groups.push([i])
+  }
+  groups.sort((a, b) => originY[a[0]!]! - originY[b[0]!]!)
+
+  const lineOf = new Array<number>(children.length).fill(-1)
+  const lineSpan = groups.map((group) => ({
+    top: Math.min(...group.map((i) => originY[i]!)),
+    bottom: Math.max(...group.map((i) => originBottom[i]!)),
+  }))
+  groups.forEach((group, gi) => {
+    for (const i of group) lineOf[i] = gi
+  })
+  for (let i = 0; i < children.length; i++) {
+    if (baseline[i] || lineSpan.length === 0) continue
+    let best = -1
+    let bestOverlap = 0
+    for (let gi = 0; gi < lineSpan.length; gi++) {
+      const span = lineSpan[gi]!
+      const overlap = Math.min(originBottom[i]!, span.bottom) - Math.max(originY[i]!, span.top)
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap
+        best = gi
+      }
+    }
+    if (best >= 0 && bestOverlap > 0.5) lineOf[i] = best
+  }
+  for (let i = 0; i < children.length; i++) {
+    const gi = lineOf[i]!
+    if (gi < 0 || baseline[i]) continue
+    const span = lineSpan[gi]!
+    span.top = Math.min(span.top, originY[i]!)
+    span.bottom = Math.max(span.bottom, originBottom[i]!)
+  }
+
+  const growths: Array<{ bottom: number; extra: number; top: number; newTop: number; newBottom: number }> = []
+  let carried = 0
+  for (let gi = 0; gi < groups.length; gi++) {
+    const group = groups[gi]!
+    const span = lineSpan[gi]!
+    const top = Math.min(...group.map((i) => originY[i]!)) + carried
+    const lineAscent = Math.max(...group.map((i) => contentBaseline(children[i]!)))
+    for (const i of group) {
+      const ascent = contentBaseline(children[i]!)
+      children[i]!.y = top + (lineAscent - ascent)
+    }
+    const baselineBottom = Math.max(...group.map((i) => children[i]!.y + children[i]!.height))
+    const shiftedBottom = span.bottom + carried
+    const newBottom = Math.max(baselineBottom, shiftedBottom)
+    const extra = Math.max(0, newBottom - shiftedBottom)
+    growths.push({ bottom: span.bottom, extra, top: span.top, newTop: top, newBottom })
+    carried += extra
+  }
+
+  for (let i = 0; i < children.length; i++) {
+    if (baseline[i]) continue
+    const gi = lineOf[i]!
+    if (gi < 0) {
+      let push = 0
+      for (const growth of growths) {
+        if (originY[i]! >= growth.bottom - 1) push += growth.extra
+      }
+      children[i]!.y = originY[i]! + push
+      continue
+    }
+    const growth = growths[gi]!
+    const prev = growths.slice(0, gi).reduce((sum, item) => sum + item.extra, 0)
+    if (growth.extra <= 0.5) {
+      children[i]!.y = originY[i]! + prev
+      continue
+    }
+    const height = children[i]!.height
+    const place = crossPlace(crossAlign[i])
+    if (place === 'end') children[i]!.y = growth.newBottom - height
+    else if (place === 'start') children[i]!.y = growth.newTop + (originY[i]! - growth.top)
+    else children[i]!.y = growth.newTop + (growth.newBottom - growth.newTop - height) / 2
+  }
+}
+
+function layoutFlex(node: LayerNode, ctx: LayoutContext): FlexLayoutNode {
+  const style = parseStyle(node.attrs.style)
+  const childCtx = inheritTextContext(ctx, node.tag, style)
+  const direction = flexDirectionOf(style)
+  const appearance = readHtmlAppearance(style)
+  applyCssBackground(appearance, style, ctx)
+  const gap = parsePx(style.gap)
+  const columnGap = parsePx(style['column-gap']) ?? gap ?? 0
+  const rowGap = parsePx(style['row-gap']) ?? gap ?? 0
+  const justify = mapJustify(style['justify-content'])
+  const alignItems = mapAlign(style['align-items'])
+  const wrapMode = mapWrap(style['flex-wrap'])
+  const wrapping = wrapMode !== Wrap.NoWrap
+
+  const fixedW = parsePx(style.width)
+  const fixedH = parsePx(style.height)
+  const childNodes = node.children.filter((c) => typeof c !== 'string') as LayerNode[]
+  const measures: FlexMeasure[] = []
+  for (let i = 0; i < childNodes.length; i++) {
+    const ch = childNodes[i]!
+    const path = nodePath(ctx.pathPrefix, ch.tag, i)
+    track(ctx, path, ch)
+    const selfAlign = parseStyle(ch.attrs.style)['align-self']?.trim().toLowerCase()
+    const crossAlign = !selfAlign || selfAlign === 'auto' ? (style['align-items'] ?? 'stretch') : selfAlign
+    const m = measureFlexChild(ch, { ...childCtx, pathPrefix: path }, direction, crossAlign)
+    if (m) measures.push({ ...m, crossAlign })
+  }
+
+  let crossAvailable =
+    direction === 'row'
+      ? fixedH != null
+        ? fixedH
+        : Math.max(0, ...measures.map((m) => m.preferredCross))
+      : fixedW != null
+        ? fixedW
+        : Math.min(
+            ctx.maxContentWidth,
+            Math.max(0, ...measures.map((m) => (Number.isFinite(m.preferredCross) ? m.preferredCross : 0))),
+          )
+
+  const Yoga = getYoga()
+  const config = Yoga.Config.create()
+  config.setUseWebDefaults(true)
+  // Text children are re-laid out at their Yoga width; pixel rounding could shave off a fraction and force a wrap.
+  config.setPointScaleFactor(0)
+  const root = Yoga.Node.createWithConfig(config)
+  root.setFlexDirection(direction === 'row' ? FlexDirection.Row : FlexDirection.Column)
+  root.setFlexWrap(wrapMode)
+  root.setJustifyContent(justify)
+  root.setAlignItems(alignItems)
+  root.setAlignContent(mapAlignContent(style['align-content']))
+  if (columnGap > 0) root.setGap(Gutter.Column, columnGap)
+  if (rowGap > 0) root.setGap(Gutter.Row, rowGap)
+
+  const mainAvailable =
+    direction === 'row'
+      ? fixedW != null
+        ? fixedW
+        : ctx.maxContentWidth
+      : fixedH ?? 1e6
+
+  if (direction === 'row') {
+    root.setWidth(Math.max(0, mainAvailable))
+    if (fixedH != null) root.setHeight(Math.max(0, crossAvailable))
+    else if (!wrapping) root.setHeight(Math.max(0, crossAvailable === Infinity ? 0 : crossAvailable))
+  } else {
+    if (!wrapping || fixedW != null) root.setWidth(Math.max(0, crossAvailable))
+    root.setHeight(Math.max(0, mainAvailable))
+  }
+
+  const yogaChildren: YogaNode[] = []
+  for (let i = 0; i < measures.length; i++) {
+    const m = measures[i]!
+    const childFvg = m.source ?? childNodes[i]!
+    const chParsed = parseStyle(childFvg.attrs.style)
+    const flexFactors = readFlexFactors(childFvg.attrs.style)
+    const yn = Yoga.Node.createWithConfig(config)
+    yn.setFlexGrow(flexFactors.grow)
+    yn.setFlexShrink(flexFactors.shrink)
+    if (flexFactors.basis === 'auto') yn.setFlexBasisAuto()
+    else yn.setFlexBasis(flexFactors.basis)
+    yn.setAlignSelf(mapAlign(m.crossAlign ?? 'stretch'))
+    const textSource = m.source
+    const columnText = direction === 'column' && m.isText && textSource != null && m.node.kind === 'text'
+    const padX = chromeX(m.node.padding, m.node.border)
+    const padY = chromeY(m.node.padding, m.node.border)
+    const explicitW = parsePx(chParsed.width)
+    const explicitH = parsePx(chParsed.height)
+    // 交叉轴没写尺寸时留给 stretch。写死内容高度的话，Yoga 不会再撑满容器。
+    const stretchCross = (m.crossAlign ?? 'stretch').trim().toLowerCase() === 'stretch'
+    if (columnText) {
+      const textPath = m.node.path
+      yn.setMeasureFunc((width, widthMode) => {
+        const limit = widthMode === MeasureMode.Undefined ? childCtx.maxContentWidth : Math.max(0, width - padX)
+        const laid = layoutTextBox(textSource, { ...childCtx, pathPrefix: textPath, issues: [] }, limit)
+        return {
+          width: widthMode === MeasureMode.Exactly ? width : laid.width,
+          height: explicitH != null ? explicitH + padY : laid.height,
+        }
+      })
+      if (explicitW != null) yn.setWidth(explicitW + padX)
+      else if (!stretchCross && Number.isFinite(m.preferredCross)) yn.setWidth(m.preferredCross)
+      if (explicitH != null) yn.setHeight(explicitH + padY)
+    } else if (direction === 'row') {
+      yn.setWidth(m.preferredMain)
+      if (explicitH != null) yn.setHeight(explicitH + padY)
+      else if (!stretchCross && Number.isFinite(m.preferredCross)) yn.setHeight(m.preferredCross)
+      else if (stretchCross && Number.isFinite(m.minCross)) yn.setMinHeight(Math.max(0, m.minCross))
+      yn.setMinWidth(m.minMain)
+    } else {
+      if (explicitW != null) yn.setWidth(explicitW + padX)
+      else if (!stretchCross && Number.isFinite(m.preferredCross)) yn.setWidth(m.preferredCross)
+      else if (stretchCross && Number.isFinite(m.minCross)) yn.setMinWidth(Math.max(0, m.minCross))
+      yn.setHeight(m.preferredMain)
+      yn.setMinHeight(m.minMain)
+      if (m.isText && !stretchCross) yn.setMinWidth(m.minMain)
+    }
+    yogaChildren.push(yn)
+    root.insertChild(yn, yogaChildren.length - 1)
+  }
+
+  root.calculateLayout(undefined, undefined)
+
+  const laidChildren: LayoutNode[] = []
+  const slots: Array<{ height: number }> = []
+  for (let i = 0; i < measures.length; i++) {
+    const m = measures[i]!
+    const yn = yogaChildren[i]!
+    const layout = yn.getComputedLayout()
+    let child = m.node
+    if (m.isText && child.kind === 'text') {
+      const assignedW = layout.width
+      const textSource = m.source ?? childNodes[i]!
+      const innerW = assignedW - chromeX(child.padding, child.border)
+      const re = layoutTextBox(textSource, { ...childCtx, pathPrefix: child.path }, innerW)
+      re.x = layout.left
+      re.y = layout.top
+      if (layout.width > re.width + 0.5) re.width = layout.width
+      if (layout.height > re.height + 0.5) re.height = layout.height
+      child = re
+    } else if (child.kind === 'image') {
+      child = refitImageNode(child, layout.left, layout.top, layout.width, layout.height)
+    } else {
+      child = { ...child, x: layout.left, y: layout.top, width: layout.width, height: layout.height }
+      if (child.kind === 'layer' || child.kind === 'flex') {
+        // keep internal layout; stretch box only
+      }
+    }
+    laidChildren.push(child)
+    slots.push({ height: layout.height })
+  }
+
+  for (const yn of yogaChildren) yn.free()
+  root.freeRecursive()
+  config.free()
+
+  if (direction === 'column') {
+    let shift = 0
+    for (let i = 0; i < laidChildren.length; i++) {
+      const child = laidChildren[i]!
+      child.y += shift
+      const extra = child.height - slots[i]!.height
+      if (extra > 0.5) shift += extra
+    }
+  } else if (measures.some((m) => isBaselineAlign(m.crossAlign))) {
+    alignFlexBaselines(
+      laidChildren,
+      measures.map((m) => isBaselineAlign(m.crossAlign)),
+      measures.map((m) => m.crossAlign),
+    )
+  }
+
+  let contentW = 0
+  let contentH = 0
+  let minX = 0
+  let minY = 0
+  for (const child of laidChildren) {
+    minX = Math.min(minX, child.x)
+    minY = Math.min(minY, child.y)
+    contentW = Math.max(contentW, child.x + child.width)
+    contentH = Math.max(contentH, child.y + child.height)
+  }
+
+  const outer = outerFromContent(contentW, contentH, appearance.padding, appearance.border)
+  const innerW = fixedW
+  const innerH = fixedH
+  if (innerW != null && (minX < -1e-3 || contentW > innerW + 1e-3)) {
+    ctx.issues.push({ level: 'warn', code: 'flex-overflow', path: ctx.pathPrefix, message: 'flex 内容超出写死的 width' })
+  }
+  if (innerH != null && (minY < -1e-3 || contentH > innerH + 1e-3)) {
+    ctx.issues.push({ level: 'warn', code: 'flex-overflow', path: ctx.pathPrefix, message: 'flex 内容超出写死的 height' })
+  }
+
+  const preserve = readPreserve(node.attrs['preserve-3d'])
+  if (preserve.invalid) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 preserve-3d: ${node.attrs['preserve-3d']}`,
+      hint: '写成 preserve-3d="true"。false 或不写表示压平',
+    })
+  }
+
+  const laid: FlexLayoutNode = {
+    kind: 'flex',
+    path: ctx.pathPrefix,
+    id: node.attrs.id,
+    tag: node.tag,
+    x: 0,
+    y: 0,
+    width: fixedW != null ? fixedW + chromeX(appearance.padding, appearance.border) : outer.width,
+    height: fixedH != null ? fixedH + chromeY(appearance.padding, appearance.border) : outer.height,
+    ink: {
+      x: contentInsets(appearance.padding, appearance.border).left,
+      y: contentInsets(appearance.padding, appearance.border).top,
+      width: contentW,
+      height: contentH,
+    },
+    ...appearance,
+    ...sharpOf(node.attrs, ctx),
+    direction,
+    ...(preserve.value ? { preserve3d: true } : {}),
+    children: laidChildren,
+    ...readEffects(style, ctx, solidPaint(appearance.background, ctx.color), 'ink'),
+    ...layoutDrawMeta(node, ctx),
+  }
+  applyCssMotion(laid, style)
+  return laid
+}
+
+function layoutUse(node: LayerNode, ctx: LayoutContext): LayerLayoutNode | null {
+  warnNestedMasks(node, ctx)
+  const href = (node.attrs.href || node.attrs['xlink:href'] || '').trim()
+  const id = href.startsWith('#') ? href.slice(1) : href
+  if (!id) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: 'use 缺少 href',
+      hint: '写成 <use href="#petal" x="120" y="80" />',
+    })
+    return null
+  }
+  const symbol = ctx.symbols.get(id)
+  if (!symbol) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'missing-symbol',
+      path: ctx.pathPrefix,
+      message: `找不到 symbol #${id}`,
+      hint: `在 <layer> 下写 <symbol id="${id}">…</symbol>`,
+    })
+    return null
+  }
+  if (ctx.useStack.includes(id)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'symbol-cycle',
+      path: ctx.pathPrefix,
+      message: `symbol #${id} 引用了自己`,
+      hint: '去掉循环的 use',
+    })
+    return null
+  }
+  const width = parseNumber(node.attrs.width) ?? parseNumber(symbol.attrs.width)
+  const height = parseNumber(node.attrs.height) ?? parseNumber(symbol.attrs.height)
+  const attrs: Record<string, string> = {}
+  if (width != null) attrs.width = String(width)
+  if (height != null) attrs.height = String(height)
+  const laid = layoutLayer(
+    { tag: 'layer', attrs, children: symbol.children },
+    { ...ctx, useStack: [...ctx.useStack, id] },
+  )
+  const appearance = readAttrAppearance(node.attrs, ctx)
+  // use 与 layer 一样不填背景；色块用 rect、HTML 或 canvas
+  appearance.background = undefined
+  const effects = readEffects(node.attrs, ctx, solidPaint(borderPaintColor(appearance.border), ctx.color), 'ink')
+  const filters = mergeFilters(laid.filters, effects.filters)
+  return {
+    ...laid,
+    tag: 'use',
+    id: node.attrs.id,
+    path: ctx.pathPrefix,
+    ...appearance,
+    ...effects,
+    ...(filters.length ? { filters } : {}),
+    ...layoutDrawMeta(node, ctx),
+  }
+}
+
+/** 自动尺寸的 layer 把内容平移到盒子原点。组只认 svg，所以平移写进矩阵。 */
+function shiftLayoutNode(node: LayoutNode, dx: number, dy: number) {
+  if (dx === 0 && dy === 0) return
+  if (node.kind === 'group') node.svg = { ...node.svg, e: node.svg.e + dx, f: node.svg.f + dy }
+  node.x += dx
+  node.y += dy
+}
+
+/** 没写 width、height，也没写 unit。unit 优先，哪怕盒子还没算出来。 */
+function modelNeedsBox(node: LayoutNode): boolean {
+  return (
+    node.kind === 'mesh' &&
+    node.mesh.type === 'model' &&
+    !(node.mesh.unit != null && node.mesh.unit > 0) &&
+    !(node.width > 0 && node.height > 0)
+  )
+}
+
+function noteModelBox(node: LayoutNode, ctx: LayoutContext, parentW?: number, parentH?: number) {
+  const w = parentW != null && parentW > 0 ? parentW : null
+  const h = parentH != null && parentH > 0 ? parentH : null
+  ctx.issues.push({
+    level: 'error',
+    code: 'invalid-attr',
+    path: node.path,
+    message: 'model 要写 width 和 height，或写 unit',
+    hint:
+      w != null && h != null
+        ? `改成 <model x="0" y="0" width="${w}" height="${h}" />，或写 unit`
+        : '写成 <model x="0" y="0" width="200" height="200" />，或写 unit="40"',
+  })
+}
+
+/** ground 的 y 是世界位置，不参与自动尺寸。还没有盒子的 model 也不把原点钉在 0。 */
+function autoBoxExtent(node: LayoutNode): { x: number; y: number; right: number; bottom: number } | null {
+  if (node.kind === 'ground') return null
+  if (node.kind === 'mesh' && node.mesh.type === 'model' && !(node.width > 0 && node.height > 0)) return null
+  return { x: node.x, y: node.y, right: node.x + node.width, bottom: node.y + node.height }
+}
+
+function placeInLayer(node: LayerNode, laid: LayoutNode) {
+  if (usesOwnCoords(node, laid.kind)) return
+  const html = isHtmlTag(node.tag)
+  const x = html ? 0 : (parseNumber(node.attrs.x) ?? 0)
+  const y = html ? 0 : (parseNumber(node.attrs.y) ?? 0)
+  const anchor = html ? 'top-left' : readAnchor(node.attrs.anchor, 'top-left').anchor
+  const tl = anchorTopLeft(x, y, laid.width, laid.height, anchor)
+  laid.x = tl.x
+  laid.y = tl.y
+}
+
+const MASK_OPS = new Set(['add', 'subtract', 'intersect', 'xor'])
+const PREVIEW_SHOWS = ['overlay', 'checker', 'black', 'white', 'edges'] as const
+
+function maskImageFields(node: LayerNode, ctx: LayoutContext): { maskChannel?: 'alpha' | 'luma'; maskPick?: number[] } {
+  const out: { maskChannel?: 'alpha' | 'luma'; maskPick?: number[] } = {}
+  const channel = node.attrs.channel?.trim()
+  if (channel) {
+    if (!ctx.inMask) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'channel 只写在 mask 里的 img 上',
+        hint: '蒙版写成 <mask><img src="cut.png" channel="luma" /></mask>',
+      })
+    } else if (channel !== 'alpha' && channel !== 'luma') {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `channel 只能是 alpha 或 luma，收到 ${channel}`,
+        hint: '黑白蒙版写 channel="luma"，带透明通道的图不用写',
+      })
+    } else {
+      out.maskChannel = channel
+    }
+  }
+  const pick = node.attrs.pick?.trim()
+  if (pick) {
+    const ids = pick.split(/[\s,]+/).map((part) => Number(part))
+    const bad = !ctx.inMask || ids.length === 0 || ids.some((id) => !Number.isInteger(id) || id < 1 || id > 255)
+    if (!ctx.inMask) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'pick 只写在 mask 里的 img 上',
+        hint: '蒙版写成 <mask><img src="regions.png" pick="3 5" /></mask>',
+      })
+    } else if (bad) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `pick 要是 1 到 255 的编号，收到 ${pick}`,
+        hint: '编号图里灰度值就是编号，0 是背景。例如 pick="3 5"',
+      })
+    } else {
+      out.maskPick = ids
+    }
+  }
+  return out
+}
+
+function applyMaskOp(node: LayerNode, laid: LayoutNode, ctx: LayoutContext) {
+  const raw = node.attrs.op?.trim()
+  if (!raw) return
+  if (!ctx.inMask) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: 'op 只写在 mask 里面',
+      hint: '蒙版里写 <circle op="subtract" />，取值 add、subtract、intersect、xor',
+    })
+    return
+  }
+  if (!MASK_OPS.has(raw)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `op 只能是 add、subtract、intersect、xor，收到 ${raw}`,
+      hint: '默认是 add。减一块写 op="subtract"',
+    })
+    return
+  }
+  laid.maskOp = raw as MaskOp
+}
+
+function notePreview(node: LayerNode, ctx: LayoutContext, path: string) {
+  track(ctx, path, node)
+  const of = node.attrs.of?.trim().replace(/^#/, '') ?? ''
+  if (!of) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path,
+      message: 'preview 缺少 of',
+      hint: '写成 <preview of="#person" show="overlay checker black white edges" />',
+    })
+    return
+  }
+  const raw = node.attrs.show?.trim()
+  const tokens = raw ? raw.split(/[\s,]+/).filter(Boolean) : [...PREVIEW_SHOWS]
+  const show: PreviewSpec['show'] = []
+  for (const token of tokens) {
+    if ((PREVIEW_SHOWS as readonly string[]).includes(token)) show.push(token as PreviewSpec['show'][number])
+    else {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path,
+        message: `show 不认识 ${token}`,
+        hint: '用 overlay、checker、black、white、edges',
+      })
+    }
+  }
+  if (show.length === 0) return
+  const spec: PreviewSpec = { of, show, path }
+  const source = ctx.sources.get(path)
+  if (source) spec.source = source
+  ctx.previews.push(spec)
+}
+
+function warnFeatherInvert(node: LayerNode, ctx: LayoutContext) {
+  if (node.tag === 'mask') return
+  for (const key of ['feather', 'invert'] as const) {
+    if (!node.attrs[key]?.trim()) continue
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `${key} 只写在 <mask> 上`,
+      hint: '写成 <mask feather="8" invert="true">',
+    })
+  }
+}
+
+/** 把 mask 里的形状和图片排进 layer 的局部坐标。空的或全被忽略时不生效。 */
+function layoutMask(maskNode: LayerNode, ctx: LayoutContext): { shapes: LayoutNode[]; feather?: number; invert?: boolean } | undefined {
+  if (maskNode.attrs.style != null && maskNode.attrs.style.trim() !== '') {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: 'mask 不使用 style',
+      hint: '形状用属性写 fill、x、y 或 cx、cy；图片的宽高写在 img 的 style 上',
+    })
+  }
+  const maskCtx: LayoutContext = { ...ctx, inMask: true }
+  const laid = layoutMaskEntries(maskNode, maskCtx)
+  if (laid.length === 0) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'empty-mask',
+      path: ctx.pathPrefix,
+      message: 'mask 里没有可用的形状或图片，没有生效',
+      hint: '在里面写 rect、circle、ellipse、polygon、path、img 或 g。没画到的地方会藏起来',
+    })
+    return undefined
+  }
+  let feather: number | undefined
+  const featherRaw = maskNode.attrs.feather?.trim()
+  if (featherRaw) {
+    const parsed = parseNumber(featherRaw)
+    if (parsed == null || parsed < 0) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `feather 要是不小于 0 的像素，收到 ${featherRaw}`,
+        hint: '写成 feather="8"',
+      })
+    } else if (parsed > 0) {
+      feather = parsed
+    }
+  }
+  const invertRaw = maskNode.attrs.invert?.trim().toLowerCase()
+  let invert = false
+  if (invertRaw) {
+    if (invertRaw === 'true' || invertRaw === '1' || invertRaw === 'yes') invert = true
+    else if (invertRaw !== 'false' && invertRaw !== '0' && invertRaw !== 'no') {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `invert 写成 true 或 false，收到 ${invertRaw}`,
+        hint: '反选写 invert="true"',
+      })
+    }
+  }
+  return { shapes: laid, ...(feather != null ? { feather } : {}), ...(invert ? { invert } : {}) }
+}
+
+function layoutMaskEntries(parent: LayerNode, ctx: LayoutContext): LayoutNode[] {
+  const children = parent.children.filter((c) => typeof c !== 'string') as LayerNode[]
+  const laid: LayoutNode[] = []
+  for (let i = 0; i < children.length; i++) {
+    const ch = children[i]!
+    const path = nodePath(ctx.pathPrefix, ch.tag, i)
+    track(ctx, path, ch)
+    const sub: LayoutContext = { ...ctx, pathPrefix: path, fillDefault: '#ffffff', inMask: true }
+    warnFeatherInvert(ch, sub)
+    if (ch.tag !== 'g' && !isMaskContentTag(ch.tag)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-child',
+        path,
+        message: `mask 里不收 <${ch.tag}>`,
+        hint: '改成 rect、circle、ellipse、polygon、path、img 或 g。没画到的地方会藏起来',
+      })
+      continue
+    }
+    ctx.issues.push(...checkChildAttrs(ch, 'layer', path))
+    const node =
+      ch.tag === 'g'
+        ? layoutMaskGroup(ch, sub)
+        : isImageTag(ch.tag)
+          ? layoutImage(ch, sub)
+          : isShapeTag(ch.tag)
+            ? layoutShape(ch, sub, ctx.color)
+            : layoutLineNode(ch, sub, ctx.color)
+    if (ch.tag !== 'g') placeInLayer(ch, node)
+    applyMaskOp(ch, node, sub)
+    laid.push(node)
+  }
+  return laid
+}
+
+function layoutMaskGroup(node: LayerNode, ctx: LayoutContext): GroupLayoutNode {
+  const appearance = readAttrAppearance(node.attrs, ctx)
+  const parsed = parseSvgTransform(node.attrs.transform)
+  if (parsed.error) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 transform: ${parsed.error}`,
+      hint: '写成 translate、rotate、scale 或 matrix，例如 transform="translate(12,8)"',
+    })
+  }
+  const children = layoutMaskEntries(node, ctx)
+  let box = { x: 0, y: 0, width: 0, height: 0 }
+  let any = false
+  for (const child of children) {
+    const next = boundsOf(parsed.matrix, { x: child.x, y: child.y, width: child.width, height: child.height })
+    if (!any) {
+      box = next
+      any = true
+    } else {
+      const x = Math.min(box.x, next.x)
+      const y = Math.min(box.y, next.y)
+      const right = Math.max(box.x + box.width, next.x + next.width)
+      const bottom = Math.max(box.y + box.height, next.y + next.height)
+      box = { x, y, width: right - x, height: bottom - y }
+    }
+  }
+  return {
+    kind: 'group',
+    path: ctx.pathPrefix,
+    id: node.attrs.id,
+    tag: 'g',
+    x: box.x,
+    y: box.y,
+    width: box.width,
+    height: box.height,
+    ink: { x: 0, y: 0, width: box.width, height: box.height },
+    ...appearance,
+    children,
+    svg: parsed.matrix,
+    ...readEffects(node.attrs, ctx, solidPaint(node.attrs.fill ?? ctx.paintFill ?? '#ffffff', ctx.color)),
+    ...layoutDrawMeta(node, ctx),
+  }
+}
+
+const measuredBoxes = new WeakMap<LayerNode, { width: number; height: number }>()
+
+/** 量过的层用自己的宽度换行，和 layer.create 同一次计算。没量过的层继续用父级的可用宽度。 */
+/** 写了宽度的 layer 用这个宽度换行。宽高都写时再减去这一层的 safe，和量尺寸时同一条规则。 */
+function contentWidthFor(node: LayerNode, fixedW: number | undefined, parentMax: number): number {
+  if (fixedW == null) return parentMax
+  const heightSet = node.attrs.height != null && node.attrs.height !== ''
+  if (!heightSet) return fixedW
+  const height = parseNumber(node.attrs.height) ?? fixedW
+  const safe = parseSafe(node.attrs.safe, fixedW, height)
+  return Math.max(0, fixedW - safe.left - safe.right)
+}
+
+function layoutGroup(node: LayerNode, ctx: LayoutContext): GroupLayoutNode {
+  warnNestedMasks(node, ctx)
+  const appearance = readAttrAppearance(node.attrs, ctx)
+  const parsed = parseSvgTransform(node.attrs.transform)
+  if (parsed.error) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 transform: ${parsed.error}`,
+      hint: '写成 translate、rotate、scale 或 matrix，例如 transform="translate(12,8)"',
+    })
+  }
+  const inherited: LayoutContext = {
+    ...ctx,
+    paintFill: node.attrs.fill ?? ctx.paintFill,
+    paintStroke: strokeTakesInk(node.attrs.stroke) ? ctx.paintStroke : (node.attrs.stroke ?? ctx.paintStroke),
+  }
+  const children: LayoutNode[] = []
+  const childFvg = node.children.filter((c) => typeof c !== 'string') as LayerNode[]
+  for (let i = 0; i < childFvg.length; i++) {
+    const raw = childFvg[i]!
+    const concrete = materialize(raw)
+    const path = nodePath(ctx.pathPrefix, concrete.tag, i)
+    track(ctx, path, raw)
+    const sub: LayoutContext = { ...inherited, pathPrefix: path }
+    const allowed =
+      concrete.tag === 'g' || isLineTag(concrete.tag) || isShapeTag(concrete.tag)
+    if (!allowed) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-child',
+        path,
+        message: `${concrete.tag} 不能放在 g 里`,
+        hint: 'g 里写 rect、circle、ellipse、line、polyline、polygon、path、curve 或 g。分组 layer 用 <>…</>，或外面套一层 <layer>',
+      })
+      continue
+    }
+    ctx.issues.push(...checkChildAttrs(concrete, 'layer', path))
+    const laid =
+      concrete.tag === 'g'
+        ? layoutGroup(concrete, sub)
+        : solidDepth(concrete.tag, concrete.attrs.depth)
+          ? layoutMesh(concrete, sub)
+          : isLineTag(concrete.tag)
+            ? layoutLineNode(concrete, sub, ctx.color)
+            : layoutShape(concrete, sub, ctx.color)
+    children.push(laid)
+  }
+  let box = { x: 0, y: 0, width: 0, height: 0 }
+  let any = false
+  for (const child of children) {
+    const next = boundsOf(parsed.matrix, { x: child.x, y: child.y, width: child.width, height: child.height })
+    if (!any) {
+      box = next
+      any = true
+    } else {
+      const x = Math.min(box.x, next.x)
+      const y = Math.min(box.y, next.y)
+      const right = Math.max(box.x + box.width, next.x + next.width)
+      const bottom = Math.max(box.y + box.height, next.y + next.height)
+      box = { x, y, width: right - x, height: bottom - y }
+    }
+  }
+  return {
+    kind: 'group',
+    path: ctx.pathPrefix,
+    id: node.attrs.id,
+    tag: 'g',
+    x: box.x,
+    y: box.y,
+    width: box.width,
+    height: box.height,
+    ink: { x: 0, y: 0, width: box.width, height: box.height },
+    ...appearance,
+    children,
+    svg: parsed.matrix,
+    ...readEffects(node.attrs, ctx, solidPaint(node.attrs.fill ?? ctx.paintFill ?? ctx.color, ctx.color)),
+    ...layoutDrawMeta(node, ctx),
+  }
+}
+
+const VISIBLE_OPACITY = 0.01
+
+function hasInkArea(b: Box): boolean {
+  return b.width > 1e-3 && b.height > 1e-3
+}
+
+function addLocalInk(union: Box | null, box: Box | null): Box | null {
+  if (!box || !hasInkArea(box)) return union
+  return union ? unionBoxes(union, box) : box
+}
+
+/**
+ * 把 node 的着墨变到 matrix 所在的坐标系。
+ * matrix 把 node 的局部原点（自身 rotate / scale 之前）映射过去。
+ * applyOwnTransform 为 false 时，不施加 node 自己的旋转和缩放。
+ */
+function accumulateInk(node: LayoutNode, parentOpacity: number, matrix: typeof IDENTITY, applyOwnTransform: boolean): Box | null {
+  const opacity = parentOpacity * node.opacity
+  if (opacity < VISIBLE_OPACITY) return null
+  const local = localNodeMatrix(node)
+  const m = applyOwnTransform && !isIdentity(local) ? multiply(matrix, local) : matrix
+
+  if (node.kind === 'layer' || node.kind === 'flex') {
+    let union: Box | null = null
+    if ((node.background && node.background !== 'transparent') || hasBorder(node.border)) {
+      union = addLocalInk(union, applyToBox(m, { x: 0, y: 0, width: node.width, height: node.height }))
+    }
+    const inset = flexContentInset(node)
+    const childBase = multiply(m, translated(inset.x, inset.y))
+    for (const child of node.children) {
+      union = addLocalInk(union, accumulateInk(child, opacity, multiply(childBase, translated(child.x, child.y)), true))
+    }
+    if (overflowClips(node) && union) {
+      union = intersectBox(union, applyToBox(m, { x: 0, y: 0, width: node.width, height: node.height }))
+      if (!hasInkArea(union)) return null
+    }
+    return union
+  }
+  let ink = node.ink
+  if (node.overflow === 'hidden') {
+    ink = intersectBox(ink, { x: 0, y: 0, width: node.width, height: node.height })
+  }
+  return hasInkArea(ink) ? applyToBox(m, ink) : null
+}
+
+/** 子树着墨，坐标系是 node 自身、且在 node 的 rotate / scale 之前。 */
+function inkInLocal(node: LayoutNode, parentOpacity: number): Box | null {
+  return accumulateInk(node, parentOpacity, IDENTITY, false)
+}
+
+function maxTextFontSize(node: LayoutNode): number {
+  if (node.kind === 'text') return node.textLayout.fontSize
+  if (node.kind !== 'layer' && node.kind !== 'flex') return 0
+  let max = 0
+  for (const child of node.children) max = Math.max(max, maxTextFontSize(child))
+  return max
+}
+
+type AnchorBoxMode = 'ink' | 'box' | 'absent'
+
+function parseAnchorBox(raw: string | undefined, issues: Issue[], path: string): AnchorBoxMode {
+  if (raw == null || raw.trim() === '') return 'absent'
+  const value = raw.trim().toLowerCase()
+  if (value === 'ink' || value === 'box') return value
+  issues.push({
+    level: 'warn',
+    code: 'invalid-attr',
+    path,
+    message: `无法解析 anchor-box: ${raw}`,
+    hint: '写成 anchor-box="ink" 或 anchor-box="box"',
+  })
+  return 'box'
+}
+
+function anchorTouchesSide(anchor: Anchor): 'left' | 'right' | null {
+  if (anchor === 'left' || anchor === 'top-left' || anchor === 'bottom-left') return 'left'
+  if (anchor === 'right' || anchor === 'top-right' || anchor === 'bottom-right') return 'right'
+  return null
+}
+
+function maybeInkInset(node: LayoutNode, anchor: Anchor, ctx: LayoutContext) {
+  const side = anchorTouchesSide(anchor)
+  if (!side || (node.kind !== 'layer' && node.kind !== 'flex')) return
+  // 开了镜头的层，布局盒子和投影后的着墨本来就不该对齐。
+  if (node.kind === 'layer' && node.perspective != null) return
+  const fontSize = maxTextFontSize(node)
+  if (fontSize <= 0) return
+  const ink = inkInLocal(node, 1)
+  if (!ink) return
+  const inset = side === 'left' ? ink.x : node.width - (ink.x + ink.width)
+  if (Math.round(inset) < 3 || inset < fontSize * 0.05) return
+  const where = side === 'left' ? '左' : '右'
+  ctx.issues.push({
+    level: 'info',
+    code: 'ink-inset',
+    path: node.path,
+    message: `字形比盒子靠里 ${Math.round(inset)}px（${where}）`,
+    hint: '想让笔画贴齐 x，写 anchor-box="ink"',
+  })
+}
+
+function applyInkAnchor(node: LayoutNode, x: number, y: number, anchor: Anchor, ctx: LayoutContext) {
+  const ink = inkInLocal(node, 1)
+  if (!ink) {
+    ctx.issues.push({
+      level: 'info',
+      code: 'ink-anchor-empty',
+      path: node.path,
+      message: '子树没有着墨，已按布局盒子定位',
+      hint: '空文字或全透明时 anchor-box="ink" 会退回 box',
+    })
+    return
+  }
+  const topLeft = anchorTopLeft(x, y, ink.width, ink.height, anchor)
+  node.x = topLeft.x - ink.x
+  node.y = topLeft.y - ink.y
+  node.anchorBox = 'ink'
+  node.inkOffset = {
+    left: ink.x,
+    top: ink.y,
+    right: node.width - (ink.x + ink.width),
+    bottom: node.height - (ink.y + ink.height),
+  }
+  if (node.rotate !== 0) {
+    ctx.issues.push({
+      level: 'info',
+      code: 'ink-anchor-rotate',
+      path: node.path,
+      message: '对齐点是旋转前的着墨',
+      hint: 'origin 仍按布局盒子计算，旋转不会改 anchor-box 的对齐点',
+    })
+  }
+}
+
+function readLayerView(node: LayerNode, layerW: number, layerH: number, ctx: LayoutContext) {
+  const raw = node.attrs.view
+  if (raw == null || raw.trim() === '') return undefined
+  const widthSet = node.attrs.width != null && node.attrs.width.trim() !== ''
+  const heightSet = node.attrs.height != null && node.attrs.height.trim() !== ''
+  if (!widthSet || !heightSet || !(layerW > 0) || !(layerH > 0)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: 'view 需要这一层写 width 和 height',
+      hint: 'width 和 height 是屏幕上的取景窗，view="x y w h" 是舞台上被取的那一块',
+    })
+    return undefined
+  }
+  const parsed = parseView(raw)
+  if (!parsed) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 view: ${raw}`,
+      hint: '写成四个数 view="x y w h"，宽和高要大于 0',
+    })
+    return undefined
+  }
+  const fitted = fitViewAspect(parsed, layerW, layerH)
+  if (fitted.adjusted) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: 'view 的宽高比和取景窗不一致，已按宽度保持中心重算高度',
+      hint: `取景窗是 ${formatSize(layerW)}×${formatSize(layerH)}，view 现为 ${formatSize(fitted.view.x)} ${formatSize(fitted.view.y)} ${formatSize(fitted.view.width)} ${formatSize(fitted.view.height)}`,
+    })
+  }
+  return fitted.view
+}
+
+function wroteCameraAttr(node: LayerNode): boolean {
+  const source = node.camera !== undefined ? node.camera : node.attrs.camera
+  return source != null && !(typeof source === 'string' && source.trim() === '')
+}
+
+function readSceneShadows(raw: string | undefined, hostsCamera: boolean, ctx: LayoutContext): { shadows?: 'none' } {
+  if (raw == null || raw.trim() === '') return {}
+  const text = raw.trim().toLowerCase()
+  if (!hostsCamera) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: 'shadows 只写在开了镜头的 layer 上',
+      hint: '要关掉这一台场景的硬边影子，写在取景的 layer 上：shadows="none"。深度遮挡还在',
+    })
+    return {}
+  }
+  if (text === 'none') return { shadows: 'none' }
+  if (text === 'auto') return {}
+  ctx.issues.push({
+    level: 'warn',
+    code: 'invalid-attr',
+    path: ctx.pathPrefix,
+    message: `无法解析 shadows: ${raw}`,
+    hint: '写成 shadows="none" 关掉主光影子，或不写（auto）',
+  })
+  return {}
+}
+
+function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
+  if (ctx.pathPrefix === 'layer') ctx.issues.push(...originValueIssues(node.attrs.origin, ctx.pathPrefix))
+  if (ctx.pathPrefix !== 'layer' && node.attrs['min-font'] != null && node.attrs['min-font'].trim() !== '') {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: 'min-font 只写在根 layer 上',
+      hint: '例如 <layer width="1240" height="1754" min-font="print">。screen 是屏幕档，print 适合海报注释，也可以写像素',
+    })
+  }
+  const appearance = readAttrAppearance(node.attrs, ctx)
+  // 根节点的 background 是画布底色，由 paintDocument 绘制。layer 自身不填色。
+  appearance.background = undefined
+  const fixedW = parseNumber(node.attrs.width)
+  const fixedH = parseNumber(node.attrs.height)
+  const hostsCamera = wroteCameraAttr(node)
+  const sceneShadows = readSceneShadows(node.attrs.shadows, hostsCamera, ctx)
+  const layerCtx = withLayerText({ ...ctx, ancestorCamera: Boolean(hostsCamera || ctx.ancestorCamera) }, node)
+
+  const childFvg = node.children.filter((c) => typeof c !== 'string') as LayerNode[]
+  let chosenMask: LayerNode | undefined
+  let chosenMaskPath = ''
+  for (let i = 0; i < childFvg.length; i++) {
+    const ch = childFvg[i]!
+    if (ch.tag !== 'mask') continue
+    const path = nodePath(ctx.pathPrefix, ch.tag, i)
+    track(ctx, path, ch)
+    if (!chosenMask) {
+      chosenMask = ch
+      chosenMaskPath = path
+    } else {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-child',
+        path,
+        message: '一层只能有一个 mask，多出来的已忽略',
+        hint: '把形状写进同一个 <mask>',
+      })
+    }
+  }
+  const placed: Array<{
+    child: LayoutNode
+    x: number
+    y: number
+    anchor: Anchor
+    anchorBox: AnchorBoxMode
+    coords: boolean
+  }> = []
+
+  for (let i = 0; i < childFvg.length; i++) {
+    const ch = childFvg[i]!
+    if (ch.tag === 'preview') {
+      notePreview(ch, ctx, nodePath(ctx.pathPrefix, ch.tag, i))
+      continue
+    }
+    if (ch.tag === 'symbol' || ch.tag === 'draw' || ch.tag === 'script' || ch.tag === 'mask') {
+      if (ch.tag === 'symbol') track(ctx, nodePath(ctx.pathPrefix, ch.tag, i), ch)
+      continue
+    }
+    if (ch.tag.toLowerCase() === FONT_TAG) {
+      const path = nodePath(ctx.pathPrefix, ch.tag, i)
+      track(ctx, path, ch)
+      if (ctx.pathPrefix !== 'layer') warnMisplacedFont(ctx, path)
+      continue
+    }
+    const concrete = materialize(ch)
+    const path = nodePath(ctx.pathPrefix, concrete.tag, i)
+    track(ctx, path, ch)
+    warnFeatherInvert(concrete, { ...ctx, pathPrefix: path })
+    if (!ctx.inMask) applyMaskOp(concrete, { maskOp: undefined } as LayoutNode, { ...ctx, pathPrefix: path, inMask: false })
+    ctx.issues.push(...checkChildAttrs(concrete, 'layer', path))
+    const textMax = contentWidthFor(node, fixedW, layerCtx.maxContentWidth)
+    const subCtx = { ...layerCtx, pathPrefix: path, maxContentWidth: textMax }
+    const laidSource = prepareHtmlBox(concrete)
+    let laid: LayoutNode | null = null
+    if (laidSource.tag === 'use') laid = layoutUse(laidSource, subCtx)
+    else if (laidSource.tag === 'g') laid = layoutGroup(laidSource, subCtx)
+    else if (solidDepth(laidSource.tag, laidSource.attrs.depth) || isMeshTag(laidSource.tag)) laid = layoutMesh(laidSource, subCtx)
+    else if (isLineTag(laidSource.tag)) laid = layoutLineNode(laidSource, subCtx, ctx.color)
+    else if (isDisplayFlex(laidSource.attrs.style) && isTextBoxTag(laidSource.tag)) laid = layoutFlex(laidSource, subCtx)
+    else if (isImageTag(laidSource.tag)) laid = layoutImage(laidSource, subCtx)
+    else if (isTextBoxTag(laidSource.tag)) laid = layoutTextBox(laidSource, subCtx, textMax)
+    else if (laidSource.tag === 'canvas') laid = layoutCanvas(laidSource, subCtx)
+    else if (isShapeTag(laidSource.tag)) laid = layoutShape(laidSource, subCtx, ctx.color)
+    else if (isGroundTag(laidSource.tag)) laid = layoutGround(laidSource, subCtx)
+    else if (laidSource.tag === 'layer') laid = layoutLayer(laidSource, subCtx)
+    else if (laidSource.tag === 'math') laid = layoutMath(laidSource, subCtx)
+    else {
+      laid = layoutUnknownOrCustom(laidSource, subCtx)
+    }
+    if (!laid) continue
+    const html = isHtmlTag(concrete.tag)
+    placed.push({
+      child: laid,
+      x: html ? 0 : (parseNumber(ch.attrs.x) ?? 0),
+      y: html ? 0 : (parseNumber(ch.attrs.y) ?? 0),
+      anchor: html ? 'top-left' : anchorOf(ch.attrs.anchor, { ...ctx, pathPrefix: path }, concrete.tag),
+      anchorBox: html ? 'absent' : parseAnchorBox(ch.attrs['anchor-box'], ctx.issues, path),
+      coords: usesOwnCoords(ch, laid.kind),
+    })
+  }
+
+  const positionOne = (p: (typeof placed)[0]) => {
+    if (p.coords) return
+    const tl = anchorTopLeft(p.x, p.y, p.child.width, p.child.height, p.anchor)
+    p.child.x = tl.x
+    p.child.y = tl.y
+    if (p.child.kind !== 'layer') return
+    if (p.anchorBox === 'ink') applyInkAnchor(p.child, p.x, p.y, p.anchor, ctx)
+    else if (p.anchorBox === 'absent') maybeInkInset(p.child, p.anchor, ctx)
+  }
+  for (const p of placed) positionOne(p)
+
+  // 写了宽高的轴仍是画板，内容留在原坐标。没写的轴改成内容的并集，从最小到最大，再把内容平移到 0。
+  let minX = 0
+  let minY = 0
+  let maxRight = 0
+  let maxBottom = 0
+  let anyBox = false
+  for (const p of placed) {
+    const extent = autoBoxExtent(p.child)
+    if (!extent) continue
+    if (!anyBox) {
+      minX = extent.x
+      minY = extent.y
+      maxRight = extent.right
+      maxBottom = extent.bottom
+      anyBox = true
+    } else {
+      minX = Math.min(minX, extent.x)
+      minY = Math.min(minY, extent.y)
+      maxRight = Math.max(maxRight, extent.right)
+      maxBottom = Math.max(maxBottom, extent.bottom)
+    }
+  }
+  const widthAuto = !(fixedW != null && fixedW > 0)
+  const heightAuto = !(fixedH != null && fixedH > 0)
+  const shiftX = widthAuto && anyBox ? -minX : 0
+  const shiftY = heightAuto && anyBox ? -minY : 0
+  for (const p of placed) shiftLayoutNode(p.child, shiftX, shiftY)
+  const layerW = widthAuto ? (anyBox ? Math.max(0, maxRight - minX) : 0) : fixedW!
+  const layerH = heightAuto ? (anyBox ? Math.max(0, maxBottom - minY) : 0) : fixedH!
+  noteMeasureMismatch(node, layerW, layerH, ctx)
+
+  for (const p of placed) {
+    const child = p.child
+    if (!modelNeedsBox(child)) continue
+    noteModelBox(child, ctx, layerW, layerH)
+  }
+
+  const children = placed.map((p) => p.child)
+
+  const overlay = readLayerOverlay(node.attrs, ctx)
+  const layerFilters = readLayerFilters(node.attrs, ctx)
+  let perspective: number | 'parallel' | undefined
+  let cameraView: number[] | undefined
+  let vanishX: number | undefined
+  let vanishY: number | undefined
+  let cameraMoved = false
+  let dof: LayerLayoutNode['dof']
+  const cameraSource = node.camera !== undefined ? node.camera : node.attrs.camera
+  if (wroteCameraAttr(node)) {
+    const resolved = resolveCamera(cameraSource, layerW, layerH)
+    for (const item of resolved.issues) {
+      ctx.issues.push({
+        level: item.level,
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: item.message,
+        hint: item.hint,
+      })
+    }
+    if (resolved.camera) {
+      perspective = resolved.camera.perspective
+      cameraView = resolved.camera.view
+      if (resolved.camera.vanishX !== 0) vanishX = resolved.camera.vanishX
+      if (resolved.camera.vanishY !== 0) vanishY = resolved.camera.vanishY
+      cameraMoved = resolved.camera.moved
+      dof = resolved.camera.dof
+    }
+  }
+  const preserve = readPreserve(node.attrs['preserve-3d'])
+  if (preserve.invalid) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 preserve-3d: ${node.attrs['preserve-3d']}`,
+      hint: '写成 preserve-3d="true"。false 或不写表示压平',
+    })
+  }
+  const laidMask = chosenMask
+    ? layoutMask(chosenMask, { ...ctx, pathPrefix: chosenMaskPath })
+    : undefined
+  if (laidMask) for (const shape of laidMask.shapes) shiftLayoutNode(shape, shiftX, shiftY)
+  const mask = laidMask?.shapes
+  if (node.attrs.mask != null && node.attrs.mask.trim() !== '') {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: '遮罩要写成 <mask> 标签，不要写成属性',
+      hint: '在 layer 里写 <mask><circle cx="160" cy="90" r="90" /></mask>',
+    })
+  }
+  const styleMask = parseStyle(node.attrs.style).mask
+  if (styleMask != null && styleMask.trim() !== '') {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: 'mask 不要写在 style 里',
+      hint: '在 layer 里写 <mask>…</mask>，不要写进 style',
+    })
+  }
+  const effects = readEffects(node.attrs, ctx, solidPaint(borderPaintColor(appearance.border), ctx.color), 'ink')
+  const filters = mergeFilters(effects.filters, layerFilters.filters)
+  let view = readLayerView(node, layerW, layerH, ctx)
+  if (view && perspective != null) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: 'view 不要和 perspective、camera 写在同一层',
+      hint: '镜头写在外层 <layer view="x y w h">，perspective 或 camera 写在里面的舞台上',
+    })
+    view = undefined
+  }
+  if (view && viewExceeds(view, children)) {
+    ctx.issues.push({
+      level: 'error',
+      code: 'view-outside',
+      path: ctx.pathPrefix,
+      message: 'view 超出了舞台',
+      hint: '把 view 收到子元素转完、缩完的范围内，或把舞台加大。取景窗没被盖住时，成片会露底',
+    })
+  }
+  const laid: LayerLayoutNode = {
+    kind: 'layer',
+    path: ctx.pathPrefix,
+    id: node.attrs.id,
+    tag: node.tag,
+    x: 0,
+    y: 0,
+    width: layerW,
+    height: layerH,
+    ink: emptyBox(),
+    ...appearance,
+    children,
+    overflow: node.attrs.overflow === 'hidden' ? 'hidden' : 'visible',
+    ...(view ? { view } : {}),
+    ...(perspective != null ? { perspective } : {}),
+    ...(cameraView ? { cameraView } : {}),
+    ...(vanishX != null ? { vanishX } : {}),
+    ...(vanishY != null ? { vanishY } : {}),
+    ...(cameraMoved ? { cameraMoved: true } : {}),
+    ...(dof ? { dof } : {}),
+    ...sceneShadows,
+    ...sharpOf(node.attrs, ctx),
+    ...(preserve.value ? { preserve3d: true } : {}),
+    ...(mask ? { mask } : {}),
+    ...(laidMask?.feather != null ? { maskFeather: laidMask.feather } : {}),
+    ...(laidMask?.invert ? { maskInvert: true } : {}),
+    ...effects,
+    ...(overlay ? { overlay } : {}),
+    ...layerFilters,
+    ...(filters.length ? { filters } : {}),
+    ...layoutDrawMeta(node, ctx),
+  }
+  laid.ink = inkInLocal(laid, 1) ?? emptyBox()
+  return laid
+}
+
+function noteAttrTypos(node: LayerNode, path: string, issues: Issue[]) {
+  const concrete = materialize(node)
+  issues.push(...typoAttrIssues(concrete, path))
+  issues.push(...hiddenAttrIssues(concrete, path))
+  issues.push(...haloAttrIssues(concrete, path))
+  issues.push(...materialAttrIssues(concrete, path))
+  if (isHtmlTag(concrete.tag) || isTextBoxTag(concrete.tag)) issues.push(...styleIssues(concrete, path))
+  issues.push(...splitAttrIssues(concrete, path))
+  let index = 0
+  for (const child of concrete.children) {
+    if (typeof child === 'string') continue
+    noteAttrTypos(child, `${path}/${child.tag}[${index}]`, issues)
+    index += 1
+  }
+}
+
+function collectSymbols(node: LayerNode, symbols: Map<string, LayerNode>, issues: Issue[], path: string) {
+  if (node.tag === 'symbol') {
+    const id = node.attrs.id?.trim()
+    if (!id) {
+      issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path,
+        message: 'symbol 缺少 id',
+        hint: '写成 <symbol id="petal">…</symbol>',
+      })
+    } else if (symbols.has(id)) {
+      issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path,
+        message: `symbol id 重复: ${id}`,
+        hint: '每个 id 只定义一次',
+      })
+    } else symbols.set(id, node)
+  }
+  node.children.forEach((child, index) => {
+    if (typeof child !== 'string') collectSymbols(child, symbols, issues, `${path}/${child.tag}[${index}]`)
+  })
+}
+
+function collectFontDecls(node: LayerNode, out: Array<{ family: string; src: string }>) {
+  const concrete = materialize(node)
+  const font = fontDecl(concrete)
+  if (font?.family && font.src) out.push(font)
+  for (const child of concrete.children) {
+    if (typeof child !== 'string') collectFontDecls(child, out)
+  }
+}
+
+/** 这一层实际会拿来排文字的字体名。 */
+export function fontFamiliesOf(node: LayerNode): string[] {
+  const out = new Set<string>()
+  const visit = (current: LayerNode) => {
+    const concrete = materialize(current)
+    const add = (raw: string | undefined) => {
+      const name = primaryFontFamily(raw)
+      if (name) out.add(name)
+    }
+    add(concrete.attrs['font-family'])
+    add(parseStyle(concrete.attrs.style)['font-family'])
+    if (symbolsClassOf(classAttr(concrete.attrs))) out.add(ICON_FONT_FAMILY)
+    for (const child of concrete.children) {
+      if (typeof child !== 'string') visit(child)
+    }
+  }
+  visit(node)
+  return [...out]
+}
+
+function collectFontFamilies(node: LayerNode, out: Set<string>) {
+  const concrete = materialize(node)
+  const style = parseStyle(concrete.attrs.style)
+  if (style['font-family']) out.add(style['font-family'])
+  if (concrete.attrs['font-family']) out.add(concrete.attrs['font-family'])
+  if (symbolsClassOf(classAttr(concrete.attrs))) out.add(ICON_FONT_FAMILY)
+  for (const child of concrete.children) {
+    if (typeof child !== 'string') collectFontFamilies(child, out)
+  }
+}
+
+function collectImageSrcs(node: LayerNode, out: string[]) {
+  const concrete = materialize(node)
+  if ((concrete.tag === 'img' || concrete.tag === 'image') && concrete.attrs.src?.trim()) out.push(concrete.attrs.src)
+  for (const child of concrete.children) {
+    if (typeof child !== 'string') collectImageSrcs(child, out)
+  }
+}
+
+/** layer.create 量到的布局尺寸。最终排版不一致时报 measure-mismatch。 */
+export function noteMeasuredSize(node: LayerNode, width: number, height: number) {
+  measuredBoxes.set(node, { width, height })
+}
+
+function formatSize(n: number): string {
+  const rounded = Math.round(n * 10) / 10
+  return String(Object.is(rounded, -0) ? 0 : rounded)
+}
+
+function noteMeasureMismatch(node: LayerNode, width: number, height: number, ctx: LayoutContext) {
+  const expected = measuredBoxes.get(node)
+  if (!expected) return
+  if (Math.abs(expected.width - width) <= 0.5 && Math.abs(expected.height - height) <= 0.5) return
+  ctx.issues.push({
+    level: 'warn',
+    code: 'measure-mismatch',
+    path: ctx.pathPrefix,
+    message: `排版尺寸 ${formatSize(width)}×${formatSize(height)} 和量到的 ${formatSize(expected.width)}×${formatSize(expected.height)} 不一致`,
+    hint: '量的时候和最终画布的可用宽度要一致。检查 width、safe 和字号',
+  })
+}
+
+export type MeasureEnv = {
+  baseDir: string
+  color: string
+  fontFamily: string
+  maxContentWidth: number
+}
+
+function scriptSource(node: LayerNode): string | undefined {
+  return node.loc ? formatSourceLoc(node.loc) : undefined
+}
+
+/** 收集 `<script>`，并拒绝已经删掉的 `<draw>`。不改节点树，量尺寸和正式排版可以各走一遍。 */
+function collectScripts(node: LayerNode, path: string, issues: Issue[], scripts: LayerScript[]): void {
+  if (node.legacyDraw) {
+    issues.push({
+      level: 'error',
+      code: 'invalid-attr',
+      path,
+      message: '不再支持 draw 回调',
+      hint: '改成 <canvas> 和 <script>。脚本里用 canvas.getContext("2d")',
+      ...(scriptSource(node) ? { source: scriptSource(node) } : {}),
+    })
+  }
+  let index = 0
+  for (const child of node.children) {
+    if (typeof child === 'string') continue
+    const childPath = `${path}/${child.tag}[${index}]`
+    index += 1
+    if (child.tag === 'draw') {
+      issues.push({
+        level: 'error',
+        code: 'invalid-child',
+        path: childPath,
+        message: '不再有 <draw>',
+        hint: '改成 <canvas id="…"> 和 <script>。脚本里用 document.querySelector 找到画布',
+        ...(scriptSource(child) ? { source: scriptSource(child) } : {}),
+      })
+      continue
+    }
+    if (child.tag === 'script') {
+      const body = child.children.map((part) => (typeof part === 'string' ? part : '')).join('')
+      const source = scriptSource(child)
+      const fns = child.scriptFns ?? []
+      if (!body.trim() && fns.length === 0) {
+        issues.push({
+          level: 'warn',
+          code: 'invalid-script',
+          path: childPath,
+          message: '<script> 内容为空',
+          hint: '写入绘制代码，例如 const canvas = document.querySelector("#bar"); canvas.getContext("2d").fillRect(0, 0, canvas.width, canvas.height)',
+          ...(source ? { source } : {}),
+        })
+      }
+      if (body.trim()) scripts.push({ path: childPath, body, ...(source ? { source } : {}) })
+      for (const fn of fns) scripts.push({ path: childPath, fn, ...(source ? { source } : {}) })
+      continue
+    }
+    collectScripts(child, childPath, issues, scripts)
+  }
+}
+
+/** 同步量一个 layer。字体、图片和 Yoga 需要先准备好。 */
+export function measureLayer(node: LayerNode, env: MeasureEnv): { laid: LayerLayoutNode; issues: Issue[] } {
+  installAuthorFeaturesSync(node)
+  const issues: Issue[] = []
+  const symbols = new Map<string, LayerNode>()
+  collectSymbols(node, symbols, issues, 'layer')
+  noteAttrTypos(node, 'layer', issues)
+  collectScripts(node, 'layer', issues, [])
+  const ctx: LayoutContext = {
+    color: env.color,
+    fontFamily: env.fontFamily,
+    maxContentWidth: env.maxContentWidth,
+    issues,
+    pathPrefix: 'layer',
+    symbols,
+    useStack: [],
+    baseDir: env.baseDir,
+    sources: new Map(),
+    previews: [],
+  }
+  track(ctx, 'layer', node)
+  const laid = layoutLayer(node, ctx)
+  return { laid, issues }
+}
+
+export type LayoutAssets = {
+  baseDir: string
+}
+
+export type PrepareOptions = {
+  /** 写在根外面的 <font> */
+  fonts?: Array<{ family: string; src: string }>
+  /** 预先加载的图。写在 layer 里的图会在 create 时自动准备 */
+  images?: string[]
+  fontFamily?: string
+  /** 把嵌套 layer 里的 <font> 也注册。layer.create 量尺寸时需要。 */
+  nestedFonts?: boolean
+}
+
+/** 准备字体、图片和 Yoga，并在这个进程里记住。已经备过的直接跳过。 */
+export function prepareAssetsSync(root: LayerNode | null, baseDir: string, options: PrepareOptions = {}): LayoutAssets {
+  getYoga()
+  const fontNodes = [...(options.fonts ?? [])]
+  if (root) {
+    if (options.nestedFonts) collectFontDecls(root, fontNodes)
+    else {
+      for (const child of root.children) {
+        if (typeof child === 'string') continue
+        const font = fontDecl(child)
+        if (font) fontNodes.push(font)
+      }
+    }
+  }
+  registerFontsFromDocumentSync(
+    fontNodes.filter((font) => font.family && font.src),
+    baseDir,
+  )
+  const families = new Set<string>([options.fontFamily ?? root?.attrs['font-family'] ?? DEFAULT_FONT_FAMILY])
+  if (root) collectFontFamilies(root, families)
+  ensureBuiltinFontsSync(families)
+  const srcs = [...(options.images ?? [])]
+  if (root) collectImageSrcs(root, srcs)
+  preloadLayerImagesSync(srcs, baseDir)
+  return { baseDir }
+}
+
+/** 异步外壳。实际准备是同步的，同一进程里多帧接着用，不会重新开始。 */
+export async function prepareAssets(root: LayerNode | null, baseDir: string, options: PrepareOptions = {}): Promise<LayoutAssets> {
+  if (root) await ensureAuthorFeatures(root)
+  return prepareAssetsSync(root, baseDir, options)
+}
+
+function unknownTagIssue(tag: string, path: string): Issue {
+  const spelling = tagSpellingHint(tag)
+  if (spelling) {
+    return { level: 'error', code: 'unknown-tag', path, message: `未知标签 ${tag}`, hint: spelling }
+  }
+  const retired = tag === 'Row' || tag === 'Column'
+  return {
+    level: 'warn',
+    code: 'unknown-tag',
+    path,
+    message: `未知标签 ${tag}`,
+    ...(retired ? { hint: rowColumnHint(tag) } : {}),
+  }
+}
+
+export function readLayerRoot(source: string | LayerNode): { root: LayerNode; fonts: Array<{ family: string; src: string }> } {
+  const nodes = typeof source === 'string' ? parseLayer(source) : [source]
+  const fonts: Array<{ family: string; src: string }> = []
+  let root: LayerNode | null = null
+  for (const node of nodes) {
+    const font = fontDecl(node)
+    if (font) fonts.push(font)
+    else if (!root) root = node
+  }
+  if (!root) throw new Error('Flex Layer 缺少根元素 <layer>')
+  return { root, fonts }
+}
+
+/** 同步排版。字体、图片和 Yoga 由 prepareAssetsSync 记住，多帧不会重新准备。 */
+export function layoutSync(rootNode: LayerNode, assets: LayoutAssets): LayerDocument {
+  installAuthorFeaturesSync(rootNode)
+  const baseDir = assets.baseDir
+  const attrs = rootNode.attrs
+  const width = parseNumber(attrs.width) ?? 1080
+  const height = parseNumber(attrs.height) ?? 1920
+  let color = attrs.color?.trim() || '#111111'
+  const fontFamily = attrs['font-family'] ?? DEFAULT_FONT_FAMILY
+  const safe = parseSafe(attrs.safe, width, height)
+  const maxContentWidth = width - safe.left - safe.right
+
+  const issues: Issue[] = []
+  const sources = new Map<string, string>()
+  const symbols = new Map<string, LayerNode>()
+  collectSymbols(rootNode, symbols, issues, 'layer')
+  noteAttrTypos(rootNode, 'layer', issues)
+  if (attrs.style?.trim()) {
+    issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: 'layer',
+      message: 'layer 和图形不使用 style',
+      hint: '把 width、opacity 写成属性。色块用 rect、HTML 或 canvas',
+    })
+  }
+  if (rootNode.tag !== 'layer') {
+    const hint = tagSpellingHint(rootNode.tag)
+    throw new Error(`Flex Layer 根元素必须是 <layer>，收到 <${rootNode.tag}>${hint ? `。${hint}` : ''}`)
+  }
+  noteStructuredData(rootNode, 'layer', issues)
+  noteCameraPlacement(rootNode, 'layer', issues)
+  issues.push(...legacyCenterIssues(rootNode, 'layer'))
+  const scripts: LayerScript[] = []
+  collectScripts(rootNode, 'layer', issues, scripts)
+  const paintCtx: LayoutContext = {
+    color,
+    fontFamily,
+    maxContentWidth,
+    issues,
+    pathPrefix: 'layer',
+    symbols,
+    useStack: [],
+    baseDir,
+    sources,
+    previews: [],
+  }
+  track(paintCtx, 'layer', rootNode)
+  if (isGradient(color)) {
+    issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: 'layer',
+      message: 'color 只收纯色',
+      hint: '写成 #112233。字形渐变写 fill: linear-gradient(to right, #ff0000, #0000ff)',
+    })
+    color = '#111111'
+    paintCtx.color = '#111111'
+  }
+  // 没写 background 时不铺底色，PNG 里空出来的像素保持透明。画布底色只收纯色。
+  const rawBackground = attrs.background?.trim() ?? ''
+  let background = 'transparent'
+  if (rawBackground) {
+    if (isGradient(rawBackground)) {
+      issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: 'layer',
+        message: '画布 background 只收纯色',
+        hint: '整页渐变用铺满的 <rect fill="linear-gradient(...)">',
+      })
+      background = '#ffffff'
+    } else {
+      background = rawBackground
+    }
+  }
+  const root = layoutLayer(rootNode, paintCtx)
+  const minFont = readMinFont(attrs['min-font'], issues)
+
+  root.width = width
+  root.height = height
+  issues.push(...perspectiveIssues(root))
+  issues.push(...cameraAuditIssues(root))
+
+  if (attrs.bleed != null) {
+    issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: 'layer',
+      message: 'bleed 已不再使用',
+      hint: '舞台写得比成片大，用 view="x y w h" 取出要出的那一块',
+    })
+  }
+
+  const ids = new Set<string>()
+  collectLayerIds(root, ids)
+  for (const preview of paintCtx.previews) {
+    if (!ids.has(preview.of)) {
+      issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: preview.path,
+        ...(preview.source ? { source: preview.source } : {}),
+        message: `preview 找不到 #${preview.of}`,
+        hint: 'of 写成带 id 的 layer，例如 <preview of="#person" />',
+      })
+    }
+  }
+
+  return {
+    width,
+    height,
+    background,
+    color,
+    fontFamily,
+    minFont,
+    safe,
+    root,
+    issues,
+    scripts,
+    sources,
+    ...(paintCtx.previews.length ? { previews: paintCtx.previews } : {}),
+  }
+}
+
+function collectLayerIds(node: LayoutNode, ids: Set<string>) {
+  if (node.kind === 'layer' && node.id) ids.add(node.id)
+  if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
+    for (const child of node.children) collectLayerIds(child, ids)
+  }
+}
+
+/** camera 对象和 preserve-3d 的位置。字符串 camera 由 layer-only 检查。 */
+function noteCameraPlacement(node: LayerNode, path: string, issues: Issue[]): void {
+  const flex = isTextBoxTag(node.tag) && isDisplayFlex(node.attrs.style)
+  if (node.camera !== undefined && node.tag !== 'layer') {
+    issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path,
+      message: 'camera 只写在 layer 上',
+      hint: '写在取景的 layer 上，例如 <layer camera="focal 900">',
+    })
+  }
+  if (node.attrs['preserve-3d'] != null && node.tag !== 'layer' && !flex) {
+    issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path,
+      message: 'preserve-3d 只写在 layer 和 flex 上',
+      hint: '写成 <div style="display:flex" preserve-3d="true">，或写在 layer 上',
+    })
+  }
+  let index = 0
+  for (const child of node.children) {
+    if (typeof child === 'string') continue
+    noteCameraPlacement(child, `${path}/${child.tag}[${index}]`, issues)
+    index++
+  }
+}
+
+/** 对象属性不能塞进字符串。`data` 解析失败是 error。 */
+function noteStructuredData(node: LayerNode, path: string, issues: Issue[]): void {
+  for (const name of node.badAttrs ?? []) {
+    issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path,
+      message: `属性 ${name} 是对象或数组，不能写成字符串`,
+      hint: '结构化数据放进 data',
+    })
+  }
+  if (node.dataError != null) {
+    issues.push({
+      level: 'error',
+      code: 'invalid-attr',
+      path,
+      message: 'data 不是合法的 JSON',
+      hint: `写成 data='{"values":[3,5,8]}'`,
+    })
+  }
+  let index = 0
+  for (const child of node.children) {
+    if (typeof child === 'string') continue
+    noteStructuredData(child, `${path}/${child.tag}[${index}]`, issues)
+    index++
+  }
+}
+
+function readMinFont(raw: string | undefined, issues: Issue[]): MinFontSpec {
+  if (raw == null || raw.trim() === '' || raw.trim().toLowerCase() === 'screen') return { mode: 'screen' }
+  const text = raw.trim().toLowerCase()
+  if (text === 'print') return { mode: 'print' }
+  if (text === 'none') return { mode: 'none' }
+  const px = Number(text)
+  if (Number.isFinite(px) && px >= 0) return px === 0 ? { mode: 'none' } : { mode: 'px', px }
+  issues.push({
+    level: 'warn',
+    code: 'invalid-attr',
+    path: 'layer',
+    message: `无法解析 min-font: ${raw}`,
+    hint: '写成 screen、print、none，或像素，例如 min-font="16"。screen 是 min(宽, 高) / 1080 × 24，print 是 × 12',
+  })
+  return { mode: 'screen' }
+}
+
+export async function layoutSource(source: string | LayerNode, baseDir: string): Promise<LayerDocument> {
+  const opened = readLayerRoot(source)
+  const assets = await prepareAssets(opened.root, baseDir, { fonts: opened.fonts })
+  return layoutSync(opened.root, assets)
+}
+
+export type { LayerDocument }

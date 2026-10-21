@@ -1,0 +1,13 @@
+<layer width="480" height="240" background="#10141c">
+  <canvas id="bars" width="480" height="240"></canvas>
+  <script>
+    const canvas = document.querySelector('#bars')
+    const ctx = canvas.getContext('2d')
+    ctx.fillStyle = '#3ecfc4'
+    ctx.fillRect(48, 70, 88, 140)
+    ctx.fillStyle = '#e8b04a'
+    ctx.fillRect(196, 36, 88, 174)
+    ctx.fillStyle = '#c23b22'
+    ctx.fillRect(344, 96, 88, 114)
+  </script>
+</layer>

@@ -1,0 +1,8 @@
+<layer width="800" height="1000" background="#1c1915" noise="0.08">
+  <layer x="64" y="280">
+    <h1 style="font-size:96px; color:#f4efe6">港口</h1>
+  </layer>
+  <layer x="64" y="420">
+    <p style="font-size:32px; color:#c9bfb0">夜班从这里开始</p>
+  </layer>
+</layer>

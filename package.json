@@ -1,0 +1,73 @@
+{
+  "name": "flexlayer",
+  "version": "0.13.3",
+  "engines": {
+    "node": ">=20"
+  },
+  "description": "Flex Layer: AI-friendly 2D frame markup with flex layout, HTML text and SVG-style shapes, rendered to PNG",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./jsx-runtime": {
+      "types": "./dist/jsx-runtime.d.ts",
+      "import": "./dist/jsx-runtime.js"
+    },
+    "./jsx-dev-runtime": {
+      "types": "./dist/jsx-dev-runtime.d.ts",
+      "import": "./dist/jsx-dev-runtime.js"
+    },
+    "./three": {
+      "types": "./dist/three.d.ts",
+      "import": "./dist/three.js"
+    }
+  },
+  "bin": {
+    "flexlayer": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "native",
+    "README.md",
+    "LICENSE",
+    "SPEC.md",
+    "docs"
+  ],
+  "scripts": {
+    "prepare": "npm run build",
+    "build": "tsc && node scripts/relink-draw.mjs && cp src/icon-codepoints.txt dist/icon-codepoints.txt && cp src/native-preload.cjs dist/native-preload.cjs",
+    "test": "vitest run",
+    "pythagoras": "tsx examples/render-pythagoras.ts",
+    "bench": "node scripts/bench-mesh.mjs",
+    "flexlayer": "tsx src/cli.ts",
+    "docs:attrs": "tsx scripts/gen-attr-docs.ts",
+    "gallery": "tsx scripts/render-gallery.ts"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@napi-rs/canvas": "^1.0.9",
+    "@types/node": "^20.19.43",
+    "esbuild": "^0.25.12",
+    "linebreak": "^1.1.0",
+    "typescript": "~5.4.2",
+    "yoga-layout": "^3.2.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.170.0",
+    "three": "0.170.0",
+    "tsx": "^4.19.2",
+    "vitest": "^2.1.9"
+  },
+  "peerDependencies": {
+    "three": ">=0.160.0"
+  },
+  "peerDependenciesMeta": {
+    "three": {
+      "optional": true
+    }
+  }
+}

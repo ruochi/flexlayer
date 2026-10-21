@@ -1,0 +1,16 @@
+<layer width="720" height="480" background="#f7f4ee" color="#1a1408">
+  <line x1="150" y1="190" x2="360" y2="190" stroke="#1a1408" stroke-width="4" />
+  <line x1="360" y1="190" x2="570" y2="190" stroke="#1a1408" stroke-width="4" />
+  <circle cx="150" cy="190" r="34" fill="#2f6fed" />
+  <circle id="node" cx="360" cy="190" r="34" fill="#3ecfc4" />
+  <circle cx="570" cy="190" r="34" fill="#e8b04a" />
+  <layer x="150" y="268" anchor="center">
+    <p style="font-size:28px; color:#1a1408">Sun</p>
+  </layer>
+  <layer x="360" y="268" anchor="center">
+    <p style="font-size:28px; color:#1a1408">Moon</p>
+  </layer>
+  <layer x="570" y="268" anchor="center">
+    <p style="font-size:28px; color:#1a1408">Star</p>
+  </layer>
+</layer>

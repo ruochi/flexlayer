@@ -1,0 +1,5 @@
+<layer width="1080" height="1350" background="#0c0e12" color="#ffffff">
+  <layer x="540" y="675" anchor="center" anchor-box="ink">
+    <h1 id="title" style="font-size:168px; color:#ffffff">NIGHT</h1>
+  </layer>
+</layer>

@@ -1,0 +1,11 @@
+<layer width="880" height="420" background="#f4efe6">
+  <layer x="40" y="40" width="800" height="340">
+    <div style="display:flex; flex-direction:row; align-items:center; gap:28px; width:800px; height:340px; background:#fff; border-radius:28px; padding:36px">
+      <div style="width:88px; height:88px; border-radius:44px; background:#1f6f5b"></div>
+      <div style="display:flex; flex-direction:column; gap:12px">
+        <h1 style="font-size:48px; color:#1c1915">潮汐</h1>
+        <p style="font-size:28px; color:#5c564c">今晚十点，码头集合。</p>
+      </div>
+    </div>
+  </layer>
+</layer>
