@@ -59,7 +59,7 @@ Combine two or three per picture. A cover usually needs one strong type treatmen
 ### Place
 
 - `anchor` is a 3×3 grid, default `top-left`. `(x, y)` is that point of the box. `anchor-box="ink"` aligns to the ink before rotation.
-- When `width` or `height` is omitted, that axis is the union of the child boxes, and the children shift so the union starts at 0. A sized axis stays an artboard.
+- When `width` or `height` is omitted, that axis is the union of the child boxes, and the children shift so the union starts at 0 inside the box. The default top-left anchor stays the local origin: the box moves by that minimum, and marks stay where they were written. Other anchors meet the union. `anchor-box="box"` does too. A sized axis stays an artboard.
 - A `layer` with width and height inside `display:flex` is a flex item. `x`, `y`, or `anchor` on it reports `invalid-attr`.
 - `background` is the canvas color, on the root only, and solid only. A page gradient is a `<rect fill>`.
 - `color` is a solid, and the default line color. Glyph paint is `fill` in `style`: a solid, `linear-gradient()`, `radial-gradient()`, or `gradient()`. `gradient()` is a color matrix, not CSS. `fill` is not inherited.

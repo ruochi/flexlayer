@@ -110,6 +110,18 @@ describe('layer.create', () => {
     expect(natural.width).toBeCloseTo(80)
     expect(natural.height).toBeCloseTo(40)
     expect(natural.attrs.scale).toBeUndefined()
+    const shifted = layer.create(
+      h('layer', { x: '30', y: '40' }, h('rect', { x: '10', y: '20', width: '5', height: '6', fill: '#fff' })),
+    )
+    expect(shifted.x).toBeCloseTo(40)
+    expect(shifted.y).toBeCloseTo(60)
+    expect(shifted.width).toBeCloseTo(5)
+    expect(shifted.height).toBeCloseTo(6)
+    const pinned = layer.create(
+      h('layer', { x: '30', y: '40', 'anchor-box': 'box' }, h('rect', { x: '10', y: '20', width: '5', height: '6', fill: '#fff' })),
+    )
+    expect(pinned.x).toBeCloseTo(30)
+    expect(pinned.y).toBeCloseTo(40)
   })
 
   it('换行宽度和最终画布一致时不报 measure-mismatch', async () => {

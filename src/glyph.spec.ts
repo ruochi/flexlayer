@@ -5,6 +5,7 @@ import { Path2D } from '@napi-rs/canvas'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { applyCanvasFont, ensureBuiltinFonts, ensureDefaultFont, getFontsCacheDir, registerFontPath } from './fonts.js'
 import { glyph } from './glyph.js'
+import { layoutSource } from './layout.js'
 import { loadLayerFile } from './load-source.js'
 import { getMeasureCtx } from './measureCtx.js'
 import { translateSvgPath } from './path.js'
@@ -191,6 +192,39 @@ describe('glyph', () => {
     const [bad] = glyph('\uFFFE', { font: 'Kai', size: 100 })
     expect(bad!.missing).toBe(true)
     expect(bad!.d).toBe(emoji[0]!.d)
+  })
+
+  it('没写宽高的 layer 不把 ·、句号和拉丁小写推到字身左上角', async () => {
+    if (!ready) return
+    const chars = glyph('国·。ay', { size: 80 })
+    const place = async (em: boolean) => {
+      let cursor = 0
+      const parts = chars.map((g) => {
+        const size = em ? ` width="${g.width}" height="${g.height}"` : ''
+        const part = `<layer x="${cursor}" y="12"${size}><path d="${g.d}" fill="#111111" stroke="none" /></layer>`
+        cursor += g.width
+        return part
+      })
+      const doc = await layoutSource(`<layer width="800" height="240">${parts.join('')}</layer>`, process.cwd())
+      return (doc.root.children as Array<{ x: number; y: number; children: Array<{ x: number; y: number; width: number; height: number }> }>).map(
+        (layer) => {
+          const path = layer.children[0]!
+          return { x: layer.x + path.x, y: layer.y + path.y, width: path.width, height: path.height }
+        },
+      )
+    }
+    const bare = await place(false)
+    const fitted = await place(true)
+    expect(bare.map((box) => box.x)).toEqual(fitted.map((box) => box.x))
+    expect(bare.map((box) => box.y)).toEqual(fitted.map((box) => box.y))
+    const dot = chars[1]!
+    const period = chars[2]!
+    const lowercase = chars[3]!
+    // 着墨不在字身顶上。被推到左上角时，y 会贴着层的 y。
+    expect(bare[1]!.y).toBeGreaterThan(12 + dot.ink!.y * 0.5)
+    expect(bare[2]!.y).toBeCloseTo(12 + period.ink!.y, 3)
+    expect(bare[3]!.y).toBeCloseTo(12 + lowercase.ink!.y, 3)
+    expect(bare[1]!.y - 12).toBeCloseTo(dot.ink!.y, 3)
   })
 
   it('取出来的路径可以画进 layer', async () => {
