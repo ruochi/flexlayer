@@ -6,6 +6,8 @@
 
 An unsized `layer` with the default top-left anchor keeps `(x, y)` as the local origin. The box is still the union of the children, and the children still shift so that union starts at 0 inside the box, but the box is placed at the origin plus that minimum. A path whose ink does not fill its coordinate box stays where it was written. That includes a `glyph()` outline of `·`, `。`, or a lowercase letter inside its own layer. `center` and the other anchors still meet the union. `anchor-box="box"` does too. A sized axis is unchanged.
 
+`native/flexlayer-render` for linux-x64-gnu is rebuilt from the current renderer. The compiled painter calls that addon for depth of field, mesh bevel, rounded rectangles, and fake WebGL. The darwin-arm64 binary is unchanged.
+
 ## 0.13.3
 
 `native/flexlayer-render` is the latest prebuilt renderer. It contains the addon binary and the compiled painter. Painter source is not in this repository. `loadNativeRender()` loads the addon. When that binary does not match this machine, `renderLayer` still paints with the compiled painter.
