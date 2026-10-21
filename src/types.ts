@@ -514,6 +514,13 @@ export type LayerLayoutNode = LayoutNodeBase & {
   maskInvert?: boolean
   /** 舞台坐标里被取的矩形。这一层的宽高是屏幕上的取景窗。 */
   view?: ViewRect
+  /**
+   * 自动宽度把内容平移到 0 之前，内容在局部坐标里的最小 x。
+   * 默认 top-left 要把盒子挪回这段，写下的坐标才留在原地。固定宽度不写。
+   */
+  autoOriginX?: number
+  /** 自动高度对应的最小 y。含义和 `autoOriginX` 相同。 */
+  autoOriginY?: number
 }
 
 export type FlexLayoutNode = LayoutNodeBase & {

@@ -183,6 +183,20 @@ function anchorOf(raw: string | undefined, ctx: LayoutContext, tag: string): Anc
   return read.anchor
 }
 
+/**
+ * 自动尺寸会把内容平移到盒子原点。默认 top-left 的 (x, y) 仍是平移前的局部原点，
+ * 所以盒子要挪回这段最小值。显式 anchor-box 继续对齐盒子或着墨，不挪。
+ */
+export function offsetForAutoOrigin(
+  anchor: Anchor,
+  anchorBox: 'ink' | 'box' | 'absent',
+  originX: number,
+  originY: number,
+): { x: number; y: number } {
+  if (anchor !== 'top-left' || anchorBox !== 'absent') return { x: 0, y: 0 }
+  return { x: originX, y: originY }
+}
+
 function anchorTopLeft(cx: number, cy: number, w: number, h: number, anchor: Anchor): { x: number; y: number } {
   switch (anchor) {
     case 'top-left':
@@ -3873,6 +3887,11 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
     const tl = anchorTopLeft(p.x, p.y, p.child.width, p.child.height, p.anchor)
     p.child.x = tl.x
     p.child.y = tl.y
+    if (p.child.kind === 'layer') {
+      const back = offsetForAutoOrigin(p.anchor, p.anchorBox, p.child.autoOriginX ?? 0, p.child.autoOriginY ?? 0)
+      p.child.x += back.x
+      p.child.y += back.y
+    }
     if (p.child.kind !== 'layer') return
     if (p.anchorBox === 'ink') applyInkAnchor(p.child, p.x, p.y, p.anchor, ctx)
     else if (p.anchorBox === 'absent') maybeInkInset(p.child, p.anchor, ctx)
@@ -3880,6 +3899,7 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
   for (const p of placed) positionOne(p)
 
   // 写了宽高的轴仍是画板，内容留在原坐标。没写的轴改成内容的并集，从最小到最大，再把内容平移到 0。
+  // 最小值记在 autoOrigin 上。默认 top-left 放置时加回去，局部原点不动，「·」才不会被推到字身顶上。
   let minX = 0
   let minY = 0
   let maxRight = 0
@@ -4017,6 +4037,8 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
     children,
     overflow: node.attrs.overflow === 'hidden' ? 'hidden' : 'visible',
     ...(view ? { view } : {}),
+    ...(widthAuto && anyBox && minX !== 0 ? { autoOriginX: minX } : {}),
+    ...(heightAuto && anyBox && minY !== 0 ? { autoOriginY: minY } : {}),
     ...(perspective != null ? { perspective } : {}),
     ...(cameraView ? { cameraView } : {}),
     ...(vanishX != null ? { vanishX } : {}),
