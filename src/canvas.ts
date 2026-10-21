@@ -4,7 +4,7 @@ import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { registerComponent } from './components.js'
 import { DEFAULT_FONT_FAMILY, ensureBuiltinFontsSync, fontReady, registerFontPath, resolveFontSrcSync } from './fonts.js'
-import { fontFamiliesOf, measureLayer, noteMeasuredSize, parseSafe, prepareAssetsSync, type MeasureEnv } from './layout.js'
+import { fontFamiliesOf, measureLayer, noteMeasuredSize, offsetForAutoOrigin, parseSafe, prepareAssetsSync, type MeasureEnv } from './layout.js'
 import type { LayerNode } from './parse.js'
 import { divHasFlowBreak, isDisplayFlex } from './rules.js'
 import { placedElements, placedRootMask, type PlacedElement, type PlacedMask } from './placed-elements.js'
@@ -209,6 +209,11 @@ export function create(node: LayerNode): CreatedLayer {
   noteMeasuredSize(node, laid.width, laid.height)
   const anchor = parseAnchor(node.attrs.anchor)
   const origin = topLeft(parseNumber(node.attrs.x) ?? 0, parseNumber(node.attrs.y) ?? 0, laid.width, laid.height, anchor)
+  const rawAnchorBox = node.attrs['anchor-box']?.trim().toLowerCase() ?? ''
+  const anchorBox = rawAnchorBox === '' ? 'absent' : rawAnchorBox === 'ink' ? 'ink' : 'box'
+  const back = offsetForAutoOrigin(anchor, anchorBox, laid.autoOriginX ?? 0, laid.autoOriginY ?? 0)
+  origin.x += back.x
+  origin.y += back.y
   const box: LayerBox = {
     left: origin.x,
     top: origin.y,

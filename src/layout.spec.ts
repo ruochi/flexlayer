@@ -251,18 +251,26 @@ describe('layoutSource', () => {
     for (const child of row.children) expect(child.textLayout.lines).toHaveLength(1)
   })
 
-  it('没写宽高的 layer 包住内容，负坐标会把其他子元素一起平移', async () => {
+  it('没写宽高的 layer 包住内容，top-left 仍落在写下的坐标', async () => {
     const doc = await layoutSource(
       `<layer width="400" height="400"><layer><rect x="10" y="10" width="20" height="20" /><rect x="-40" y="30" width="20" height="20" /></layer></layer>`,
       process.cwd(),
     )
-    const layer = doc.root.children[0] as { kind: string; width: number; height: number; children: Array<{ x: number; y: number }> }
+    const layer = doc.root.children[0] as { kind: string; x: number; y: number; width: number; height: number; children: Array<{ x: number; y: number }> }
     expect(layer.kind).toBe('layer')
     expect(layer.width).toBe(70)
     expect(layer.height).toBe(40)
     const [first, second] = layer.children
+    // 盒子内部仍把并集收到 0。负的那个把另一个一起平移。
     expect(first).toMatchObject({ x: 50, y: 0 })
     expect(second).toMatchObject({ x: 0, y: 20 })
+    // 默认 top-left 是局部原点，盒子挪回去，屏幕上还是写下的 10,10 和 -40,30。
+    expect(layer.x).toBe(-40)
+    expect(layer.y).toBe(10)
+    expect(layer.x + first!.x).toBe(10)
+    expect(layer.y + first!.y).toBe(10)
+    expect(layer.x + second!.x).toBe(-40)
+    expect(layer.y + second!.y).toBe(30)
   })
 
   it('圆在局部原点、anchor 为 center 时，圆心落在锚点上', async () => {
@@ -316,6 +324,52 @@ describe('layoutSource', () => {
     expect(mask).toBeDefined()
     expect(mask!.x + mask!.width / 2).toBe(visible.x + visible.width / 2)
     expect(mask!.y + 20).toBe(visible.y + 40)
+  })
+
+  it('没写宽高、默认 top-left 时，路径留在写下的坐标', async () => {
+    const doc = await layoutSource(
+      `<layer width="400" height="300"><layer x="30" y="40"><path d="M 80 90 L 140 110" fill="#fff" stroke="none" /></layer></layer>`,
+      process.cwd(),
+    )
+    const layer = doc.root.children[0] as { x: number; y: number; width: number; height: number; children: Array<{ x: number; y: number }> }
+    expect(layer.width).toBe(60)
+    expect(layer.height).toBe(20)
+    expect(layer.x).toBe(110)
+    expect(layer.y).toBe(130)
+    expect(layer.children[0]).toMatchObject({ x: 0, y: 0 })
+    const fitted = await layoutSource(
+      `<layer width="400" height="300"><layer x="30" y="40" width="200" height="160"><path d="M 80 90 L 140 110" fill="#fff" stroke="none" /></layer></layer>`,
+      process.cwd(),
+    )
+    const board = fitted.root.children[0] as { x: number; y: number; children: Array<{ x: number; y: number }> }
+    const boardPath = board.children[0]!
+    expect(layer.x + layer.children[0]!.x).toBe(board.x + boardPath.x)
+    expect(layer.y + layer.children[0]!.y).toBe(board.y + boardPath.y)
+  })
+
+  it('只自动高度时，top-left 只把垂直方向留在原坐标', async () => {
+    const doc = await layoutSource(
+      `<layer width="400" height="300"><layer x="5" y="8" width="100"><rect x="10" y="30" width="20" height="20" /></layer></layer>`,
+      process.cwd(),
+    )
+    const layer = doc.root.children[0] as { x: number; y: number; width: number; height: number; children: Array<{ x: number; y: number }> }
+    expect(layer.width).toBe(100)
+    expect(layer.height).toBe(20)
+    expect(layer.x).toBe(5)
+    expect(layer.y).toBe(38)
+    expect(layer.children[0]).toMatchObject({ x: 10, y: 0 })
+    expect(layer.y + layer.children[0]!.y).toBe(38)
+  })
+
+  it('anchor-box="box" 的自动尺寸仍把并集的角放在锚点上', async () => {
+    const doc = await layoutSource(
+      `<layer width="400" height="300"><layer x="30" y="40" anchor-box="box"><rect x="10" y="20" width="20" height="20" /></layer></layer>`,
+      process.cwd(),
+    )
+    const layer = doc.root.children[0] as { x: number; y: number; children: Array<{ x: number; y: number }> }
+    expect(layer.x).toBe(30)
+    expect(layer.y).toBe(40)
+    expect(layer.children[0]).toMatchObject({ x: 0, y: 0 })
   })
 
   it('写了宽高的 layer 仍是画板，不把内容平移', async () => {

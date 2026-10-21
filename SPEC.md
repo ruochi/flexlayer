@@ -32,7 +32,7 @@ Color blocks use `<rect fill>`, an HTML `background`, or `<canvas>`. `background
 
 | Attribute | Meaning |
 | --- | --- |
-| `width`, `height` | Required on the root. They are the canvas size. A nested layer that sets one is an artboard on that axis, and content stays where it was written. When an axis is omitted, the box is the union of the child boxes on that axis, from the minimum to the maximum, and the children shift so the union starts at 0. `ground` does not count. A `model` with no box yet does not count. Once it has `width` and `height`, or `unit`, it does. Content may still draw outside a sized box |
+| `width`, `height` | Required on the root. They are the canvas size. A nested layer that sets one is an artboard on that axis, and content stays where it was written. When an axis is omitted, the box is the union of the child boxes on that axis, from the minimum to the maximum, and the children shift so the union starts at 0 inside the box. The default top-left anchor stays the local origin: the box is placed at that origin plus the minimum, so a mark keeps the coordinates it was written with. Any other anchor meets the union. `anchor-box="box"` also meets the union. `ground` does not count. A `model` with no box yet does not count. Once it has `width` and `height`, or `unit`, it does. Content may still draw outside a sized box |
 | `background` | Root only. Default transparent |
 | `color` | Default text color and default line color. Solid colors only. Default `#111111`. A glyph gradient is `fill` |
 | `font-family` | Default `ChillDuanSans`. A catalog name is written directly and downloaded on first use. A file you supply uses `<font>`. See [docs/RESOURCES.md](docs/RESOURCES.md) |
@@ -63,7 +63,7 @@ Where attributes go (generated from [src/schema.ts](src/schema.ts); do not edit 
 <!-- attrs:ownership:begin -->
 | Attribute | Where |
 | --- | --- |
-| `width`, `height`, `min-font`, `x`, `y`, `anchor`, `anchor-box` | `x` and `y` are the anchor point. Default `anchor` is `top-left`. An omitted `width` or `height` is the union of the children. Writing them on HTML warns |
+| `width`, `height`, `min-font`, `x`, `y`, `anchor`, `anchor-box` | `x` and `y` are the anchor point. Default `anchor` is `top-left`. On an unsized layer that default is the local origin, not the corner of the union. An omitted `width` or `height` is the union of the children. Writing them on HTML warns |
 | `opacity`, `rotate`, `rotateX`, `rotateY`, `z`, `scale`, `origin` | Shapes, lines, and `layer` use attributes; text uses `style`. Writing them as attributes on HTML warns |
 | `background`, `padding`, `font-size`, `color`, `flex`, `flex-grow`, `flex-shrink`, `flex-basis`, `gap`, `border`, `border-radius`, `max-width`, `align-items`, `align-content`, `justify-content`, `flex-wrap`, `row-gap`, `column-gap`, `writing-mode`, `object-fit`, `object-position` | HTML, rendered as CSS, written in `style`. Initial values are not restated. `style` on `layer` or a shape warns |
 | `cx`, `cy`, `x1`, `y1`, `x2`, `y2`, `points`, `d`, `depth`, `fill-rule`, `tube`, `round`, `fill`, `stroke`, `stroke-dasharray`, `stroke-dashoffset`, `hidden`, `halo`, `material`, `cast-shadow`, `receive-shadow`, `shadow-blur`, `shadow-opacity`, `shadow-color`, `transform` | Shape attributes. Coordinates are local to the containing `layer` |

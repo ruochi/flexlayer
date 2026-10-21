@@ -56,7 +56,7 @@ Effects: `shadow` `0 8 16 #00000055` (default color `#00000066`), `box-shadow` `
 
 In tsx, `<model x y width height object={mesh} />` contain-fits a mesh in that box. `<model unit x y object={mesh} />` puts the model origin at `(x, y)`. Lambert and Toon become `matte`. Phong becomes `plastic` after `shininess` is turned into roughness. Transmission of at least 0.5 becomes `glass`. Anything else is `metal` or `plastic` by metalness. An in-memory `map` and vertex colors tint the base color. `emissive` is added after shading. `ShaderMaterial` contributes only a color from its uniforms. `Line` and `wireframe` draw into the same depth buffer.
 
-An unsized `layer` box is the union of its children, and the children shift so that union starts at 0. A sized axis stays an artboard. `tube` `d` is already in layer coordinates. A solid, a `ground`, or a 3D pose needs `camera` on the layer that frames the shot. Omitting it reports `flatten-3d`.
+An unsized `layer` box is the union of its children, and the children shift so that union starts at 0 inside the box. The default top-left anchor stays the local origin, so the box moves with the minimum and marks stay where they were written. Other anchors meet the union, and so does `anchor-box="box"`. A sized axis stays an artboard. `tube` `d` is already in layer coordinates. A solid, a `ground`, or a 3D pose needs `camera` on the layer that frames the shot. Omitting it reports `flatten-3d`.
 
 ```html
 <layer width="320" height="180">

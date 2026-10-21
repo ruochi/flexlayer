@@ -512,7 +512,7 @@ export const EFFECT_ATTRS: string[] = ATTRS.filter((attr) => attr.effect).map((a
 const DOC_GROUP_ORDER: DocGroup[] = ['layer', 'transform', 'html', 'graphic', 'image', 'effect', 'layer-only', 'data', 'expect']
 
 const DOC_GROUP_LABEL: Record<DocGroup, string> = {
-  layer: '`x` and `y` are the anchor point. Default `anchor` is `top-left`. An omitted `width` or `height` is the union of the children. Writing them on HTML warns',
+  layer: '`x` and `y` are the anchor point. Default `anchor` is `top-left`. On an unsized layer that default is the local origin, not the corner of the union. An omitted `width` or `height` is the union of the children. Writing them on HTML warns',
   transform: 'Shapes, lines, and `layer` use attributes; text uses `style`. Writing them as attributes on HTML warns',
   html: 'HTML, rendered as CSS, written in `style`. Initial values are not restated. `style` on `layer` or a shape warns',
   graphic: 'Shape attributes. Coordinates are local to the containing `layer`',
