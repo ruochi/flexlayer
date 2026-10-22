@@ -13,7 +13,7 @@ The entry point for models is [AGENTS.md](AGENTS.md). Attributes, one by one, ar
 
 ## layer
 
-The root `<layer width height>` is the canvas, and it is a layer.
+The root `<layer width height>` is the canvas, and it is a layer. The delivered picture is `width × scale` by `height × scale`. With `FLEXLAYER_PAINTER=native` the capped addon refuses that picture when either edge is above 1920, reports `output-limit`, and does not write a PNG. It does not scale the picture down. An input image whose long edge is above 3840 is scaled down at decode and reported as `input-limit`. The unlimited addon, built with the `unlimited` feature, raises both edges to 16384 and is not published. The default painter is still the compiled JS painter, which does not apply this cap. Internal supersample buffers may be larger than the delivered picture and are not returned.
 
 ```html
 <layer width="1080" height="1920" background="#0f1115" color="#ffffff">
@@ -365,6 +365,8 @@ Rendering also writes JSON. Each node in `elements` has `path`, `id`, `tag`, `bo
 | `ink-anchor-empty` | info | `anchor-box="ink"` has no ink |
 | `ink-anchor-rotate` | info | `anchor-box="ink"` and `rotate` are both set |
 | `flatten-3d` | error | A 3D pose or a solid did not land in a camera |
+| `output-limit` | error | The delivered picture, `width × scale` by `height × scale`, is past the addon’s long-edge cap. No PNG is written |
+| `input-limit` | info | An input image was scaled down because its long edge was past the addon’s input cap |
 | `flattened-3d` | info | `preserve-3d` is set, but this layer flattens the subtree into one picture |
 | `behind-camera` | warn | After projection, `w` is less than or equal to 0. `parallel` does not report this |
 | `unsupported-dom` | error | The script used DOM outside the subset |

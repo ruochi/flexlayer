@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.13.6
+
+`FLEXLAYER_PAINTER=native` paints through the flexlayer-render addon. The addon returns a PNG or RGBA and paint issues. It does not return a canvas. The capped build refuses a delivered long edge above 1920 with `output-limit` and writes no PNG. An input image whose long edge is above 3840 is scaled down and reported as `input-limit`. Text uses the same `wght` axis as layout. `gradient()` is sampled in the addon. `FLEXLAYER_PAINTER=js` remains the default. On the gallery, text, images, and solid color are close; glass still differs, so the compiled painter stays. The unlimited build is `engine()` ending in `+unlimited` and is not exported. `draw/` stays in the package until the two painters match.
+
 ## 0.13.5
 
 `material="clay"`, `plastic`, `metal`, `mirror`, and `brushed` are baked finishes. Omit `fill` and the finish uses its own color. A `fill` recolors it. A number after one of those names reports `invalid-attr`. `matte`, `glass`, and `plastic`, `metal`, or `glass` followed by a roughness stay on the older shading. Omitting `material` is still matte. A model with no `material` still maps three.js kinds onto that older shading.
