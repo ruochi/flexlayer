@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.13.6
+
+The key light casts onto solids as well as `ground`. On a solid the edge stays hard. On `ground`, `shadow-blur` is the maximum softness in layer pixels. `0` stays hard. A larger value keeps the edge sharp where the caster meets the ground and softens it as the caster rises. The ground darkens where a caster sits close and picks up a little of that color. A solid does the same from its neighbors.
+
+`lamp` and `neon` emit. Omit `fill` and lamp is `#ffe6c2`, neon is `#3ad8ff`. Neon has a white core and a wider halo. They light what is near them, including the ground, and they do not cast. Glass does not write a hard shadow. Light passing through it keeps the glass color at the rim and stays white at the center. A three.js `emissive` is still added after shading, and it also lights nearby surfaces.
+
+`native/flexlayer-render` for linux-x64-gnu is rebuilt. The darwin-arm64 binary is unchanged. Rebuilding the other platform binaries needs `zig` and `cargo-xwin` via `npm run build:platforms`.
+
 ## 0.13.5
 
 `material="clay"`, `plastic`, `metal`, `mirror`, and `brushed` are baked finishes. Omit `fill` and the finish uses its own color. A `fill` recolors it. A number after one of those names reports `invalid-attr`. `matte`, `glass`, and `plastic`, `metal`, or `glass` followed by a roughness stay on the older shading. Omitting `material` is still matte. A model with no `material` still maps three.js kinds onto that older shading.
