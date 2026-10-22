@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.13.5
+
+`material="clay"`, `plastic`, `metal`, `mirror`, and `brushed` are baked finishes. Omit `fill` and the finish uses its own color. A `fill` recolors it. A number after one of those names reports `invalid-attr`. `matte`, `glass`, and `plastic`, `metal`, or `glass` followed by a roughness stay on the older shading. Omitting `material` is still matte. A model with no `material` still maps three.js kinds onto that older shading.
+
+`native/flexlayer-render` for linux-x64-gnu is rebuilt. The darwin-arm64 binary is unchanged. Rebuilding the other platform binaries needs `zig` and `cargo-xwin` via `npm run build:platforms`.
+
 ## 0.13.4
 
 An unsized `layer` with the default top-left anchor keeps `(x, y)` as the local origin. The box is still the union of the children, and the children still shift so that union starts at 0 inside the box, but the box is placed at the origin plus that minimum. A path whose ink does not fill its coordinate box stays where it was written. That includes a `glyph()` outline of `·`, `。`, or a lowercase letter inside its own layer. `center` and the other anchors still meet the union. `anchor-box="box"` does too. A sized axis is unchanged.

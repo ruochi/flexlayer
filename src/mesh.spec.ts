@@ -1,11 +1,14 @@
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { describe, expect, it } from 'vitest'
 import { parseGlb, solidBoxGlb } from './glb.js'
 import { BOX_EDGES, roundedBoxGeometry } from './mesh-round.js'
 import { bevelFewFaces, bevelRadius } from './mesh-bevel.js'
+import { MATCAP_DEFAULTS, MATCAP_NAMES } from './matcaps.js'
 import { checkLayer, renderLayer } from './render.js'
 import { tessellateSvgPath } from './path.js'
 import { boxBottom, boxRight } from './types.js'
@@ -535,7 +538,7 @@ describe('网格绘制', () => {
         `<layer width="180" height="180" background="#101010" camera="700"><sphere cx="90" cy="90" r="50" fill="#888888"${material} /></layer>`,
       )
     const plain = await imageOf((await paint('')).png)
-    const plastic = await imageOf((await paint(' material="plastic"')).png)
+    const plastic = await imageOf((await paint(' material="plastic 0.4"')).png)
     const lum = (image: ImageSample, x: number, y: number) => image.at(x, y).reduce((sum, channel, index) => (index < 3 ? sum + channel : sum), 0)
     const peakP = brightest(plastic)
     const peakM = brightest(plain)
@@ -724,6 +727,56 @@ describe('网格绘制', () => {
     )
     expect(ok.issues.filter((issue) => issue.code === 'invalid-attr')).toEqual([])
   })
+
+  it('材质球名字跟插件一致，没写 fill 用表里的颜色，名字后面的数字要删掉', async () => {
+    const require = createRequire(import.meta.url)
+    const native = require(fileURLToPath(new URL('../native/flexlayer-render/flexlayer-render.linux-x64-gnu.node', import.meta.url))) as {
+      matcapNames: () => string
+    }
+    const rows = native
+      .matcapNames()
+      .split('\n')
+      .filter((line) => line.length > 0)
+      .map((line) => {
+        const [name, color] = line.split(' ')
+        return { name, color }
+      })
+    expect(rows.map((row) => row.name)).toEqual(MATCAP_NAMES)
+    expect(Object.fromEntries(rows.map((row) => [row.name, row.color]))).toEqual(MATCAP_DEFAULTS)
+
+    const paint = (material: string, fill = '') =>
+      renderLayer(
+        `<layer width="80" height="80" background="#101010" camera="400"><sphere cx="40" cy="40" r="24"${fill} material="${material}" /></layer>`,
+      )
+    const bare = await imageOf((await paint('clay')).png)
+    const tinted = await imageOf((await paint('clay', ' fill="#d4cfc4"')).png)
+    const legacy = await imageOf((await paint('plastic 0.4', ' fill="#888888"')).png)
+    const baked = await imageOf((await paint('plastic', ' fill="#888888"')).png)
+    let same = 0
+    let differ = 0
+    for (let y = 0; y < bare.height; y++) {
+      for (let x = 0; x < bare.width; x++) {
+        const a = bare.at(x, y)
+        const b = tinted.at(x, y)
+        if (a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3]) same++
+        const c = legacy.at(x, y)
+        const d = baked.at(x, y)
+        if (c[0] !== d[0] || c[1] !== d[1] || c[2] !== d[2]) differ++
+      }
+    }
+    expect(same).toBe(bare.width * bare.height)
+    expect(differ).toBeGreaterThan(20)
+
+    const numbered = await checkLayer(
+      `<layer width="120" height="120" camera="400"><sphere cx="60" cy="60" r="20" material="clay 0.2" /></layer>`,
+    )
+    const issue = numbered.issues.find((item) => item.message.includes('不写粗糙度'))
+    expect(issue?.hint).toContain('删掉数字')
+    const kept = await checkLayer(
+      `<layer width="120" height="120" camera="400"><sphere cx="60" cy="60" r="20" fill="#fff" material="metal 0.35" /></layer>`,
+    )
+    expect(kept.issues.filter((item) => item.code === 'invalid-attr')).toEqual([])
+  }, 30000)
 
   it('网格上的渐变、shadow、glow 会警告', async () => {
     const report = await checkLayer(

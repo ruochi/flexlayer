@@ -632,10 +632,12 @@ export type MeshSpec =
       revision?: string
     }
 
-/** 网格表面。不写时是 matte：磨砂塑料，主光乘 fill，没有高光。粗糙度 0 到 1，越大高光和反射越散。磨砂不看粗糙度。 */
+/** 网格表面。不写时是磨砂：主光乘 fill。`matcap` 有名字时按预烘材质球着色，粗糙度不再参与。 */
 export type MeshMaterial = {
-  kind: 'matte' | 'plastic' | 'metal' | 'glass'
+  kind: 'matte' | 'plastic' | 'metal' | 'glass' | 'clay' | 'mirror' | 'brushed'
   roughness: number
+  /** 预烘材质球。`clay`、`plastic`、`metal`、`mirror`、`brushed`。 */
+  matcap?: string
 }
 
 /** 无限平面。不写 fill 时透明，只接网格沿主光投下的影子。旋转和 box 同一套。 */

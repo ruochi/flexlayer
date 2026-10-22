@@ -258,7 +258,7 @@ export const ATTRS: AttrDef[] = [
   },
   { name: 'hidden', docGroup: 'graphic' },
   { name: 'halo', docGroup: 'graphic', syntax: 'px', example: '3' },
-  { name: 'material', docGroup: 'graphic', syntax: 'matte | plastic | metal | glass [roughness]', example: 'metal 0.35' },
+  { name: 'material', docGroup: 'graphic', syntax: 'clay | plastic | metal | mirror | brushed | matte | glass [roughness]', example: 'metal' },
   {
     name: 'cast-shadow',
     forbidInStyle: true,

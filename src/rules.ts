@@ -351,7 +351,7 @@ export function materialAttrIssues(node: LayerNode, path: string): Issue[] {
       'invalid-attr',
       path,
       'material 只写在实体上',
-      'matte、plastic、metal 或 glass。不写是磨砂，例如 material="metal 0.35"',
+      '写成 clay、plastic、metal、mirror、brushed 或 glass。不写是磨砂',
     ),
   ]
 }
