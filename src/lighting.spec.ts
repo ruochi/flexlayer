@@ -47,4 +47,59 @@ describe('lighting', () => {
     const far = luma(ctx.getImageData(16, 140, 1, 1).data)
     expect(pool).toBeGreaterThan(far + 4)
   })
+
+  it('灯的光池沿一行相邻亮度差不超过 3', async () => {
+    const { png } = await renderLayer(`
+      <layer width="180" height="120" background="#101014" camera="360">
+        <sphere cx="90" cy="48" r="12" material="lamp" />
+        <ground y="96" rotateX="82" fill="#24262e" shadow-opacity="0" />
+      </layer>
+    `)
+    const ctx = await imageOf(png)
+    const lumaAt = (x: number, y: number) => {
+      const px = ctx.getImageData(x, y, 1, 1).data
+      return px[0]! * 0.3 + px[1]! * 0.59 + px[2]! * 0.11
+    }
+    const y = 92
+    const line = Array.from({ length: 160 }, (_, i) => lumaAt(10 + i, y))
+    const mid = line[80]!
+    const edge = Math.min(line[0]!, line[line.length - 1]!)
+    expect(mid).toBeGreaterThan(edge + 4)
+    let jump = 0
+    for (let i = 1; i < line.length; i++) jump = Math.max(jump, Math.abs(line[i]! - line[i - 1]!))
+    expect(jump).toBeLessThanOrEqual(3)
+  })
+
+  it('扁霓虹圆环下的光池没有台阶', async () => {
+    const { png } = await renderLayer(`
+      <layer width="360" height="200" background="#101014" camera="640">
+        <torus cx="180" cy="78" r="70" tube="10" fill="#3ad8ff" material="neon" rotateX="68" />
+        <ground y="168" rotateX="78" fill="#1c1e26" shadow-opacity="0" />
+      </layer>
+    `)
+    const ctx = await imageOf(png)
+    const frame = ctx.getImageData(0, 0, 360, 200).data
+    const lumaAt = (x: number, y: number) => {
+      const i = (y * 360 + x) * 4
+      return frame[i]! * 0.3 + frame[i + 1]! * 0.59 + frame[i + 2]! * 0.11
+    }
+    const y0 = 144
+    const y1 = 176
+    const x0 = 50
+    const x1 = 310
+    let brightest = 0
+    let dimmest = 255
+    let jump = 0
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const L = lumaAt(x, y)
+        brightest = Math.max(brightest, L)
+        dimmest = Math.min(dimmest, L)
+        if (x < x1) jump = Math.max(jump, Math.abs(lumaAt(x + 1, y) - L))
+        if (y < y1) jump = Math.max(jump, Math.abs(lumaAt(x, y + 1) - L))
+      }
+    }
+    expect(brightest).toBeGreaterThan(dimmest + 4)
+    expect(jump).toBeLessThanOrEqual(3)
+  })
 })
