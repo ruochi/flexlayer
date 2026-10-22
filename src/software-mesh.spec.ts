@@ -155,7 +155,7 @@ describe('软件光栅', () => {
       </layer>
     `)
     const face = await pixelAt(png, 168, 158)
-    const open = await pixelAt(png, 280, 240)
+    const open = await pixelAt(png, 280, 115)
     expect([open[0], open[1], open[2]]).toEqual([0xf4, 0xf1, 0xea])
     const luma = (px: Uint8ClampedArray) => px[0]! * 0.3 + px[1]! * 0.59 + px[2]! * 0.11
     expect(luma(open) - luma(face)).toBeGreaterThan(20)
