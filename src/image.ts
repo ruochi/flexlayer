@@ -152,6 +152,11 @@ function downloadBytesSync(url: string): Buffer {
   )
 }
 
+/** 原图字节。排版仍只读文件头尺寸；绘制插件自己解码。 */
+export function readImageBytes(src: string, baseDir: string): Buffer {
+  return imageBytesSync(resolveImageKey(src, baseDir))
+}
+
 function imageBytesSync(key: string): Buffer {
   if (key.startsWith('data:')) {
     const comma = key.indexOf(',')

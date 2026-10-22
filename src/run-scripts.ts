@@ -4,7 +4,7 @@ import { lstatSync, readlinkSync, readdirSync, realpathSync, statSync } from 'no
 import { basename, dirname, isAbsolute, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createCanvas } from '@napi-rs/canvas'
-import { createCanvasSession, type CanvasDomIssue, type CanvasDomSpec } from '../native/flexlayer-render/draw/canvas-dom.mjs'
+import { createCanvasSession, type CanvasDomIssue, type CanvasDomSpec } from './canvas-dom.mjs'
 import type { CanvasLayoutNode, Issue, LayerDocument, LayoutNode } from './types.js'
 
 const require = createRequire(import.meta.url)
@@ -433,7 +433,7 @@ export function scriptChildArgs(host: string): string[] {
 }
 
 function runChild(payload: unknown): Promise<{ issues: CanvasDomIssue[]; canvases: ExportedCanvas[] }> {
-  const host = fileURLToPath(new URL('../native/flexlayer-render/draw/canvas-dom.mjs', import.meta.url))
+  const host = fileURLToPath(new URL('./canvas-dom.mjs', import.meta.url))
   const { nativeFile } = nativeBinding()
   const flags = scriptPermissionFlags(process.versions.node, nodeHasAllowAddons())
   const grants = new Set(flags.length === 0 ? [] : scriptReadGrants(host))
