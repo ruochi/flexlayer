@@ -33,7 +33,7 @@ describe('lighting', () => {
     const near = ctx.getImageData(128, 90, 1, 1).data
     const far = ctx.getImageData(172, 90, 1, 1).data
     const bias = (px: Uint8ClampedArray) => px[0]! - px[1]!
-    expect(bias(near)).toBeGreaterThan(bias(far) + 4)
+    expect(bias(near)).toBeGreaterThan(bias(far) + 10)
   })
 
   it('灯照亮地面，同一张图再画一次字节相同', async () => {
