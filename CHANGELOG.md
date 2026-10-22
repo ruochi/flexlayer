@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.14.0
+
+The JS document painter is removed. `render`, `renderFrames`, and `<preview>` sheets run inside the capped addon. `FLEXLAYER_PAINTER=js` throws. A delivered long edge above 1920 is `output-limit` and writes no PNG. `native/flexlayer-render` no longer ships `draw/`. The linux-x64-gnu and darwin-arm64 addons are `flexlayer-render/0.0.2+cap1080`. The same addon still exports `renderStylePng` and `renderScenePng`; those still lifes allow an edge of `1..=16384`. The darwin binary is cross-compiled and has not been run on a Mac. Windows is not in this package: the cross link stops on `__std_minmax_element_f`, and the 0.13.7 Windows addon is the style renderer without the document painter. Mask measurement, mesh frames, and `<canvas>` scripts stay in this package and call the addon. The unlimited build is not exported.
+
 ## 0.13.7
 
 `native/flexlayer-render` now includes `darwin-arm64` and `win32-x64-msvc`, built from the same `flexlayer-render/0.0.2` as the linux addon in 0.13.6. The linux binary is unchanged.

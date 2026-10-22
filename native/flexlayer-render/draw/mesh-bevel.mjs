@@ -1,1 +1,0 @@
-import{getNativeAddon as n}from"./native-loader.mjs";const e=await n();function l(r){if(!e)throw new Error("Native mesh-bevel addon not loaded - cannot call bevelRadius");return e.bevelRadius(r)}function i(r,o,a){if(!e)throw new Error("Native mesh-bevel addon not loaded - cannot call bevelFewFaces");return e.bevelFewFaces(r,o,a??null)}export{i as bevelFewFaces,l as bevelRadius};

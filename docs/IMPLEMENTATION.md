@@ -161,9 +161,9 @@ Glow and stroke go through `drawTextNode`, so they follow the pixels that were p
 
 ## Native renderer
 
-`native/flexlayer-render` holds the latest build. A publish deletes that directory and writes the new `.node` files, the loader (`index.cjs`), and `draw/`, the compiled painter. Painter source is not in this repository. `src/paint.ts` and the other drawing modules re-export `draw/`. Layout, parsing, and `check` stay here. The `*.mjs` files import this repository's `src/` and are what `tsx` loads. The `*-dist.mjs` files import `dist/` and are what the published CLI loads. `scripts/relink-draw.mjs` points the `dist` re-exports at that second set. `canvas-dom.mjs` is one shared file.
+`native/flexlayer-render` holds the latest capped addon: the `.node` files, `index.cjs`, and `index.d.ts`. A publish deletes that directory and writes those files. It does not ship `draw/`. The delivered picture is painted inside the addon. `FLEXLAYER_PAINTER=js` throws. Mask measurement, mesh frames, and the `<canvas>` script host live in `src/` and call the addon. `canvas-dom.mjs` sits next to `run-scripts`.
 
-`loadNativeRender` in `src/native.ts` looks for the addon. `FLEXLAYER_RENDER`, when set, is a package directory or a `.node` file, and that path is the only one tried. Otherwise the loader tries `native/flexlayer-render` in this package, then the package `flexlayer-render`, then `@ruochi/flexlayer-render`. The module has to export `engine` and `solidPng`. A missing file, a failed load, or the wrong exports returns `null`. `renderLayer` calls `paintDocument` from `draw/`.
+`loadNativeRender` in `src/native.ts` looks for the addon. `FLEXLAYER_RENDER`, when set, is a package directory or a `.node` file, and that path is the only one tried. Otherwise the loader tries `native/flexlayer-render` in this package, then the package `flexlayer-render`, then `@ruochi/flexlayer-render`. The module has to export `engine` and `solidPng`. A missing file, a failed load, or the wrong exports returns `null`. `renderLayer` calls `render` on that addon.
 
 ## Models
 

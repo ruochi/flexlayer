@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 
 const dist = new URL('../dist/', import.meta.url)
 const draw = new URL('../native/flexlayer-render/draw/', import.meta.url)
+if (!existsSync(draw)) process.exit(0)
 
 for (const name of readdirSync(dist)) {
   if (!name.endsWith('.js')) continue

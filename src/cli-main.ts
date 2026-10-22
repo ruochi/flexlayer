@@ -509,7 +509,7 @@ async function execute(args: RunArgs, input: LoadedJob): Promise<boolean> {
       attachFileIssues(report)
       await emitNode(node, args.emit, report)
       const outPath = outPng(abs, args.out)
-      await writeFile(outPath, png)
+      if (png.length > 0) await writeFile(outPath, png)
       printIssues(report, args.showType)
       if (args.report) await writeFile(args.report, JSON.stringify(report, null, 2))
       const failed = failIfErrors(report)
@@ -599,7 +599,7 @@ async function execute(args: RunArgs, input: LoadedJob): Promise<boolean> {
   if (loaded.kind === 'node') await emitNode(loaded.node, args.emit, report)
   attachFileIssues(report)
   const outPath = outPng(abs, args.out)
-  await writeFile(outPath, png)
+  if (png.length > 0) await writeFile(outPath, png)
   if (args.preview) {
     const sheet = await renderPreview(source, { baseDir, scale: args.scale })
     if (!sheet) throw new Error('没有 <preview>。写成 <preview of="#id" show="overlay checker black white edges" />')
