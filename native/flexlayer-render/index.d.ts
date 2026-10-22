@@ -542,3 +542,21 @@ export declare function engine(): string
  * `transparent`, `black`, and `white`.
  */
 export declare function solidPng(width: number, height: number, color: string): Buffer
+/**
+ * The built-in still life in one look: `studio`, `toon`, `technical`, or `manga`.
+ * A box camera, two spheres, and a cylinder stand on a shadow-only ground.
+ * Chinese names `影棚写实`, `扁平卡通`, `技术线稿`, and `漫画网点` are accepted.
+ * Width and height are the PNG size, `1..=16384`.
+ */
+export declare function renderStylePng(style: string, width: number, height: number): Buffer
+/**
+ * Boxes plus a look. See `render_style_png` for style names.
+ * A box omits `stroke` to inherit the look, or sets `stroke` to `none` or a color.
+ * `strokeWidth` is outline, crease, and hidden, in pixels.
+ * Optional `material` is `clay`, `plastic`, `metal`, `mirror`, `brushed`,
+ * `matte`, or `glass`. A bare `clay`, `plastic`, `metal`, `mirror`, or
+ * `brushed` is a baked finish and `fill` recolors it. `roughness` keeps
+ * `matte`, `plastic`, `metal`, and `glass` on the older shading.
+ * Omitted material is matte.
+ */
+export declare function renderScenePng(spec: string): Buffer

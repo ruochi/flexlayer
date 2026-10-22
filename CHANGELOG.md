@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.13.6
+
+`native/flexlayer-render` for linux-x64-gnu is rebuilt. The addon is `flexlayer-render/0.0.2`. `renderStylePng(style, width, height)` draws the built-in still life in `studio`, `toon`, `technical`, or `manga`. `renderScenePng` draws boxes in one of those looks. Toon creases follow each part's fill, and toon and manga line widths scale with the part. The darwin-arm64 binary is unchanged.
+
 ## 0.13.5
 
 `material="clay"`, `plastic`, `metal`, `mirror`, and `brushed` are baked finishes. Omit `fill` and the finish uses its own color. A `fill` recolors it. A number after one of those names reports `invalid-attr`. `matte`, `glass`, and `plastic`, `metal`, or `glass` followed by a roughness stay on the older shading. Omitting `material` is still matte. A model with no `material` still maps three.js kinds onto that older shading.
