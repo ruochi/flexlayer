@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.13.6
+
+A baked finish on a large picture samples the lighting map from how fast the normal moves across the screen. Grain and brushed stripes keep their own blur. The lighting maps are 256×256. `native/flexlayer-render` for linux-x64-gnu is rebuilt. The darwin-arm64 binary is unchanged.
+
 ## 0.13.5
 
 `material="clay"`, `plastic`, `metal`, `mirror`, and `brushed` are baked finishes. Omit `fill` and the finish uses its own color. A `fill` recolors it. A number after one of those names reports `invalid-attr`. `matte`, `glass`, and `plastic`, `metal`, or `glass` followed by a roughness stay on the older shading. Omitting `material` is still matte. A model with no `material` still maps three.js kinds onto that older shading.
