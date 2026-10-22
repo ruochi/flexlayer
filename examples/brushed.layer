@@ -1,0 +1,19 @@
+<layer width="1400" height="760" background="#101114" color="#f4efe6" font-family="ChillDuanSans">
+  <layer camera="1600" width="1400" height="760">
+    <sphere cx="200" cy="230" r="88" material="brushed" />
+    <circle cx="620" cy="250" r="70" depth="220" material="brushed" rotateX="90" />
+    <rect x="960" y="140" width="280" height="180" depth="18" rx="8" material="brushed" rotateX="-18" rotateY="-28" />
+
+    <sphere cx="200" cy="560" r="88" fill="#c86a3e" material="brushed" />
+    <circle cx="620" cy="580" r="70" depth="220" fill="#c86a3e" material="brushed" rotateX="90" />
+    <rect x="960" y="470" width="280" height="180" depth="18" rx="8" fill="#c86a3e" material="brushed" rotateX="-18" rotateY="-28" />
+
+    <ground y="700" rotateX="72" fill="#181a20" />
+  </layer>
+  <layer x="72" y="28">
+    <p style="font-size:32px">brushed · 纹路沿局部 x，高光与纹路垂直</p>
+  </layer>
+  <layer x="140" y="340" width="120"><p style="font-size:24px; color:#c8c2b6">球</p></layer>
+  <layer x="540" y="390" width="160"><p style="font-size:24px; color:#c8c2b6">圆柱</p></layer>
+  <layer x="1040" y="360" width="160"><p style="font-size:24px; color:#c8c2b6">平板</p></layer>
+</layer>
