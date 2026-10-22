@@ -640,9 +640,9 @@
   {
     "name": "material",
     "group": "graphic",
-    "syntax": "matte | plastic | metal | glass [roughness]",
+    "syntax": "clay | plastic | metal | mirror | brushed | matte | glass [roughness]",
     "default": null,
-    "example": "metal 0.35",
+    "example": "metal",
     "layerOnly": false,
     "htmlUsesStyle": false,
     "note": null,

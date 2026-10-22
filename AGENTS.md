@@ -39,7 +39,7 @@ Plain HTML and CSS work too, so they are not listed here. Reach for these when a
 | Film look | `<layer grade="lomo 0.8, vignette 0.3" grade-mask="radial-gradient(...)">` | Also `matte`, `chrome`, `bleach`, `mono`. `noise="0.08"` adds grain. `noise="0.08 @t"` reshuffles it each frame |
 | Text behind a subject | Copy `items[0].snippet` from the asset report | The service returns the images and the fragment. See SPEC, "Images" |
 | Knockout | `<mask>` with `op="subtract"`, `feather`, `invert` | Shapes or image alpha. The layer's shadow follows the cut contour |
-| 3D objects in a 2D page | `depth="40"` on `rect`, `circle`, `path`; `sphere`, `torus`, `tube` | Same coordinates as 2D. `material="metal 0.35"` or `glass` |
+| 3D objects in a 2D page | `depth="40"` on `rect`, `circle`, `path`; `sphere`, `torus`, `tube` | Same coordinates as 2D. `material="clay"` or `metal`. A bare name is a baked finish and `fill` recolors it. `metal 0.35` is the older roughness form |
 | 3D lettering | `glyph()` outlines into `<path d depth>` | Any catalog font becomes an extruded solid |
 | Product shot | `camera="fov 40, orbit 35 18, aperture 12"` plus `<ground>` | Orbit, soft shadows on the ground, depth of field. `sharp="true"` keeps a layer in focus |
 | Technical line art | Solid with `stroke` and `hidden="#999"` | Visible edges solid, hidden edges in another color |
