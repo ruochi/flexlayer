@@ -75,8 +75,8 @@ export async function ensureDefaultFont(): Promise<string> {
 }
 
 export function registerFontPath(family: string, filePath: string): void {
-  fontFiles.set(family, filePath)
   if (registered.has(family)) return
+  fontFiles.set(family, filePath)
   const key = GlobalFonts.registerFromPath(filePath, family)
   if (!key) throw new Error(`字体注册失败: ${filePath}`)
   registered.add(family)

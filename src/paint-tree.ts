@@ -3,6 +3,7 @@ import { fontFileFor, registeredFontFiles } from './fonts.js'
 import { readImageBytes } from './image.js'
 import { absoluteNodeMatrix, isIdentity, originOffset } from './matrix.js'
 import { ownsMeshScene, renderMeshLayer, type MeshRaster } from './mesh.js'
+import { meshVisibleRect } from './paint.js'
 import type { NativeRender } from './native.js'
 import { contentInsets } from './style.js'
 import { planLinePaint, runOpacity, segmentNeedsPaint } from './text.js'
@@ -119,11 +120,13 @@ export function packPaintTree(doc: LayerDocument, options: PackOptions): PackedP
     const out: Record<string, unknown> = {
       kind: node.kind,
       path: node.path,
+      ...(node.id ? { id: node.id } : {}),
       x: node.x,
       y: node.y,
       width: node.width,
       height: node.height,
       opacity: node.opacity,
+      ...(node.maskOp ? { maskOp: node.maskOp } : {}),
       rotate: node.rotate,
       rotateX: node.rotateX ?? 0,
       rotateY: node.rotateY ?? 0,
@@ -157,8 +160,9 @@ export function packPaintTree(doc: LayerDocument, options: PackOptions): PackedP
     if (node.innerShadowList) out.innerShadowList = node.innerShadowList
     if (node.innerGlow) out.innerGlow = node.innerGlow
     if (node.inkStroke) out.inkStroke = node.inkStroke
-    if (node.colorFilter?.length) {
-      out.colorFilters = node.colorFilter.flatMap((spec) => ('value' in spec ? [{ name: spec.name, value: spec.value }] : []))
+    if (node.colorFilter?.length) out.colorFilters = node.colorFilter
+    if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'shape' || node.kind === 'text' || node.kind === 'image') {
+      if (node.backdropFilter?.length) out.backdropFilter = node.backdropFilter
     }
     if (node.kind === 'shape') {
       out.shape = node.shape
@@ -201,6 +205,7 @@ export function packPaintTree(doc: LayerDocument, options: PackOptions): PackedP
       out.objectFit = node.objectFit
       out.objectPosition = node.objectPosition
       if (node.maskPick) out.maskPick = node.maskPick
+      if (node.maskChannel) out.maskChannel = node.maskChannel
     } else if (node.kind === 'canvas' && node.bitmap) {
       out.rasterId = takeRaster(node.bitmap)
     } else if (node.kind === 'mesh' || node.kind === 'ground') {
@@ -219,7 +224,8 @@ export function packPaintTree(doc: LayerDocument, options: PackOptions): PackedP
         if (node.maskInvert) out.maskInvert = true
         if (node.mask?.length) out.mask = node.mask.map((child) => packNode(child, true))
         if (!skipMesh && options.native.render && (ownsMeshScene(node) || node.dof)) {
-          const frame = renderMeshLayer(node, options.scale, rasterPlane, { samples: options.meshSamples })
+          const clip = meshVisibleRect(doc.width, doc.height, doc.root, node)
+          const frame = renderMeshLayer(node, options.scale, rasterPlane, { samples: options.meshSamples, clip })
           if (frame && frame.width > 0 && frame.height > 0) {
             out.meshFrame = {
               rasterId: takeRaster(frame.canvas),
@@ -264,14 +270,29 @@ function textDraws(node: TextLayoutNode) {
   const contentX = node.x + inset.left
   const contentY = node.y + inset.top
   const innerW = node.width - inset.left - inset.right
-  for (const line of node.textLayout.lines) {
+    for (const line of node.textLayout.lines) {
     let offsetX = 0
     if (node.textAlign === 'center') offsetX = (innerW - line.width) / 2
     if (node.textAlign === 'right') offsetX = innerW - line.width
+    const lineTop = contentY + line.y
     for (let index = 0; index < line.segments.length; ) {
       const seg = line.segments[index]!
       if (!segmentNeedsPaint(seg.style)) {
-        draws.push(plainDraw(seg, contentX + offsetX, contentY + line.baselineY, line.y, line.height, contentY))
+        const glyphRun = runSpan(line.segments, index, (style) => style.fill?.trim() || style.color, contentX, offsetX, lineTop, line.height)
+        const backgroundRun = runSpan(line.segments, index, (style) => style.background, contentX, offsetX, lineTop, line.height)
+        const color = seg.style.fill ?? seg.style.color
+        const box = textPaintBox(node, color, glyphRun)
+        draws.push({
+          ...plainDraw(seg, contentX + offsetX + seg.x, contentY + line.baselineY, line.y, line.height, contentY),
+          paintX: box.x,
+          paintY: box.y,
+          paintW: box.width,
+          paintH: box.height,
+          bgPaintX: backgroundRun.x,
+          bgPaintY: backgroundRun.y,
+          bgPaintW: backgroundRun.width,
+          bgPaintH: backgroundRun.height,
+        })
         index += 1
         continue
       }
@@ -308,6 +329,47 @@ function textDraws(node: TextLayoutNode) {
     }
   }
   return draws
+}
+
+function samePaint(a: string | undefined, b: string | undefined): boolean {
+  return (a ?? '').trim() === (b ?? '').trim()
+}
+
+type PaintBox = { x: number; y: number; width: number; height: number }
+
+/** 写在文字盒子上的 fill 按整段盒子取样；行内自己的 fill 用同一颜料连在一起的那一段。 */
+function textPaintBox(node: TextLayoutNode, paint: string, fragment: PaintBox): PaintBox {
+  const declared = node.style.fill?.trim()
+  if (declared && samePaint(declared, paint) && node.width > 0 && node.height > 0) {
+    return { x: node.x, y: node.y, width: node.width, height: node.height }
+  }
+  return fragment
+}
+
+function runSpan(
+  segments: TextLayoutNode['textLayout']['lines'][number]['segments'],
+  index: number,
+  valueAt: (style: TextLayoutNode['textLayout']['lines'][number]['segments'][number]['style']) => string | undefined,
+  contentX: number,
+  offsetX: number,
+  lineTop: number,
+  lineHeight: number,
+): PaintBox {
+  const value = valueAt(segments[index]!.style)
+  let start = index
+  while (start > 0 && samePaint(valueAt(segments[start - 1]!.style), value)) start--
+  let end = index + 1
+  while (end < segments.length && samePaint(valueAt(segments[end]!.style), value)) end++
+  let minX = Infinity
+  let maxX = -Infinity
+  for (let i = start; i < end; i++) {
+    const x = contentX + offsetX + segments[i]!.x
+    minX = Math.min(minX, x)
+    maxX = Math.max(maxX, x + segments[i]!.width)
+  }
+  const left = Number.isFinite(minX) ? minX : contentX + offsetX
+  const right = Number.isFinite(maxX) ? maxX : left + 1
+  return { x: left, y: lineTop, width: Math.max(right - left, 1), height: Math.max(lineHeight, 1) }
 }
 
 function plainDraw(

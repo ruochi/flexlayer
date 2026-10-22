@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { layoutSync, prepareAssets, readLayerRoot } from './layout.js'
 import { loadNativeRender } from './native.js'
 import { packPaintTree } from './paint-tree.js'
-import { renderLayer } from './render.js'
+import { painterMode, renderLayer, renderPreview } from './render.js'
 
 const prevPainter = process.env.FLEXLAYER_PAINTER
 const prevRender = process.env.FLEXLAYER_RENDER
@@ -41,21 +41,25 @@ describe('绘制树', () => {
 })
 
 describe('native 绘制', () => {
-  it('实心矩形和 JS 绘制器一致，超长边拒绝', async () => {
+  it('请求 js 绘制器直接报错', () => {
+    process.env.FLEXLAYER_PAINTER = 'js'
+    expect(() => painterMode()).toThrow(/移除/)
+  })
+
+  it('实心矩形出图，超长边拒绝', async () => {
     const native = loadNativeRender()
     if (!native?.render || !String(native.engine()).includes('+cap1080')) return
-    process.env.FLEXLAYER_PAINTER = 'js'
-    const js = await renderLayer(scene)
-    process.env.FLEXLAYER_PAINTER = 'native'
+    delete process.env.FLEXLAYER_PAINTER
+    expect(painterMode()).toBe('native')
     const rust = await renderLayer(scene)
     expect(rust.report.issues.some((issue) => issue.level === 'error')).toBe(false)
-    const jsPx = await pixels(js.png)
     const rustPx = await pixels(rust.png)
-    expect(rustPx.width).toBe(jsPx.width)
-    expect(rustPx.height).toBe(jsPx.height)
-    let far = 0
-    for (let i = 0; i < jsPx.data.length; i += 1) far = Math.max(far, Math.abs(jsPx.data[i]! - rustPx.data[i]!))
-    expect(far).toBeLessThanOrEqual(2)
+    expect(rustPx.width).toBe(32)
+    expect(rustPx.height).toBe(24)
+    expect(channel(rustPx.data, 32, 1, 1, 0)).toBeGreaterThan(10)
+    expect(channel(rustPx.data, 32, 1, 1, 2)).toBeGreaterThan(40)
+    expect(channel(rustPx.data, 32, 8, 9, 0)).toBeGreaterThan(200)
+    expect(channel(rustPx.data, 32, 8, 9, 1)).toBeLessThan(30)
 
     const refused = native.render(
       JSON.stringify({
@@ -73,19 +77,28 @@ describe('native 绘制', () => {
     expect(refused.issues.some((issue) => issue.code === 'output-limit' && issue.level === 'error')).toBe(true)
 
     const text = `<layer width="180" height="64" background="#ffffff"><h1 style="font-size:32px; color:#111">Hello</h1></layer>`
-    process.env.FLEXLAYER_PAINTER = 'js'
-    const jsText = await renderLayer(text)
-    process.env.FLEXLAYER_PAINTER = 'native'
     const rustText = await renderLayer(text)
-    const a = await pixels(jsText.png)
     const b = await pixels(rustText.png)
-    expect(b.width).toBe(a.width)
-    expect(b.height).toBe(a.height)
-    let textSum = 0
-    for (let i = 0; i < a.data.length; i += 1) textSum += Math.abs(a.data[i]! - b.data[i]!)
-    expect(textSum / a.data.length).toBeLessThanOrEqual(8)
+    expect(b.width).toBe(180)
+    expect(b.height).toBe(64)
+    expect(rustText.report.issues.some((issue) => issue.level === 'error')).toBe(false)
+    let dark = 0
+    for (let i = 0; i < b.data.length; i += 4) if ((b.data[i]! + b.data[i + 1]! + b.data[i + 2]!) < 200) dark += 1
+    expect(dark).toBeGreaterThan(20)
+  })
+
+  it('预览拼图超长边也拿不到图', async () => {
+    const native = loadNativeRender()
+    if (!native?.previewSheet || !String(native.engine()).includes('+cap1080')) return
+    process.env.FLEXLAYER_PAINTER = 'native'
+    const source = `<layer id="page" width="2000" height="80" background="#ffffff"><preview of="#page" show="checker" /></layer>`
+    await expect(renderPreview(source)).rejects.toThrow(/1920|超过/)
   })
 })
+
+function channel(data: Uint8ClampedArray, width: number, x: number, y: number, i: number) {
+  return data[(y * width + x) * 4 + i] ?? 0
+}
 
 async function pixels(png: Buffer) {
   const image = await loadImage(png)

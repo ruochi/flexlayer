@@ -534,11 +534,53 @@ export declare function transformPoint(toLayer: Array<number>, ox: number, oy: n
 export declare function transformNormal(toLayer: Array<number>, nx: number, ny: number, nz: number): Vec3
 /** Project a 3D point to layer screen coordinates */
 export declare function layerProject(p: Vec3, perspective: string, px: number, py: number): Vec3
-/** Identifies this addon. Flex Layer only checks that the function exists. */
+export interface PaintIssueOut {
+  level: string
+  code: string
+  path: string
+  message: string
+  hint: string
+}
+export interface ImageBytes {
+  id: string
+  bytes: Buffer
+}
+export interface RasterBytes {
+  id: string
+  width: number
+  height: number
+  rgba: Buffer
+}
+export interface RenderOut {
+  png?: Buffer
+  rgba?: Buffer
+  width: number
+  height: number
+  issues: Array<PaintIssueOut>
+}
+/** 画出一棵打包好的布局树。只交回 PNG 或 RGBA，不交出表面。 */
+export declare function render(json: string, images?: Array<ImageBytes> | undefined | null, rasters?: Array<RasterBytes> | undefined | null, wantRgba?: boolean | undefined | null): RenderOut
+export interface FramePaint {
+  json: string
+  images?: Array<ImageBytes>
+  rasters?: Array<RasterBytes>
+}
+/** 一批帧一次画完。图片和栅格跟这一帧走，长边上限每一帧都查。 */
+export declare function renderFrames(frames: Array<FramePaint>, wantRgba?: boolean | undefined | null): Array<RenderOut>
+/** `<preview>` 拼成的一张图。没有 preview 时 `png` 为空、宽高为 0。超长边时带 `output-limit` 且没有 PNG。 */
+export declare function previewSheet(json: string, images?: Array<ImageBytes> | undefined | null, rasters?: Array<RasterBytes> | undefined | null): RenderOut
+/** 把各帧 PNG 排成联系表。超过这一档的成片长边时拒绝。 */
+export declare function contactSheet(pngs: Array<Buffer>): Buffer
+/**
+ * Identifies this addon and which size tier it was built with.
+ * `+cap1080` refuses a delivered long edge above 1920.
+ * `+unlimited` is the server build and is never exported.
+ */
 export declare function engine(): string
 /**
  * One solid PNG, so Node can take bytes from the addon.
  * `color` matches Flex Layer: `#rgb` … `#rrggbbaa`, `rgb()`, `rgba()`,
  * `transparent`, `black`, and `white`.
+ * Width and height are checked at allocation and again before encode.
  */
 export declare function solidPng(width: number, height: number, color: string): Buffer

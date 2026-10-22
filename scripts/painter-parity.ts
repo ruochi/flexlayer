@@ -1,57 +1,34 @@
 /**
- * 同一批 .layer 用 JS 绘制器和 native 插件各出一张，打印平均差和最大差。
- * FLEXLAYER_RENDER 要指到带 render 的插件。
- * 用法：FLEXLAYER_RENDER=../flexlayer-render npx tsx scripts/painter-parity.ts docs/gallery
+ * 用插件把 .layer 画出来，打印尺寸和错误码。JS 绘制器已移除。
+ * 用法：npx tsx scripts/painter-parity.ts docs/gallery examples
  */
 import { createCanvas, loadImage } from '@napi-rs/canvas'
-import { readdirSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 import { renderLayer } from '../src/render.js'
 
-const dir = process.argv[2] ?? 'docs/gallery'
-const skip = new Set((process.argv[3] ?? '').split(',').filter(Boolean))
+const roots = process.argv.slice(2).filter((arg) => !arg.includes('='))
+const dirs = roots.length > 0 ? roots : ['docs/gallery', 'examples']
+const files = dirs.flatMap((dir) => {
+  if (!statSync(dir, { throwIfNoEntry: false })?.isDirectory()) return dir.endsWith('.layer') ? [dir] : []
+  return readdirSync(dir)
+    .filter((name) => name.endsWith('.layer'))
+    .map((name) => join(dir, name))
+}).sort()
 
-const files = readdirSync(dir)
-  .filter((name) => name.endsWith('.layer') && !skip.has(name))
-  .sort()
-
-for (const name of files) {
-  const file = join(dir, name)
+for (const file of files) {
+  const name = basename(file)
   const source = readFileSync(file, 'utf8')
   const baseDir = dirname(file)
-  process.env.FLEXLAYER_PAINTER = 'js'
-  const js = await renderLayer(source, { baseDir })
-  process.env.FLEXLAYER_PAINTER = 'native'
+  delete process.env.FLEXLAYER_PAINTER
   const rust = await renderLayer(source, { baseDir })
   const errors = rust.report.issues.filter((issue) => issue.level === 'error').map((issue) => issue.code)
-  if (!js.png.length || !rust.png.length) {
-    console.log(`${name} empty js=${js.png.length} rust=${rust.png.length} errors=${errors.join(',')}`)
+  if (!rust.png.length) {
+    console.log(`${name} empty errors=${errors.join(',')}`)
     continue
   }
-  const a = await pixels(js.png)
   const b = await pixels(rust.png)
-  if (a.width !== b.width || a.height !== b.height) {
-    console.log(`${name} size ${a.width}x${a.height} vs ${b.width}x${b.height} errors=${errors.join(',')}`)
-    continue
-  }
-  let sum = 0
-  let max = 0
-  let changed = 0
-  const n = a.data.length / 4
-  for (let i = 0; i < a.data.length; i += 4) {
-    const delta = Math.max(
-      Math.abs(a.data[i]! - b.data[i]!),
-      Math.abs(a.data[i + 1]! - b.data[i + 1]!),
-      Math.abs(a.data[i + 2]! - b.data[i + 2]!),
-      Math.abs(a.data[i + 3]! - b.data[i + 3]!),
-    )
-    sum += delta
-    if (delta > max) max = delta
-    if (delta > 0) changed += 1
-  }
-  console.log(
-    `${name} mean=${(sum / n).toFixed(2)} max=${max} changed=${((changed / n) * 100).toFixed(1)}% errors=${errors.join(',') || '-'}`,
-  )
+  console.log(`${name} ${b.width}x${b.height} errors=${errors.join(',') || '-'}`)
 }
 
 async function pixels(png: Buffer) {
