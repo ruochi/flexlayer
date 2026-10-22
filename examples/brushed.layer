@@ -5,7 +5,7 @@
     <rect x="960" y="140" width="280" height="180" depth="18" rx="8" material="brushed" rotateX="-18" rotateY="-28" />
 
     <sphere cx="200" cy="560" r="88" fill="#c86a3e" material="brushed" />
-    <circle cx="620" cy="580" r="70" depth="220" fill="#c86a3e" material="brushed" rotateX="90" />
+    <circle cx="620" cy="530" r="70" depth="220" fill="#c86a3e" material="brushed" rotateX="90" />
     <rect x="960" y="470" width="280" height="180" depth="18" rx="8" fill="#c86a3e" material="brushed" rotateX="-18" rotateY="-28" />
 
     <ground y="700" rotateX="72" fill="#181a20" />
