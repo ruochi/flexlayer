@@ -1,1 +1,0 @@
-let e=null;async function t(){if(e!==null)return e;if(globalThis.__flexlayerNativeAddon)return e=globalThis.__flexlayerNativeAddon,e;try{const{createRequire:r}=await import("node:module");return e=r(import.meta.url)("../index.cjs"),e}catch{e=void 0;return}}export{t as getNativeAddon};

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.14.0
+
+The JS document painter is removed. `render`, `renderFrames`, and `<preview>` sheets run inside the capped addon. `FLEXLAYER_PAINTER=js` throws. A delivered long edge above 1920 is `output-limit` and writes no PNG. `native/flexlayer-render` no longer ships `draw/`. The linux-x64-gnu and darwin-arm64 addons are the capped build (`engine()` ends in `+cap1080`). The darwin binary is cross-compiled and has not been run on a Mac. Windows is not in this package: the cross link stops on `__std_minmax_element_f`. Mask measurement, mesh frames, and `<canvas>` scripts stay in this package and call the addon. The unlimited build is not exported.
+
 ## 0.13.6
 
 `FLEXLAYER_PAINTER=native` paints through the flexlayer-render addon. The addon returns a PNG or RGBA and paint issues. It does not return a canvas. The capped build refuses a delivered long edge above 1920 with `output-limit` and writes no PNG. An input image whose long edge is above 3840 is scaled down and reported as `input-limit`. Text uses the same `wght` axis as layout. `gradient()` is sampled in the addon. `FLEXLAYER_PAINTER=js` remains the default. On the gallery, text, images, and solid color are close; glass still differs, so the compiled painter stays. The unlimited build is `engine()` ending in `+unlimited` and is not exported. `draw/` stays in the package until the two painters match.

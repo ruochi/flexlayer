@@ -31,7 +31,19 @@ export type NativeRender = {
     rasters: Array<{ id: string; width: number; height: number; rgba: Buffer }>,
     wantRgba: boolean,
   ) => NativeRenderOut
-  renderFrames?: (jsons: string[], wantRgba: boolean) => NativeRenderOut[]
+  renderFrames?: (
+    frames: Array<{
+      json: string
+      images?: Array<{ id: string; bytes: Buffer }>
+      rasters?: Array<{ id: string; width: number; height: number; rgba: Buffer }>
+    }>,
+    wantRgba: boolean,
+  ) => NativeRenderOut[]
+  previewSheet?: (
+    json: string,
+    images: Array<{ id: string; bytes: Buffer }>,
+    rasters: Array<{ id: string; width: number; height: number; rgba: Buffer }>,
+  ) => NativeRenderOut
   contactSheet?: (pngs: Buffer[]) => Buffer
 }
 

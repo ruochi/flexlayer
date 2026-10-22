@@ -13,7 +13,7 @@ The entry point for models is [AGENTS.md](AGENTS.md). Attributes, one by one, ar
 
 ## layer
 
-The root `<layer width height>` is the canvas, and it is a layer. The delivered picture is `width × scale` by `height × scale`. With `FLEXLAYER_PAINTER=native` the capped addon refuses that picture when either edge is above 1920, reports `output-limit`, and does not write a PNG. It does not scale the picture down. An input image whose long edge is above 3840 is scaled down at decode and reported as `input-limit`. The unlimited addon, built with the `unlimited` feature, raises both edges to 16384 and is not published. The default painter is still the compiled JS painter, which does not apply this cap. Internal supersample buffers may be larger than the delivered picture and are not returned.
+The root `<layer width height>` is the canvas, and it is a layer. The delivered picture is `width × scale` by `height × scale`. The picture is painted by the capped addon. That addon refuses the picture when either edge is above 1920, reports `output-limit`, and does not write a PNG. It does not scale the picture down. An input image whose long edge is above 3840 is scaled down at decode and reported as `input-limit`. The unlimited addon, built with the `unlimited` feature, raises both edges to 16384 and is not published. `FLEXLAYER_PAINTER=js` is an error. Internal supersample buffers may be larger than the delivered picture and are not returned.
 
 ```html
 <layer width="1080" height="1920" background="#0f1115" color="#ffffff">
