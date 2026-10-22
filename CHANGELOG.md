@@ -4,7 +4,7 @@
 
 ## 0.13.7
 
-The fixed studio is Poly Haven `monochrome_studio_01` (Grzegorz Wronkowski, CC0). The softbox is rotated onto the key light, so highlights and ground shadows stay on the same side. Baked finishes and the older metal, plastic, and glass reflections trace that photograph as curves: the dark ceiling, the two coves, the floor, the doorway, the windows, and the softbox. Potrace fits each region to cubic Beziers, so an edge follows the photograph instead of the pixel grid. Small equipment is left out. There are no texels. An edge widens with roughness and with the angle one pixel covers, so a sharp reflection on a large face does not stair-step. `native/flexlayer-render` for linux-x64-gnu is rebuilt. The darwin-arm64 binary is unchanged.
+The fixed studio is Poly Haven `monochrome_studio_01` (Grzegorz Wronkowski, CC0). Baked finishes and the older metal, plastic, and glass reflections use it. The umbrella is rotated onto the key light, so highlights and ground shadows stay on the same side. `native/flexlayer-render` for linux-x64-gnu is rebuilt. The darwin-arm64 binary is unchanged.
 
 ## 0.13.6
 
