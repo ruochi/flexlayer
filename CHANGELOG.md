@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.13.7
+
+The fixed studio is Poly Haven `monochrome_studio_01` (Grzegorz Wronkowski, CC0). Baked finishes and the older metal, plastic, and glass reflections use it. The umbrella is rotated onto the key light, so highlights and ground shadows stay on the same side. `native/flexlayer-render` for linux-x64-gnu is rebuilt. The darwin-arm64 binary is unchanged.
+
 ## 0.13.6
 
 A baked finish on a large picture samples the lighting map from how fast the normal moves across the screen. Grain and brushed stripes keep their own blur. The lighting maps are 256×256. `native/flexlayer-render` for linux-x64-gnu is rebuilt. The darwin-arm64 binary is unchanged.
