@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.13.6
+
+`finish-mix` puts baked finishes and the older shading on one table: `clay`, `plastic`, `brushed`, and `mirror`, next to a matte box, `plastic 0.22`, `glass 0.1`, and `metal 0.72`. `finish-pairs` repeats one `fill`. The bare name is the baked finish. A roughness number stays on the older shading. Both pictures are in the gallery.
+
 ## 0.13.5
 
 `material="clay"`, `plastic`, `metal`, `mirror`, and `brushed` are baked finishes. Omit `fill` and the finish uses its own color. A `fill` recolors it. A number after one of those names reports `invalid-attr`. `matte`, `glass`, and `plastic`, `metal`, or `glass` followed by a roughness stay on the older shading. Omitting `material` is still matte. A model with no `material` still maps three.js kinds onto that older shading.

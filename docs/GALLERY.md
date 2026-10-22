@@ -13,6 +13,8 @@ Each picture is a grid. The label under a cell is the attribute name. Sources ar
 | [text.png](gallery/text.png) | Title size, wrapping at `max-width`, flex gap, `writing-mode:vertical-rl` |
 | [flex.png](gallery/flex.png) | A tag cloud with `flex-wrap`, and a card grid with `column-gap` / `row-gap` |
 | [matcaps.png](gallery/matcaps.png) | `clay`, `plastic`, `metal`, `mirror`, `brushed`. The top row is the finish color. The bottom row is the same finish with `fill` |
+| [finish-mix.png](gallery/finish-mix.png) | One table. `clay`, `plastic`, `brushed`, and `mirror` are baked. The box with no `material` is matte. `plastic 0.22`, `glass 0.1`, and `metal 0.72` stay on the older shading |
+| [finish-pairs.png](gallery/finish-pairs.png) | The same `fill` on both sides of a pair. The bare name is the baked finish. A roughness number stays on the older shading |
 
 The smallest forms:
 
