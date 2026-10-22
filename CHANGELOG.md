@@ -4,7 +4,7 @@
 
 ## 0.13.7
 
-The fixed studio is Poly Haven `monochrome_studio_01` (Grzegorz Wronkowski, CC0). Baked finishes are lit from that picture. The umbrella is rotated onto the key light, so highlights and ground shadows stay on the same side. Metal, plastic, and glass reflections use a vector fit of the same studio: a dark ceiling, the cove, and one umbrella. The fit has no texels. Its edge widens with roughness and with the angle one pixel covers, so a sharp reflection on a large face does not stair-step. `native/flexlayer-render` for linux-x64-gnu is rebuilt. The darwin-arm64 binary is unchanged.
+The fixed studio is Poly Haven `monochrome_studio_01` (Grzegorz Wronkowski, CC0). The umbrella is rotated onto the key light, so highlights and ground shadows stay on the same side. Baked finishes and the older metal, plastic, and glass reflections use a vector fit of that studio: a dark ceiling, the cove, and one umbrella. The fit has no texels. Its edge widens with roughness and with the angle one pixel covers, so a sharp reflection on a large face does not stair-step. `native/flexlayer-render` for linux-x64-gnu is rebuilt. The darwin-arm64 binary is unchanged.
 
 ## 0.13.6
 
