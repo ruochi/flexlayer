@@ -4,11 +4,15 @@
 
 ## 0.14.0
 
-The JS document painter is removed. `render`, `renderFrames`, and `<preview>` sheets run inside the capped addon. `FLEXLAYER_PAINTER=js` throws. A delivered long edge above 1920 is `output-limit` and writes no PNG. `native/flexlayer-render` no longer ships `draw/`. The linux-x64-gnu and darwin-arm64 addons are the capped build (`engine()` ends in `+cap1080`). The darwin binary is cross-compiled and has not been run on a Mac. Windows is not in this package: the cross link stops on `__std_minmax_element_f`. Mask measurement, mesh frames, and `<canvas>` scripts stay in this package and call the addon. The unlimited build is not exported.
+The JS document painter is removed. `render`, `renderFrames`, and `<preview>` sheets run inside the capped addon. `FLEXLAYER_PAINTER=js` throws. A delivered long edge above 1920 is `output-limit` and writes no PNG. `native/flexlayer-render` no longer ships `draw/`. The linux-x64-gnu and darwin-arm64 addons are `flexlayer-render/0.0.2+cap1080`. The same addon still exports `renderStylePng` and `renderScenePng`; those still lifes allow an edge of `1..=16384`. The darwin binary is cross-compiled and has not been run on a Mac. Windows is not in this package: the cross link stops on `__std_minmax_element_f`, and the 0.13.7 Windows addon is the style renderer without the document painter. Mask measurement, mesh frames, and `<canvas>` scripts stay in this package and call the addon. The unlimited build is not exported.
+
+## 0.13.7
+
+`native/flexlayer-render` now includes `darwin-arm64` and `win32-x64-msvc`, built from the same `flexlayer-render/0.0.2` as the linux addon in 0.13.6. The linux binary is unchanged.
 
 ## 0.13.6
 
-`FLEXLAYER_PAINTER=native` paints through the flexlayer-render addon. The addon returns a PNG or RGBA and paint issues. It does not return a canvas. The capped build refuses a delivered long edge above 1920 with `output-limit` and writes no PNG. An input image whose long edge is above 3840 is scaled down and reported as `input-limit`. Text uses the same `wght` axis as layout. `gradient()` is sampled in the addon. `FLEXLAYER_PAINTER=js` remains the default. On the gallery, text, images, and solid color are close; glass still differs, so the compiled painter stays. The unlimited build is `engine()` ending in `+unlimited` and is not exported. `draw/` stays in the package until the two painters match.
+`native/flexlayer-render` for linux-x64-gnu is rebuilt. The addon is `flexlayer-render/0.0.2`. `renderStylePng(style, width, height)` draws the built-in still life in `studio`, `toon`, `technical`, or `manga`. `renderScenePng` draws boxes in one of those looks. Toon creases follow each part's fill, and toon and manga line widths scale with the part. The darwin-arm64 binary is unchanged.
 
 ## 0.13.5
 

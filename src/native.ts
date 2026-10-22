@@ -45,6 +45,8 @@ export type NativeRender = {
     rasters: Array<{ id: string; width: number; height: number; rgba: Buffer }>,
   ) => NativeRenderOut
   contactSheet?: (pngs: Buffer[]) => Buffer
+  renderStylePng?: (style: string, width: number, height: number) => Buffer
+  renderScenePng?: (spec: string) => Buffer
 }
 
 /**
