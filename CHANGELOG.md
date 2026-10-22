@@ -4,7 +4,7 @@
 
 ## 0.13.7
 
-The fixed studio is Poly Haven `monochrome_studio_01` (Grzegorz Wronkowski, CC0). Baked finishes and the older metal, plastic, and glass reflections use it. The umbrella is rotated onto the key light, so highlights and ground shadows stay on the same side. Those reflections sample the photograph at full size. Roughness keeps the previous blur angle. A pixel whose reflection covers more than one texel steps up the pyramid, so a large face does not enlarge the pixel grid. `native/flexlayer-render` for linux-x64-gnu is rebuilt. The darwin-arm64 binary is unchanged.
+The fixed studio is Poly Haven `monochrome_studio_01` (Grzegorz Wronkowski, CC0). Baked finishes and the older metal, plastic, and glass reflections use it. The umbrella is rotated onto the key light, so highlights and ground shadows stay on the same side. Those reflections sample the photograph at full size. Roughness keeps the previous blur angle. A pixel whose reflection covers more than one texel steps up the pyramid, so a large face does not enlarge the pixel grid. `brushed` blurs that same photograph along the grain and draws the hairlines at the size of a pixel, so the streak stays in the metal color. `native/flexlayer-render` for linux-x64-gnu is rebuilt. The darwin-arm64 binary is unchanged.
 
 ## 0.13.6
 
