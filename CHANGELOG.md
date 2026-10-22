@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.13.7
+
+`native/flexlayer-render` now includes `darwin-arm64` and `win32-x64-msvc`, built from the same `flexlayer-render/0.0.2` as the linux addon in 0.13.6. The linux binary is unchanged.
+
 ## 0.13.6
 
 `native/flexlayer-render` for linux-x64-gnu is rebuilt. The addon is `flexlayer-render/0.0.2`. `renderStylePng(style, width, height)` draws the built-in still life in `studio`, `toon`, `technical`, or `manga`. `renderScenePng` draws boxes in one of those looks. Toon creases follow each part's fill, and toon and manga line widths scale with the part. The darwin-arm64 binary is unchanged.
