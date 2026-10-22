@@ -23,7 +23,7 @@ describe('预编译渲染器', () => {
     }
     const native = loadNativeRender()
     expect(native).not.toBeNull()
-    expect(native!.engine()).toBe('flexlayer-render/0.0.1')
+    expect(native!.engine()).toBe('flexlayer-render/0.0.2')
     expect(Buffer.from(native!.solidPng(2, 2, '#ffffff')).subarray(0, 8)).toEqual(
       Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
     )
