@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+`glyph('–')` is an en dash. When the face has no en dash, the outline is that face's figure dash, or half of its em dash, instead of the missing-glyph box. A check mark whose outline is a thin tall tick is drawn from Inter, on the same baseline, so `✓` does not read as a radical. Text uses the same stand-in. A non-default weight no longer drops a mark that sits entirely above the baseline.
+
 ## 0.13.5
 
 `material="clay"`, `plastic`, `metal`, `mirror`, and `brushed` are baked finishes. Omit `fill` and the finish uses its own color. A `fill` recolors it. A number after one of those names reports `invalid-attr`. `matte`, `glass`, and `plastic`, `metal`, or `glass` followed by a roughness stay on the older shading. Omitting `material` is still matte. A model with no `material` still maps three.js kinds onto that older shading.
