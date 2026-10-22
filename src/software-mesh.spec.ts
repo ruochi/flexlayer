@@ -147,7 +147,7 @@ describe('软件光栅', () => {
     expect(sphere[0]).toBeGreaterThan(140)
   })
 
-  it('长方体正面不接另一只实体的影子', async () => {
+  it('长方体正面接住另一只实体的影子', async () => {
     const { png } = await render(`
       <layer width="420" height="360" background="#d9d3c7" camera="800">
         <box x="150" y="115" width="160" height="150" depth="20" fill="#f4f1ea" />
@@ -157,9 +157,8 @@ describe('软件光栅', () => {
     const face = await pixelAt(png, 168, 158)
     const open = await pixelAt(png, 280, 240)
     expect([open[0], open[1], open[2]]).toEqual([0xf4, 0xf1, 0xea])
-    expect(Math.abs(face[0]! - open[0]!)).toBeLessThan(8)
-    expect(Math.abs(face[1]! - open[1]!)).toBeLessThan(8)
-    expect(Math.abs(face[2]! - open[2]!)).toBeLessThan(8)
+    const luma = (px: Uint8ClampedArray) => px[0]! * 0.3 + px[1]! * 0.59 + px[2]! * 0.11
+    expect(luma(open) - luma(face)).toBeGreaterThan(20)
   })
 
   it('三维场景里的平面颜色保持原色阶', async () => {

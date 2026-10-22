@@ -8,3 +8,11 @@ export const MATCAP_DEFAULTS: Record<string, string> = {
 }
 
 export const MATCAP_NAMES = Object.keys(MATCAP_DEFAULTS)
+
+/** 自发光名字。不进材质球表，颜色仍可以写 fill。 */
+export const LIGHT_DEFAULTS: Record<string, string> = {
+  lamp: '#ffe6c2',
+  neon: '#3ad8ff',
+}
+
+export const LIGHT_NAMES = Object.keys(LIGHT_DEFAULTS)
