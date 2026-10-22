@@ -197,4 +197,99 @@ describe('lighting', () => {
     expect(jump).toBeLessThanOrEqual(3)
     expect(changes).toBe(1)
   })
+
+  // 高度要留出接触点以下 60 像素。球半径保持 58，缩画布会把离地 14 的比例一起缩掉。
+  function contactScene(cy: number) {
+    return `
+      <layer width="240" height="200" background="#efeae2" camera="900">
+        <sphere cx="120" cy="${cy}" r="58" fill="#c23b32" material="clay" />
+        <ground y="110" rotateX="76" fill="#e7e1d6" shadow-blur="0" shadow-opacity="0" />
+      </layer>`
+  }
+
+  async function contactAo(cy: number) {
+    const width = 240
+    const height = 200
+    const { png } = await renderLayer(contactScene(cy))
+    const ctx = await imageOf(png)
+    const data = ctx.getImageData(0, 0, width, height).data
+    const fill = [0xe7, 0xe1, 0xd6]
+    const fillL = lumaOf(Uint8ClampedArray.from([...fill, 255]), 0)
+    const fillRG = fill[0]! - fill[1]!
+    const px = (x: number, y: number) => {
+      const i = (y * width + x) * 4
+      return [data[i]!, data[i + 1]!, data[i + 2]!] as const
+    }
+    const isBall = (r: number, g: number, b: number) => r > 90 && r > g + 30 && r > b + 30 && g < 140
+    let sx0 = width
+    let sx1 = 0
+    let sy1 = 0
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const [r, g, b] = px(x, y)
+        if (!isBall(r, g, b)) continue
+        sx0 = Math.min(sx0, x)
+        sx1 = Math.max(sx1, x)
+        sy1 = Math.max(sy1, y)
+      }
+    }
+    const diameter = sx1 - sx0 + 1
+    let minX = width
+    let maxX = -1
+    let darkest = 0
+    let dx = 0
+    let dy = 0
+    let maxRG = -999
+    for (let y = sy1 + 1; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const [r, g, b] = px(x, y)
+        if (isBall(r, g, b) || x <= sx0 - 40 || x >= sx1 + 40) continue
+        const delta = fillL - lumaOf(data, (y * width + x) * 4)
+        if (delta < 4) continue
+        minX = Math.min(minX, x)
+        maxX = Math.max(maxX, x)
+        maxRG = Math.max(maxRG, r - g - fillRG)
+        if (delta > darkest) {
+          darkest = delta
+          dx = x
+          dy = y
+        }
+      }
+    }
+    return { diameter, width: maxX - minX + 1, darkest, maxRG, dx, dy, data, frameW: width, frameH: height }
+  }
+
+  function aoWalk(data: Uint8ClampedArray, width: number, height: number, x0: number, y0: number, dx: number, dy: number) {
+    let prev = lumaOf(data, (y0 * width + x0) * 4)
+    for (let i = 1; i <= 60; i++) {
+      const x = x0 + dx * i
+      const y = y0 + dy * i
+      expect(x).toBeGreaterThanOrEqual(0)
+      expect(y).toBeGreaterThanOrEqual(0)
+      expect(x).toBeLessThan(width)
+      expect(y).toBeLessThan(height)
+      const L = lumaOf(data, (y * width + x) * 4)
+      expect(L).toBeGreaterThanOrEqual(prev - 0.5)
+      prev = L
+    }
+  }
+
+  it('贴地的接触阴影比球窄，接触点够深', async () => {
+    const ao = await contactAo(52)
+    expect(ao.width / ao.diameter).toBeLessThanOrEqual(0.9)
+    expect(ao.darkest).toBeGreaterThanOrEqual(25)
+    expect(ao.maxRG).toBeLessThanOrEqual(8)
+    aoWalk(ao.data, ao.frameW, ao.frameH, ao.dx, ao.dy, -1, 1)
+    aoWalk(ao.data, ao.frameW, ao.frameH, ao.dx, ao.dy, -1, 0)
+    aoWalk(ao.data, ao.frameW, ao.frameH, ao.dx, ao.dy, 0, 1)
+  })
+
+  it('离地 14 的接触阴影更窄，走出去不出现第二圈', async () => {
+    const ao = await contactAo(38)
+    expect(ao.width / ao.diameter).toBeLessThanOrEqual(0.6)
+    expect(ao.maxRG).toBeLessThanOrEqual(8)
+    aoWalk(ao.data, ao.frameW, ao.frameH, ao.dx, ao.dy, -1, 1)
+    aoWalk(ao.data, ao.frameW, ao.frameH, ao.dx, ao.dy, -1, 0)
+    aoWalk(ao.data, ao.frameW, ao.frameH, ao.dx, ao.dy, 0, 1)
+  })
 })
