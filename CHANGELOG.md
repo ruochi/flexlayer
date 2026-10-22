@@ -2,15 +2,21 @@
 
 ## Unreleased
 
-## 0.13.6
-
 The key light casts onto solids as well as `ground`. On a solid the shadow stays hard, with an antialiased rim. On `ground`, `shadow-blur` is the maximum softness in layer pixels. `0` stays hard. A larger value keeps the edge sharp where the caster meets the ground and softens it as the caster rises. The contact shadow hugs the contact point: a small dark patch, not a second disc, and only a little of the caster's color. A solid does the same from its neighbors.
 
 `lamp` and `neon` emit. Omit `fill` and lamp is `#ffe6c2`, neon is `#3ad8ff`. Neon has a white core and a wider halo. They light what is near them, including the ground, by the area that actually emits, not by the bounding sphere, and they do not cast. The halo is centered on the emitter and fades out. It does not end on a rectangle. A pool on the ground fades out smoothly, including under a torus that is flat on screen. Glass does not write a hard shadow. On a dark ground the patch has a bright center and a darker rim. The tint softens with `shadow-blur`. A translucent glass solid is painted after `ground`, so the ground does not cover it. A three.js `emissive` is still added after shading, and it also lights nearby surfaces.
 
 On `ground`, a soft shadow falls off without a stair or a hard cut at the blur radius. `shadow-blur="0"` stays hard, with an antialiased rim. The contact edge stays sharp when the caster meets the ground.
 
-`native/flexlayer-render` for linux-x64-gnu is rebuilt. The darwin-arm64 binary is unchanged. Rebuilding the other platform binaries needs `zig` and `cargo-xwin` via `npm run build:platforms`.
+`native/flexlayer-render` for linux-x64-gnu is rebuilt. The darwin-arm64 and win32-x64-msvc binaries from 0.13.7 are unchanged.
+
+## 0.13.7
+
+`native/flexlayer-render` now includes `darwin-arm64` and `win32-x64-msvc`, built from the same `flexlayer-render/0.0.2` as the linux addon in 0.13.6. The linux binary is unchanged.
+
+## 0.13.6
+
+`native/flexlayer-render` for linux-x64-gnu is rebuilt. The addon is `flexlayer-render/0.0.2`. `renderStylePng(style, width, height)` draws the built-in still life in `studio`, `toon`, `technical`, or `manga`. `renderScenePng` draws boxes in one of those looks. Toon creases follow each part's fill, and toon and manga line widths scale with the part. The darwin-arm64 binary is unchanged.
 
 ## 0.13.5
 
