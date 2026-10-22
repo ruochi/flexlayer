@@ -1,7 +1,8 @@
 import { createCanvas, loadImage, type Canvas } from '@napi-rs/canvas'
+import { loadNativeRender } from './native.js'
 import type { LayerNode } from './parse.js'
 import { prepareAssets } from './layout.js'
-import { renderToCanvas } from './render.js'
+import { painterMode, renderToCanvas } from './render.js'
 import { setFontsCacheDir } from './fonts.js'
 import type { LayerReport, RenderOptions } from './types.js'
 
@@ -282,6 +283,20 @@ function blankPng(): Buffer {
  * 单元格最长边不超过 480px，整张宽度不超过 3840px。
  */
 export function createContactSheet(input: { count: number; width: number; height: number }): ContactSheet {
+  if (painterMode() === 'native') {
+    const frames: Buffer[] = []
+    return {
+      async add(frame) {
+        if (!(input.count >= 1) || frames.length >= input.count) throw new Error('联系表已经放满')
+        frames.push(Buffer.isBuffer(frame) ? frame : frame.toBuffer('image/png'))
+      },
+      toPng() {
+        const native = loadNativeRender()
+        if (!native?.contactSheet) return blankPng()
+        return native.contactSheet(frames)
+      },
+    }
+  }
   if (!(input.count >= 1) || input.width <= 0 || input.height <= 0) {
     return {
       async add() {
@@ -317,6 +332,10 @@ export function createContactSheet(input: { count: number; width: number; height
  * 单元格最长边不超过 480px，整张宽度不超过 3840px。
  */
 export async function contactSheetFromPngs(frames: Buffer[]): Promise<Buffer> {
+  if (painterMode() === 'native') {
+    const native = loadNativeRender()
+    if (native?.contactSheet) return native.contactSheet(frames)
+  }
   if (frames.length === 0) return blankPng()
   const first = await loadImage(frames[0]!)
   const sheet = createContactSheet({ count: frames.length, width: first.width, height: first.height })

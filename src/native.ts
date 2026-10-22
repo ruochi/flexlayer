@@ -5,10 +5,34 @@ import { fileURLToPath } from 'node:url'
 const requireNative = createRequire(import.meta.url)
 const vendored = join(dirname(fileURLToPath(import.meta.url)), '..', 'native', 'flexlayer-render')
 
-/** 预编译渲染器交给 Node 的入口。场景绘制仍在 `paintDocument`。 */
+export type NativePaintIssue = {
+  level: string
+  code: string
+  path: string
+  message: string
+  hint: string
+}
+
+export type NativeRenderOut = {
+  png?: Buffer | null
+  rgba?: Buffer | null
+  width: number
+  height: number
+  issues: NativePaintIssue[]
+}
+
+/** 预编译渲染器交给 Node 的入口。`render` 在插件里画完，只交回像素。 */
 export type NativeRender = {
   engine: () => string
   solidPng: (width: number, height: number, color: string) => Buffer
+  render?: (
+    json: string,
+    images: Array<{ id: string; bytes: Buffer }>,
+    rasters: Array<{ id: string; width: number; height: number; rgba: Buffer }>,
+    wantRgba: boolean,
+  ) => NativeRenderOut
+  renderFrames?: (jsons: string[], wantRgba: boolean) => NativeRenderOut[]
+  contactSheet?: (pngs: Buffer[]) => Buffer
 }
 
 /**
