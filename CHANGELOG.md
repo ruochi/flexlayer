@@ -4,7 +4,7 @@
 
 ## 0.13.6
 
-The key light casts onto solids as well as `ground`. On a solid the edge stays hard. On `ground`, `shadow-blur` is the maximum softness in layer pixels. `0` stays hard. A larger value keeps the edge sharp where the caster meets the ground and softens it as the caster rises. The ground darkens where a caster sits close and picks up a little of that color. A solid does the same from its neighbors.
+The key light casts onto solids as well as `ground`. On a solid the shadow stays hard, with an antialiased rim. On `ground`, `shadow-blur` is the maximum softness in layer pixels. `0` stays hard. A larger value keeps the edge sharp where the caster meets the ground and softens it as the caster rises. The ground darkens where a caster sits close and picks up a little of that color. A solid does the same from its neighbors.
 
 `lamp` and `neon` emit. Omit `fill` and lamp is `#ffe6c2`, neon is `#3ad8ff`. Neon has a white core and a wider halo. They light what is near them, including the ground, and they do not cast. The halo is centered on the emitter and fades out. It does not end on a rectangle. A pool on the ground fades out smoothly, including under a torus that is flat on screen. Glass does not write a hard shadow. Light passing through it stays white at the center, takes the glass color toward the rim, and softens with `shadow-blur`. A translucent glass solid is painted after `ground`, so the ground does not cover it. A three.js `emissive` is still added after shading, and it also lights nearby surfaces.
 
