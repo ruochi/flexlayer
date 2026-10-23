@@ -1,0 +1,47 @@
+{
+  "at": "2026-10-23T05:25:21.208Z",
+  "scenes": [
+    {
+      "name": "box-sphere-ground",
+      "ms": 397,
+      "pngBytes": 40152,
+      "rssBytes": 37691392,
+      "sha256": "6f81f69fff769ee7041b68fc4fbe50d96fa894b49f5aad7698e481f56183c69a"
+    },
+    {
+      "name": "torus-ground",
+      "ms": 423,
+      "pngBytes": 76852,
+      "rssBytes": 64000000,
+      "sha256": "c266f7edd6e5ee62368ab8b611901dfae82b381ad7e082d1e82992e73250aee9"
+    },
+    {
+      "name": "torus",
+      "ms": 139,
+      "pngBytes": 73694,
+      "rssBytes": 1310720,
+      "sha256": "09710e3cc817a4cb7cebfc29c2145ccec0703f8dca083aa517408d0ca203bd8c"
+    },
+    {
+      "name": "strokes",
+      "ms": 107,
+      "pngBytes": 15656,
+      "rssBytes": 24227840,
+      "sha256": "8f6fafd97985451860d0d24e81653ebcf4d0f76b9f15e21af1b2160b20664d0a"
+    },
+    {
+      "name": "cards",
+      "ms": 34,
+      "pngBytes": 6436,
+      "rssBytes": 5582848,
+      "sha256": "48618db949e7b9ff548295047545f5e004541b8e4f5afbc095ab09ae2b162466"
+    },
+    {
+      "name": "macbook-pro",
+      "ms": 3393,
+      "pngBytes": 523595,
+      "rssBytes": 135905280,
+      "sha256": "5ff3547df2d7c36a9845096d5a52ed80302b9afab6de87358e49ce90192691ca"
+    }
+  ]
+}

@@ -2,9 +2,9 @@
 
 ## Unreleased
 
-## 0.14.4
+## 0.14.5
 
-Solids and WebGL share one CPU kernel. Tag solids still shade through the studio raster, so `shading`, `lamp`, `neon`, glass, and contact shadows stay. The kernel adds the draw list, a GLSL ES interpreter, and `pickRay`.
+Solids and WebGL share one CPU kernel beside the studio raster. Tag solids still shade through that raster, so a default camera keeps `shading`, `lamp`, `neon`, glass, contact shadows, and the pictures from 0.14.4. The kernel adds the draw list, a GLSL ES interpreter, and `pickRay`.
 
 `<light>` on a camera layer writes an author light. The first directional replaces the studio key. `light="world"` keeps that key fixed while the camera orbits. `light="camera"` locks it to the lens. `environment`, `tonemap`, and `quality="draft|final"` are recorded on that layer. `roughness`, `metalness`, `clearcoat`, `transmission`, `ior`, and `emissive` can be written on a solid. `material="matcap:clay"` keeps a baked finish.
 
@@ -12,7 +12,15 @@ WebGL with no matrix projects coordinates inside -1 to 1 through the viewport. A
 
 `flexlayer pick --positions ... --indices ... --from ... --dir ...` prints the closest triangle. `check` and `render` take `--quality draft|final`.
 
-`native/flexlayer-render` for linux-x64-gnu is rebuilt. darwin-arm64 and win32-x64-msvc stay the 0.14.3 binaries until the next three-platform export.
+`native/flexlayer-render` for linux-x64-gnu is rebuilt from `flexlayer-render/0.0.2+cap1080` and includes 0.14.4 plus this kernel. darwin-arm64 and win32-x64-msvc stay the 0.14.3 binaries until `npm run build:platforms` exports them.
+
+## 0.14.4
+
+`brushed` and `metal` stay closer to the written `fill` at a grazing angle, and a dark `fill` no longer falls to black. Their specular bake has an environment floor, and those two finishes use their own exposure. `clay`, `plastic`, and `mirror` are unchanged.
+
+Near-field occlusion and bounce stay continuous across bin edges, so a picture with many solids no longer breaks into blocks.
+
+`native/flexlayer-render` for linux-x64-gnu is rebuilt from the same `flexlayer-render/0.0.2+cap1080` painter. The darwin-arm64 and win32-x64-msvc binaries are still the 0.14.3 build and do not include either change. Rebuild those two on their own platforms before this release is merged.
 
 ## 0.14.3
 
