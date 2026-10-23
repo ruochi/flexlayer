@@ -1,6 +1,6 @@
 {
   "name": "flexlayer",
-  "version": "0.13.8",
+  "version": "0.14.1",
   "engines": {
     "node": ">=20"
   },
@@ -39,7 +39,7 @@
   ],
   "scripts": {
     "prepare": "npm run build",
-    "build": "tsc && node scripts/relink-draw.mjs && cp src/icon-codepoints.txt dist/icon-codepoints.txt && cp src/native-preload.cjs dist/native-preload.cjs",
+    "build": "tsc && node scripts/relink-draw.mjs && cp src/icon-codepoints.txt dist/icon-codepoints.txt && cp src/native-preload.cjs dist/native-preload.cjs && cp src/canvas-dom.mjs src/webgl-fake.mjs src/tri-raster.mjs src/native-loader.mjs src/native-mesh-renderer.mjs dist/",
     "test": "vitest run",
     "pythagoras": "tsx examples/render-pythagoras.ts",
     "bench": "node scripts/bench-mesh.mjs",

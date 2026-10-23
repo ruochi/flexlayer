@@ -241,7 +241,7 @@ describe('canvas 和 script', () => {
   })
 
   it('Node 20 读宿主每一级 package.json 时路径已放行', () => {
-    const host = fileURLToPath(new URL('../native/flexlayer-render/draw/canvas-dom.mjs', import.meta.url))
+    const host = fileURLToPath(new URL('./canvas-dom.mjs', import.meta.url))
     const grants = scriptReadGrants(host)
     expect(grants).toContain(join(dirname(host), 'package.json'))
     expect(grants).toContain(join(dirname(dirname(host)), 'package.json'))
@@ -258,9 +258,9 @@ describe('canvas 和 script', () => {
     expect(scriptPermissionFlags('21.6.2', false)).toEqual([])
     expect(scriptPermissionFlags('22.14.0', true)).toEqual(['--permission', '--allow-addons'])
     expect(scriptPermissionFlags('24.10.0', true)).toEqual(['--permission', '--allow-addons'])
-    const args = scriptChildArgs(fileURLToPath(new URL('../native/flexlayer-render/draw/canvas-dom.mjs', import.meta.url)))
+    const args = scriptChildArgs(fileURLToPath(new URL('./canvas-dom.mjs', import.meta.url)))
     if (scriptPermissionFlags(process.versions.node, args[0]?.startsWith('--') ?? false).length === 0) {
-      expect(args).toEqual([fileURLToPath(new URL('../native/flexlayer-render/draw/canvas-dom.mjs', import.meta.url))])
+      expect(args).toEqual([fileURLToPath(new URL('./canvas-dom.mjs', import.meta.url))])
     } else {
       expect(args[0]).toMatch(/--(experimental-)?permission/)
       expect(args).toContain('--allow-addons')
@@ -268,7 +268,7 @@ describe('canvas 和 script', () => {
   })
 
   it('读权限不会在 Node 20 上把同一条前缀插两次', () => {
-    const host = fileURLToPath(new URL('../native/flexlayer-render/draw/canvas-dom.mjs', import.meta.url))
+    const host = fileURLToPath(new URL('./canvas-dom.mjs', import.meta.url))
     const grants = scriptReadGrants(host)
     expect(grants.length).toBeGreaterThan(0)
     const inserted = grants.map((grant) => {
@@ -298,10 +298,10 @@ describe('canvas 和 script', () => {
       symlinkSync(join(realRoot, 'canvas'), join(store, 'canvas'))
       symlinkSync(join(store, 'canvas'), join(app, 'node_modules', '@napi-rs', 'canvas'))
       const host = join(app, 'src', 'canvas-dom.mjs')
-      writeFileSync(host, readFileSync(new URL('../native/flexlayer-render/draw/canvas-dom.mjs', import.meta.url)))
-      writeFileSync(join(app, 'src', 'webgl-fake.mjs'), readFileSync(new URL('../native/flexlayer-render/draw/webgl-fake.mjs', import.meta.url)))
-      writeFileSync(join(app, 'src', 'tri-raster.mjs'), readFileSync(new URL('../native/flexlayer-render/draw/tri-raster.mjs', import.meta.url)))
-      writeFileSync(join(app, 'src', 'native-loader.mjs'), readFileSync(new URL('../native/flexlayer-render/draw/native-loader.mjs', import.meta.url)))
+      writeFileSync(host, readFileSync(new URL('./canvas-dom.mjs', import.meta.url)))
+      writeFileSync(join(app, 'src', 'webgl-fake.mjs'), readFileSync(new URL('./webgl-fake.mjs', import.meta.url)))
+      writeFileSync(join(app, 'src', 'tri-raster.mjs'), readFileSync(new URL('./tri-raster.mjs', import.meta.url)))
+      writeFileSync(join(app, 'src', 'native-loader.mjs'), readFileSync(new URL('./native-loader.mjs', import.meta.url)))
       const grants = scriptReadGrants(host)
       expect(grants).toContain(join(app, 'node_modules', '@napi-rs', 'canvas', 'package.json'))
       expect(grants).toContain(join(realRoot, 'canvas', 'package.json'))
@@ -335,10 +335,10 @@ describe('canvas 和 script', () => {
   it('node_modules 整目录或 pnpm 虚拟目录是符号链接时脚本仍能画', () => {
     const root = mkdtempSync(join(tmpdir(), 'flexlayer-link-'))
     const realRoot = join(dirname(fileURLToPath(import.meta.url)), '..', 'node_modules', '@napi-rs')
-    const hostSrc = readFileSync(new URL('../native/flexlayer-render/draw/canvas-dom.mjs', import.meta.url))
-    const webglSrc = readFileSync(new URL('../native/flexlayer-render/draw/webgl-fake.mjs', import.meta.url))
-    const rasterSrc = readFileSync(new URL('../native/flexlayer-render/draw/tri-raster.mjs', import.meta.url))
-    const loaderSrc = readFileSync(new URL('../native/flexlayer-render/draw/native-loader.mjs', import.meta.url))
+    const hostSrc = readFileSync(new URL('./canvas-dom.mjs', import.meta.url))
+    const webglSrc = readFileSync(new URL('./webgl-fake.mjs', import.meta.url))
+    const rasterSrc = readFileSync(new URL('./tri-raster.mjs', import.meta.url))
+    const loaderSrc = readFileSync(new URL('./native-loader.mjs', import.meta.url))
     const payload = JSON.stringify({
       canvases: [{ path: 'layer/canvas[0]', id: 'bar', width: 4, height: 4, bitmapWidth: 4, bitmapHeight: 4, x: 0, y: 0, style: {}, computed: {}, text: '', attrs: {} }],
       scripts: [{ path: 'layer/script[0]', body: 'const c=document.querySelector("#bar"); const x=c.getContext("2d"); x.fillStyle="#ff0000"; x.fillRect(0,0,4,4)' }],

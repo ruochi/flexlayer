@@ -14,6 +14,7 @@ const DEFAULT_FONT_URL = DEFAULT_FONT.faces[0]!.url
 const DEFAULT_FONT_FILE = DEFAULT_FONT.faces[0]!.file
 
 const registered = new Set<string>()
+const fontFiles = new Map<string, string>()
 let freshFontLoads = 0
 
 /** 真正读过或下载过的字体次数。已经记住的名字不会再加。 */
@@ -75,10 +76,38 @@ export async function ensureDefaultFont(): Promise<string> {
 
 export function registerFontPath(family: string, filePath: string): void {
   if (registered.has(family)) return
+  fontFiles.set(family, filePath)
   const key = GlobalFonts.registerFromPath(filePath, family)
   if (!key) throw new Error(`字体注册失败: ${filePath}`)
   registered.add(family)
   freshFontLoads += 1
+}
+
+/** 这个 family 名对应的字体文件。排版量过字之后才有。 */
+export function registeredFontFiles(): Array<{ family: string; path: string }> {
+  return [...fontFiles.entries()].map(([family, path]) => ({ family, path }))
+}
+
+/**
+ * 绘制要用的文件。目录字体按最近的一档，默认黑体用可变文件。
+ * 返回的 family 是画布上注册的名字。
+ */
+export function fontFileFor(family: string, weight = 400): { family: string; path: string } {
+  const requested = family.trim() || DEFAULT_FONT_FAMILY
+  const resolved = isDefaultFontName(requested) ? DEFAULT_FONT_FAMILY : requested
+  const builtin = builtinFont(resolved)
+  if (builtin) {
+    const face = nearestFace(builtin, weight)
+    ensureFaceSync(face)
+    const path = fontFiles.get(face.registeredAs) ?? materializeFace(face)
+    fontFiles.set(face.registeredAs, path)
+    fontFiles.set(requested, path)
+    return { family: face.registeredAs, path }
+  }
+  const known = fontFiles.get(resolved)
+  if (known) return { family: resolved, path: known }
+  const path = ensureDefaultFontSync()
+  return { family: DEFAULT_FONT_FAMILY, path }
 }
 
 /** `字体.ttc#2` 的 `#2` 是从 0 开始的字形序号，不是文件名。 */

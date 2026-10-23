@@ -1048,6 +1048,8 @@ const EXPECT_CODES = new Set([
   'effect-clipped',
   'view-outside',
   'flatten-3d',
+  'output-limit',
+  'input-limit',
   'flattened-3d',
   'behind-camera',
   'emit-draw',
