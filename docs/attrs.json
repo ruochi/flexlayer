@@ -640,7 +640,7 @@
   {
     "name": "material",
     "group": "graphic",
-    "syntax": "clay | plastic | metal | mirror | brushed | matte | glass [roughness]",
+    "syntax": "clay | plastic | metal | mirror | brushed | lamp | neon | matte | glass [roughness]",
     "default": null,
     "example": "metal",
     "layerOnly": false,
@@ -656,7 +656,7 @@
     "example": "false",
     "layerOnly": false,
     "htmlUsesStyle": false,
-    "note": "When false, this solid does not cast a shadow onto ground. Glass never casts one",
+    "note": "When false, this solid does not cast. Glass tints the light instead of writing a hard shadow. lamp and neon do not cast",
     "misplacedHint": null
   },
   {
@@ -678,7 +678,7 @@
     "example": "16",
     "layerOnly": false,
     "htmlUsesStyle": false,
-    "note": null,
+    "note": "Maximum softness of a ground shadow, in layer pixels. 0 stays hard. Where the caster touches the ground the edge stays sharp",
     "misplacedHint": null
   },
   {

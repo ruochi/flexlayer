@@ -101,7 +101,7 @@ type Batch = {
   /** 被挡住时按主光变暗。 */
   receiveShadow: boolean
   /** lambert 是默认磨砂（matte）和平面的明暗。glass 不写主光阴影，半透明时不写深度。 */
-  material: 'lambert' | 'plastic' | 'metal' | 'glass'
+  material: 'lambert' | 'plastic' | 'metal' | 'glass' | 'lamp' | 'neon'
   roughness: number
   /** 预烘材质球的名字。空则走原来的明暗。 */
   matcap?: string | null

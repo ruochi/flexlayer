@@ -2,9 +2,19 @@
 
 ## Unreleased
 
+## 0.14.2
+
+`native/flexlayer-render` includes `win32-x64-msvc`, built from the same `flexlayer-render/0.0.2+cap1080` addon as linux and darwin. That build includes the 0.14.1 lighting. The cross link uses the Visual Studio 2022 CRT. The Windows binary has not been loaded on Windows. The darwin binary is cross-compiled from this same source and has not been run on a Mac.
+
 ## 0.14.1
 
-`native/flexlayer-render` includes `win32-x64-msvc`, built from the same `flexlayer-render/0.0.2+cap1080` addon as the linux and darwin binaries. The cross link uses the Visual Studio 2022 CRT. This Windows binary has not been loaded on Windows. The darwin binary is still cross-compiled and has not been run on a Mac.
+The key light casts onto solids as well as `ground`. On a solid the shadow stays hard, with an antialiased rim. On `ground`, `shadow-blur` is the maximum softness in layer pixels. `0` stays hard. A larger value keeps the edge sharp where the caster meets the ground and softens it as the caster rises. The contact shadow hugs the contact point: a small dark patch, not a second disc, and only a little of the caster's color. A solid does the same from its neighbors.
+
+`lamp` and `neon` emit. Omit `fill` and lamp is `#ffe6c2`, neon is `#3ad8ff`. Neon has a white core and a wider halo. They light what is near them, including the ground, by the area that actually emits, not by the bounding sphere, and they do not cast. The halo is centered on the emitter and fades out. It does not end on a rectangle. A pool on the ground fades out smoothly, including under a torus that is flat on screen. Glass does not write a hard shadow. On a dark ground the patch has a bright center and a darker rim. The tint softens with `shadow-blur`. A translucent glass solid is painted after `ground`, so the ground does not cover it. A three.js `emissive` is still added after shading, and it also lights nearby surfaces.
+
+On `ground`, a soft shadow falls off without a stair or a hard cut at the blur radius. `shadow-blur="0"` stays hard, with an antialiased rim. The contact edge stays sharp when the caster meets the ground.
+
+`native/flexlayer-render` for linux-x64-gnu is rebuilt on the capped addon. The darwin-arm64 binary stays the 0.14.0 build and does not include this lighting.
 
 ## 0.14.0
 

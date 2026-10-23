@@ -258,7 +258,7 @@ export const ATTRS: AttrDef[] = [
   },
   { name: 'hidden', docGroup: 'graphic' },
   { name: 'halo', docGroup: 'graphic', syntax: 'px', example: '3' },
-  { name: 'material', docGroup: 'graphic', syntax: 'clay | plastic | metal | mirror | brushed | matte | glass [roughness]', example: 'metal' },
+  { name: 'material', docGroup: 'graphic', syntax: 'clay | plastic | metal | mirror | brushed | lamp | neon | matte | glass [roughness]', example: 'metal' },
   {
     name: 'cast-shadow',
     forbidInStyle: true,
@@ -266,7 +266,7 @@ export const ATTRS: AttrDef[] = [
     syntax: 'true | false',
     defaultValue: 'true',
     example: 'false',
-    note: 'When false, this solid does not cast a shadow onto ground. Glass never casts one',
+    note: 'When false, this solid does not cast. Glass tints the light instead of writing a hard shadow. lamp and neon do not cast',
   },
   {
     name: 'receive-shadow',
@@ -284,6 +284,7 @@ export const ATTRS: AttrDef[] = [
     defaultValue: '0',
     example: '16',
     issue: 'invalid-attr',
+    note: 'Maximum softness of a ground shadow, in layer pixels. 0 stays hard. Where the caster touches the ground the edge stays sharp',
   },
   {
     name: 'shadow-opacity',

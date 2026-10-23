@@ -632,9 +632,9 @@ export type MeshSpec =
       revision?: string
     }
 
-/** 网格表面。不写时是磨砂：主光乘 fill。`matcap` 有名字时按预烘材质球着色，粗糙度不再参与。 */
+/** 网格表面。不写时是磨砂：主光乘 fill。`matcap` 有名字时按预烘材质球着色，粗糙度不再参与。`lamp` 和 `neon` 自己发光。 */
 export type MeshMaterial = {
-  kind: 'matte' | 'plastic' | 'metal' | 'glass' | 'clay' | 'mirror' | 'brushed'
+  kind: 'matte' | 'plastic' | 'metal' | 'glass' | 'clay' | 'mirror' | 'brushed' | 'lamp' | 'neon'
   roughness: number
   /** 预烘材质球。`clay`、`plastic`、`metal`、`mirror`、`brushed`。 */
   matcap?: string

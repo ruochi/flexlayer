@@ -65,6 +65,7 @@ export interface ExactBatchInput {
 }
 export declare function renderExactSimple(config: ExactRenderConfig, batches: Array<ExactBatchInput>): Array<number>
 export declare function matcapNames(): string
+export declare function lightNames(): string
 export interface BevelGeometry {
   positions: Float32Array
   normals: Float32Array
@@ -152,6 +153,8 @@ export interface FillBatch {
   hasLines: boolean
   lineMargin: number
   matcap?: string
+  bloomRadius?: number
+  whiteCore?: number
 }
 export interface FillGround {
   toLayer: Array<number>
