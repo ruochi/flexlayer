@@ -1,12 +1,14 @@
 /**
- * 假的 WebGL1 / WebGL2 上下文。方法名和 three.js 的 WebGLRenderer 对齐。
- * 着色器不执行。drawArrays / drawElements 读 position、normal、uv、color，
- * 以及 modelViewMatrix、projectionMatrix、normalMatrix、diffuse、opacity、
- * roughness、metalness、emissive、shininess、transmission、map。
- * 明暗用和网格同一套磨砂、塑料、金属、玻璃。灯、阴影 framebuffer、后处理只被接住。
+ * WebGL1 / WebGL2 命令记录器。缓冲、纹理、帧缓冲、程序和状态先记下。
+ * drawArrays / drawElements 在调用时拷贝属性和 uniform，真正的光栅留到
+ * readPixels、flush、finish，或画布被 getImageData 读取时一次执行。
+ * 读 position、normal、uv、color，以及 modelViewMatrix、projectionMatrix、
+ * normalMatrix、diffuse、opacity、roughness、metalness、emissive、shininess、
+ * transmission、map。three.js 0.160 起的内置材质按 SHADER_TYPE 和 USE_* 识别，
+ * 金属度、粗糙度、透射走和 `<model>` 同一套种类。更早的版本报 unsupported-webgl。
  * 没有矩阵时，坐标都在 -1 到 1 里就按裁剪空间投影到视口。
  * 否则属性 0 是像素坐标，y 向下，属性 1 是平面颜色。
- * 三角形没有盖住画布时报 unsupported-webgl。three.js 内置材质按 SHADER_TYPE 识别。
+ * 三角形没有盖住画布时报 unsupported-webgl。
  * 画布上的三角形走网格那条路：Rust 画进 MESH_SAMPLES 倍的缓冲，再 resolveGrid 缩回。
  */
 import { MESH_SAMPLES, fakeClear, fakeDraw, parseShaderProgram, resolveGrid, webglDraw } from './tri-raster.mjs'
@@ -476,7 +478,36 @@ export function createFakeWebGL(host, attributes = {}) {
   let scissor = { x: 0, y: 0, w: screen.width, h: screen.height }
   const framebuffers = new Map()
 
+  const queue = []
+  let flushing = false
+
+  function flushCommands() {
+    if (flushing) return
+    flushing = true
+    try {
+      const batch = queue.splice(0, queue.length)
+      const dirty = new Set()
+      for (const cmd of batch) {
+        cmd.run()
+        dirty.add(cmd.buf)
+      }
+      for (const buf of dirty) present(buf)
+    } finally {
+      flushing = false
+    }
+  }
+
+  if (!host.ctx.__flexlayerWebgl) {
+    const readCanvas = host.ctx.getImageData.bind(host.ctx)
+    host.ctx.__flexlayerWebgl = true
+    host.ctx.getImageData = (...args) => {
+      if (!flushing) flushCommands()
+      return readCanvas(...args)
+    }
+  }
+
   function resize() {
+    queue.length = 0
     screen = makeBuffer(host.canvas.width, host.canvas.height, MESH_SAMPLES)
     viewport = { x: 0, y: 0, w: screen.width, h: screen.height }
     scissor = { x: 0, y: 0, w: screen.width, h: screen.height }
@@ -586,7 +617,7 @@ export function createFakeWebGL(host, attributes = {}) {
   function packAttrib(item) {
     const slotItem = item || emptySlot()
     const value = slotItem.value || [0, 0, 0, 1]
-    const data = slotItem.buffer && slotItem.buffer.data ? slotItem.buffer.data : new Uint8Array()
+    const data = slotItem.buffer && slotItem.buffer.data ? copyBytes(slotItem.buffer.data) : new Uint8Array()
     return {
       data,
       hasBuffer: Boolean(slotItem.enabled && slotItem.buffer),
@@ -613,26 +644,101 @@ export function createFakeWebGL(host, attributes = {}) {
     'MeshMatcapMaterial',
   ])
 
+  const THREE_BUILTIN_SINCE = 160
+
   function shaderKindOf(vertex, fragment) {
     const src = `${vertex}\n${fragment}`
     const type = src.match(/#define\s+SHADER_TYPE\s+(\w+)/)?.[1] ?? ''
     const uses = [...src.matchAll(/#define\s+(USE_[A-Z0-9_]+)/g)].map((match) => match[1])
-    return { type, uses, builtin: BUILTIN_SHADERS.has(type) }
+    const revMatch = src.match(/three\.js r(\d+)/i) ?? src.match(/#define\s+THREE_REVISION\s+(\d+)/)
+    const revision = revMatch ? Number(revMatch[1]) : null
+    const inRange = revision == null || revision >= THREE_BUILTIN_SINCE
+    return { type, uses, revision, builtin: BUILTIN_SHADERS.has(type) && inRange }
+  }
+
+  function componentBytes(type) {
+    if (type === GL.BYTE || type === GL.UNSIGNED_BYTE) return 1
+    if (type === GL.SHORT || type === GL.UNSIGNED_SHORT || type === GL.HALF_FLOAT) return 2
+    return 4
+  }
+
+  function halfToFloat(bits) {
+    const sign = (bits & 0x8000) << 16
+    const exp = (bits >> 10) & 0x1f
+    const frac = bits & 0x3ff
+    let out = sign
+    if (exp === 0) {
+      if (frac !== 0) {
+        let e = -1
+        let m = frac
+        do {
+          e++
+          m <<= 1
+        } while ((m & 0x400) === 0)
+        m &= 0x3ff
+        out |= ((127 - 15 - e) << 23) | (m << 13)
+      }
+    } else if (exp === 31) {
+      out |= 0x7f800000 | (frac << 13)
+    } else {
+      out |= ((exp + (127 - 15)) << 23) | (frac << 13)
+    }
+    return new Float32Array(new Uint32Array([out]).buffer)[0]
+  }
+
+  function readComponent(view, offset, type, normalized, byteLength) {
+    if (offset < 0 || offset >= byteLength) return 0
+    if (type === GL.FLOAT) {
+      if (offset + 4 > byteLength) return 0
+      return view.getFloat32(offset, true)
+    }
+    if (type === GL.HALF_FLOAT) {
+      if (offset + 2 > byteLength) return 0
+      return halfToFloat(view.getUint16(offset, true))
+    }
+    if (type === GL.UNSIGNED_BYTE) {
+      const v = view.getUint8(offset)
+      return normalized ? v / 255 : v
+    }
+    if (type === GL.BYTE) {
+      const v = view.getInt8(offset)
+      return normalized ? Math.max(v / 127, -1) : v
+    }
+    if (type === GL.UNSIGNED_SHORT) {
+      if (offset + 2 > byteLength) return 0
+      const v = view.getUint16(offset, true)
+      return normalized ? v / 65535 : v
+    }
+    if (type === GL.SHORT) {
+      if (offset + 2 > byteLength) return 0
+      const v = view.getInt16(offset, true)
+      return normalized ? Math.max(v / 32767, -1) : v
+    }
+    if (type === GL.UNSIGNED_INT) {
+      if (offset + 4 > byteLength) return 0
+      const v = view.getUint32(offset, true)
+      return normalized ? v / 4294967295 : v
+    }
+    if (type === GL.INT) {
+      if (offset + 4 > byteLength) return 0
+      return view.getInt32(offset, true)
+    }
+    return 0
   }
 
   function readPosition(index) {
     const posLoc = program?.attributeByName?.get('position')?.location ?? 0
     const item = slot(posLoc)
     if (!item.enabled || !item.buffer?.data) return [item.value[0] ?? 0, item.value[1] ?? 0, item.value[2] ?? 0]
-    const stride = item.stride || (item.size || 3) * 4
+    const size = item.size || 3
+    const stride = item.stride || size * componentBytes(item.type ?? GL.FLOAT)
     const offset = (item.offset | 0) + index * stride
     const bytes = item.buffer.data
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-    const size = item.size || 3
     const out = [0, 0, 0, 1]
-    if (item.type != null && item.type !== GL.FLOAT) return out
+    const step = componentBytes(item.type ?? GL.FLOAT)
     for (let k = 0; k < size && k < 4; k++) {
-      if (offset + (k + 1) * 4 <= bytes.byteLength) out[k] = view.getFloat32(offset + k * 4, true)
+      out[k] = readComponent(view, offset + k * step, item.type ?? GL.FLOAT, Boolean(item.normalized), bytes.byteLength)
     }
     return out
   }
@@ -693,10 +799,22 @@ export function createFakeWebGL(host, attributes = {}) {
     buf.seeded = true
   }
 
+  function enqueue(buf, run) {
+    queue.push({ buf, run })
+  }
+
   function draw(mode, count, indexOf) {
     if (count <= 0) return
     const buf = targetOf(drawFramebuffer)
-    pull(buf)
+    const kind = program?.shaderKind
+    if (kind?.type && kind.revision != null && kind.revision < THREE_BUILTIN_SINCE && BUILTIN_SHADERS.has(kind.type)) {
+      host.report?.({
+        level: 'warn',
+        code: 'unsupported-webgl',
+        message: `three.js r${kind.revision} 的 ${kind.type} 不在 0.160 起的内置表里`,
+        hint: '升级 three.js，或改用自定义片元着色器',
+      })
+    }
     const mv = uniformData('modelViewMatrix')
     const proj = uniformData('projectionMatrix')
     const normalMat = uniformData('normalMatrix')
@@ -725,7 +843,7 @@ export function createFakeWebGL(host, attributes = {}) {
       })
       const order = new Uint32Array(samples.length)
       for (let i = 0; i < samples.length; i++) order[i] = i
-      const frame = webglDraw({
+      const drawCall = {
         width: buf.width,
         height: buf.height,
         clip: clipBuf,
@@ -736,22 +854,33 @@ export function createFakeWebGL(host, attributes = {}) {
         colorA: 255,
         shaded: false,
         shader: fragment,
+      }
+      enqueue(buf, () => {
+        pull(buf)
+        const frame = webglDraw(drawCall)
+        if (frame.reason) {
+          host.report?.({
+            level: 'warn',
+            code: 'unsupported-webgl',
+            message: String(frame.reason),
+            hint: '换一段这个执行器能跑的片元，或改用内置材质',
+          })
+        }
+        if (!frame.covered) reportUncovered()
+        else paintResolved(buf, frame.pixels)
       })
-      if (!frame.covered) reportUncovered()
-      else paintResolved(buf, frame.pixels)
-      present(buf)
       return
     }
     const posLoc = program?.attributeByName?.get('position')?.location ?? 0
     const nrm = program?.attributeByName?.get('normal')
     const uv = program?.attributeByName?.get('uv')
     const colAttr = program?.attributeByName?.get('color')
-    const flat = slot(1).value
+    const flat = (slot(1).value || [0, 0, 0, 1]).slice()
     const mapUnit = uniformData('map')
     const tex = mapUnit ? textureBinding[mapUnit[0] | 0]?.[GL.TEXTURE_2D] : null
     const mapBytes = !tex?.data ? new Uint8Array() : ArrayBuffer.isView(tex.data) ? new Uint8Array(tex.data.buffer, tex.data.byteOffset, tex.data.byteLength) : Uint8Array.from(tex.data)
     const constAttrib = (v0, v1, v2, v3) => ({ data: new Uint8Array(), hasBuffer: false, size: 4, glType: GL.FLOAT, normalized: false, stride: 0, offset: 0, v0, v1, v2, v3 })
-    fakeDraw(buf.color, buf.depth, {
+    const drawCall = {
       mode,
       indices: ids,
       pos: packAttrib(slot(posLoc)),
@@ -814,14 +943,16 @@ export function createFakeWebGL(host, attributes = {}) {
       cullFace,
       frontFace,
       pointSize: Math.max(1, uniformNum('size', 1)),
+    }
+    enqueue(buf, () => {
+      pull(buf)
+      fakeDraw(buf.color, buf.depth, drawCall)
     })
-    present(buf)
   }
 
 
   function clearBuffer(buf, mask) {
-    pull(buf)
-    fakeClear(buf.color, buf.depth, {
+    const drawCall = {
       mask,
       rasterW: buf.rasterW,
       rasterH: buf.rasterH,
@@ -842,8 +973,11 @@ export function createFakeWebGL(host, attributes = {}) {
       clearB: clearColor[2],
       clearA: clearColor[3],
       clearDepth,
+    }
+    enqueue(buf, () => {
+      pull(buf)
+      fakeClear(buf.color, buf.depth, drawCall)
     })
-    present(buf)
   }
 
   function drawInstanced(primcount, emit) {
@@ -891,8 +1025,38 @@ export function createFakeWebGL(host, attributes = {}) {
     },
     isContextLost: () => false,
     getError: () => GL.NO_ERROR,
-    getSupportedExtensions: () => [],
-    getExtension: () => null,
+    getSupportedExtensions: () => [
+      'ANGLE_instanced_arrays',
+      'OES_element_index_uint',
+      'OES_standard_derivatives',
+      'OES_texture_float',
+      'OES_texture_half_float',
+      'WEBGL_depth_texture',
+      'WEBGL_draw_buffers',
+      'EXT_color_buffer_float',
+    ],
+    getExtension(name) {
+      if (name === 'ANGLE_instanced_arrays') {
+        return {
+          VERTEX_ATTRIB_ARRAY_DIVISOR_ANGLE: GL.VERTEX_ATTRIB_ARRAY_DIVISOR,
+          drawArraysInstancedANGLE: (mode, first, count, primcount) => api.drawArraysInstanced(mode, first, count, primcount),
+          drawElementsInstancedANGLE: (mode, count, type, offset, primcount) => api.drawElementsInstanced(mode, count, type, offset, primcount),
+          vertexAttribDivisorANGLE: (index, divisor) => api.vertexAttribDivisor(index, divisor),
+        }
+      }
+      if (name === 'OES_standard_derivatives') return { FRAGMENT_SHADER_DERIVATIVE_HINT_OES: 0x8b8b }
+      if (name === 'OES_texture_half_float') return { HALF_FLOAT_OES: 0x8d61 }
+      if (name === 'WEBGL_draw_buffers') return { drawBuffersWEBGL() {}, COLOR_ATTACHMENT0_WEBGL: GL.COLOR_ATTACHMENT0, DRAW_BUFFER0_WEBGL: GL.DRAW_BUFFER0 }
+      if (
+        name === 'OES_element_index_uint' ||
+        name === 'OES_texture_float' ||
+        name === 'WEBGL_depth_texture' ||
+        name === 'EXT_color_buffer_float'
+      ) {
+        return {}
+      }
+      return null
+    },
     getShaderPrecisionFormat: () => ({ rangeMin: 127, rangeMax: 127, precision: 23 }),
     getParameter(pname) {
       switch (pname) {
@@ -1130,7 +1294,50 @@ export function createFakeWebGL(host, attributes = {}) {
     texParameterf(target, pname, param) {
       api.texParameteri(target, pname, param)
     },
-    generateMipmap() {},
+    generateMipmap(target) {
+      const tex = textureBinding[textureUnit]?.[target]
+      if (!tex?.data || !(tex.width > 0) || !(tex.height > 0)) return
+      const mips = [tex.data]
+      let w = tex.width | 0
+      let h = tex.height | 0
+      let src = tex.data
+      while (w > 1 || h > 1) {
+        const nw = Math.max(1, w >> 1)
+        const nh = Math.max(1, h >> 1)
+        const dst = new Uint8Array(nw * nh * 4)
+        for (let y = 0; y < nh; y++) {
+          for (let x = 0; x < nw; x++) {
+            let r = 0
+            let g = 0
+            let b = 0
+            let a = 0
+            let n = 0
+            for (let oy = 0; oy < 2; oy++) {
+              for (let ox = 0; ox < 2; ox++) {
+                const sx = Math.min(w - 1, x * 2 + ox)
+                const sy = Math.min(h - 1, y * 2 + oy)
+                const i = (sy * w + sx) * 4
+                r += src[i] ?? 0
+                g += src[i + 1] ?? 0
+                b += src[i + 2] ?? 0
+                a += src[i + 3] ?? 0
+                n++
+              }
+            }
+            const o = (y * nw + x) * 4
+            dst[o] = Math.round(r / n)
+            dst[o + 1] = Math.round(g / n)
+            dst[o + 2] = Math.round(b / n)
+            dst[o + 3] = Math.round(a / n)
+          }
+        }
+        mips.push(dst)
+        src = dst
+        w = nw
+        h = nh
+      }
+      tex.mips = mips
+    },
     pixelStorei(pname, param) {
       if (pname === GL.UNPACK_FLIP_Y_WEBGL) unpackFlipY = Boolean(param)
       else if (pname === GL.UNPACK_PREMULTIPLY_ALPHA_WEBGL) unpackPremultiply = Boolean(param)
@@ -1144,13 +1351,20 @@ export function createFakeWebGL(host, attributes = {}) {
     },
     texStorage3D() {},
     texImage2D(target, _level, _internal, a, b, c, d, e, f) {
-      const tex = textureBinding[textureUnit]?.[target]
+      const face = target >= GL.TEXTURE_CUBE_MAP_POSITIVE_X && target < GL.TEXTURE_CUBE_MAP_POSITIVE_X + 6
+      const tex = textureBinding[textureUnit]?.[face ? GL.TEXTURE_CUBE_MAP : target]
       if (!tex) return
-      if (f !== undefined) storeImage(tex, a | 0, b | 0, toRGBA(f, a | 0, b | 0), unpackFlipY)
-      else {
-        const image = readImageSource(c)
-        if (image) storeImage(tex, image.width, image.height, image.data, unpackFlipY)
+      const stored = f !== undefined
+        ? { width: a | 0, height: b | 0, data: toRGBA(f, a | 0, b | 0) }
+        : readImageSource(c)
+      if (!stored) return
+      if (face) {
+        tex.faces = tex.faces ?? {}
+        tex.faces[target] = stored
+        if (!tex.data) storeImage(tex, stored.width, stored.height, stored.data, unpackFlipY)
+        return
       }
+      storeImage(tex, stored.width, stored.height, stored.data, unpackFlipY)
     },
     texImage3D() {},
     texSubImage2D(target, _level, _x, _y, a, b, c, d, e) {
@@ -1217,6 +1431,7 @@ export function createFakeWebGL(host, attributes = {}) {
     blitFramebuffer() {},
     invalidateFramebuffer() {},
     readPixels(x, y, width, height, _format, _type, pixels) {
+      flushCommands()
       const buf = targetOf(readFramebuffer ?? drawFramebuffer)
       if (!pixels) return
       const resolved = buf.samples === 1 ? buf.color : (() => {
@@ -1326,6 +1541,9 @@ export function createFakeWebGL(host, attributes = {}) {
     uniform2fv: (loc, v) => loc && loc.program.values.set(loc.name, Array.from(v)),
     uniform3fv: (loc, v) => loc && loc.program.values.set(loc.name, Array.from(v)),
     uniform4fv: (loc, v) => loc && loc.program.values.set(loc.name, Array.from(v)),
+    uniform2iv: (loc, v) => loc && loc.program.values.set(loc.name, Array.from(v)),
+    uniform3iv: (loc, v) => loc && loc.program.values.set(loc.name, Array.from(v)),
+    uniform4iv: (loc, v) => loc && loc.program.values.set(loc.name, Array.from(v)),
     uniformMatrix2fv: (loc, _transpose, v) => loc && loc.program.values.set(loc.name, Array.from(v)),
     uniformMatrix3fv: (loc, _transpose, v) => loc && loc.program.values.set(loc.name, Array.from(v)),
     uniformMatrix4fv: (loc, _transpose, v) => loc && loc.program.values.set(loc.name, Array.from(v)),
@@ -1343,8 +1561,12 @@ export function createFakeWebGL(host, attributes = {}) {
     drawElementsInstanced(mode, count, type, offset, primcount) {
       drawInstanced(primcount, () => api.drawElements(mode, count, type, offset))
     },
-    flush() {},
-    finish() {},
+    flush() {
+      flushCommands()
+    },
+    finish() {
+      flushCommands()
+    },
   }
 
   const extra = new Map()

@@ -394,6 +394,7 @@ export function createCanvasSession(input) {
   }
 
   function exportJSON() {
+    for (const host of hosts) host.webgl?.flush?.()
     return {
       issues,
       canvases: hosts.map((host) => {
