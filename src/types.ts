@@ -654,6 +654,8 @@ export type MeshMaterial = {
   clearcoat?: number
   transmission?: number
   ior?: number
+  sheen?: number
+  anisotropy?: number
   /** 自发光颜色，`#rrggbb`。 */
   emissive?: string
 }

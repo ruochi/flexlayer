@@ -209,6 +209,28 @@
     "misplacedHint": "Write ior on a solid"
   },
   {
+    "name": "sheen",
+    "group": null,
+    "syntax": "0..1",
+    "default": null,
+    "example": "0.4",
+    "layerOnly": false,
+    "htmlUsesStyle": false,
+    "note": "Charlie sheen on a solid. Grazing angles pick it up",
+    "misplacedHint": "Write sheen on a solid"
+  },
+  {
+    "name": "anisotropy",
+    "group": null,
+    "syntax": "0..1",
+    "default": null,
+    "example": "0.8",
+    "layerOnly": false,
+    "htmlUsesStyle": false,
+    "note": "Anisotropic GGX. brushed is 0.8. Stretches the highlight along the tangent",
+    "misplacedHint": "Write anisotropy on a solid"
+  },
+  {
     "name": "emissive",
     "group": null,
     "syntax": "color",

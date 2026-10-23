@@ -105,6 +105,11 @@ type Batch = {
   /** lambert 是默认磨砂（matte）和平面的明暗。glass 不写主光阴影，半透明时不写深度。 */
   material: 'lambert' | 'plastic' | 'metal' | 'glass' | 'lamp' | 'neon'
   roughness: number
+  metalness?: number
+  clearcoat?: number
+  clearcoatRoughness?: number
+  sheen?: number
+  anisotropy?: number
   /** 预烘材质球的名字。空则走原来的明暗。 */
   matcap?: string | null
   texture: Uint8ClampedArray | null
@@ -169,6 +174,12 @@ type ModelPrim = {
   colors?: Float32Array
   map?: GlbPrimitive['map']
   emissive?: [number, number, number]
+  clearcoat?: number
+  clearcoatRoughness?: number
+  transmission?: number
+  ior?: number
+  sheen?: number
+  anisotropy?: number
   /** 下标是线段对，不光栅三角形。 */
   lines?: boolean
   linePx?: number
@@ -493,6 +504,12 @@ function buildModelFresh(node: MeshLayoutNode): ModelPrim[] {
       colors: prim.colors ? scaleVertexColors(prim.colors) : undefined,
       map: prim.map,
       emissive: prim.emissive,
+      clearcoat: prim.clearcoat,
+      clearcoatRoughness: prim.clearcoatRoughness,
+      transmission: prim.transmission,
+      ior: prim.ior,
+      sheen: prim.sheen,
+      anisotropy: prim.anisotropy,
     })
   }
   return out
@@ -1190,6 +1207,26 @@ function shadeMaterial(kind: NonNullable<MeshLayoutNode['material']>['kind'] | u
   return kind
 }
 
+/** A written metalness, coat, sheen, or anisotropy leaves the matte Lambert path. */
+function surfaceMaterial(material: MeshLayoutNode['material'] | undefined): Batch['material'] {
+  const base = shadeMaterial(material?.kind)
+  if (base !== 'lambert' || !material) return base
+  const metal = material.metalness
+  if (metal == null && material.clearcoat == null && material.sheen == null && material.anisotropy == null && material.transmission == null) return base
+  if ((material.transmission ?? 0) >= 0.5) return 'glass'
+  return (metal ?? 0) >= 0.5 ? 'metal' : 'plastic'
+}
+
+function surfaceScalars(material: MeshLayoutNode['material'] | undefined, prim?: ModelPrim) {
+  return {
+    metalness: material?.metalness ?? prim?.metalness,
+    clearcoat: material?.clearcoat ?? prim?.clearcoat,
+    clearcoatRoughness: prim?.clearcoatRoughness,
+    sheen: material?.sheen ?? prim?.sheen,
+    anisotropy: material?.anisotropy ?? prim?.anisotropy ?? (material?.kind === 'brushed' ? 0.8 : undefined),
+  }
+}
+
 function groupDepth(group: Batch[]): number {
   let sum = 0
   let n = 0
@@ -1350,8 +1387,9 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
         }
         const painted = prim.map || prim.colors ? { positions: prim.positions, normals: prim.normals, indices: prim.indices } : paintGeometry(node, prim.positions, prim.normals, prim.indices, layer.shading)
         const authored = node.material
-        const material = authored ? shadeMaterial(authored.kind) : prim.shade ? shadeMaterial(prim.shade) : prim.metalness >= 0.5 ? 'metal' : 'plastic'
+        const material = authored ? surfaceMaterial(authored) : prim.shade ? shadeMaterial(prim.shade) : prim.metalness >= 0.5 ? 'metal' : 'plastic'
         const roughness = authored ? authored.roughness : prim.roughness
+        const scalars = surfaceScalars(authored, prim)
         const glass = (authored?.kind ?? prim.shade) === 'glass'
         batches.push({
           positions: painted.positions,
@@ -1369,6 +1407,7 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
           receiveShadow: false,
           material,
           roughness,
+          ...scalars,
           matcap: authored?.matcap ?? null,
           texture: null,
           tw: 0,
@@ -1407,8 +1446,9 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
       depthWrite: glass && a < 255 ? false : fillNone || a >= 255,
       castShadow: node.castShadow !== false,
       receiveShadow: false,
-      material: shadeMaterial(node.material?.kind),
+      material: surfaceMaterial(node.material),
       roughness: node.material?.roughness ?? 1,
+      ...surfaceScalars(node.material),
       matcap: node.material?.matcap ?? null,
       texture: null,
       tw: 0,

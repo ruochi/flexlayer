@@ -3962,8 +3962,10 @@ function applySurfaceAttrs(material: MeshMaterial | undefined, node: LayerNode, 
   const clearcoat = node.attrs.clearcoat
   const transmission = node.attrs.transmission
   const ior = node.attrs.ior
+  const sheen = node.attrs.sheen
+  const anisotropy = node.attrs.anisotropy
   const emissive = node.attrs.emissive
-  const written = [roughness, metalness, clearcoat, transmission, ior, emissive].some((value) => value != null && value.trim() !== '')
+  const written = [roughness, metalness, clearcoat, transmission, ior, sheen, anisotropy, emissive].some((value) => value != null && value.trim() !== '')
   if (!written) return material
   const next: MeshMaterial = material ? { ...material } : { kind: 'matte', roughness: 1 }
   if (roughness != null && roughness.trim() !== '') next.roughness = readUnitInterval(roughness, next.roughness, ctx, 'roughness', '例如 roughness="0.4"')
@@ -3971,6 +3973,8 @@ function applySurfaceAttrs(material: MeshMaterial | undefined, node: LayerNode, 
   if (clearcoat != null && clearcoat.trim() !== '') next.clearcoat = readUnitInterval(clearcoat, 0, ctx, 'clearcoat', '例如 clearcoat="1"')
   if (transmission != null && transmission.trim() !== '') next.transmission = readUnitInterval(transmission, 0, ctx, 'transmission', '例如 transmission="1"')
   if (ior != null && ior.trim() !== '') next.ior = readNonNegative(ior, 1.5, ctx, 'ior', '例如 ior="1.5"')
+  if (sheen != null && sheen.trim() !== '') next.sheen = readUnitInterval(sheen, 0, ctx, 'sheen', '例如 sheen="0.4"')
+  if (anisotropy != null && anisotropy.trim() !== '') next.anisotropy = readUnitInterval(anisotropy, 0, ctx, 'anisotropy', '例如 anisotropy="0.8"')
   if (emissive != null && emissive.trim() !== '') {
     const painted = parseColor(emissive)
     if (!painted) {
