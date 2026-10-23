@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.14.2
+
+`native/flexlayer-render` includes `win32-x64-msvc`, built from the same `flexlayer-render/0.0.2+cap1080` addon as linux and darwin. That build includes the 0.14.1 lighting. The cross link uses the Visual Studio 2022 CRT. The Windows binary has not been loaded on Windows. The darwin binary is cross-compiled from this same source and has not been run on a Mac.
+
 ## 0.14.1
 
 The key light casts onto solids as well as `ground`. On a solid the shadow stays hard, with an antialiased rim. On `ground`, `shadow-blur` is the maximum softness in layer pixels. `0` stays hard. A larger value keeps the edge sharp where the caster meets the ground and softens it as the caster rises. The contact shadow hugs the contact point: a small dark patch, not a second disc, and only a little of the caster's color. A solid does the same from its neighbors.
