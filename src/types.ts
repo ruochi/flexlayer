@@ -503,6 +503,8 @@ export type LayerLayoutNode = LayoutNodeBase & {
   dof?: DofSpec
   /** 这台镜头不建主光阴影图。深度遮挡仍在。不写时不透明表面互相投影子。 */
   shadows?: 'none'
+  /** 这一台镜头的画法。不写是影棚，连续明暗，和现在的图一样。 */
+  shading?: 'toon' | 'technical' | 'manga'
   /**
    * 蒙版内容，坐标系是这一层的局部像素。
    * 绘制时只取 alpha，不进入 children，不参与布局。
@@ -663,6 +665,8 @@ export type MeshLayoutNode = LayoutNodeBase & {
   halo: number
   /** 被这只网格自己挡住的棱。`none` 不画。 */
   hidden: string
+  /** 作者写了 `stroke="none"`。镜头的 shading 也不给这只网格加线。 */
+  strokeOff?: true
 }
 
 export type LayoutNode =

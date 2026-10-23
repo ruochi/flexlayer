@@ -209,6 +209,8 @@ export namespace JSX {
         'preserve-3d'?: boolean | string
         /** 这台镜头的主光影子。none 关掉硬边影子，深度遮挡还在 */
         shadows?: 'none' | 'auto' | string
+        /** 这一台镜头的画法。不写是 studio。toon、technical、manga 盖住镜头下的实体 */
+        shading?: 'studio' | 'toon' | 'technical' | 'manga' | string
         /** 只在根上。screen、print、none，或最小像素 */
         'min-font'?: number | string
         scale?: number | string

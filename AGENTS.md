@@ -84,6 +84,7 @@ Combine two or three per picture. A cover usually needs one strong type treatmen
 - A positive `depth` extrudes along z. `rect` is a box (`rx` rounds the edges). `circle` is a cylinder. Also `sphere`, `torus`, `tube`, and `model`. `tube` `d` is the centerline in layer coordinates, the same as `path`. `<model x y width height>` contain-fits in that box. `<model unit x y>` puts the model origin at `(x, y)`. Omitting both is an error. `<model object={mesh} />` reads a three.js mesh. `unit` is pixels per model unit. Model space keeps y pointing up.
 - Write `camera` on the layer that frames the shot. A number is the viewing distance, for example `camera="900"`. Omitting it leaves the picture in 2D and reports `flatten-3d`. Do not combine `camera` and `view` on the same layer.
 - `<ground>` receives shadows. With no `fill`, only the shadow is drawn. `shadows="none"` on the camera layer turns shadows off.
+- `shading` on that same layer is `studio` when omitted, or `toon`, `technical`, or `manga`. It covers every solid under the camera. An authored `stroke` still wins.
 
 ### Checks and programs
 
