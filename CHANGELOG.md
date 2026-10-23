@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.15.0
+
+Numbered plastic and metal shade as glTF metal-roughness under the studio environment: GGX, height-correlated Smith, Schlick, and a multiple-scatter lift as roughness rises. Clearcoat, Charlie sheen, and anisotropic stretch sit on that shader. Geometric specular antialiasing raises the roughness floor from normal variance and at grazing angles. Point, spot, hemisphere, ambient, and rectangular area lights (LTC) add on top of the studio key. A written `metalness`, `clearcoat`, `sheen`, `anisotropy`, or `transmission` leaves the matte Lambert path. `sheen` and `anisotropy` are solid attributes. three.js and glb pass those parameters through, including `KHR_materials_sheen` and `KHR_materials_anisotropy`. The physical shader dithers with the fixed blue-noise tile before 8-bit rounding. Khronos PBR Neutral and AgX are the tonemap curves for the analytic path.
+
+Matte faces that face the camera stay the written `fill`. Baked names (`clay`, `metal`, `brushed`, `mirror`, `matcap:*`) stay on the baked finish. Glass stays on the studio transmission formula. Draft shadows stay on the shadow map so contact stays smooth. `quality="final"` still adds the contact pass. The ray queries for penumbra, occlusion, one diffuse bounce, and an albedo-guided à-trous step live next to that map.
+
+`native/flexlayer-render` for linux-x64-gnu is rebuilt. darwin-arm64 and win32-x64-msvc stay the previous binaries until `npm run build:platforms` exports them.
+
 ## 0.14.5
 
 Solids and WebGL share one CPU kernel beside the studio raster. Tag solids still shade through that raster, so a default camera keeps `shading`, `lamp`, `neon`, glass, contact shadows, and the pictures from 0.14.4. The kernel adds the draw list, a GLSL ES interpreter, and `pickRay`.

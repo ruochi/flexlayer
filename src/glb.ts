@@ -172,7 +172,16 @@ type GltfJson = {
     doubleSided?: boolean
     emissiveFactor?: number[]
     pbrMetallicRoughness?: { baseColorFactor?: number[]; metallicFactor?: number; roughnessFactor?: number }
-    extensions?: Record<string, { transmissionFactor?: number; ior?: number; clearcoatFactor?: number; clearcoatRoughnessFactor?: number; emissiveStrength?: number }>
+    extensions?: Record<string, {
+      transmissionFactor?: number
+      ior?: number
+      clearcoatFactor?: number
+      clearcoatRoughnessFactor?: number
+      emissiveStrength?: number
+      sheenColorFactor?: number[]
+      sheenRoughnessFactor?: number
+      anisotropyStrength?: number
+    }>
   }>
   accessors?: Array<{ bufferView?: number; byteOffset?: number; componentType: number; count: number; type: string }>
   bufferViews?: Array<{ byteOffset?: number; byteLength: number; byteStride?: number }>
@@ -256,6 +265,9 @@ function emitMesh(json: GltfJson, bin: Buffer, meshIndex: number, world: Mat4, o
     const ior = ext.KHR_materials_ior?.ior
     const clearcoat = ext.KHR_materials_clearcoat?.clearcoatFactor
     const clearcoatRoughness = ext.KHR_materials_clearcoat?.clearcoatRoughnessFactor
+    const sheenColor = ext.KHR_materials_sheen?.sheenColorFactor
+    const sheen = sheenColor ? Math.max(sheenColor[0] ?? 0, sheenColor[1] ?? 0, sheenColor[2] ?? 0) : undefined
+    const anisotropy = ext.KHR_materials_anisotropy?.anisotropyStrength
     const strength = ext.KHR_materials_emissive_strength?.emissiveStrength
     const emit = material?.emissiveFactor
     out.push({
@@ -270,6 +282,8 @@ function emitMesh(json: GltfJson, bin: Buffer, meshIndex: number, world: Mat4, o
       ...(ior != null ? { ior } : {}),
       ...(clearcoat != null ? { clearcoat } : {}),
       ...(clearcoatRoughness != null ? { clearcoatRoughness } : {}),
+      ...(sheen != null ? { sheen } : {}),
+      ...(anisotropy != null ? { anisotropy } : {}),
       ...(emit ? { emissive: [(emit[0] ?? 0) * (strength ?? 1), (emit[1] ?? 0) * (strength ?? 1), (emit[2] ?? 0) * (strength ?? 1)] as [number, number, number] } : {}),
       ...(ext.KHR_materials_unlit ? { unlit: true } : {}),
     })
