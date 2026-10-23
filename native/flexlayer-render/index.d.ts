@@ -223,6 +223,8 @@ export interface FillFrame {
   viewH: number
 }
 export declare function rasterizeFill(config: FillConfig, batches: Array<FillBatch>, grounds: Array<FillGround>): FillFrame
+/** Same inputs as rasterizeFill. The kernel path. `FLEXLAYER_3D=legacy` keeps rasterizeFill. */
+export declare function renderScene(config: FillConfig, batches: Array<FillBatch>, grounds: Array<FillGround>): FillFrame
 export declare function debugShadeOf(nx: number, ny: number, nz: number, back: boolean, blocked: boolean): number
 export interface Vec3 {
   x: number

@@ -140,7 +140,11 @@ export function rasterizeFill(config, batches, grounds = []) {
     shadowBlur: ground.shadowBlur,
     receiveShadow: ground.receiveShadow,
   }))
-  return addon.rasterizeFill(config, nativeBatches, nativeGrounds)
+  // legacy keeps the single-threaded studio raster. kernel is the shared path.
+  // Unset means kernel once that path is the default. FLEXLAYER_3D=legacy opts out.
+  const mode = process.env.FLEXLAYER_3D || 'kernel'
+  const fn = mode !== 'legacy' && addon.renderScene ? addon.renderScene : addon.rasterizeFill
+  return fn(config, nativeBatches, nativeGrounds)
 }
 
 export function meshStrokeRuns(batches, depth, owners, pw, ph, parallel, focal, camX, camY, vanishX, vanishY, originX, originY, scaleX, scaleY, scale, mapX, mapY, canvasW, canvasH) {
