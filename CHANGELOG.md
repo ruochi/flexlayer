@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.14.4
+
+`brushed` and `metal` stay closer to the written `fill` at a grazing angle, and a dark `fill` no longer falls to black. Their specular bake has an environment floor, and those two finishes use their own exposure. `clay`, `plastic`, and `mirror` are unchanged.
+
+Near-field occlusion and bounce stay continuous across bin edges, so a picture with many solids no longer breaks into blocks.
+
+`native/flexlayer-render` for linux-x64-gnu is rebuilt from the same `flexlayer-render/0.0.2+cap1080` painter. The darwin-arm64 and win32-x64-msvc binaries are still the 0.14.3 build and do not include either change. Rebuild those two on their own platforms before this release is merged.
+
 ## 0.14.3
 
 `shading` on the layer that has `camera` is `studio` when omitted, or `toon`, `technical`, or `manga`. Chinese names are `影棚`, `卡通`, `线稿`, and `漫画`. Studio matches the previous pictures. Toon and manga replace the continuous finish and add lines. Technical keeps that finish and adds lines. A solid's own `stroke` still wins. `stroke="none"` draws no lines.
