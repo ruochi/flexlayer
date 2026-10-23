@@ -37,7 +37,11 @@ describe('预编译渲染器', () => {
   it('公开目录里只有这一次的二进制', () => {
     const dir = fileURLToPath(new URL('../native/flexlayer-render', import.meta.url))
     const names = readdirSync(dir)
-    expect(names.some((name) => name.endsWith('.node'))).toBe(true)
+    expect(names).toEqual(expect.arrayContaining([
+      'flexlayer-render.linux-x64-gnu.node',
+      'flexlayer-render.darwin-arm64.node',
+      'flexlayer-render.win32-x64-msvc.node',
+    ]))
     expect(names.some((name) => name.endsWith('.rs') || name === 'Cargo.toml' || name === 'Cargo.lock')).toBe(false)
   })
 
