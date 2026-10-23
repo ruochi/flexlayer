@@ -16,12 +16,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - name: golden flip
+        run: npx tsx scripts/check-golden.mjs
       - name: bench budget
         run: |
           npx tsx scripts/bench-3d.mjs --out bench-3d.json
           npx tsx scripts/check-budget.mjs bench-3d.json
-      - name: golden flip
-        run: npx tsx scripts/check-golden.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
