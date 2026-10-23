@@ -812,6 +812,47 @@ describe('网格绘制', () => {
     expect(average(500, 500, 900, 800)).toBeLessThan(240)
   }, 30000)
 
+  it('邻近实体多时掌托上没有方块', async () => {
+    const { png } = await renderLayer(`
+      <layer width="1440" height="1800" background="#f6f3ee">
+        <layer width="1440" height="1800" camera="fov 28, orbit 16 14">
+          <layer x="310" y="1030" width="980" height="650" origin="490 0" rotateX="90">
+            <rect x="0" y="0" width="980" height="650" rx="14" fill="#c6c9ce" material="metal" depth="28" />
+            <rect x="70" y="36" width="50" height="32" rx="2" fill="#222327" material="plastic" depth="4" z="16" />
+            <rect x="140" y="36" width="50" height="32" rx="2" fill="#222327" material="plastic" depth="4" z="16" />
+            <rect x="210" y="36" width="50" height="32" rx="2" fill="#222327" material="plastic" depth="4" z="16" />
+            <rect x="280" y="36" width="50" height="32" rx="2" fill="#222327" material="plastic" depth="4" z="16" />
+            <rect x="350" y="36" width="50" height="32" rx="2" fill="#222327" material="plastic" depth="4" z="16" />
+            <rect x="420" y="36" width="50" height="32" rx="2" fill="#222327" material="plastic" depth="4" z="16" />
+            <rect x="70" y="84" width="50" height="32" rx="2" fill="#222327" material="plastic" depth="4" z="16" />
+            <rect x="140" y="84" width="50" height="32" rx="2" fill="#222327" material="plastic" depth="4" z="16" />
+            <rect x="210" y="84" width="50" height="32" rx="2" fill="#222327" material="plastic" depth="4" z="16" />
+            <rect x="280" y="84" width="50" height="32" rx="2" fill="#222327" material="plastic" depth="4" z="16" />
+            <rect x="350" y="84" width="50" height="32" rx="2" fill="#222327" material="plastic" depth="4" z="16" />
+            <rect x="420" y="84" width="50" height="32" rx="2" fill="#222327" material="plastic" depth="4" z="16" />
+          </layer>
+          <layer x="318" y="390" width="980" height="650" origin="490 650" rotateX="15" cast-shadow="false">
+            <rect x="0" y="0" width="980" height="650" rx="14" fill="#c6c9ce" material="metal" depth="10" />
+          </layer>
+          <ground y="1044" rotateX="90" fill="#efe8df" shadow-blur="36" shadow-opacity="0.34" />
+        </layer>
+      </layer>
+    `)
+    const image = await imageOf(png)
+    const luma = (x: number, y: number) => {
+      const px = image.at(x, y)
+      return 0.2126 * px[0]! + 0.7152 * px[1]! + 0.0722 * px[2]!
+    }
+    let max = 0
+    for (let y = 1048; y < 1108; y++) {
+      for (let x = 608; x < 727; x++) {
+        max = Math.max(max, Math.abs(luma(x, y) - luma(x + 1, y)))
+      }
+    }
+    // 修复前同一块金属上相邻像素差 24.8，修复后是 1.0。
+    expect(max).toBeLessThan(4)
+  }, 30000)
+
   it('网格上的渐变、shadow、glow 会警告', async () => {
     const report = await checkLayer(
       `<layer width="160" height="120" camera="400"><box x="60" y="45" width="40" height="30" depth="20" fill="linear-gradient(#fff, #000)" shadow="0 8 12 #000" glow="10 #fff" /></layer>`,
