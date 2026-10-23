@@ -22,7 +22,7 @@ Three differences from a web page:
 - HTML writes `style`. `layer` and shapes write attributes.
 - Tags are lowercase. Layout lengths are pixels. The y axis points down.
 
-HTML, flex, and SVG geometry follow their own standards. Below, only the deviations. Full prose is in [SPEC.md](SPEC.md). One page of syntax is [docs/CHEATSHEET.md](docs/CHEATSHEET.md). Fonts and palettes are in [docs/RESOURCES.md](docs/RESOURCES.md). Sample pictures are in [docs/GALLERY.md](docs/GALLERY.md). Attribute syntax, one name at a time, is [docs/attrs.json](docs/attrs.json).
+HTML, flex, and SVG geometry follow their own standards. Below, only the deviations. Full prose is in [SPEC.md](SPEC.md). One page of syntax is [docs/CHEATSHEET.md](docs/CHEATSHEET.md). Fonts and palettes are in [docs/RESOURCES.md](docs/RESOURCES.md). Sample pictures are in [docs/GALLERY.md](docs/GALLERY.md). The 3D plates are in [docs/GALLERY-3D.md](docs/GALLERY-3D.md). Attribute syntax, one name at a time, is [docs/attrs.json](docs/attrs.json).
 
 ## What it can do beyond a web page
 

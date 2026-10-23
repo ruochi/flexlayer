@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+The 3D gallery is six sheets: one still life, shading, draft against final, sixteen materials, four cameras, and a line drawing. The rules are in `docs/GALLERY-3D.md`. `npm run gallery:3d` rebuilds them.
+
 ## 0.15.3
 
 `material` takes the preset and the physical fields together: `finish metal, color #c6c9ce, roughness 0.28, metalness 1`. `color` replaces `fill`. In tsx the same fields are an object, `material={{ finish: "metal", color: "#c6c9ce", roughness: 0.28, metalness: 1 }}`. A bare name such as `material="metal"` still selects that baked finish.

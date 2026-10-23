@@ -26,7 +26,7 @@ describe('效果图覆盖', () => {
   })
 
   it('gallery 与 examples 没有 error', async () => {
-    const files = [...layerPaths('docs/gallery'), ...layerPaths('examples')]
+    const files = [...layerPaths('docs/gallery'), ...layerPaths('docs/gallery/3d'), ...layerPaths('examples')]
     const failed: string[] = []
     for (const file of files) {
       const source = readFileSync(join(root, file), 'utf8')
@@ -37,5 +37,22 @@ describe('效果图覆盖', () => {
       }
     }
     expect(failed).toEqual([])
+  })
+
+  it('三维样张按静物分成格子，每种画法和质量档都在', () => {
+    const read = (name: string) => readFileSync(join(root, 'docs/gallery/3d', name), 'utf8')
+    const bench = read('3d-shade-studio.layer')
+    expect(bench).toContain('material="neon"')
+    expect(bench).toContain('material="lamp"')
+    expect(bench).toContain('material="glass 0.07"')
+    for (const name of ['studio', 'toon', 'technical', 'manga']) {
+      expect(read(`3d-shade-${name}.layer`)).toContain(`shading="${name}"`)
+    }
+    expect(read('3d-quality-draft.layer')).toContain('quality="draft"')
+    expect(read('3d-quality-final.layer')).toContain('quality="final"')
+    expect(read('3d-cam-dof.layer')).toContain('aperture 14')
+    expect(read('3d-lines.layer')).toContain('halo=')
+    expect(read('3d-mat-glass-0-06.layer')).toContain('glass 0.06')
+    expect(read('3d-mat-glass-0-72.layer')).toContain('glass 0.72')
   })
 })

@@ -26,3 +26,5 @@ The smallest forms:
 ```
 
 Syntax follows "Paint" and "Effects" in [SPEC.md](../SPEC.md).
+
+3D plates are a separate set. The still life, the four shading looks, draft against final, the material cluster, the cameras, and the line drawing are specified in [GALLERY-3D.md](GALLERY-3D.md). Rebuild them with `npm run gallery:3d`.
