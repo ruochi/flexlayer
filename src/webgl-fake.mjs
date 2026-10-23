@@ -4,10 +4,12 @@
  * 以及 modelViewMatrix、projectionMatrix、normalMatrix、diffuse、opacity、
  * roughness、metalness、emissive、shininess、transmission、map。
  * 明暗用和网格同一套磨砂、塑料、金属、玻璃。灯、阴影 framebuffer、后处理只被接住。
- * 没有矩阵时，属性 0 是像素坐标，y 向下，属性 1 是平面颜色。
+ * 没有矩阵时，坐标都在 -1 到 1 里就按裁剪空间投影到视口。
+ * 否则属性 0 是像素坐标，y 向下，属性 1 是平面颜色。
+ * 三角形没有盖住画布时报 unsupported-webgl。three.js 内置材质按 SHADER_TYPE 识别。
  * 画布上的三角形走网格那条路：Rust 画进 MESH_SAMPLES 倍的缓冲，再 resolveGrid 缩回。
  */
-import { MESH_SAMPLES, fakeClear, fakeDraw, parseShaderProgram, resolveGrid } from './tri-raster.mjs'
+import { MESH_SAMPLES, fakeClear, fakeDraw, parseShaderProgram, resolveGrid, webglDraw } from './tri-raster.mjs'
 
 const GL = {
   DEPTH_BUFFER_BIT: 0x00000100,
@@ -600,6 +602,97 @@ export function createFakeWebGL(host, attributes = {}) {
     }
   }
 
+  const IDENTITY4 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+  const BUILTIN_SHADERS = new Set([
+    'MeshBasicMaterial',
+    'MeshLambertMaterial',
+    'MeshPhongMaterial',
+    'MeshStandardMaterial',
+    'MeshPhysicalMaterial',
+    'MeshToonMaterial',
+    'MeshMatcapMaterial',
+  ])
+
+  function shaderKindOf(vertex, fragment) {
+    const src = `${vertex}\n${fragment}`
+    const type = src.match(/#define\s+SHADER_TYPE\s+(\w+)/)?.[1] ?? ''
+    const uses = [...src.matchAll(/#define\s+(USE_[A-Z0-9_]+)/g)].map((match) => match[1])
+    return { type, uses, builtin: BUILTIN_SHADERS.has(type) }
+  }
+
+  function readPosition(index) {
+    const posLoc = program?.attributeByName?.get('position')?.location ?? 0
+    const item = slot(posLoc)
+    if (!item.enabled || !item.buffer?.data) return [item.value[0] ?? 0, item.value[1] ?? 0, item.value[2] ?? 0]
+    const stride = item.stride || (item.size || 3) * 4
+    const offset = (item.offset | 0) + index * stride
+    const bytes = item.buffer.data
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    const size = item.size || 3
+    const out = [0, 0, 0, 1]
+    if (item.type != null && item.type !== GL.FLOAT) return out
+    for (let k = 0; k < size && k < 4; k++) {
+      if (offset + (k + 1) * 4 <= bytes.byteLength) out[k] = view.getFloat32(offset + k * 4, true)
+    }
+    return out
+  }
+
+  function positionSamples(count, indexOf) {
+    const samples = []
+    for (let i = 0; i < count; i++) samples.push(readPosition(indexOf(i)))
+    return samples
+  }
+
+  function looksLikeClip(samples) {
+    return samples.length > 0 && samples.every((p) => Math.abs(p[0]) <= 1.25 && Math.abs(p[1]) <= 1.25 && Math.abs(p[2]) <= 1.25)
+  }
+
+  function missesCanvas(samples) {
+    const w = host.canvas.width
+    const h = host.canvas.height
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    for (const p of samples) {
+      minX = Math.min(minX, p[0])
+      maxX = Math.max(maxX, p[0])
+      minY = Math.min(minY, p[1])
+      maxY = Math.max(maxY, p[1])
+    }
+    return maxX < 0 || maxY < 0 || minX > w || minY > h
+  }
+
+  function reportUncovered() {
+    host.report?.({
+      level: 'warn',
+      code: 'unsupported-webgl',
+      message: 'WebGL 绘制没有落在画布上',
+      hint: '没有矩阵时，坐标在 -1 到 1 会按裁剪空间投影。像素坐标要落在画布里',
+    })
+  }
+
+  function paintResolved(buf, pixels) {
+    const scale = buf.samples
+    const w = buf.width
+    const h = buf.height
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const si = (y * w + x) * 4
+        for (let oy = 0; oy < scale; oy++) {
+          for (let ox = 0; ox < scale; ox++) {
+            const di = ((y * scale + oy) * buf.rasterW + (x * scale + ox)) * 4
+            buf.color[di] = pixels[si] ?? 0
+            buf.color[di + 1] = pixels[si + 1] ?? 0
+            buf.color[di + 2] = pixels[si + 2] ?? 0
+            buf.color[di + 3] = pixels[si + 3] ?? 0
+          }
+        }
+      }
+    }
+    buf.seeded = true
+  }
+
   function draw(mode, count, indexOf) {
     if (count <= 0) return
     const buf = targetOf(drawFramebuffer)
@@ -618,6 +711,37 @@ export function createFakeWebGL(host, attributes = {}) {
     const transmission = uniformNum('transmission', 0)
     const ids = new Uint32Array(count)
     for (let i = 0; i < count; i++) ids[i] = indexOf(i) >>> 0
+    const samples = positionSamples(count, indexOf)
+    const ndc = !clip && drawFramebuffer == null && looksLikeClip(samples)
+    if (!clip && drawFramebuffer == null && !ndc && missesCanvas(samples)) reportUncovered()
+    const fragment = program?.shaders?.find((shader) => shader?.type === GL.FRAGMENT_SHADER)?.source ?? ''
+    if (ndc && fragment && !program?.shaderKind?.builtin && /gl_FragColor|fragColor/.test(fragment)) {
+      const clipBuf = new Float32Array(samples.length * 4)
+      samples.forEach((p, i) => {
+        clipBuf[i * 4] = p[0]
+        clipBuf[i * 4 + 1] = p[1]
+        clipBuf[i * 4 + 2] = p[2]
+        clipBuf[i * 4 + 3] = 1
+      })
+      const order = new Uint32Array(samples.length)
+      for (let i = 0; i < samples.length; i++) order[i] = i
+      const frame = webglDraw({
+        width: buf.width,
+        height: buf.height,
+        clip: clipBuf,
+        indices: order,
+        colorR: 255,
+        colorG: 255,
+        colorB: 255,
+        colorA: 255,
+        shaded: false,
+        shader: fragment,
+      })
+      if (!frame.covered) reportUncovered()
+      else paintResolved(buf, frame.pixels)
+      present(buf)
+      return
+    }
     const posLoc = program?.attributeByName?.get('position')?.location ?? 0
     const nrm = program?.attributeByName?.get('normal')
     const uv = program?.attributeByName?.get('uv')
@@ -640,8 +764,8 @@ export function createFakeWebGL(host, attributes = {}) {
       flat1: flat[1] ?? 0,
       flat2: flat[2] ?? 0,
       flat3: flat[3] ?? 1,
-      mv: clip ? Array.from(mv) : [],
-      proj: clip ? Array.from(proj) : [],
+      mv: clip ? Array.from(mv) : ndc ? IDENTITY4 : [],
+      proj: clip ? Array.from(proj) : ndc ? IDENTITY4.slice() : [],
       normalMat: normalMat && normalMat.length >= 9 ? Array.from(normalMat) : [],
       diffuse0: diffuse[0],
       diffuse1: diffuse[1],
@@ -720,6 +844,28 @@ export function createFakeWebGL(host, attributes = {}) {
       clearDepth,
     })
     present(buf)
+  }
+
+  function drawInstanced(primcount, emit) {
+    const n = primcount | 0
+    if (n <= 0) return
+    const instanced = vao.attribs.some((item) => item && item.divisor > 0)
+    if (!instanced || n === 1) {
+      emit()
+      return
+    }
+    const saved = vao.attribs.map((item) => item?.offset ?? 0)
+    for (let i = 0; i < n; i++) {
+      vao.attribs.forEach((item, index) => {
+        if (!item || !(item.divisor > 0)) return
+        const stride = item.stride || (item.size || 1) * 4
+        item.offset = saved[index] + i * item.divisor * stride
+      })
+      emit()
+    }
+    vao.attribs.forEach((item, index) => {
+      if (item) item.offset = saved[index]
+    })
   }
 
   const api = {
@@ -1121,6 +1267,7 @@ export function createFakeWebGL(host, attributes = {}) {
       const vertex = prog.shaders.find((shader) => shader?.type === GL.VERTEX_SHADER)?.source ?? ''
       const fragment = prog.shaders.find((shader) => shader?.type === GL.FRAGMENT_SHADER)?.source ?? ''
       const parsed = parseProgram(vertex, fragment)
+      prog.shaderKind = shaderKindOf(vertex, fragment)
       let next = 0
       const used = new Set()
       for (const [name, index] of prog.binds) {
@@ -1191,10 +1338,10 @@ export function createFakeWebGL(host, attributes = {}) {
       draw(mode, count | 0, (i) => readIndex(buffer, type, (offset | 0) + i * stride))
     },
     drawArraysInstanced(mode, first, count, primcount) {
-      if ((primcount | 0) > 0) api.drawArrays(mode, first, count)
+      drawInstanced(primcount, () => api.drawArrays(mode, first, count))
     },
     drawElementsInstanced(mode, count, type, offset, primcount) {
-      if ((primcount | 0) > 0) api.drawElements(mode, count, type, offset)
+      drawInstanced(primcount, () => api.drawElements(mode, count, type, offset))
     },
     flush() {},
     finish() {},

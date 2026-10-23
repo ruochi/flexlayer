@@ -21,7 +21,7 @@ export type Composition = {
   component: (input: FrameInput) => LayerNode
 }
 
-export type RenderCompositionOptions = Pick<RenderOptions, 'scale' | 'baseDir' | 'fontsCacheDir' | 'debug' | 'meshSamples' | 'meshCache' | 'noScript'>
+export type RenderCompositionOptions = Pick<RenderOptions, 'scale' | 'baseDir' | 'fontsCacheDir' | 'debug' | 'meshSamples' | 'meshCache' | 'noScript' | 'quality'>
 
 export type RenderFramesOptions = RenderCompositionOptions & {
   /** 含这一帧。缺省为 0。 */
@@ -349,6 +349,7 @@ export async function* renderFrames(
             meshSamples: options.meshSamples,
             meshCache: options.meshCache,
             noScript: options.noScript,
+            quality: options.quality,
           },
         }
       }),

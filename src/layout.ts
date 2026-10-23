@@ -20,7 +20,7 @@ import { materialize } from './components.js'
 import { catmullRomPath } from './curve.js'
 import { isGradient, parseGradient, solidPaint } from './gradient.js'
 import { LIGHT_DEFAULTS, MATCAP_DEFAULTS } from './matcaps.js'
-import { isGradientPaint } from './gradientField.js'
+import { isGradientPaint, parseColor } from './gradientField.js'
 import { glbBounds, glbSpan, primitiveBounds, primitiveSpan, resolveModelFile } from './glb.js'
 import { fromThree, holdModelPrims, modelRevision } from './three.js'
 import { readBoxFillet, readCylinderFillet } from './mesh-round.js'
@@ -119,6 +119,7 @@ import type {
   MeshLayoutNode,
   GroundLayoutNode,
   MaskOp,
+  LightSpec,
   MeshMaterial,
   NoiseSpec,
   Origin,
@@ -1884,6 +1885,21 @@ function readMeshMaterial(raw: string | undefined, ctx: LayoutContext, tag: stri
   if (raw == null) return undefined
   const text = raw.trim().toLowerCase()
   if (text === '' || text === 'none') return undefined
+  if (text.startsWith('matcap:')) {
+    const finish = text.slice('matcap:'.length)
+    if (!MESH_MATERIALS.has(finish)) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${tag} 不认识的 material: ${raw.trim()}`,
+        hint: MATERIAL_HINT,
+      })
+      return undefined
+    }
+    const kind = finish as MeshMaterial['kind']
+    return { kind, roughness: MESH_ROUGHNESS[kind], matcap: finish }
+  }
   const parts = text.split(/[\s,]+/).filter((part) => part.length > 0 && part !== 'rough')
   const name = parts[0] ?? ''
   if (!MESH_MATERIALS.has(name)) {
@@ -2349,7 +2365,7 @@ function layoutMesh(node: LayerNode, ctx: LayoutContext): MeshLayoutNode {
       hint: 'glow 写在平面上；网格用 fill 和 stroke',
     })
   }
-  const material = readMeshMaterial(node.attrs.material, ctx, node.tag)
+  const material = applySurfaceAttrs(readMeshMaterial(node.attrs.material, ctx, node.tag), node, ctx)
   if (node.attrs.fill == null || node.attrs.fill.trim() === '') {
     const fallback = material?.matcap ? MATCAP_DEFAULTS[material.matcap] : material ? LIGHT_DEFAULTS[material.kind] : undefined
     if (fallback) fill = fallback
@@ -3855,6 +3871,121 @@ function readSceneShading(raw: string | undefined, hostsCamera: boolean, ctx: La
   return { shading }
 }
 
+const LIGHT_TYPES = new Set(['directional', 'point', 'spot', 'hemisphere', 'area', 'ambient'])
+
+function readVec3(raw: string | undefined, fallback: [number, number, number]): [number, number, number] {
+  if (raw == null || raw.trim() === '') return fallback
+  const parts = raw.trim().split(/[\s,]+/).map(Number)
+  if (parts.length < 3 || parts.some((n) => !Number.isFinite(n))) return fallback
+  return [parts[0]!, parts[1]!, parts[2]!]
+}
+
+function readLight(node: LayerNode, ctx: LayoutContext): LightSpec | null {
+  const rawType = (node.attrs.type ?? 'directional').trim().toLowerCase()
+  if (!LIGHT_TYPES.has(rawType)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 light 的 type: ${node.attrs.type ?? ''}`,
+      hint: '写成 directional、point、spot、hemisphere、area 或 ambient',
+    })
+    return null
+  }
+  const painted = parseColor(node.attrs.color?.trim() || '#ffffff')
+  const color: [number, number, number] = painted ? [painted.r, painted.g, painted.b] : [255, 255, 255]
+  const intensity = readNonNegative(node.attrs.intensity, 1, ctx, 'intensity', '例如 intensity="2"')
+  return {
+    type: rawType as LightSpec['type'],
+    color,
+    intensity,
+    x: parseNumber(node.attrs.x) ?? 0,
+    y: parseNumber(node.attrs.y) ?? 0,
+    z: parseNumber(node.attrs.z) ?? 0,
+    target: readVec3(node.attrs.target, [0, 0, 0]),
+    ...(node.attrs.distance != null ? { distance: readNonNegative(node.attrs.distance, 0, ctx, 'distance', '例如 distance="80"') } : {}),
+    ...(node.attrs.decay != null ? { decay: readNonNegative(node.attrs.decay, 2, ctx, 'decay', '例如 decay="2"') } : {}),
+    ...(node.attrs.angle != null ? { angle: readNonNegative(node.attrs.angle, 0, ctx, 'angle', '例如 angle="0.6"') } : {}),
+    ...(node.attrs.penumbra != null ? { penumbra: readUnitInterval(node.attrs.penumbra, 0, ctx, 'penumbra', '例如 penumbra="0.2"') } : {}),
+    ...(node.attrs.width != null ? { width: readNonNegative(node.attrs.width, 0, ctx, 'width', '例如 width="40"') } : {}),
+    ...(node.attrs.height != null ? { height: readNonNegative(node.attrs.height, 0, ctx, 'height', '例如 height="20"') } : {}),
+    ...(node.attrs['cast-shadow'] === 'false' ? { castShadow: false } : {}),
+  }
+}
+
+function readLights(children: LayerNode[], ctx: LayoutContext): LightSpec[] {
+  const lights: LightSpec[] = []
+  for (const child of children) {
+    if (child.tag !== 'light') continue
+    const light = readLight(child, ctx)
+    if (light) lights.push(light)
+  }
+  return lights
+}
+
+function readCameraChoice(
+  raw: string | undefined,
+  allowed: readonly string[],
+  label: string,
+  hostsCamera: boolean,
+  ctx: LayoutContext,
+  hint: string,
+): string | undefined {
+  if (raw == null || raw.trim() === '') return undefined
+  if (!hostsCamera) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `${label} 只写在开了镜头的 layer 上`,
+      hint,
+    })
+    return undefined
+  }
+  const text = raw.trim().toLowerCase()
+  if (!allowed.includes(text)) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 ${label}: ${raw}`,
+      hint,
+    })
+    return undefined
+  }
+  return text
+}
+
+function applySurfaceAttrs(material: MeshMaterial | undefined, node: LayerNode, ctx: LayoutContext): MeshMaterial | undefined {
+  const roughness = node.attrs.roughness
+  const metalness = node.attrs.metalness
+  const clearcoat = node.attrs.clearcoat
+  const transmission = node.attrs.transmission
+  const ior = node.attrs.ior
+  const emissive = node.attrs.emissive
+  const written = [roughness, metalness, clearcoat, transmission, ior, emissive].some((value) => value != null && value.trim() !== '')
+  if (!written) return material
+  const next: MeshMaterial = material ? { ...material } : { kind: 'matte', roughness: 1 }
+  if (roughness != null && roughness.trim() !== '') next.roughness = readUnitInterval(roughness, next.roughness, ctx, 'roughness', '例如 roughness="0.4"')
+  if (metalness != null && metalness.trim() !== '') next.metalness = readUnitInterval(metalness, 0, ctx, 'metalness', '例如 metalness="1"')
+  if (clearcoat != null && clearcoat.trim() !== '') next.clearcoat = readUnitInterval(clearcoat, 0, ctx, 'clearcoat', '例如 clearcoat="1"')
+  if (transmission != null && transmission.trim() !== '') next.transmission = readUnitInterval(transmission, 0, ctx, 'transmission', '例如 transmission="1"')
+  if (ior != null && ior.trim() !== '') next.ior = readNonNegative(ior, 1.5, ctx, 'ior', '例如 ior="1.5"')
+  if (emissive != null && emissive.trim() !== '') {
+    const painted = parseColor(emissive)
+    if (!painted) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `无法解析 emissive: ${emissive}`,
+        hint: '写成颜色，例如 emissive="#3ad8ff"',
+      })
+    } else next.emissive = emissive.trim()
+  }
+  return next
+}
+
 function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
   if (ctx.pathPrefix === 'layer') ctx.issues.push(...originValueIssues(node.attrs.origin, ctx.pathPrefix))
   if (ctx.pathPrefix !== 'layer' && node.attrs['min-font'] != null && node.attrs['min-font'].trim() !== '') {
@@ -3874,9 +4005,28 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
   const hostsCamera = wroteCameraAttr(node)
   const sceneShadows = readSceneShadows(node.attrs.shadows, hostsCamera, ctx)
   const sceneShading = readSceneShading(node.attrs.shading, hostsCamera, ctx)
+  const tonemap = readCameraChoice(node.attrs.tonemap, ['neutral', 'agx', 'none'], 'tonemap', hostsCamera, ctx, '写成 neutral、agx 或 none')
+  const lightSpace = readCameraChoice(node.attrs.light, ['world', 'camera'], 'light', hostsCamera, ctx, '写成 world 或 camera。world 让影子跟着物体，camera 把主光锁在镜头上')
+  const quality = readCameraChoice(node.attrs.quality, ['draft', 'final'], 'quality', true, ctx, '写成 draft 或 final')
+  let environment: string | undefined
+  const rawEnvironment = node.attrs.environment?.trim()
+  if (rawEnvironment) {
+    if (!hostsCamera) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: 'environment 只写在开了镜头的 layer 上',
+        hint: '写在取景的 layer 上，例如 <layer camera="900" environment="studio">',
+      })
+    } else if (rawEnvironment.toLowerCase() !== 'studio') {
+      environment = rawEnvironment.toLowerCase() === 'none' ? 'none' : rawEnvironment
+    }
+  }
   const layerCtx = withLayerText({ ...ctx, ancestorCamera: Boolean(hostsCamera || ctx.ancestorCamera) }, node)
 
   const childFvg = node.children.filter((c) => typeof c !== 'string') as LayerNode[]
+  const sceneLights = readLights(childFvg, ctx)
   let chosenMask: LayerNode | undefined
   let chosenMaskPath = ''
   for (let i = 0; i < childFvg.length; i++) {
@@ -3912,7 +4062,7 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
       notePreview(ch, ctx, nodePath(ctx.pathPrefix, ch.tag, i))
       continue
     }
-    if (ch.tag === 'symbol' || ch.tag === 'draw' || ch.tag === 'script' || ch.tag === 'mask') {
+    if (ch.tag === 'light' || ch.tag === 'symbol' || ch.tag === 'draw' || ch.tag === 'script' || ch.tag === 'mask') {
       if (ch.tag === 'symbol') track(ctx, nodePath(ctx.pathPrefix, ch.tag, i), ch)
       continue
     }
@@ -4124,6 +4274,11 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
     ...(dof ? { dof } : {}),
     ...sceneShadows,
     ...sceneShading,
+    ...(sceneLights.length ? { lights: sceneLights } : {}),
+    ...(environment ? { environment } : {}),
+    ...(tonemap && tonemap !== 'neutral' ? { tonemap: tonemap as 'agx' | 'none' } : {}),
+    ...(lightSpace ? { lightSpace: lightSpace as 'world' | 'camera' } : {}),
+    ...(quality ? { quality: quality as 'draft' | 'final' } : {}),
     ...sharpOf(node.attrs, ctx),
     ...(preserve.value ? { preserve3d: true } : {}),
     ...(mask ? { mask } : {}),

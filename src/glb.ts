@@ -31,6 +31,14 @@ export type GlbPrimitive = {
   }
   /** 自发光，0–1，已经乘过强度。加在明暗之后。 */
   emissive?: [number, number, number]
+  clearcoat?: number
+  clearcoatRoughness?: number
+  transmission?: number
+  thickness?: number
+  ior?: number
+  sheen?: number
+  anisotropy?: number
+  unlit?: boolean
   /** 线段，不填三角形。来自 three.js 的 Line 或 `wireframe: true`。 */
   lines?: boolean
   /** 屏幕像素。不写是 1。 */
@@ -160,7 +168,12 @@ type GltfJson = {
   scenes?: Array<{ nodes?: number[] }>
   nodes?: Array<{ mesh?: number; children?: number[]; matrix?: number[]; translation?: number[]; rotation?: number[]; scale?: number[] }>
   meshes?: Array<{ primitives?: Array<{ attributes?: { POSITION?: number; NORMAL?: number }; indices?: number; material?: number; mode?: number }> }>
-  materials?: Array<{ doubleSided?: boolean; pbrMetallicRoughness?: { baseColorFactor?: number[]; metallicFactor?: number; roughnessFactor?: number } }>
+  materials?: Array<{
+    doubleSided?: boolean
+    emissiveFactor?: number[]
+    pbrMetallicRoughness?: { baseColorFactor?: number[]; metallicFactor?: number; roughnessFactor?: number }
+    extensions?: Record<string, { transmissionFactor?: number; ior?: number; clearcoatFactor?: number; clearcoatRoughnessFactor?: number; emissiveStrength?: number }>
+  }>
   accessors?: Array<{ bufferView?: number; byteOffset?: number; componentType: number; count: number; type: string }>
   bufferViews?: Array<{ byteOffset?: number; byteLength: number; byteStride?: number }>
 }
@@ -238,6 +251,13 @@ function emitMesh(json: GltfJson, bin: Buffer, meshIndex: number, world: Mat4, o
     const material = json.materials?.[prim.material ?? -1]
     const pbr = material?.pbrMetallicRoughness
     const factor = pbr?.baseColorFactor ?? [1, 1, 1, 1]
+    const ext = material?.extensions ?? {}
+    const transmission = ext.KHR_materials_transmission?.transmissionFactor
+    const ior = ext.KHR_materials_ior?.ior
+    const clearcoat = ext.KHR_materials_clearcoat?.clearcoatFactor
+    const clearcoatRoughness = ext.KHR_materials_clearcoat?.clearcoatRoughnessFactor
+    const strength = ext.KHR_materials_emissive_strength?.emissiveStrength
+    const emit = material?.emissiveFactor
     out.push({
       positions,
       normals,
@@ -246,6 +266,12 @@ function emitMesh(json: GltfJson, bin: Buffer, meshIndex: number, world: Mat4, o
       roughness: pbr?.roughnessFactor ?? 0.65,
       metalness: pbr?.metallicFactor ?? 0,
       doubleSided: material?.doubleSided ?? false,
+      ...(transmission != null ? { transmission } : {}),
+      ...(ior != null ? { ior } : {}),
+      ...(clearcoat != null ? { clearcoat } : {}),
+      ...(clearcoatRoughness != null ? { clearcoatRoughness } : {}),
+      ...(emit ? { emissive: [(emit[0] ?? 0) * (strength ?? 1), (emit[1] ?? 0) * (strength ?? 1), (emit[2] ?? 0) * (strength ?? 1)] as [number, number, number] } : {}),
+      ...(ext.KHR_materials_unlit ? { unlit: true } : {}),
     })
   }
 }
