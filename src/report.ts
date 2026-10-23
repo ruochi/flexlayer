@@ -1038,6 +1038,7 @@ const EXPECT_CODES = new Set([
   'invalid-draw',
   'invalid-script',
   'unsupported-dom',
+  'unsupported-webgl',
   'missing-image',
   'missing-icon',
   'missing-model',

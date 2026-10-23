@@ -50,6 +50,7 @@ async function prepareDocument(source: string | LayerNode, options: RenderOption
   const opened = readLayerRoot(source)
   const assets = await prepareAssets(opened.root, baseDir, { fonts: opened.fonts })
   const doc = layoutSync(opened.root, assets)
+  if (options.quality) doc.root.quality = options.quality
   await applyCanvasScripts(doc, {
     t: options.t ?? 0,
     frame: options.frame ?? 0,
@@ -256,6 +257,7 @@ export async function checkLayer(source: string | LayerNode, options: RenderOpti
   const opened = readLayerRoot(source)
   const assets = await prepareAssets(opened.root, baseDir, { fonts: opened.fonts })
   const doc = layoutSync(opened.root, assets)
+  if (options.quality) doc.root.quality = options.quality
   await applyCanvasScripts(doc, {
     t: options.t ?? 0,
     frame: options.frame ?? 0,

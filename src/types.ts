@@ -505,6 +505,16 @@ export type LayerLayoutNode = LayoutNodeBase & {
   shadows?: 'none'
   /** 这一台镜头的画法。不写是影棚，连续明暗，和现在的图一样。 */
   shading?: 'toon' | 'technical' | 'manga'
+  /** 作者灯。不写时用影棚主光和补光。 */
+  lights?: LightSpec[]
+  /** 环境。不写是 studio。none 关掉环境。其余是 hdr 资源名。 */
+  environment?: string
+  /** 色调映射。不写是 neutral。 */
+  tonemap?: 'neutral' | 'agx' | 'none'
+  /** 灯跟世界还是跟镜头。不写是 world。camera 把主光锁在镜头上。 */
+  lightSpace?: 'world' | 'camera'
+  /** 质量档。不写是 draft。final 走同一条光栅，接触阴影仍由地面接收。 */
+  quality?: 'draft' | 'final'
   /**
    * 蒙版内容，坐标系是这一层的局部像素。
    * 绘制时只取 alpha，不进入 children，不参与布局。
@@ -638,8 +648,31 @@ export type MeshSpec =
 export type MeshMaterial = {
   kind: 'matte' | 'plastic' | 'metal' | 'glass' | 'clay' | 'mirror' | 'brushed' | 'lamp' | 'neon'
   roughness: number
-  /** 预烘材质球。`clay`、`plastic`、`metal`、`mirror`、`brushed`。 */
+  /** 预烘材质球。`clay`、`plastic`、`metal`、`mirror`、`brushed`。`matcap:clay` 也落在这里。 */
   matcap?: string
+  metalness?: number
+  clearcoat?: number
+  transmission?: number
+  ior?: number
+  /** 自发光颜色，`#rrggbb`。 */
+  emissive?: string
+}
+
+export type LightSpec = {
+  type: 'directional' | 'point' | 'spot' | 'hemisphere' | 'area' | 'ambient'
+  color: [number, number, number]
+  intensity: number
+  x: number
+  y: number
+  z: number
+  target: [number, number, number]
+  distance?: number
+  decay?: number
+  angle?: number
+  penumbra?: number
+  width?: number
+  height?: number
+  castShadow?: boolean
 }
 
 /** 无限平面。不写 fill 时透明，只接网格沿主光投下的影子。旋转和 box 同一套。 */
@@ -740,4 +773,6 @@ export type RenderOptions = {
    * 节点已经在手边时直接交给 `renderLayer`。
    */
   format?: 'png' | 'rgba'
+  /** 根镜头的质量档。draft 是检查的默认，final 保留接触阴影和同一条光栅。 */
+  quality?: 'draft' | 'final'
 }

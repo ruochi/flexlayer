@@ -429,6 +429,44 @@ describe('canvas 和 script', () => {
     expect(await pixelAt(png, 4, 18)).toEqual([0, 0, 0, 255])
   })
 
+  it('裁剪空间顶点没有矩阵时按视口投影', async () => {
+    const { png, report } = await renderLayer(scene(
+      `const gl = document.querySelector('#bar').getContext('webgl')
+       const buf = gl.createBuffer()
+       gl.bindBuffer(gl.ARRAY_BUFFER, buf)
+       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, 0, 1]), gl.STATIC_DRAW)
+       gl.enableVertexAttribArray(0)
+       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
+       gl.drawArrays(gl.TRIANGLES, 0, 3)`,
+    ))
+    expect(report.issues.some((issue) => issue.code === 'unsupported-webgl')).toBe(false)
+    const img = await loadImage(png)
+    const canvas = createCanvas(img.width, img.height)
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    let white = 0
+    for (let y = 4; y < 20; y++) {
+      for (let x = 4; x < 20; x++) {
+        const px = ctx.getImageData(x, y, 1, 1).data
+        if (px[0]! > 200 && px[1]! > 200 && px[2]! > 200) white++
+      }
+    }
+    expect(white).toBeGreaterThan(8)
+  })
+
+  it('画布外的像素坐标报告 unsupported-webgl', async () => {
+    const { report } = await renderLayer(scene(
+      `const gl = document.querySelector('#bar').getContext('webgl')
+       const buf = gl.createBuffer()
+       gl.bindBuffer(gl.ARRAY_BUFFER, buf)
+       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([400, 400, 420, 400, 410, 430]), gl.STATIC_DRAW)
+       gl.enableVertexAttribArray(0)
+       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
+       gl.drawArrays(gl.TRIANGLES, 0, 3)`,
+    ))
+    expect(report.issues.some((issue) => issue.code === 'unsupported-webgl' && issue.level === 'warn')).toBe(true)
+  })
+
   it('webgl 三角形斜边按覆盖混合，不是阶梯', async () => {
     const { png, report } = await renderLayer(scene(
       `const gl = document.querySelector('#bar').getContext('webgl')

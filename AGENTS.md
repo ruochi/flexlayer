@@ -41,7 +41,8 @@ Plain HTML and CSS work too, so they are not listed here. Reach for these when a
 | Knockout | `<mask>` with `op="subtract"`, `feather`, `invert` | Shapes or image alpha. The layer's shadow follows the cut contour |
 | 3D objects in a 2D page | `depth="40"` on `rect`, `circle`, `path`; `sphere`, `torus`, `tube` | Same coordinates as 2D. `material="clay"` or `metal`. A bare name is a baked finish and `fill` recolors it. `lamp` and `neon` emit. `metal 0.35` is the older roughness form |
 | 3D lettering | `glyph()` outlines into `<path d depth>` | Any catalog font becomes an extruded solid |
-| Product shot | `camera="fov 40, orbit 35 18, aperture 12"` plus `<ground>` | Orbit, shadows on the ground and on solids, depth of field. `shadow-blur` is the maximum softness and `0` stays hard. `sharp="true"` keeps a layer in focus |
+| Product shot | `camera="fov 40, orbit 35 18, aperture 12"` plus `<ground>` | Orbit, shadows on the ground and on solids, depth of field. `shadow-blur` is the maximum softness and `0` stays hard. `sharp="true"` keeps a layer in focus. `light="world"` keeps the key fixed as the camera orbits. `light="camera"` locks it to the lens |
+| Author light | `<light type="directional" x="0" y="-200" z="400" target="0 0 0">` | The first directional light replaces the studio key. Also `point`, `spot`, `hemisphere`, `area`, `ambient` |
 | Technical line art | Solid with `stroke` and `hidden="#999"` | Visible edges solid, hidden edges in another color |
 | three.js scenes | `<model x y width height>` or `<model unit x y>` | Contain-fit in its own box, or put the model origin at `(x, y)`. Meshes, lines, and points share one depth buffer |
 | Tilted cards and cover flow | `rotateY="-30"`, `z="80"` on a `layer` | Real perspective. `preserve-3d` sorts nested layers by depth |

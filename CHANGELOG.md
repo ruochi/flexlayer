@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.14.4
+
+Solids and WebGL share one CPU kernel. Tag solids still shade through the studio raster, so `shading`, `lamp`, `neon`, glass, and contact shadows stay. The kernel adds the draw list, a GLSL ES interpreter, and `pickRay`.
+
+`<light>` on a camera layer writes an author light. The first directional replaces the studio key. `light="world"` keeps that key fixed while the camera orbits. `light="camera"` locks it to the lens. `environment`, `tonemap`, and `quality="draft|final"` are recorded on that layer. `roughness`, `metalness`, `clearcoat`, `transmission`, `ior`, and `emissive` can be written on a solid. `material="matcap:clay"` keeps a baked finish.
+
+WebGL with no matrix projects coordinates inside -1 to 1 through the viewport. A draw that misses the canvas reports `unsupported-webgl`. A straight-line fragment shader that writes `gl_FragColor` runs on the CPU. three.js materials marked `SHADER_TYPE` keep the studio shade.
+
+`flexlayer pick --positions ... --indices ... --from ... --dir ...` prints the closest triangle. `check` and `render` take `--quality draft|final`.
+
+`native/flexlayer-render` for linux-x64-gnu is rebuilt. darwin-arm64 and win32-x64-msvc stay the 0.14.3 binaries until the next three-platform export.
+
 ## 0.14.3
 
 `shading` on the layer that has `camera` is `studio` when omitted, or `toon`, `technical`, or `manga`. Chinese names are `影棚`, `卡通`, `线稿`, and `漫画`. Studio matches the previous pictures. Toon and manga replace the continuous finish and add lines. Technical keeps that finish and adds lines. A solid's own `stroke` still wins. `stroke="none"` draws no lines.
