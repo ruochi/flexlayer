@@ -188,7 +188,7 @@ export const ATTRS: AttrDef[] = [
     syntax: 'studio | none | hdr',
     defaultValue: 'studio',
     example: 'none',
-    note: 'On a layer that has a camera. studio is the procedural room. none turns the environment off. Any other value is an HDR resource name',
+    note: 'On a layer that has a camera. studio is monochrome_studio_01. none turns the environment off. Any other value is an HDR resource name',
     misplacedHint: 'Put this on the layer that frames the shot, for example <layer camera="900" environment="studio">',
     styleHint: 'Do not put this in style. Write it as an attribute on layer',
   },

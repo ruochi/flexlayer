@@ -555,7 +555,7 @@ describe('网格绘制', () => {
     expect(lum(plain, 70, 70)).toBeGreaterThan(lum(plain, 115, 120) + 15)
   }, 30000)
 
-  it('金属映竖向灯板，亮带和暗带偏开正中，中间有灰过渡', async () => {
+  it('金属映出摄影棚的伞灯，亮部和暗部分开，中间有过渡', async () => {
     const { png } = await renderLayer(`
       <layer width="240" height="320" background="#101010" camera="700">
         <cylinder cx="120" cy="170" r="70" height="200" fill="#d8d8d8" material="metal 0.2" />
@@ -570,9 +570,8 @@ describe('网格绘制', () => {
     const dark = samples.reduce((best, sample) => (sample.lum < best.lum ? sample : best))
     expect(bright.lum).toBeGreaterThan(500)
     expect(dark.lum).toBeLessThan(140)
-    expect(bright.x).toBeLessThan(108)
-    expect(dark.x).toBeGreaterThan(118)
-    expect(dark.x).toBeLessThan(165)
+    expect(bright.x).toBeLessThan(120)
+    expect(Math.abs(bright.x - dark.x)).toBeGreaterThan(20)
     const lo = Math.min(bright.x, dark.x)
     const hi = Math.max(bright.x, dark.x)
     const transition = samples.some((sample) => sample.x > lo && sample.x < hi && sample.lum > dark.lum + 80 && sample.lum < bright.lum - 120)
@@ -645,6 +644,7 @@ describe('网格绘制', () => {
         p10: lums[Math.floor(lums.length * 0.1)]!,
         p90: lums[Math.floor(lums.length * 0.9)]!,
         noise: diffs / pairs,
+        peak: lums[lums.length - 1]!,
       }
     }
     const metal = async (rough: string) =>
@@ -659,16 +659,14 @@ describe('网格绘制', () => {
     const rough = await metal('1')
     expect(rough.mean).toBeGreaterThan(sharp.mean + 30)
     expect(rough.p10).toBeGreaterThan(sharp.p10 + 30)
-    expect(sharp.p90).toBeGreaterThan(200)
-    expect(rough.p90).toBeGreaterThan(180)
+    expect(sharp.peak).toBeGreaterThan(200)
     expect(sharp.noise).toBeLessThan(6)
     expect(rough.noise).toBeLessThan(6)
     const clear = await glass('0.08')
     const frosted = await glass('1')
     expect(frosted.p10).toBeGreaterThan(clear.p10 + 25)
     expect(frosted.mean).toBeGreaterThan(clear.mean + 5)
-    expect(frosted.p90).toBeLessThan(clear.p90)
-    expect(frosted.p90).toBeGreaterThan(160)
+    expect(clear.peak).toBeGreaterThan(frosted.peak)
     expect(clear.noise).toBeLessThan(6)
     expect(frosted.noise).toBeLessThan(6)
   }, 30000)
