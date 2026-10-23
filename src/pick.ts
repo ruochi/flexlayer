@@ -58,7 +58,7 @@ function contentMatrix(node: LayoutNode, posed: Matrix): Matrix {
  * 布局盒算命中，字形间隙也算。线的盒子按墨迹扩一圈。
  */
 export function pickNode(root: LayoutNode, at: PickPoint): PickHit | null {
-  let best: { hit: PickHit; order: number } | null = null
+  const found: { hit: PickHit | null; order: number } = { hit: null, order: 0 }
   let order = 0
   const visit = (node: LayoutNode, parent: Matrix, clips: Clip[], shown: number) => {
     const opacity = shown * node.opacity
@@ -91,9 +91,13 @@ export function pickNode(root: LayoutNode, at: PickPoint): PickHit | null {
         depth: depthOf(node),
       }
       const paintOrder = order
-      const nearer = best != null && hit.depth < best.hit.depth - 0.5
-      const samePlane = best == null || Math.abs(hit.depth - best.hit.depth) <= 0.5
-      if (best == null || nearer || (samePlane && paintOrder >= best.order)) best = { hit, order: paintOrder }
+      const current = found.hit
+      const nearer = current != null && hit.depth < current.depth - 0.5
+      const samePlane = current == null || Math.abs(hit.depth - current.depth) <= 0.5
+      if (current == null || nearer || (samePlane && paintOrder >= found.order)) {
+        found.hit = hit
+        found.order = paintOrder
+      }
     }
     const next = clips.slice()
     if ((node.kind === 'layer' && (node.overflow === 'hidden' || node.view)) || overflowClips(node)) {
@@ -106,7 +110,7 @@ export function pickNode(root: LayoutNode, at: PickPoint): PickHit | null {
     }
   }
   visit(root, IDENTITY, [], 1)
-  return best?.hit ?? null
+  return found.hit
 }
 
 /** 排版后按画布像素拾取。没有命中时 `hit` 是 null，这不是错误。 */
