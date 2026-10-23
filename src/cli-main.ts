@@ -6,8 +6,9 @@ import type { Writable } from 'node:stream'
 import { formatSampleCoverage, mergeFrameIssues, planSample, type FramePart, type SampleSpec } from './check-frames.js'
 import { emitLayer } from './emit.js'
 import type { Composition, FrameInput } from './frame.js'
-import type { LoadedLayer } from './load-source.js'
+import { loadLayerFile, type LoadedLayer } from './load-source.js'
 import { applyRootExpects, formatIssueLine } from './report.js'
+import { pickLayer } from './pick.js'
 import { checkLayer, renderLayer, renderPreview } from './render.js'
 import type { LayerNode } from './parse.js'
 import type { LayerReport, Issue } from './types.js'
@@ -18,6 +19,7 @@ function usage(): never {
   console.error(`用法:
   flexlayer render <file> [<file>...] [-o out.png|dir] [--report out.json|dir] [--scale 1] [--scale 2] [--debug] [--preview out.png] [--emit out.layer|dir] [--frame N] [--frames dir] [--from N] [--to N] [--step N] [--rgba -|file] [--mesh-samples 1|2|4] [--no-script] [--typecheck] [--watch]
   flexlayer check <file> [<file>...] [--report out.json|dir] [--emit out.layer|dir] [--frame N] [--frames all|ends|A-B|N] [--step N] [--no-script] [--no-typecheck] [--watch] [--quality draft|final]
+  flexlayer pick <file> --at x,y
   flexlayer pick --positions x,y,z,... --indices i,j,k,... --from ox,oy,oz --dir dx,dy,dz
 
 .tsx / .jsx / .ts / .js 会先执行，得到和 .layer 相同的节点树。
@@ -34,7 +36,8 @@ check 不写 --frames 时大约每 0.5 秒抽一帧，最多 96 帧，并写明�
 --no-script 不执行 <script>，canvas 保持透明。
 --watch 在源文件和它引用的相对路径变化后再跑一遍。不和 --rgba、--frames 一起用。
 --quality draft|final 覆盖根上的 quality。不写时用文件里的值，检查默认是 draft。
-pick 用实体的包围体射线，打印 { "hit": N } 或 { "hit": null }。`)
+pick <file> --at x,y 用布局盒拾取，打印 { "hit": { path, localX, localY, depth } } 或 { "hit": null }。源文件有 error 时退出码是 1。
+pick --positions --indices --from --dir 用包围体射线，打印 { "hit": N } 或 { "hit": null }。`)
   process.exit(2)
 }
 
@@ -401,15 +404,41 @@ async function runPick(argv: string[]) {
   let indices: string | undefined
   let from: string | undefined
   let dir: string | undefined
+  let at: string | undefined
+  const files: string[] = []
   for (let i = 0; i < argv.length; i++) {
-    const flag = argv[i]
+    const flag = argv[i]!
+    if (!flag.startsWith('-')) {
+      files.push(flag)
+      continue
+    }
     const value = argv[++i]
     if (value == null) throw new Error(`pick 缺少 ${flag} 的值`)
     if (flag === '--positions') positions = value
     else if (flag === '--indices') indices = value
     else if (flag === '--from') from = value
     else if (flag === '--dir') dir = value
+    else if (flag === '--at') at = value
     else throw new Error(`pick 不认识 ${flag}`)
+  }
+  if (at != null || files.length > 0) {
+    if (at == null || files.length !== 1) throw new Error('屏幕拾取写成 flexlayer pick <file> --at x,y')
+    const [xs, ys] = at.split(',')
+    const x = Number(xs)
+    const y = Number(ys)
+    if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error('pick 的 --at 要两个数字，例如 12,8')
+    const file = resolve(files[0]!)
+    const loaded = await loadLayerFile(file)
+    if (loaded.kind === 'composition') throw new Error('pick 需要单帧，不能是 Composition')
+    const source = loaded.kind === 'markup' ? loaded.source : loaded.node
+    const picked = await pickLayer(source, { x, y }, { baseDir: dirname(file) })
+    const issues = [...(loaded.kind === 'markup' ? [] : loaded.issues), ...picked.issues]
+    for (const issue of issues) {
+      if (issue.level === 'error') console.error(formatIssueLine(issue))
+    }
+    console.log(JSON.stringify({ hit: picked.hit }))
+    if (issues.some((issue) => issue.level === 'error')) process.exit(1)
+    return
   }
   const xyz = numberList(positions, 'positions')
   const ids = numberList(indices, 'indices')

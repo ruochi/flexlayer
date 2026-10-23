@@ -1,6 +1,7 @@
 export { createCanvas, loadImage } from '@napi-rs/canvas'
 export { applyCanvasFont, DEFAULT_FONT_FAMILY, initFonts, registerFontPath } from './fonts.js'
 export { renderLayer, checkLayer, type RenderResult, type RgbaRenderResult } from './render.js'
+export { pickLayer, pickNode, type PickHit, type PickOptions, type PickPoint, type PickResult } from './pick.js'
 export { loadNativeRender, type NativeRender } from './native.js'
 export { layer, create, type CreatedLayer, type MeshEdgeKind, type MeshPoint, type MeshProjectedEdge, type PlacedChar, type PlacedElement, type PlacedLine, type PlacedMask, type PlacedText } from './canvas.js'
 export { registerComponent, arrowComponent, type ComponentFn, type ComponentProps } from './components.js'
