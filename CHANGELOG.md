@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.15.2
+
+Draft edge smoothing writes only the visible ground. Screen text and key edges stay sharp. `shading="toon"`, `manga`, and `technical` still smooth the whole frame.
+
+The ground shadow mask is normalized to 1, so a wide blur no longer turns the penumbra opaque black. Contact darkening follows the nearest vertex and stays a ring on the ground the body touches.
+
+`--quality` and a `quality` attribute on the root pass to a camera layer that did not write its own. A camera that writes `quality` keeps that value.
+
+A glyph the requested face does not cover, such as `→` in Inter's Latin subset, is drawn with ChillDuanSans instead of a `.notdef` box.
+
+The 64×48 draft golden was regenerated. Its old sphere still carried the frame-wide edge smear.
+
+`native/flexlayer-render` for linux-x64-gnu is rebuilt. darwin-arm64 and win32-x64-msvc stay the previous binaries until `npm run build:platforms` exports them.
+
 ## 0.15.1
 
 `quality="final"` widens the shadow-map penumbra and adds occlusion, one diffuse bounce, a reflection on sharp metal, and a glass tint. Draft stays on the shadow map. Baked finishes are not re-shaded by those rays. Glass and lamps do not cast them.
