@@ -157,6 +157,7 @@ export function rasterizeNative(
     const canvas = createCanvas(1, 1)
     return { canvas, x: 0, y: 0, width: 0, height: 0 }
   }
+  const tNative = Date.now()
   const frame = rasterizeFill(
     {
       layerWidth: layer.width,
@@ -198,7 +199,7 @@ export function rasterizeNative(
     grounds,
   )
   if (process.env.DEBUG_RASTER === '1') {
-    console.error('RUST', frame.debug)
+    console.error('RUST', frame.debug, `${Date.now() - tNative}ms`)
   }
   if (keepHi) {
     return {
