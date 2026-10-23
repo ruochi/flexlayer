@@ -253,6 +253,7 @@ function hashKind(node: LayoutNode): string | null {
       strokeWidths: node.strokeWidths,
       halo: node.halo,
       hidden: node.hidden,
+      strokeOff: node.strokeOff === true,
       castShadow: node.castShadow !== false,
       receiveShadow: node.receiveShadow !== false,
     })
@@ -266,8 +267,9 @@ function hashKind(node: LayoutNode): string | null {
  */
 export function meshSceneCacheKey(scene: MeshCacheScene): string | null {
   const parts: string[] = [
-    'mesh-scene-v4',
+    'mesh-scene-v5',
     scene.layer.shadows === 'none' ? 'shadows none' : 'shadows',
+    scene.layer.shading ?? 'studio',
     scene.layer.dof ? `dof ${qnum(scene.layer.dof.aperture)} ${qnum(scene.layer.dof.focus)} ${qnum(scene.layer.dof.maxBlur)}` : 'dof',
     String(qnum(scene.layer.width)),
     String(qnum(scene.layer.height)),
@@ -294,6 +296,7 @@ export function meshSceneCacheKey(scene: MeshCacheScene): string | null {
       strokeWidths: node.strokeWidths,
       halo: node.halo,
       hidden: node.hidden,
+      strokeOff: node.strokeOff === true,
       sharp: node.sharp === true,
       castShadow: node.castShadow !== false,
       receiveShadow: node.receiveShadow !== false,

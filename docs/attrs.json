@@ -99,6 +99,17 @@
     "misplacedHint": "Put this on the layer that frames the shot, for example <layer camera=\"900\" shadows=\"none\">"
   },
   {
+    "name": "shading",
+    "group": "layer-only",
+    "syntax": "studio | toon | technical | manga",
+    "default": "studio",
+    "example": "toon",
+    "layerOnly": true,
+    "htmlUsesStyle": false,
+    "note": "On a layer that has a camera. studio is the continuous finish. toon, technical, and manga cover every solid under that camera. An authored stroke still wins. Also 影棚, 卡通, 线稿, 漫画",
+    "misplacedHint": "Put this on the layer that frames the shot, for example <layer camera=\"900\" shading=\"toon\">"
+  },
+  {
     "name": "min-font",
     "group": "layer",
     "syntax": "screen | print | none | px",

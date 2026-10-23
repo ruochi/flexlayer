@@ -1216,3 +1216,55 @@ describe('网格绘制', () => {
     expect(rings[0]!.points.length).toBeGreaterThan(40)
   })
 })
+
+describe('shading', () => {
+  const sphere = `<sphere cx="80" cy="80" r="36" fill="#ff2244" />`
+
+  it('省略和 studio 是同一张图', async () => {
+    const omitted = await renderLayer(`<layer width="160" height="160" background="#123456" camera="500">${sphere}</layer>`)
+    const studio = await renderLayer(`<layer width="160" height="160" background="#123456" camera="500" shading="studio">${sphere}</layer>`)
+    expect(studio.png.equals(omitted.png)).toBe(true)
+  }, 30000)
+
+  it('toon 和影棚不同，轮廓是墨色', async () => {
+    const studio = await renderLayer(`<layer width="160" height="160" background="#f6f3ec" camera="500">${sphere}</layer>`)
+    const toon = await renderLayer(`<layer width="160" height="160" background="#f6f3ec" camera="500" shading="toon">${sphere}</layer>`)
+    expect(toon.png.equals(studio.png)).toBe(false)
+    const image = await imageOf(toon.png)
+    let ink = 0
+    for (let y = 0; y < image.height; y++) {
+      for (let x = 0; x < image.width; x++) {
+        const pixel = image.at(x, y)
+        if (pixel[0]! < 45 && pixel[1]! < 45 && pixel[2]! < 45 && pixel[3]! > 200) ink++
+      }
+    }
+    expect(ink).toBeGreaterThan(20)
+  }, 30000)
+
+  it('没有镜头时 shading 报 invalid-attr', async () => {
+    const report = await checkLayer(`<layer width="80" height="80" shading="toon"><rect width="40" height="20" fill="#fff" /></layer>`)
+    const hit = report.issues.find((issue) => issue.code === 'invalid-attr' && issue.message.includes('shading'))
+    expect(hit?.message).toContain('shading')
+  })
+
+  it('无法解析的值报 invalid-attr', async () => {
+    const report = await checkLayer(`<layer width="80" height="80" camera="200" shading="oil"><sphere cx="40" cy="40" r="16" /></layer>`)
+    const hit = report.issues.find((issue) => issue.code === 'invalid-attr' && issue.message.includes('shading'))
+    expect(hit?.hint).toContain('studio')
+  })
+
+  it('作者写的 stroke 在 technical 下仍是红色', async () => {
+    const { png } = await renderLayer(
+      `<layer width="160" height="160" background="#f6f3ec" camera="500" shading="technical"><sphere cx="80" cy="80" r="36" fill="#88aacc" stroke="#ff0000" /></layer>`,
+    )
+    const image = await imageOf(png)
+    let red = 0
+    for (let y = 0; y < image.height; y++) {
+      for (let x = 0; x < image.width; x++) {
+        const pixel = image.at(x, y)
+        if (pixel[0]! > 200 && pixel[1]! < 40 && pixel[2]! < 40) red++
+      }
+    }
+    expect(red).toBeGreaterThan(10)
+  }, 30000)
+})

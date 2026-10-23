@@ -1771,8 +1771,9 @@ function readDepth(raw: string | undefined, fallback: number, ctx: LayoutContext
   return parsed
 }
 
-function readMeshLines(node: LayerNode, ctx: LayoutContext): { stroke: string; strokeWidths: [number, number, number]; hidden: string; halo: number } {
+function readMeshLines(node: LayerNode, ctx: LayoutContext): { stroke: string; strokeWidths: [number, number, number]; hidden: string; halo: number; strokeOff?: true } {
   const rawStroke = strokeTakesInk(node.attrs.stroke) ? undefined : node.attrs.stroke
+  const strokeOff = rawStroke != null && rawStroke.trim().toLowerCase() === 'none'
   const rawHidden = node.attrs.hidden
   const rawWidth = node.attrs['stroke-width']
   const strokeWritten = rawStroke != null && rawStroke.trim() !== '' && rawStroke.trim() !== 'none'
@@ -1870,7 +1871,7 @@ function readMeshLines(node: LayerNode, ctx: LayoutContext): { stroke: string; s
       })
     }
   }
-  return { stroke, strokeWidths, hidden, halo }
+  return { stroke, strokeWidths, hidden, halo, ...(strokeOff ? { strokeOff: true as const } : {}) }
 }
 
 const MESH_MATERIALS = new Set(['matte', 'plastic', 'metal', 'glass', 'clay', 'mirror', 'brushed'])
@@ -3798,6 +3799,49 @@ function readSceneShadows(raw: string | undefined, hostsCamera: boolean, ctx: La
   return {}
 }
 
+const SCENE_SHADING = {
+  studio: 'studio',
+  '影棚写实': 'studio',
+  '影棚': 'studio',
+  toon: 'toon',
+  '扁平卡通': 'toon',
+  '卡通': 'toon',
+  technical: 'technical',
+  '技术线稿': 'technical',
+  '线稿': 'technical',
+  manga: 'manga',
+  '漫画网点': 'manga',
+  '漫画': 'manga',
+} as const
+
+function readSceneShading(raw: string | undefined, hostsCamera: boolean, ctx: LayoutContext): { shading?: 'toon' | 'technical' | 'manga' } {
+  if (raw == null || raw.trim() === '') return {}
+  const text = raw.trim().toLowerCase()
+  if (!hostsCamera) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: 'shading 只写在开了镜头的 layer 上',
+      hint: '写在取景的 layer 上，例如 <layer camera="900" shading="toon">',
+    })
+    return {}
+  }
+  const shading = SCENE_SHADING[text as keyof typeof SCENE_SHADING]
+  if (!shading) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `无法解析 shading: ${raw}`,
+      hint: '写成 studio、toon、technical 或 manga。不写是影棚',
+    })
+    return {}
+  }
+  if (shading === 'studio') return {}
+  return { shading }
+}
+
 function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
   if (ctx.pathPrefix === 'layer') ctx.issues.push(...originValueIssues(node.attrs.origin, ctx.pathPrefix))
   if (ctx.pathPrefix !== 'layer' && node.attrs['min-font'] != null && node.attrs['min-font'].trim() !== '') {
@@ -3816,6 +3860,7 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
   const fixedH = parseNumber(node.attrs.height)
   const hostsCamera = wroteCameraAttr(node)
   const sceneShadows = readSceneShadows(node.attrs.shadows, hostsCamera, ctx)
+  const sceneShading = readSceneShading(node.attrs.shading, hostsCamera, ctx)
   const layerCtx = withLayerText({ ...ctx, ancestorCamera: Boolean(hostsCamera || ctx.ancestorCamera) }, node)
 
   const childFvg = node.children.filter((c) => typeof c !== 'string') as LayerNode[]
@@ -4065,6 +4110,7 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
     ...(cameraMoved ? { cameraMoved: true } : {}),
     ...(dof ? { dof } : {}),
     ...sceneShadows,
+    ...sceneShading,
     ...sharpOf(node.attrs, ctx),
     ...(preserve.value ? { preserve3d: true } : {}),
     ...(mask ? { mask } : {}),

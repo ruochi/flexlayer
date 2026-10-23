@@ -46,7 +46,7 @@ Effects: `shadow` `0 8 16 #00000055` (default color `#00000066`), `box-shadow` `
 ```
 
 ```html
-<layer width="1080" height="1080" camera="900">
+<layer width="1080" height="1080" camera="900" shading="toon">
   <rect x="80" y="80" width="160" height="120" depth="60" rx="8" fill="#e8b04a" />
   <circle cx="420" cy="160" r="70" depth="40" fill="#c23b22" />
   <sphere cx="700" cy="180" r="80" fill="#2f6fed" />
@@ -54,9 +54,11 @@ Effects: `shadow` `0 8 16 #00000055` (default color `#00000066`), `box-shadow` `
 </layer>
 ```
 
-In tsx, `<model x y width height object={mesh} />` contain-fits a mesh in that box. `<model unit x y object={mesh} />` puts the model origin at `(x, y)`. Lambert and Toon become `matte`. Phong becomes `plastic` after `shininess` is turned into roughness. Transmission of at least 0.5 becomes `glass`. Anything else is `metal` or `plastic` by metalness, on the older shading. An in-memory `map` and vertex colors tint the base color. `emissive` is added after shading. `ShaderMaterial` contributes only a color from its uniforms. `Line` and `wireframe` draw into the same depth buffer.
+`shading` on that layer is `studio` when omitted. `toon` is flat color and ink, `technical` keeps the continuous finish and adds lines, and `manga` is paper, hatch, and ink. A solid's own `stroke` still wins.
 
-`material="clay"`, `plastic`, `metal`, `mirror`, or `brushed` is a baked finish. Omit `fill` and it uses the finish color. A `fill` recolors it. `metal 0.35` and `plastic 0.4` stay on the older shading. `glass` does too.
+In tsx, `<model x y width height object={mesh} />` contain-fits a mesh in that box. `<model unit x y object={mesh} />` puts the model origin at `(x, y)`. Lambert and Toon become `matte`. Phong becomes `plastic` after `shininess` is turned into roughness. Transmission of at least 0.5 becomes `glass`. Anything else is `metal` or `plastic` by metalness, on the older finish. An in-memory `map` and vertex colors tint the base color. `emissive` is added after shading. `ShaderMaterial` contributes only a color from its uniforms. `Line` and `wireframe` draw into the same depth buffer.
+
+`material="clay"`, `plastic`, `metal`, `mirror`, or `brushed` is a baked finish. Omit `fill` and it uses the finish color. A `fill` recolors it. `metal 0.35` and `plastic 0.4` stay on the older finish. `glass` does too.
 
 An unsized `layer` box is the union of its children, and the children shift so that union starts at 0 inside the box. The default top-left anchor stays the local origin, so the box moves with the minimum and marks stay where they were written. Other anchors meet the union, and so does `anchor-box="box"`. A sized axis stays an artboard. `tube` `d` is already in layer coordinates. A solid, a `ground`, or a 3D pose needs `camera` on the layer that frames the shot. Omitting it reports `flatten-3d`.
 

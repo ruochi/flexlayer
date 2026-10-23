@@ -58,6 +58,7 @@ export interface FillBatch {
   hasLines: boolean
   lineMargin: number
   matcap?: string
+  form?: string
 }
 export interface FillGround {
   toLayer: Array<number>
@@ -88,6 +89,7 @@ export interface FillConfig {
   clipH: number
   shadows: boolean
   keepHi: boolean
+  shading?: string
 }
 export interface FillFrame {
   pixels: Uint8ClampedArray
@@ -424,6 +426,7 @@ export interface StrokeBatch {
   halo: number
   css: string
   hiddenCss: string
+  creaseCss?: string
   hasHidden: boolean
   hasOutline: boolean
   hasRound: boolean
@@ -556,7 +559,7 @@ export declare function renderStylePng(style: string, width: number, height: num
  * Optional `material` is `clay`, `plastic`, `metal`, `mirror`, `brushed`,
  * `matte`, or `glass`. A bare `clay`, `plastic`, `metal`, `mirror`, or
  * `brushed` is a baked finish and `fill` recolors it. `roughness` keeps
- * `matte`, `plastic`, `metal`, and `glass` on the older shading.
+ * `matte`, `plastic`, `metal`, and `glass` on the older finish.
  * Omitted material is matte.
  */
 export declare function renderScenePng(spec: string): Buffer

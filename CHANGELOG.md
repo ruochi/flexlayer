@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.13.8
+
+`shading` on the layer that has `camera` is `studio` when omitted, or `toon`, `technical`, or `manga`. Chinese names are `影棚`, `卡通`, `线稿`, and `漫画`. Studio matches the previous pictures. Toon and manga replace the continuous finish and add lines. Technical keeps that finish and adds lines. A solid's own `stroke` still wins. `stroke="none"` draws no lines.
+
+`native/flexlayer-render` is rebuilt for linux-x64-gnu, darwin-arm64, and win32-x64-msvc from the same `flexlayer-render/0.0.2` painter. The mesh path reads `shading`.
+
 ## 0.13.7
 
 `native/flexlayer-render` now includes `darwin-arm64` and `win32-x64-msvc`, built from the same `flexlayer-render/0.0.2` as the linux addon in 0.13.6. The linux binary is unchanged.
