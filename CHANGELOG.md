@@ -2,11 +2,29 @@
 
 ## Unreleased
 
-## 0.13.8
+## 0.14.3
 
 `shading` on the layer that has `camera` is `studio` when omitted, or `toon`, `technical`, or `manga`. Chinese names are `影棚`, `卡通`, `线稿`, and `漫画`. Studio matches the previous pictures. Toon and manga replace the continuous finish and add lines. Technical keeps that finish and adds lines. A solid's own `stroke` still wins. `stroke="none"` draws no lines.
 
-`native/flexlayer-render` is rebuilt for linux-x64-gnu, darwin-arm64, and win32-x64-msvc from the same `flexlayer-render/0.0.2` painter. The mesh path reads `shading`.
+`native/flexlayer-render` is rebuilt for linux-x64-gnu, darwin-arm64, and win32-x64-msvc from the same `flexlayer-render/0.0.2+cap1080` painter. The mesh path reads `shading`.
+
+## 0.14.2
+
+`native/flexlayer-render` includes `win32-x64-msvc`, built from the same `flexlayer-render/0.0.2+cap1080` addon as linux and darwin. That build includes the 0.14.1 lighting. The cross link uses the Visual Studio 2022 CRT. The Windows binary has not been loaded on Windows. The darwin binary is cross-compiled from this same source and has not been run on a Mac.
+
+## 0.14.1
+
+The key light casts onto solids as well as `ground`. On a solid the shadow stays hard, with an antialiased rim. On `ground`, `shadow-blur` is the maximum softness in layer pixels. `0` stays hard. A larger value keeps the edge sharp where the caster meets the ground and softens it as the caster rises. The contact shadow hugs the contact point: a small dark patch, not a second disc, and only a little of the caster's color. A solid does the same from its neighbors.
+
+`lamp` and `neon` emit. Omit `fill` and lamp is `#ffe6c2`, neon is `#3ad8ff`. Neon has a white core and a wider halo. They light what is near them, including the ground, by the area that actually emits, not by the bounding sphere, and they do not cast. The halo is centered on the emitter and fades out. It does not end on a rectangle. A pool on the ground fades out smoothly, including under a torus that is flat on screen. Glass does not write a hard shadow. On a dark ground the patch has a bright center and a darker rim. The tint softens with `shadow-blur`. A translucent glass solid is painted after `ground`, so the ground does not cover it. A three.js `emissive` is still added after shading, and it also lights nearby surfaces.
+
+On `ground`, a soft shadow falls off without a stair or a hard cut at the blur radius. `shadow-blur="0"` stays hard, with an antialiased rim. The contact edge stays sharp when the caster meets the ground.
+
+`native/flexlayer-render` for linux-x64-gnu is rebuilt on the capped addon. The darwin-arm64 binary stays the 0.14.0 build and does not include this lighting.
+
+## 0.14.0
+
+The JS document painter is removed. `render`, `renderFrames`, and `<preview>` sheets run inside the capped addon. `FLEXLAYER_PAINTER=js` throws. A delivered long edge above 1920 is `output-limit` and writes no PNG. `native/flexlayer-render` no longer ships `draw/`. The linux-x64-gnu and darwin-arm64 addons are `flexlayer-render/0.0.2+cap1080`. The same addon still exports `renderStylePng` and `renderScenePng`; those still lifes allow an edge of `1..=16384`. The darwin binary is cross-compiled and has not been run on a Mac. Windows is not in this package: the cross link stops on `__std_minmax_element_f`, and the 0.13.7 Windows addon is the style renderer without the document painter. Mask measurement, mesh frames, and `<canvas>` scripts stay in this package and call the addon. The unlimited build is not exported.
 
 ## 0.13.7
 
