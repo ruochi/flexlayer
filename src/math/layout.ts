@@ -1,6 +1,6 @@
 import { isGradient } from '../gradient.js'
 import type { LayerNode } from '../parse.js'
-import { contentInsets, overflowAppearance, parseAngle, parseNumber, parsePx, parseScale, parseStyle, radiusAppearance, readBorderStyle, readPaddingStyle, readRadiusStyle, ZERO_EDGES } from '../style.js'
+import { contentInsets, overflowAppearance, parseNumber, parsePx, parseScale, parseStyle, radiusAppearance, readBorderStyle, readPaddingStyle, readRadiusStyle, styleAngle, ZERO_EDGES } from '../style.js'
 import { layoutText } from '../text.js'
 import type {
   Box,
@@ -1021,7 +1021,7 @@ export function layoutMath(node: LayerNode, host: MathLayoutHost, rowAlign?: str
   laid.height += inset.top + inset.bottom
   laid.id = node.attrs.id
   laid.opacity = opacity
-  const styledAngle = style.rotate != null ? parseAngle(style.rotate) : undefined
+  const styledAngle = style.rotate != null ? styleAngle(style.rotate) : undefined
   if (style.rotate != null && !styledAngle && parseNumber(node.attrs.rotate) == null) {
     host.issues.push({
       level: 'warn',
@@ -1029,16 +1029,6 @@ export function layoutMath(node: LayerNode, host: MathLayoutHost, rowAlign?: str
       path: host.pathPrefix,
       message: `无法解析 rotate: ${style.rotate}`,
       hint: '写成 30deg、0.5rad、0.25turn。0 可以不带单位',
-    })
-  }
-  if (styledAngle?.unitless && styledAngle.degrees !== 0 && parseNumber(node.attrs.rotate) == null) {
-    const shown = style.rotate!.trim()
-    host.issues.push({
-      level: 'info',
-      code: 'non-canonical',
-      path: host.pathPrefix,
-      message: `rotate 的 ${shown} 不带单位`,
-      hint: `改成 ${shown}deg。0 可以不带单位`,
     })
   }
   laid.rotate = parseNumber(node.attrs.rotate) ?? styledAngle?.degrees ?? 0

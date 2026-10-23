@@ -29,7 +29,7 @@ export type LayerNode = {
 
 export type LayerChild = string | LayerNode
 
-const VOID_TAGS = new Set(['br', 'font', 'img', 'image', 'sphere', 'box', 'cylinder', 'torus', 'tube', 'extrude', 'model', 'ground', 'light'])
+const VOID_TAGS = new Set(['br', 'font', 'img', 'image', 'sphere', 'cylinder', 'torus', 'tube', 'model', 'ground', 'light'])
 
 const CLOSE_TAG_RE = /<\s*\/\s*([a-zA-Z][\w-]*)\s*>/y
 const OPEN_TAG_RE = /<\s*([a-zA-Z][\w-]*)((?:\s+[^\s=>/]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'>]+))?)*)\s*(\/)?\s*>/y

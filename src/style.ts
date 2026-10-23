@@ -45,7 +45,7 @@ export function parseNumber(value: string | undefined): number | undefined {
 
 const NUMBER_UNIT = /^([+-]?(?:\d+\.?\d*|\.\d+))([a-z%]+)?$/
 
-/** 角度。`none` 是 0。带单位换成度。裸数字仍是度，`unitless` 为 true。解析失败返回 undefined。 */
+/** 角度。`none` 是 0。带单位换成度。裸数字仍标成度，`unitless` 为 true。解析失败返回 undefined。 */
 export function parseAngle(value: string | undefined): { degrees: number; unitless: boolean } | undefined {
   if (value == null) return undefined
   const token = value.trim().toLowerCase()
@@ -61,6 +61,13 @@ export function parseAngle(value: string | undefined): { degrees: number; unitle
   if (unit === 'grad') return { degrees: n * 0.9, unitless: false }
   if (unit === 'turn') return { degrees: n * 360, unitless: false }
   return undefined
+}
+
+/** `style` 里的角度。只有 0 可以不带单位。非 0 的裸数字不旋转。 */
+export function styleAngle(value: string | undefined): { degrees: number } | undefined {
+  const parsed = parseAngle(value)
+  if (!parsed || (parsed.unitless && parsed.degrees !== 0)) return undefined
+  return { degrees: parsed.degrees }
 }
 
 /**
@@ -1259,7 +1266,7 @@ function numberHint(value: string, hint: string): StyleDiagnostic | null {
 const ANGLE_HINT = '写成 30deg、0.5rad、0.25turn。0 可以不带单位'
 
 function angleHint(value: string): StyleDiagnostic | null {
-  return parseAngle(value) ? null : { hint: ANGLE_HINT }
+  return styleAngle(value) ? null : { hint: ANGLE_HINT }
 }
 
 /** 认识的 CSS 属性。返回 null 表示值可用；不在表里的名字由调用方当成不支持。 */

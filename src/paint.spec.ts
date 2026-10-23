@@ -286,7 +286,7 @@ describe('paint containers', () => {
     const text = h(
       'layer',
       { width: '200', height: '200', background: '#000000' },
-      h('layer', { x: '40', y: '90' }, h('div', { style: 'width:120px; height:20px; background:#ffffff; rotate:90' }, 'A')),
+      h('layer', { x: '40', y: '90' }, h('div', { style: 'width:120px; height:20px; background:#ffffff; rotate:90deg' }, 'A')),
     )
     const textPng = await renderLayer(text)
     expect((await pixelAt(textPng.png, 100, 50))[0]).toBeGreaterThan(200)
