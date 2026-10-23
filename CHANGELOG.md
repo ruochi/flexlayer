@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.15.1
+
+`quality="final"` widens the shadow-map penumbra and adds occlusion, one diffuse bounce, a reflection on sharp metal, and a glass tint. Draft stays on the shadow map. Baked finishes are not re-shaded by those rays. Glass and lamps do not cast them.
+
+`flexlayer pick <file> --at x,y` hits a layout box and prints `{ "hit": { path, localX, localY, depth } }`. A miss is `{ "hit": null }`. An error-level issue exits 1. The ray form of `pick` is unchanged.
+
+WebGL draws are recorded and run when the canvas is read. three.js builtins from r160 keep the material kind table. A shader with derivatives, a fixed loop, or `discard` runs on a register machine. `while` reports `unsupported-webgl` with a reason.
+
+`native/flexlayer-render` for linux-x64-gnu is rebuilt. darwin-arm64 and win32-x64-msvc stay the previous binaries until `npm run build:platforms` exports them.
+
 ## 0.15.0
 
 The studio environment is Poly Haven `monochrome_studio_01` (Grzegorz Wronkowski, CC0). Numbered plastic and metal, glass, and the baked finishes all sample that panorama. The umbrella is rotated onto the key.

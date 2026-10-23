@@ -224,7 +224,7 @@ export const ATTRS: AttrDef[] = [
     syntax: 'draft | final',
     defaultValue: 'draft',
     example: 'final',
-    note: 'draft is the check default. final keeps the same raster and adds the heavier contact path when a scene asks for it',
+    note: 'draft is the default and keeps the shadow map. final widens the penumbra and adds occlusion, one diffuse bounce, a sharp-metal reflection, and a glass tint',
     misplacedHint: 'Write quality on a layer, for example <layer camera="900" quality="final">',
     styleHint: 'Do not put this in style. Write it as an attribute on layer',
   },
@@ -233,7 +233,7 @@ export const ATTRS: AttrDef[] = [
     forbidInStyle: true,
     syntax: '0..1',
     example: '0.4',
-    note: 'Physical roughness on a solid. A numbered material such as metal 0.35 still means the older finish',
+    note: 'Physical roughness on a solid. material="metal 0.35" is that roughness on the metal-roughness shader',
     misplacedHint: 'Write roughness on a solid, for example <sphere roughness="0.4">',
   },
   {

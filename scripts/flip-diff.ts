@@ -19,7 +19,7 @@ function srgbToLinear(c: number): number {
 
 function hyab(a: number[], b: number[]): number {
   const dL = a[0]! - b[0]!
-  const dC = Math.hypot(a[1]! - b[1]!) - Math.hypot(b[1]!, b[2]!)
+  const dC = Math.hypot(a[1]!, a[2]!) - Math.hypot(b[1]!, b[2]!)
   return Math.abs(dL) + Math.abs(dC)
 }
 

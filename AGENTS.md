@@ -86,6 +86,8 @@ Combine two or three per picture. A cover usually needs one strong type treatmen
 - Write `camera` on the layer that frames the shot. A number is the viewing distance, for example `camera="900"`. Omitting it leaves the picture in 2D and reports `flatten-3d`. Do not combine `camera` and `view` on the same layer.
 - `<ground>` receives shadows. With no `fill`, only the shadow is drawn. `shadows="none"` on the camera layer turns shadows off.
 - `shading` on that same layer is `studio` when omitted, or `toon`, `technical`, or `manga`. It covers every solid under the camera. An authored `stroke` still wins.
+- `quality` is `draft` when omitted. `quality="final"` widens the shadow-map penumbra and adds occlusion, one diffuse bounce, a sharp-metal reflection, and a glass tint. Baked finishes stay baked.
+- `flexlayer pick scene.tsx --at x,y` hits a layout box. The ray form `pick --positions --indices --from --dir` still returns a triangle index.
 
 ### Checks and programs
 
