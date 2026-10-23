@@ -267,9 +267,14 @@ function hashKind(node: LayoutNode): string | null {
  */
 export function meshSceneCacheKey(scene: MeshCacheScene): string | null {
   const parts: string[] = [
-    'mesh-scene-v5',
+    'mesh-scene-v6',
     scene.layer.shadows === 'none' ? 'shadows none' : 'shadows',
     scene.layer.shading ?? 'studio',
+    scene.layer.lightSpace ?? 'world',
+    scene.layer.environment ?? 'studio',
+    scene.layer.tonemap ?? 'neutral',
+    scene.layer.quality ?? 'draft',
+    scene.layer.lights ? JSON.stringify(scene.layer.lights) : '',
     scene.layer.dof ? `dof ${qnum(scene.layer.dof.aperture)} ${qnum(scene.layer.dof.focus)} ${qnum(scene.layer.dof.maxBlur)}` : 'dof',
     String(qnum(scene.layer.width)),
     String(qnum(scene.layer.height)),

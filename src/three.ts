@@ -63,6 +63,21 @@ type Obj = {
   isMeshPhysicalMaterial?: boolean
   isShaderMaterial?: boolean
   isRawShaderMaterial?: boolean
+  isDirectionalLight?: boolean
+  isSpotLight?: boolean
+  isPointLight?: boolean
+  isHemisphereLight?: boolean
+  isAmbientLight?: boolean
+  intensity?: number
+  z?: number
+  clearcoat?: number
+  clearcoatRoughness?: number
+  thickness?: number
+  ior?: number
+  sheen?: number
+  anisotropy?: number
+  position?: { x?: number; y?: number; z?: number }
+  target?: { position?: { x?: number; y?: number; z?: number } }
   isColor?: boolean
   vertexColors?: boolean | number
   emissive?: { r?: number; g?: number; b?: number }
@@ -122,6 +137,9 @@ export function modelRevision(prims: GlbPrimitive[]): string {
     if (prim.uvs) hashFloats(prim.uvs, word)
     if (prim.colors) hashFloats(prim.colors, word)
     if (prim.emissive) for (const channel of prim.emissive) word(Math.round(channel * 1000))
+    if (prim.clearcoat != null) word(Math.round(prim.clearcoat * 1000))
+    if (prim.transmission != null) word(Math.round(prim.transmission * 1000))
+    if (prim.ior != null) word(Math.round(prim.ior * 1000))
     if (prim.map) {
       word(prim.map.w)
       word(prim.map.h)
@@ -274,6 +292,13 @@ function emitMesh(mesh: Obj, out: GlbPrimitive[]) {
         colors,
         map: pbr.map,
         emissive: pbr.emissive,
+        ...(pbr.clearcoat != null ? { clearcoat: pbr.clearcoat } : {}),
+        ...(pbr.clearcoatRoughness != null ? { clearcoatRoughness: pbr.clearcoatRoughness } : {}),
+        ...(pbr.transmission != null ? { transmission: pbr.transmission } : {}),
+        ...(pbr.thickness != null ? { thickness: pbr.thickness } : {}),
+        ...(pbr.ior != null ? { ior: pbr.ior } : {}),
+        ...(pbr.sheen != null ? { sheen: pbr.sheen } : {}),
+        ...(pbr.anisotropy != null ? { anisotropy: pbr.anisotropy } : {}),
       })
     }
   }
@@ -476,6 +501,13 @@ function readPbr(material: unknown): {
   vertexColors: boolean
   map?: GlbPrimitive['map']
   emissive?: [number, number, number]
+  clearcoat?: number
+  clearcoatRoughness?: number
+  transmission?: number
+  thickness?: number
+  ior?: number
+  sheen?: number
+  anisotropy?: number
 } {
   const mat = asObj(material)
   const color = mat?.color
@@ -509,6 +541,13 @@ function readPbr(material: unknown): {
     vertexColors: mat?.vertexColors === true || mat?.vertexColors === 2,
     map: readMap(mat),
     emissive: readEmissive(mat),
+    ...(typeof mat?.clearcoat === 'number' ? { clearcoat: clamp01(mat.clearcoat) } : {}),
+    ...(typeof mat?.clearcoatRoughness === 'number' ? { clearcoatRoughness: clamp01(mat.clearcoatRoughness) } : {}),
+    ...(typeof mat?.transmission === 'number' ? { transmission: clamp01(mat.transmission) } : {}),
+    ...(typeof mat?.thickness === 'number' ? { thickness: mat.thickness } : {}),
+    ...(typeof mat?.ior === 'number' ? { ior: mat.ior } : {}),
+    ...(typeof mat?.sheen === 'number' ? { sheen: clamp01(mat.sheen) } : {}),
+    ...(typeof mat?.anisotropy === 'number' ? { anisotropy: mat.anisotropy } : {}),
   }
 }
 
@@ -767,4 +806,47 @@ function applyNormal(n: number[], x: number, y: number, z: number): [number, num
   const oz = n[2]! * x + n[5]! * y + n[8]! * z
   const len = Math.hypot(ox, oy, oz) || 1
   return [ox / len, oy / len, oz / len]
+}
+
+export type ThreeLight = {
+  type: 'directional' | 'point' | 'spot' | 'hemisphere' | 'ambient'
+  color: [number, number, number]
+  intensity: number
+  x: number
+  y: number
+  z: number
+}
+
+/** 读 three.js 场景里的灯。颜色保持线性，和 three.js 的 Color 一致。 */
+export function lightsFromThree(root: unknown): ThreeLight[] {
+  const out: ThreeLight[] = []
+  const visit = (node: unknown) => {
+    const obj = asObj(node)
+    if (!obj) return
+    const type = obj.isDirectionalLight
+      ? 'directional'
+      : obj.isSpotLight
+        ? 'spot'
+        : obj.isPointLight
+          ? 'point'
+          : obj.isHemisphereLight
+            ? 'hemisphere'
+            : obj.isAmbientLight
+              ? 'ambient'
+              : ''
+    if (type) {
+      const color = obj.color
+      out.push({
+        type,
+        color: [finite(color?.r, 1), finite(color?.g, 1), finite(color?.b, 1)],
+        intensity: finite(obj.intensity, 1),
+        x: finite(obj.position?.x, 0),
+        y: finite(obj.position?.y, 0),
+        z: finite(obj.position?.z, 0),
+      })
+    }
+    if (Array.isArray(obj.children)) for (const child of obj.children) visit(child)
+  }
+  visit(root)
+  return out
 }

@@ -19,6 +19,11 @@ export function fakeDraw(color, depth, input) {
   return addon.fakeDraw(color, depth, input)
 }
 
+export function webglDraw(draw) {
+  if (!addon?.webglDraw) return { pixels: new Uint8ClampedArray(), covered: false }
+  return addon.webglDraw(draw)
+}
+
 export function fakeClear(color, depth, input) {
   if (!addon?.fakeClear) throw new Error('Native fakeClear is not available')
   return addon.fakeClear(color, depth, input)

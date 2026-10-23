@@ -211,6 +211,14 @@ export namespace JSX {
         shadows?: 'none' | 'auto' | string
         /** 这一台镜头的画法。不写是 studio。toon、technical、manga 盖住镜头下的实体 */
         shading?: 'studio' | 'toon' | 'technical' | 'manga' | string
+        /** 环境。studio、none，或 hdr 资源名 */
+        environment?: string
+        /** 色调映射。neutral、agx、none */
+        tonemap?: 'neutral' | 'agx' | 'none' | string
+        /** 灯的空间。world 跟着物体，camera 锁在镜头上 */
+        light?: 'world' | 'camera' | string
+        /** draft 或 final */
+        quality?: 'draft' | 'final' | string
         /** 只在根上。screen、print、none，或最小像素 */
         'min-font'?: number | string
         scale?: number | string
@@ -220,6 +228,23 @@ export namespace JSX {
         border?: string
         'border-radius'?: string | number
       }
+    /** 灯。写在开了镜头的 layer 里。不写时用影棚主光和补光。 */
+    light: {
+      type?: 'directional' | 'point' | 'spot' | 'hemisphere' | 'area' | 'ambient' | string
+      color?: string
+      intensity?: number | string
+      x?: number | string
+      y?: number | string
+      z?: number | string
+      target?: string
+      distance?: number | string
+      decay?: number | string
+      angle?: number | string
+      penumbra?: number | string
+      width?: number | string
+      height?: number | string
+      'cast-shadow'?: boolean | string
+    }
     /** 位图画布。width、height 属性是位图尺寸，也是默认布局尺寸。style 里的宽高只改布局。 */
     canvas: LayerPositioned & {
       width?: number | string

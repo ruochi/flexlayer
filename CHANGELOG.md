@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.14.5
+
+Solids and WebGL share one CPU kernel beside the studio raster. Tag solids still shade through that raster, so a default camera keeps `shading`, `lamp`, `neon`, glass, contact shadows, and the pictures from 0.14.4. The kernel adds the draw list, a GLSL ES interpreter, and `pickRay`.
+
+`<light>` on a camera layer writes an author light. The first directional replaces the studio key. `light="world"` keeps that key fixed while the camera orbits. `light="camera"` locks it to the lens. `environment`, `tonemap`, and `quality="draft|final"` are recorded on that layer. `roughness`, `metalness`, `clearcoat`, `transmission`, `ior`, and `emissive` can be written on a solid. `material="matcap:clay"` keeps a baked finish.
+
+WebGL with no matrix projects coordinates inside -1 to 1 through the viewport. A draw that misses the canvas reports `unsupported-webgl`. A straight-line fragment shader that writes `gl_FragColor` runs on the CPU. three.js materials marked `SHADER_TYPE` keep the studio shade.
+
+`flexlayer pick --positions ... --indices ... --from ... --dir ...` prints the closest triangle. `check` and `render` take `--quality draft|final`.
+
+`native/flexlayer-render` for linux-x64-gnu is rebuilt from `flexlayer-render/0.0.2+cap1080` and includes 0.14.4 plus this kernel. darwin-arm64 and win32-x64-msvc stay the 0.14.3 binaries until `npm run build:platforms` exports them.
+
 ## 0.14.4
 
 `brushed` and `metal` stay closer to the written `fill` at a grazing angle, and a dark `fill` no longer falls to black. Their specular bake has an environment floor, and those two finishes use their own exposure. `clay`, `plastic`, and `mirror` are unchanged.
