@@ -1,5 +1,21 @@
 import type { LayerNode } from './parse.js'
 
+/** 预设放在 finish 里。color 盖过 fill。 */
+type MaterialValue =
+  | string
+  | {
+      finish?: string
+      color?: string
+      roughness?: number | string
+      metalness?: number | string
+      clearcoat?: number | string
+      transmission?: number | string
+      ior?: number | string
+      sheen?: number | string
+      anisotropy?: number | string
+      emissive?: string
+    }
+
 /** HTML 用 style；layer 和图形用属性。 */
 type LayerStyle = string | Record<string, string | number | undefined>
 
@@ -130,8 +146,8 @@ type LayerShape = LayerPositioned &
     'fill-rule'?: string
     /** 被挡住的棱。要和 stroke 一起写 */
     hidden?: string
-    /** matte、plastic、metal、glass。不写是磨砂 */
-    material?: string
+    /** finish 是预设。color 盖过 fill */
+    material?: MaterialValue
     /** rotateX()、rotateY()、translateZ()，和同名属性同一套姿态 */
     transform?: string
     stroke?: string
@@ -304,8 +320,8 @@ export namespace JSX {
         head?: number | string
       }
     polyline: LayerGraphic & LayerLinePaint & { points?: string }
-    polygon: LayerGraphic & LayerLinePaint & { points?: string; depth?: number | string; 'fill-rule'?: string; hidden?: string; material?: string; transform?: string }
-    path: LayerGraphic & LayerLinePaint & { d?: string; depth?: number | string; 'fill-rule'?: string; hidden?: string; material?: string; transform?: string }
+    polygon: LayerGraphic & LayerLinePaint & { points?: string; depth?: number | string; 'fill-rule'?: string; hidden?: string; material?: MaterialValue; transform?: string }
+    path: LayerGraphic & LayerLinePaint & { d?: string; depth?: number | string; 'fill-rule'?: string; hidden?: string; material?: MaterialValue; transform?: string }
     sphere: LayerPositioned &
       LayerCenter &
       LayerEffects & {
@@ -319,7 +335,7 @@ export namespace JSX {
         /** 可见线在交叉处把更远的线断开，屏幕像素 */
         halo?: number | string
         /** matte、plastic、metal、glass。不写是磨砂。粗糙度跟在名字后面 */
-        material?: string
+        material?: MaterialValue
         rotate?: number | string
         rotateX?: number | string
         rotateY?: number | string
@@ -345,7 +361,7 @@ export namespace JSX {
         /** 可见线在交叉处把更远的线断开，屏幕像素 */
         halo?: number | string
         /** matte、plastic、metal、glass。不写是磨砂。粗糙度跟在名字后面 */
-        material?: string
+        material?: MaterialValue
         rotate?: number | string
         rotateX?: number | string
         rotateY?: number | string
@@ -366,7 +382,7 @@ export namespace JSX {
         /** 可见线在交叉处把更远的线断开，屏幕像素 */
         halo?: number | string
         /** matte、plastic、metal、glass。不写是磨砂。粗糙度跟在名字后面 */
-        material?: string
+        material?: MaterialValue
         rotate?: number | string
         rotateX?: number | string
         rotateY?: number | string
@@ -386,7 +402,7 @@ export namespace JSX {
         /** 可见线在交叉处把更远的线断开，屏幕像素 */
         halo?: number | string
         /** matte、plastic、metal、glass。不写是磨砂。粗糙度跟在名字后面 */
-        material?: string
+        material?: MaterialValue
         rotate?: number | string
         rotateX?: number | string
         rotateY?: number | string
@@ -410,7 +426,7 @@ export namespace JSX {
         hidden?: string
         /** 可见线在交叉处把更远的线断开，屏幕像素 */
         halo?: number | string
-        material?: string
+        material?: MaterialValue
         rotate?: number | string
         rotateX?: number | string
         rotateY?: number | string
@@ -444,7 +460,7 @@ export namespace JSX {
         hidden?: string
         /** 可见线在交叉处把更远的线断开，屏幕像素 */
         halo?: number | string
-        material?: string
+        material?: MaterialValue
         rotate?: number | string
         rotateX?: number | string
         rotateY?: number | string
@@ -465,7 +481,7 @@ export namespace JSX {
       hidden?: string
       /** 可见线在交叉处把更远的线断开，屏幕像素 */
       halo?: number | string
-      material?: string
+      material?: MaterialValue
     }
     curve: LayerGraphic & LayerLinePaint & { points?: string; closed?: boolean | string }
     h1: LayerHtml

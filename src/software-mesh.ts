@@ -2,6 +2,7 @@ import { createCanvas, type Canvas, type CanvasRenderingContext2D } from '@napi-
 import { MESH_SAMPLES, resolveGrid } from './tri-raster.mjs'
 import { readFileSync, statSync } from 'node:fs'
 import { solidPaint } from './gradient.js'
+import { parseColor } from './gradientField.js'
 import { parseGlb, type GlbPrimitive } from './glb.js'
 import { heldModelPrims } from './three.js'
 import { bevelFewFaces, bevelRadius } from './mesh-bevel.js'
@@ -158,6 +159,13 @@ type Vert = {
 
 function quantGeometry(n: number) {
   return Math.round(n * 1e4) / 1e4
+}
+
+function emissiveBytes(raw: string | undefined): [number, number, number] | null {
+  if (!raw) return null
+  const paint = parseColor(raw)
+  if (!paint) return null
+  return [paint.r, paint.g, paint.b]
 }
 
 type MeshGeometry = { positions: Float32Array; normals: Float32Array; indices: Uint32Array }
@@ -1391,6 +1399,7 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
         const roughness = authored ? authored.roughness : prim.roughness
         const scalars = surfaceScalars(authored, prim)
         const glass = (authored?.kind ?? prim.shade) === 'glass'
+        const glow = authored?.emissive ? emissiveBytes(authored.emissive) : null
         batches.push({
           positions: painted.positions,
           normals: painted.normals,
@@ -1414,9 +1423,9 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
           th: 0,
           albedoMap: prim.map,
           colors: prim.colors,
-          emissiveR: prim.emissive ? byte(prim.emissive[0] * 255) : 0,
-          emissiveG: prim.emissive ? byte(prim.emissive[1] * 255) : 0,
-          emissiveB: prim.emissive ? byte(prim.emissive[2] * 255) : 0,
+          emissiveR: glow ? glow[0] : prim.emissive ? byte(prim.emissive[0] * 255) : 0,
+          emissiveG: glow ? glow[1] : prim.emissive ? byte(prim.emissive[1] * 255) : 0,
+          emissiveB: glow ? glow[2] : prim.emissive ? byte(prim.emissive[2] * 255) : 0,
           toLayer: instance.toLayer,
           originX: o.x,
           originY: o.y,
@@ -1432,6 +1441,7 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
     const clear = node.fill === 'none' || node.fill === 'transparent'
     const fillNone = clear && !glass
     const [r, g, b, a] = fillNone ? [0, 0, 0, 0] : clear ? [255, 255, 255, 0] : fillBytes(node.fill, opacity)
+    const glow = emissiveBytes(node.material?.emissive)
     batches.push({
       positions: painted.positions,
       normals: painted.normals,
@@ -1453,6 +1463,9 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
       texture: null,
       tw: 0,
       th: 0,
+      emissiveR: glow?.[0] ?? 0,
+      emissiveG: glow?.[1] ?? 0,
+      emissiveB: glow?.[2] ?? 0,
       toLayer: instance.toLayer,
       originX: o.x,
       originY: o.y,

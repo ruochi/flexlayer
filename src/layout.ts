@@ -1881,12 +1881,174 @@ const MESH_MATERIALS = new Set(['matte', 'plastic', 'metal', 'glass', 'clay', 'm
 const MESH_ROUGHNESS = { matte: 1, plastic: 0.4, metal: 0.25, glass: 0.08, clay: 1, mirror: 1, brushed: 1, lamp: 1, neon: 1 }
 const MATCAP_ONLY = new Set(['clay', 'mirror', 'brushed'])
 const LIGHTS = new Set(['lamp', 'neon'])
-const MATERIAL_HINT = '写成 clay、plastic、metal、mirror、brushed、glass、lamp 或 neon。不写是磨砂。旧写法可以在 matte、plastic、metal、glass 后面跟粗糙度，例如 material="metal 0.35"'
+const MATERIAL_PARAMS = new Set(['color', 'roughness', 'metalness', 'clearcoat', 'transmission', 'ior', 'sheen', 'anisotropy', 'emissive'])
+const MATERIAL_HINT = '预设写 finish，例如 material="finish metal, color #c6c9ce, roughness 0.28, metalness 1"。color 盖过 fill。不写 finish 是磨砂'
+
+function splitMaterialClauses(text: string): string[] {
+  const out: string[] = []
+  let start = 0
+  let depth = 0
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!
+    if (ch === '(') depth++
+    else if (ch === ')') depth = Math.max(0, depth - 1)
+    else if (ch === ',' && depth === 0) {
+      const clause = text.slice(start, i).trim()
+      if (clause) out.push(clause)
+      start = i + 1
+    }
+  }
+  const last = text.slice(start).trim()
+  if (last) out.push(last)
+  return out
+}
+
+function materialKey(clause: string): string {
+  return clause.split(/\s+/)[0]?.toLowerCase() ?? ''
+}
+
+function readMaterialPhrase(raw: string, ctx: LayoutContext, tag: string): MeshMaterial | undefined {
+  let kind: MeshMaterial['kind'] | undefined
+  const fields: {
+    color?: string
+    roughness?: number
+    metalness?: number
+    clearcoat?: number
+    transmission?: number
+    ior?: number
+    sheen?: number
+    anisotropy?: number
+    emissive?: string
+  } = {}
+  for (const clause of splitMaterialClauses(raw)) {
+    const bits = clause.split(/\s+/).filter((part) => part.length > 0)
+    const key = (bits[0] ?? '').toLowerCase()
+    const rest = bits.slice(1).join(' ')
+    if (key === 'finish' || key === 'matcap') {
+      const name = rest.trim().toLowerCase().replace(/^matcap:/, '')
+      if (!MESH_MATERIALS.has(name)) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: ctx.pathPrefix,
+          message: `${tag} 不认识的 finish: ${rest.trim() || clause}`,
+          hint: MATERIAL_HINT,
+        })
+        continue
+      }
+      if (kind) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: ctx.pathPrefix,
+          message: `${tag} 的 material 写了两个 finish`,
+          hint: MATERIAL_HINT,
+        })
+        continue
+      }
+      kind = name as MeshMaterial['kind']
+      continue
+    }
+    if ((key === 'color' || key === 'emissive' || key === 'ior' || MATERIAL_PARAMS.has(key)) && rest.trim() === '') {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `无法解析 material 的 ${key}: ${clause}`,
+        hint: MATERIAL_HINT,
+      })
+      continue
+    }
+    if (key === 'color' || key === 'emissive') {
+      if (!parseColor(rest)) {
+        ctx.issues.push({
+          level: 'warn',
+          code: 'invalid-attr',
+          path: ctx.pathPrefix,
+          message: `无法解析 material 的 ${key}: ${rest || clause}`,
+          hint: key === 'color' ? '例如 color #c6c9ce' : '例如 emissive #3ad8ff',
+        })
+      } else if (key === 'color') fields.color = rest.trim()
+      else fields.emissive = rest.trim()
+      continue
+    }
+    if (key === 'ior') {
+      fields.ior = readNonNegative(rest, 1.5, ctx, 'ior', '例如 ior 1.5')
+      continue
+    }
+    if (MATERIAL_PARAMS.has(key)) {
+      const value = readUnitInterval(rest, Number.NaN, ctx, key, `例如 ${key} 0.4`)
+      if (!Number.isFinite(value)) continue
+      if (key === 'roughness') fields.roughness = value
+      else if (key === 'metalness') fields.metalness = value
+      else if (key === 'clearcoat') fields.clearcoat = value
+      else if (key === 'transmission') fields.transmission = value
+      else if (key === 'sheen') fields.sheen = value
+      else fields.anisotropy = value
+      continue
+    }
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `${tag} 不认识的 material: ${clause}`,
+      hint: MATERIAL_HINT,
+    })
+  }
+  const physical =
+    fields.roughness != null ||
+    fields.metalness != null ||
+    fields.clearcoat != null ||
+    fields.transmission != null ||
+    fields.ior != null ||
+    fields.sheen != null ||
+    fields.anisotropy != null
+  if (!kind) {
+    if ((fields.transmission ?? 0) >= 0.5) kind = 'glass'
+    else if ((fields.metalness ?? 0) >= 0.5) kind = 'metal'
+    else if (fields.metalness != null || fields.clearcoat != null || fields.sheen != null || fields.anisotropy != null) kind = 'plastic'
+    else kind = 'matte'
+  }
+  if ((MATCAP_ONLY.has(kind) || LIGHTS.has(kind)) && physical) {
+    ctx.issues.push({
+      level: 'warn',
+      code: 'invalid-attr',
+      path: ctx.pathPrefix,
+      message: `${tag} 的 ${kind} 不写粗糙度`,
+      hint: '删掉数字。颜色写在 material 里，例如 finish clay, color #d4cfc4',
+    })
+    return {
+      kind,
+      roughness: MESH_ROUGHNESS[kind],
+      ...(fields.color ? { color: fields.color } : {}),
+      ...(MATCAP_ONLY.has(kind) ? { matcap: kind } : {}),
+      ...(fields.emissive ? { emissive: fields.emissive } : {}),
+    }
+  }
+  const baked = !physical && (MATCAP_ONLY.has(kind) || kind === 'plastic' || kind === 'metal')
+  return {
+    kind,
+    roughness: fields.roughness ?? MESH_ROUGHNESS[kind],
+    ...(fields.color ? { color: fields.color } : {}),
+    ...(baked ? { matcap: kind } : {}),
+    ...(fields.metalness != null ? { metalness: fields.metalness } : {}),
+    ...(fields.clearcoat != null ? { clearcoat: fields.clearcoat } : {}),
+    ...(fields.transmission != null ? { transmission: fields.transmission } : {}),
+    ...(fields.ior != null ? { ior: fields.ior } : {}),
+    ...(fields.sheen != null ? { sheen: fields.sheen } : {}),
+    ...(fields.anisotropy != null ? { anisotropy: fields.anisotropy } : {}),
+    ...(fields.emissive ? { emissive: fields.emissive } : {}),
+  }
+}
 
 function readMeshMaterial(raw: string | undefined, ctx: LayoutContext, tag: string): MeshMaterial | undefined {
   if (raw == null) return undefined
-  const text = raw.trim().toLowerCase()
-  if (text === '' || text === 'none') return undefined
+  const trimmed = raw.trim()
+  if (trimmed === '' || trimmed.toLowerCase() === 'none') return undefined
+  if (splitMaterialClauses(trimmed).some((clause) => materialKey(clause) === 'finish' || materialKey(clause) === 'matcap' || MATERIAL_PARAMS.has(materialKey(clause)))) {
+    return readMaterialPhrase(trimmed, ctx, tag)
+  }
+  const text = trimmed.toLowerCase()
   if (text.startsWith('matcap:')) {
     const finish = text.slice('matcap:'.length)
     if (!MESH_MATERIALS.has(finish)) {
@@ -2368,7 +2530,8 @@ function layoutMesh(node: LayerNode, ctx: LayoutContext): MeshLayoutNode {
     })
   }
   const material = applySurfaceAttrs(readMeshMaterial(node.attrs.material, ctx, node.tag), node, ctx)
-  if (node.attrs.fill == null || node.attrs.fill.trim() === '') {
+  if (material?.color) fill = material.color
+  else if (node.attrs.fill == null || node.attrs.fill.trim() === '') {
     const fallback = material?.matcap ? MATCAP_DEFAULTS[material.matcap] : material ? LIGHT_DEFAULTS[material.kind] : undefined
     if (fallback) fill = fallback
   }

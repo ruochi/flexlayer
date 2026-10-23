@@ -860,12 +860,12 @@
   {
     "name": "material",
     "group": "graphic",
-    "syntax": "clay | plastic | metal | mirror | brushed | lamp | neon | matte | glass [roughness]",
+    "syntax": "finish metal, color #c6c9ce, roughness 0.28, metalness 1",
     "default": null,
-    "example": "metal",
+    "example": "finish metal, color #c6c9ce, roughness 0.28, metalness 1",
     "layerOnly": false,
     "htmlUsesStyle": false,
-    "note": null,
+    "note": "On a solid. finish is clay, plastic, metal, mirror, brushed, glass, lamp, neon, or matte. color replaces fill. roughness, metalness, clearcoat, transmission, ior, sheen, anisotropy, and emissive are the MeshPhysicalMaterial fields",
     "misplacedHint": null
   },
   {

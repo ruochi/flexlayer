@@ -29,6 +29,25 @@ function isPlainData(value: unknown): boolean {
   return Array.isArray(value) || (typeof value === 'object' && value != null)
 }
 
+const MATERIAL_FIELDS = ['finish', 'color', 'roughness', 'metalness', 'clearcoat', 'transmission', 'ior', 'sheen', 'anisotropy', 'emissive']
+
+/** tsx 里的材质对象收成和标记一样的短句。 */
+function formatMaterial(value: Record<string, unknown>): string {
+  const parts: string[] = []
+  const seen = new Set<string>()
+  for (const key of MATERIAL_FIELDS) {
+    const item = value[key]
+    if (item == null || item === false) continue
+    seen.add(key)
+    parts.push(`${key} ${typeof item === 'number' ? String(item) : String(item)}`)
+  }
+  for (const [key, item] of Object.entries(value)) {
+    if (seen.has(key) || item == null || item === false) continue
+    parts.push(`${key} ${String(item)}`)
+  }
+  return parts.join(', ')
+}
+
 /** 构建 Flex Layer 节点。`data` 挂在节点上，不进 `attrs`。`<script>` 的函数子节点记在 `scriptFns`。 */
 export function h(tag: string, props: LayerProps | null, ...children: unknown[]): LayerNode {
   const attrs: Record<string, string> = {}
@@ -62,6 +81,10 @@ export function h(tag: string, props: LayerProps | null, ...children: unknown[])
     if (key === 'object' && isPlainData(value)) {
       modelObject = value
       hasModelObject = true
+      continue
+    }
+    if (key === 'material' && isPlainData(value) && !Array.isArray(value)) {
+      attrs.material = formatMaterial(value as Record<string, unknown>)
       continue
     }
     if (key === 'children' || key === 'key' || key === 'ref') continue

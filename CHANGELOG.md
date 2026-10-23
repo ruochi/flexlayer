@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.15.3
+
+`material` takes the preset and the physical fields together: `finish metal, color #c6c9ce, roughness 0.28, metalness 1`. `color` replaces `fill`. In tsx the same fields are an object, `material={{ finish: "metal", color: "#c6c9ce", roughness: 0.28, metalness: 1 }}`. A bare name such as `material="metal"` still selects that baked finish.
+
 ## 0.15.2
 
 Draft edge smoothing writes only the visible ground. Screen text and key edges stay sharp. `shading="toon"`, `manga`, and `technical` still smooth the whole frame.
