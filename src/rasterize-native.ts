@@ -68,7 +68,7 @@ type Batch = {
   depthWrite: boolean
   castShadow: boolean
   receiveShadow: boolean
-  material: 'lambert' | 'plastic' | 'metal' | 'glass'
+  material: 'lambert' | 'plastic' | 'metal' | 'glass' | 'lamp' | 'neon'
   roughness: number
   matcap?: string | null
   texture: Uint8ClampedArray | null

@@ -13,6 +13,7 @@ Each picture is a grid. The label under a cell is the attribute name. Sources ar
 | [text.png](gallery/text.png) | Title size, wrapping at `max-width`, flex gap, `writing-mode:vertical-rl` |
 | [flex.png](gallery/flex.png) | A tag cloud with `flex-wrap`, and a card grid with `column-gap` / `row-gap` |
 | [matcaps.png](gallery/matcaps.png) | `clay`, `plastic`, `metal`, `mirror`, `brushed`. The top row is the finish color. The bottom row is the same finish with `fill` |
+| [lighting.png](gallery/lighting.png) | Contact-hardening ground shadow, color bleed, `lamp`, `neon`, and a glass tint |
 
 The smallest forms:
 
