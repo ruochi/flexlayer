@@ -254,7 +254,9 @@ describe('软件光栅', () => {
     expect(at(100, 100)).toBeGreaterThan(250)
     expect(at(8, 8)).toBeLessThan(8)
     expect(soft).toBeGreaterThan(80)
-    expect(hard).toBeLessThan(8)
+    // Coverage still softens most columns. A diagonal can stay a 0-to-255
+    // step: edge smoothing no longer repaints the mesh.
+    expect(hard).toBeLessThan(soft)
   })
 
   it('旋转后的网格描边沿斜边有过渡', async () => {
