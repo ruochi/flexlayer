@@ -49,8 +49,8 @@ async function prepareDocument(source: string | LayerNode, options: RenderOption
   const baseDir = options.baseDir ?? process.cwd()
   const opened = readLayerRoot(source)
   const assets = await prepareAssets(opened.root, baseDir, { fonts: opened.fonts })
-  const doc = layoutSync(opened.root, assets)
-  if (options.quality) doc.root.quality = options.quality
+  const doc = layoutSync(opened.root, assets, options.quality)
+  applyDocumentQuality(doc.root, options.quality)
   await applyCanvasScripts(doc, {
     t: options.t ?? 0,
     frame: options.frame ?? 0,
@@ -59,6 +59,25 @@ async function prepareDocument(source: string | LayerNode, options: RenderOption
     noScript: options.noScript,
   })
   return { doc, baseDir, options }
+}
+
+/** `--quality` 和根上的 quality 传给还没写质量档的镜头。镜头自己写了的不动。 */
+export function inheritQuality(node: LayoutNode, quality: 'draft' | 'final' | undefined): void {
+  if (!quality) return
+  if (node.kind === 'layer') {
+    if (node.perspective != null && node.quality == null) node.quality = quality
+    for (const child of node.children) inheritQuality(child, quality)
+    if (node.mask) for (const child of node.mask) inheritQuality(child, quality)
+    return
+  }
+  if (node.kind === 'flex' || node.kind === 'group') {
+    for (const child of node.children) inheritQuality(child, quality)
+  }
+}
+
+function applyDocumentQuality(root: LayerLayoutNode, override: 'draft' | 'final' | undefined): void {
+  if (override) root.quality = override
+  inheritQuality(root, override ?? root.quality)
 }
 
 function hasCustomPixel(node: LayoutNode): boolean {
@@ -228,7 +247,8 @@ export async function renderPreview(source: string | LayerNode, options: RenderO
   const baseDir = options.baseDir ?? process.cwd()
   const opened = readLayerRoot(source)
   const assets = await prepareAssets(opened.root, baseDir, { fonts: opened.fonts })
-  const doc = layoutSync(opened.root, assets)
+  const doc = layoutSync(opened.root, assets, options.quality)
+  applyDocumentQuality(doc.root, options.quality)
   const native = loadNativeRender()
   if (!native?.previewSheet || !native.render) {
     throw new Error('预览拼图需要带 previewSheet 的 flexlayer-render。')
@@ -256,8 +276,8 @@ export async function checkLayer(source: string | LayerNode, options: RenderOpti
   const baseDir = options.baseDir ?? process.cwd()
   const opened = readLayerRoot(source)
   const assets = await prepareAssets(opened.root, baseDir, { fonts: opened.fonts })
-  const doc = layoutSync(opened.root, assets)
-  if (options.quality) doc.root.quality = options.quality
+  const doc = layoutSync(opened.root, assets, options.quality)
+  applyDocumentQuality(doc.root, options.quality)
   await applyCanvasScripts(doc, {
     t: options.t ?? 0,
     frame: options.frame ?? 0,

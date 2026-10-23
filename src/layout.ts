@@ -163,6 +163,8 @@ export type LayoutContext = {
   previews: PreviewSpec[]
   /** 祖先已经打开镜头。这一层不写 camera 时不再另开默认镜头。 */
   ancestorCamera?: boolean
+  /** 根上的质量档，或这次渲染覆盖进来的值。镜头自己没写 quality 时用它。 */
+  sceneQuality?: 'draft' | 'final'
 }
 
 function isClosedFlag(raw: string | undefined): boolean {
@@ -3923,6 +3925,37 @@ function readLights(children: LayerNode[], ctx: LayoutContext): LightSpec[] {
   return lights
 }
 
+function parseQuality(raw: string | undefined): 'draft' | 'final' | undefined {
+  const text = raw?.trim().toLowerCase()
+  if (text === 'draft' || text === 'final') return text
+  return undefined
+}
+
+/** 根上的 quality 是整页的默认档，即使根自己没有镜头。其余层仍必须开了镜头才收。 */
+function readLayerQuality(raw: string | undefined, hostsCamera: boolean, isRoot: boolean, ctx: LayoutContext): 'draft' | 'final' | undefined {
+  if (isRoot && !hostsCamera) {
+    if (raw == null || raw.trim() === '') return undefined
+    const parsed = parseQuality(raw)
+    if (!parsed) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `无法解析 quality: ${raw}`,
+        hint: '写成 draft 或 final',
+      })
+    }
+    return parsed
+  }
+  return readCameraChoice(raw, ['draft', 'final'], 'quality', hostsCamera, ctx, '写成 draft 或 final') as 'draft' | 'final' | undefined
+}
+
+function layerQuality(authored: 'draft' | 'final' | undefined, hostsCamera: boolean, ctx: LayoutContext): 'draft' | 'final' | undefined {
+  if (authored) return authored
+  if (!hostsCamera) return undefined
+  return ctx.sceneQuality
+}
+
 function readCameraChoice(
   raw: string | undefined,
   allowed: readonly string[],
@@ -4011,7 +4044,7 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
   const sceneShading = readSceneShading(node.attrs.shading, hostsCamera, ctx)
   const tonemap = readCameraChoice(node.attrs.tonemap, ['neutral', 'agx', 'none'], 'tonemap', hostsCamera, ctx, '写成 neutral、agx 或 none')
   const lightSpace = readCameraChoice(node.attrs.light, ['world', 'camera'], 'light', hostsCamera, ctx, '写成 world 或 camera。world 让影子跟着物体，camera 把主光锁在镜头上')
-  const quality = readCameraChoice(node.attrs.quality, ['draft', 'final'], 'quality', true, ctx, '写成 draft 或 final')
+  const quality = readLayerQuality(node.attrs.quality, hostsCamera, ctx.pathPrefix === 'layer', ctx)
   let environment: string | undefined
   const rawEnvironment = node.attrs.environment?.trim()
   if (rawEnvironment) {
@@ -4254,6 +4287,7 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
       hint: '把 view 收到子元素转完、缩完的范围内，或把舞台加大。取景窗没被盖住时，成片会露底',
     })
   }
+  const chosenQuality = layerQuality(quality, hostsCamera || perspective != null, ctx)
   const laid: LayerLayoutNode = {
     kind: 'layer',
     path: ctx.pathPrefix,
@@ -4282,7 +4316,7 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
     ...(environment ? { environment } : {}),
     ...(tonemap && tonemap !== 'neutral' ? { tonemap: tonemap as 'agx' | 'none' } : {}),
     ...(lightSpace ? { lightSpace: lightSpace as 'world' | 'camera' } : {}),
-    ...(quality ? { quality: quality as 'draft' | 'final' } : {}),
+    ...(chosenQuality ? { quality: chosenQuality } : {}),
     ...sharpOf(node.attrs, ctx),
     ...(preserve.value ? { preserve3d: true } : {}),
     ...(mask ? { mask } : {}),
@@ -4573,7 +4607,7 @@ export function readLayerRoot(source: string | LayerNode): { root: LayerNode; fo
 }
 
 /** 同步排版。字体、图片和 Yoga 由 prepareAssetsSync 记住，多帧不会重新准备。 */
-export function layoutSync(rootNode: LayerNode, assets: LayoutAssets): LayerDocument {
+export function layoutSync(rootNode: LayerNode, assets: LayoutAssets, quality?: 'draft' | 'final'): LayerDocument {
   installAuthorFeaturesSync(rootNode)
   const baseDir = assets.baseDir
   const attrs = rootNode.attrs
@@ -4618,6 +4652,7 @@ export function layoutSync(rootNode: LayerNode, assets: LayoutAssets): LayerDocu
     baseDir,
     sources,
     previews: [],
+    sceneQuality: quality ?? parseQuality(attrs.quality),
   }
   track(paintCtx, 'layer', rootNode)
   if (isGradient(color)) {
