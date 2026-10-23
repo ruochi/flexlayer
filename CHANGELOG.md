@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.15.3
+
+Draft ground shadows are painted from the contact map. A contact line sits under the body, and the cast shadow hardens where the caster meets the ground. The pale penumbra is still smoothed. A contact ramp that is already dark is left alone, so the chassis does not lift it. A one-pixel cliff between ground pixels is still pulled into midtones.
+
+`native/flexlayer-render` for linux-x64-gnu is rebuilt. darwin-arm64 and win32-x64-msvc stay the previous binaries until `npm run build:platforms` exports them.
+
 ## 0.15.2
 
 Draft edge smoothing writes only the visible ground. Screen text and key edges stay sharp. `shading="toon"`, `manga`, and `technical` still smooth the whole frame.
