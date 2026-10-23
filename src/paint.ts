@@ -1,1 +1,2521 @@
-export * from '../native/flexlayer-render/draw/paint.mjs'
+import {
+  createCanvas,
+  type Canvas,
+  type CanvasRenderingContext2D,
+  type SKRSContext2D,
+} from '@napi-rs/canvas'
+
+/** 运行时就是这份上下文。标准 2D 类型没有 `drawImage`。 */
+type PaintCtx = SKRSContext2D
+import { applyCanvasFont } from './fonts.js'
+import { planLinePaint, runOpacity, segmentNeedsPaint } from './text.js'
+import { backdropFilters, filtersPad, getFilter, orderedFilters } from './filter.js'
+import { fitImageRect } from './image.js'
+import { canvasPaint, isGradient } from './gradient.js'
+import { gradientStyle, isGradientPaint, type GradientBox } from './gradientField.js'
+import { absoluteNodeMatrix, apply, applyToBox, IDENTITY, intersectBox, invert, isIdentity, multiply, originOffset, translated, type Matrix } from './matrix.js'
+import { openSvgPath } from './path.js'
+import { cameraItems, projectOnLayer } from './camera.js'
+import { ownsMeshScene, renderMeshLayer, type MeshFrame } from './mesh.js'
+import { applyPoseMatrix, behindCamera, cameraSceneCustom, drawSolidPolygon, drawTexturedPlane, drawTexturedPolygon, has3dPose, hasPerspective, PERSPECTIVE_AA, planeDepth, posePoint, project, resolveSamples, type Perspective, type ScreenPoint } from './perspective.js'
+import { flatFill, planeBitmapPad, visiblePlaneWindow, type PlaneCorner } from './plane-crop.js'
+import { borderQuads, clampCornersNative, roundRectCommands, roundedCornerCommands } from './rasterize-native.js'
+import { compositeMask } from './mask-compose.js'
+import { anyCorner, borderEdges, colorFilterToCss, contentInsets, cornerRadiiOf, flexContentInset, growCorners, hasBorder, outerInkStrokeReach, overflowClips, shadowLayers, uniformBorderSide, uniformRadius, type Edges } from './style.js'
+import { layoutScale, viewMatrix } from './view.js'
+import { unionBoxes, type AppliedFilter, type Box,
+  type ColorFilterSpec,
+  GlassSpec,
+  GlowSpec,
+  CanvasLayoutNode,
+  CornerRadii,
+  ImageLayoutNode,
+  InkStrokeSpec,
+  LayerLayoutNode,
+  LayoutNode,
+  type MaskOpReport,
+  LineLayoutNode,
+  NoiseSpec,
+  OverlaySpec,
+  ShadowSpec,
+  ShapeLayoutNode,
+  TextLayoutNode,
+  type Issue,
+} from './types.js'
+export type PaintOptions = {
+  width: number
+  height: number
+  background: string
+  scale: number
+  debug: boolean
+  t: number
+  frame?: number
+  fps?: number
+  /** 脚本问题写到这里，不中断其余内容。 */
+  issues?: Issue[]
+  /** 网格超采样。1、2 或 4，缺省 4。 */
+  meshSamples?: 1 | 2 | 4
+  /** 网格场景缓存上限，字节。false 关闭。 */
+  meshCache?: number | false
+}
+
+export type PaintState = {
+  canvasWidth: number
+  canvasHeight: number
+  meshFrames?: Map<LayerLayoutNode, MeshFrame>
+  frame: number
+  fps: number
+  issues: Issue[]
+  /** 平面位图的超采样倍数。blur 按这个倍数画进位图，缩回后仍是作者写的半径。 */
+  supersample?: number
+}
+
+const SILHOUETTE = '#000000'
+
+function paintOf(
+  ctx: CanvasRenderingContext2D,
+  value: string,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  pad = 0,
+) {
+  if (isGradientPaint(value)) {
+    const box: GradientBox = { x, y, width: w, height: h }
+    return gradientStyle(ctx, value, box, pad)
+  }
+  return canvasPaint(ctx, value, x, y, w, h)
+}
+
+function shapePad(node: ShapeLayoutNode): number {
+  return node.stroke !== 'none' && node.strokeWidth > 0 ? node.strokeWidth / 2 + 2 : 1
+}
+
+function linePad(node: LineLayoutNode): number {
+  const stroked = node.stroke !== 'none' && node.strokeWidth > 0
+  if (!stroked) return 1
+  let pad = node.strokeWidth / 2 + 2
+  return pad
+}
+
+type PathCmd = { op: string; x: number; y: number; w: number; h: number; start: number; end: number }
+
+function replayPath(ctx: CanvasRenderingContext2D, commands: PathCmd[]) {
+  for (const cmd of commands) {
+    if (cmd.op === 'begin') ctx.beginPath()
+    else if (cmd.op === 'rect') ctx.rect(cmd.x, cmd.y, cmd.w, cmd.h)
+    else if (cmd.op === 'arc') ctx.arc(cmd.x, cmd.y, cmd.w, cmd.start, cmd.end)
+    else if (cmd.op === 'move') ctx.moveTo(cmd.x, cmd.y)
+    else if (cmd.op === 'line') ctx.lineTo(cmd.x, cmd.y)
+    else if (cmd.op === 'ellipse') ctx.ellipse(cmd.x, cmd.y, cmd.w, cmd.h, 0, cmd.start, cmd.end)
+    else if (cmd.op === 'close') ctx.closePath()
+  }
+}
+
+function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, rx: number, ry = rx) {
+  replayPath(ctx, roundRectCommands(x, y, w, h, rx, ry))
+}
+
+/** 相邻圆角加起来超过边长时，按 CSS 把四个角一起缩小。 */
+function clampCorners(w: number, h: number, radii: CornerRadii): CornerRadii {
+  const next = clampCornersNative(w, h, radii.topLeft, radii.topRight, radii.bottomRight, radii.bottomLeft)
+  return { topLeft: next.topLeft, topRight: next.topRight, bottomRight: next.bottomRight, bottomLeft: next.bottomLeft }
+}
+
+/** 四角相同走原来的胶囊路径。分角时每个角用自己的半径。 */
+function traceRoundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, radii: CornerRadii) {
+  const uniform = uniformRadius(radii)
+  if (uniform != null) {
+    roundRectPath(ctx, x, y, w, h, uniform)
+    return
+  }
+  const r = clampCorners(w, h, radii)
+  if (!anyCorner(r)) {
+    ctx.beginPath()
+    ctx.rect(x, y, w, h)
+    return
+  }
+  replayPath(ctx, roundedCornerCommands(x, y, w, h, r.topLeft, r.topRight, r.bottomRight, r.bottomLeft))
+}
+
+function clipRoundedBox(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, node: { borderRadius?: number; corners?: CornerRadii }) {
+  const radii = cornerRadiiOf(node)
+  if (anyCorner(radii)) traceRoundedRect(ctx, x, y, w, h, radii)
+  else {
+    ctx.beginPath()
+    ctx.rect(x, y, w, h)
+  }
+  ctx.clip()
+}
+
+function drawBorderSides(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, border: NonNullable<LayoutNode['border']>, radii: CornerRadii) {
+  const e: Edges = borderEdges(border)
+  ctx.save()
+  if (anyCorner(radii)) {
+    traceRoundedRect(ctx, x, y, w, h, radii)
+    ctx.clip()
+  }
+  const fillSide = (color: string, width: number, path: () => void) => {
+    if (width <= 0) return
+    ctx.beginPath()
+    path()
+    ctx.fillStyle = color
+    ctx.fill()
+  }
+  const quads = borderQuads(x, y, w, h, e.top, e.right, e.bottom, e.left)
+  const sides = [border.top, border.right, border.bottom, border.left]
+  const widths = [e.top, e.right, e.bottom, e.left]
+  sides.forEach((side, index) => {
+    const q = quads[index]!
+    fillSide(side.color, widths[index]!, () => {
+      ctx.moveTo(q.x0, q.y0)
+      ctx.lineTo(q.x1, q.y1)
+      ctx.lineTo(q.x2, q.y2)
+      ctx.lineTo(q.x3, q.y3)
+      ctx.closePath()
+    })
+  })
+  ctx.restore()
+}
+
+function drawBoxChrome(ctx: CanvasRenderingContext2D, node: LayoutNode) {
+  const radii = cornerRadiiOf(node)
+  const rounded = anyCorner(radii)
+  if (node.background && node.background !== 'transparent') {
+    ctx.fillStyle = paintOf(ctx, node.background, node.x, node.y, node.width, node.height)
+    if (rounded) {
+      traceRoundedRect(ctx, node.x, node.y, node.width, node.height, radii)
+      ctx.fill()
+    } else {
+      ctx.fillRect(node.x, node.y, node.width, node.height)
+    }
+  }
+  const uniform = uniformBorderSide(node.border)
+  if (uniform) {
+    ctx.strokeStyle = uniform.color
+    ctx.lineWidth = uniform.width
+    if (rounded) {
+      traceRoundedRect(ctx, node.x, node.y, node.width, node.height, radii)
+      ctx.stroke()
+    } else {
+      ctx.strokeRect(node.x + uniform.width / 2, node.y + uniform.width / 2, node.width - uniform.width, node.height - uniform.width)
+    }
+  } else if (hasBorder(node.border) && node.border) {
+    drawBorderSides(ctx, node.x, node.y, node.width, node.height, node.border, radii)
+  }
+}
+
+function drawImageNode(ctx: PaintCtx, node: ImageLayoutNode, recolor?: string) {
+  const inset = contentInsets(node.padding, node.border)
+  const boxX = node.x + inset.left
+  const boxY = node.y + inset.top
+  const boxW = node.width - inset.left - inset.right
+  const boxH = node.height - inset.top - inset.bottom
+  const bitmap = node.bitmap
+  if (!bitmap || boxW <= 0 || boxH <= 0) return
+  const dest = fitImageRect(boxW, boxH, bitmap.width, bitmap.height, node.objectFit, node.objectPosition)
+  ctx.save()
+  if (anyCorner(cornerRadiiOf(node)) || node.overflow === 'hidden') {
+    clipRoundedBox(ctx, node.x, node.y, node.width, node.height, node)
+  }
+  ctx.beginPath()
+  ctx.rect(boxX, boxY, boxW, boxH)
+  ctx.clip()
+  if (node.maskPick) ctx.imageSmoothingEnabled = false
+  if (recolor) {
+    const tw = Math.max(1, Math.ceil(boxW))
+    const th = Math.max(1, Math.ceil(boxH))
+    const off = createCanvas(tw, th)
+    const octx = off.getContext('2d')
+    octx.drawImage(bitmap, dest.x, dest.y, dest.width, dest.height)
+    octx.globalCompositeOperation = 'source-in'
+    octx.fillStyle = recolor
+    octx.fillRect(0, 0, tw, th)
+    ctx.drawImage(off, boxX, boxY, boxW, boxH)
+  } else {
+    ctx.drawImage(bitmap, boxX + dest.x, boxY + dest.y, dest.width, dest.height)
+  }
+  ctx.restore()
+}
+
+type PaintBox = { x: number; y: number; width: number; height: number }
+
+/** 单行蒙版的设备像素上限。更大时退回直接填充，避免一张离屏盖住整页。 */
+const TEXT_MASK_LIMIT = 8192
+
+function samePaint(a: string | undefined, b: string | undefined): boolean {
+  return (a ?? '').trim() === (b ?? '').trim()
+}
+
+/** 写在文字盒子上的 fill 按整段盒子取样；行内自己的 fill 用调用方给出的行盒。 */
+function textPaintBox(node: TextLayoutNode, paint: string, fragment: PaintBox): PaintBox {
+  const declared = node.style.fill?.trim()
+  if (declared && samePaint(declared, paint) && node.width > 0 && node.height > 0) {
+    return { x: node.x, y: node.y, width: node.width, height: node.height }
+  }
+  return fragment
+}
+
+function runBox(
+  segments: Array<{ x: number; width: number; style: { color: string; background?: string; fill?: string } }>,
+  index: number,
+  valueAt: (style: { color: string; background?: string; fill?: string }) => string | undefined,
+  contentX: number,
+  offsetX: number,
+  lineTop: number,
+  lineHeight: number,
+): PaintBox {
+  const value = valueAt(segments[index]!.style)
+  let start = index
+  while (start > 0 && samePaint(valueAt(segments[start - 1]!.style), value)) start--
+  let end = index + 1
+  while (end < segments.length && samePaint(valueAt(segments[end]!.style), value)) end++
+  let minX = Infinity
+  let maxX = -Infinity
+  for (let i = start; i < end; i++) {
+    const x = contentX + offsetX + segments[i]!.x
+    minX = Math.min(minX, x)
+    maxX = Math.max(maxX, x + segments[i]!.width)
+  }
+  return {
+    x: Number.isFinite(minX) ? minX : contentX + offsetX,
+    y: lineTop,
+    width: Math.max((Number.isFinite(maxX) ? maxX : minX + 1) - minX, 1),
+    height: Math.max(lineHeight, 1),
+  }
+}
+
+/**
+ * 渐变不要直接交给 fillText。倍率不是 1 时，着色器会把字画偏，并且缩成大约一半。
+ * 字形先画成实色蒙版，渐变只铺在矩形上，再按设备像素 1:1 贴回当前画布。
+ */
+function fillTextPaint(
+  ctx: PaintCtx,
+  text: string,
+  x: number,
+  baseline: number,
+  color: string,
+  box: PaintBox,
+  fontSize: number,
+) {
+  if (!text || !isGradient(color)) {
+    ctx.fillStyle = color
+    ctx.fillText(text, x, baseline)
+    return
+  }
+  const metrics = ctx.measureText(text)
+  const pad = Math.max(4, fontSize * 0.2)
+  const left = metrics.actualBoundingBoxLeft
+  const right = metrics.actualBoundingBoxRight > 0 ? metrics.actualBoundingBoxRight : metrics.width
+  const ascent = metrics.actualBoundingBoxAscent > 0 ? metrics.actualBoundingBoxAscent : fontSize * 0.8
+  const descent = metrics.actualBoundingBoxDescent > 0 ? metrics.actualBoundingBoxDescent : fontSize * 0.2
+  const gx = x - left - pad
+  const gy = baseline - ascent - pad
+  const gw = Math.max(1, left + right + pad * 2)
+  const gh = Math.max(1, ascent + descent + pad * 2)
+  const tr = ctx.getTransform()
+  const corners: Array<[number, number]> = [
+    [gx, gy],
+    [gx + gw, gy],
+    [gx + gw, gy + gh],
+    [gx, gy + gh],
+  ]
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const [px, py] of corners) {
+    const dx = tr.a * px + tr.c * py + tr.e
+    const dy = tr.b * px + tr.d * py + tr.f
+    minX = Math.min(minX, dx)
+    minY = Math.min(minY, dy)
+    maxX = Math.max(maxX, dx)
+    maxY = Math.max(maxY, dy)
+  }
+  const ox = Math.floor(minX) - 1
+  const oy = Math.floor(minY) - 1
+  const dw = Math.ceil(maxX) - ox + 1
+  const dh = Math.ceil(maxY) - oy + 1
+  if (!(dw > 0) || !(dh > 0) || dw > TEXT_MASK_LIMIT || dh > TEXT_MASK_LIMIT || dw * dh > 8_000_000) {
+    ctx.fillStyle = paintOf(ctx, color, box.x, box.y, Math.max(box.width, 1), Math.max(box.height, 1))
+    ctx.fillText(text, x, baseline)
+    return
+  }
+  const mask = createCanvas(dw, dh)
+  const mctx = mask.getContext('2d')
+  mctx.setTransform(tr.a, tr.b, tr.c, tr.d, tr.e - ox, tr.f - oy)
+  mctx.font = ctx.font
+  mctx.fontVariationSettings = ctx.fontVariationSettings
+  mctx.letterSpacing = ctx.letterSpacing
+  mctx.textAlign = ctx.textAlign
+  mctx.textBaseline = ctx.textBaseline
+  mctx.direction = ctx.direction
+  mctx.fillStyle = '#000000'
+  mctx.fillText(text, x, baseline)
+
+  const off = createCanvas(dw, dh)
+  const octx = off.getContext('2d')
+  octx.setTransform(tr.a, tr.b, tr.c, tr.d, tr.e - ox, tr.f - oy)
+  octx.fillStyle = paintOf(octx, color, box.x, box.y, Math.max(box.width, 1), Math.max(box.height, 1))
+  octx.fillRect(gx, gy, gw, gh)
+  octx.setTransform(1, 0, 0, 1, 0, 0)
+  octx.globalCompositeOperation = 'destination-in'
+  octx.drawImage(mask, 0, 0)
+
+  ctx.save()
+  try {
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.imageSmoothingEnabled = false
+    ctx.drawImage(off, ox, oy)
+  } finally {
+    ctx.restore()
+  }
+}
+
+function drawTextRun(
+  ctx: PaintCtx,
+  text: string,
+  x: number,
+  width: number,
+  baseline: number,
+  color: string,
+  box: PaintBox,
+  fontSize: number,
+  underline: boolean,
+  inkColor: string | undefined,
+) {
+  if (!text) return
+  fillTextPaint(ctx, text, x, baseline, color, box, fontSize)
+  if (!underline) return
+  const y = baseline + Math.max(1, fontSize * 0.12)
+  ctx.strokeStyle = !inkColor && isGradient(color) ? paintOf(ctx, color, box.x, box.y, Math.max(box.width, 1), Math.max(box.height, 1)) : color
+  ctx.lineWidth = Math.max(1, fontSize / 16)
+  ctx.beginPath()
+  ctx.moveTo(x, y)
+  ctx.lineTo(x + width, y)
+  ctx.stroke()
+}
+
+function drawTextNode(ctx: PaintCtx, node: TextLayoutNode, inkColor?: string) {
+  const inset = contentInsets(node.padding, node.border)
+  const contentX = node.x + inset.left
+  const contentY = node.y + inset.top
+  const innerW = node.width - inset.left - inset.right
+  for (const line of node.textLayout.lines) {
+    let offsetX = 0
+    if (node.textAlign === 'center') offsetX = (innerW - line.width) / 2
+    if (node.textAlign === 'right') offsetX = innerW - line.width
+    const lineTop = contentY + line.y
+    const drawPlain = (segIndex: number) => {
+      const seg = line.segments[segIndex]!
+      const x = contentX + offsetX + seg.x
+      const glyphRun = runBox(line.segments, segIndex, (style) => style.fill?.trim() || style.color, contentX, offsetX, lineTop, line.height)
+      const backgroundRun = runBox(line.segments, segIndex, (style) => style.background, contentX, offsetX, lineTop, line.height)
+      const background = seg.style.background
+      if (!inkColor && background && background !== 'transparent' && background !== 'none' && seg.width > 0 && line.height > 0) {
+        ctx.fillStyle = paintOf(ctx, background, backgroundRun.x, backgroundRun.y, backgroundRun.width, backgroundRun.height)
+        ctx.fillRect(x, lineTop, seg.width, line.height)
+      }
+      if (!seg.text) return
+      applyCanvasFont(ctx, seg.style.fontFamily, seg.style.fontWeight, seg.style.fontSize, seg.style.fontStyle)
+      ctx.letterSpacing = `${seg.style.letterSpacing}px`
+      const color = inkColor ?? seg.style.fill ?? seg.style.color
+      const box = inkColor ? glyphRun : textPaintBox(node, color, glyphRun)
+      drawTextRun(ctx, seg.text, x, seg.width, contentY + line.baselineY, color, box, seg.style.fontSize, seg.style.underline === true, inkColor)
+    }
+    for (let segIndex = 0; segIndex < line.segments.length; ) {
+      if (!segmentNeedsPaint(line.segments[segIndex]!.style)) {
+        drawPlain(segIndex)
+        segIndex += 1
+        continue
+      }
+      let end = segIndex + 1
+      while (end < line.segments.length && segmentNeedsPaint(line.segments[end]!.style)) end += 1
+      const ox = contentX + offsetX
+      const groups = planLinePaint(line.segments.slice(segIndex, end), line.baselineY, line.y, line.height)
+      for (const group of groups) {
+        ctx.save()
+        ctx.translate(ox, contentY)
+        if (group.moves) ctx.transform(group.matrix.a, group.matrix.b, group.matrix.c, group.matrix.d, group.matrix.e, group.matrix.f)
+        const opacity = runOpacity(group.style)
+        if (opacity !== 1) ctx.globalAlpha *= opacity
+        for (const piece of group.pieces) {
+          const background = piece.style.background
+          if (!inkColor && background && background !== 'transparent' && background !== 'none' && piece.width > 0 && line.height > 0) {
+            ctx.fillStyle = paintOf(ctx, background, piece.x, line.y, piece.width, line.height)
+            ctx.fillRect(piece.x, line.y, piece.width, line.height)
+          }
+          if (!piece.text.trim()) continue
+          applyCanvasFont(ctx, piece.style.fontFamily, piece.style.fontWeight, piece.style.fontSize, piece.style.fontStyle)
+          ctx.letterSpacing = `${piece.style.letterSpacing}px`
+          const color = inkColor ?? piece.style.fill ?? piece.style.color
+          const box = { x: piece.x, y: line.y, width: Math.max(piece.width, 1), height: Math.max(line.height, 1) }
+          drawTextRun(ctx, piece.text, piece.x, piece.width, line.baselineY, color, box, piece.style.fontSize, piece.style.underline === true, inkColor)
+        }
+        ctx.restore()
+      }
+      segIndex = end
+    }
+  }
+  for (const image of node.inlines ?? []) {
+    const placed = { ...image, x: node.x + image.x, y: node.y + image.y }
+    drawBoxChrome(ctx, placed)
+    drawImageNode(ctx, placed)
+  }
+}
+
+function strokeDashed(ctx: CanvasRenderingContext2D, dash: number[] | undefined, offset: number | undefined, draw: () => void) {
+  if (dash?.length) {
+    ctx.setLineDash(dash)
+    ctx.lineDashOffset = offset ?? 0
+  }
+  draw()
+  if (dash?.length) {
+    ctx.setLineDash([])
+    ctx.lineDashOffset = 0
+  }
+}
+
+function drawShape(ctx: CanvasRenderingContext2D, node: ShapeLayoutNode) {
+  const x = node.x
+  const y = node.y
+  const pad = shapePad(node)
+  if (node.shape === 'rect') {
+    const rx = node.rx ?? 0
+    const ry = node.ry ?? rx
+    if (rx > 0 || ry > 0) {
+      roundRectPath(ctx, x, y, node.width, node.height, rx, ry)
+      if (node.fill !== 'none') {
+        ctx.fillStyle = paintOf(ctx, node.fill, node.x, node.y, node.width, node.height, pad)
+        ctx.fill()
+      }
+      if (node.stroke !== 'none') {
+        ctx.strokeStyle = paintOf(ctx, node.stroke, node.x, node.y, node.width, node.height, pad)
+        ctx.lineWidth = node.strokeWidth
+        strokeDashed(ctx, node.dash, node.dashOffset, () => ctx.stroke())
+      }
+    } else {
+      if (node.fill !== 'none') {
+        ctx.fillStyle = paintOf(ctx, node.fill, node.x, node.y, node.width, node.height, pad)
+        ctx.fillRect(x, y, node.width, node.height)
+      }
+      if (node.stroke !== 'none') {
+        ctx.strokeStyle = paintOf(ctx, node.stroke, node.x, node.y, node.width, node.height, pad)
+        ctx.lineWidth = node.strokeWidth
+        strokeDashed(ctx, node.dash, node.dashOffset, () => ctx.strokeRect(x, y, node.width, node.height))
+      }
+    }
+  } else if (node.shape === 'circle') {
+    ctx.beginPath()
+    ctx.arc(x + node.width / 2, y + node.height / 2, node.r ?? node.width / 2, 0, Math.PI * 2)
+    if (node.fill !== 'none') {
+      ctx.fillStyle = paintOf(ctx, node.fill, node.x, node.y, node.width, node.height, pad)
+      ctx.fill()
+    }
+    if (node.stroke !== 'none') {
+      ctx.strokeStyle = paintOf(ctx, node.stroke, node.x, node.y, node.width, node.height, pad)
+      ctx.lineWidth = node.strokeWidth
+      strokeDashed(ctx, node.dash, node.dashOffset, () => ctx.stroke())
+    }
+  } else {
+    ctx.beginPath()
+    ctx.ellipse(
+      x + node.width / 2,
+      y + node.height / 2,
+      node.rxEllipse ?? node.width / 2,
+      node.ry ?? node.height / 2,
+      0,
+      0,
+      Math.PI * 2,
+    )
+    if (node.fill !== 'none') {
+      ctx.fillStyle = paintOf(ctx, node.fill, node.x, node.y, node.width, node.height, pad)
+      ctx.fill()
+    }
+    if (node.stroke !== 'none') {
+      ctx.strokeStyle = paintOf(ctx, node.stroke, node.x, node.y, node.width, node.height, pad)
+      ctx.lineWidth = node.strokeWidth
+      strokeDashed(ctx, node.dash, node.dashOffset, () => ctx.stroke())
+    }
+  }
+}
+
+function drawLine(ctx: CanvasRenderingContext2D, node: LineLayoutNode, silhouette = false, spread = 0) {
+  ctx.save()
+  ctx.translate(node.x, node.y)
+  const stroked = node.stroke !== 'none' && node.strokeWidth > 0
+  const lineWidth = silhouette ? Math.max(0.5, node.strokeWidth + spread * 2) : node.strokeWidth
+  const pad = linePad(node)
+  if (silhouette) {
+    ctx.strokeStyle = SILHOUETTE
+    ctx.fillStyle = SILHOUETTE
+    ctx.lineWidth = lineWidth
+  } else if (stroked) {
+    ctx.strokeStyle = paintOf(ctx, node.stroke, 0, 0, node.width, node.height, pad)
+    ctx.fillStyle = paintOf(ctx, node.stroke, 0, 0, node.width, node.height, pad)
+    ctx.lineWidth = node.strokeWidth
+  }
+  ctx.lineCap = node.strokeLinecap ?? 'round'
+  ctx.lineJoin = node.strokeLinejoin ?? 'round'
+  if (node.dash?.length) {
+    ctx.setLineDash(node.dash)
+    ctx.lineDashOffset = node.dashOffset ?? 0
+  }
+  const g = node.geometry
+  if (g.kind === 'line') {
+    if (!stroked) {
+      ctx.restore()
+      return
+    }
+    ctx.beginPath()
+    ctx.moveTo(g.x1, g.y1)
+    ctx.lineTo(g.x2, g.y2)
+    ctx.stroke()
+  } else if (g.kind === 'polyline') {
+    if (g.points.length < 2 || !stroked) {
+      ctx.restore()
+      return
+    }
+    ctx.beginPath()
+    ctx.moveTo(g.points[0]!.x, g.points[0]!.y)
+    for (let i = 1; i < g.points.length; i++) ctx.lineTo(g.points[i]!.x, g.points[i]!.y)
+    ctx.stroke()
+  } else if (g.kind === 'polygon') {
+    if (g.points.length < 3) {
+      ctx.restore()
+      return
+    }
+    ctx.beginPath()
+    ctx.moveTo(g.points[0]!.x, g.points[0]!.y)
+    for (let i = 1; i < g.points.length; i++) ctx.lineTo(g.points[i]!.x, g.points[i]!.y)
+    ctx.closePath()
+    if (node.fill !== 'none') {
+      if (!silhouette) ctx.fillStyle = paintOf(ctx, node.fill, 0, 0, node.width, node.height, pad)
+      ctx.fill()
+    }
+    if (stroked) ctx.stroke()
+  } else if (g.kind === 'path') {
+    const opened = openSvgPath(g.d)
+    if ('error' in opened) {
+      ctx.restore()
+      return
+    }
+    const p = opened.path
+    if (node.fill !== 'none') {
+      if (!silhouette) ctx.fillStyle = paintOf(ctx, node.fill, 0, 0, node.width, node.height, pad)
+      ctx.fill(p)
+    }
+    if (stroked) ctx.stroke(p)
+  } else {
+    // 未知线条类型
+  }
+  ctx.restore()
+}
+
+function drawDebugOverlay(ctx: CanvasRenderingContext2D, node: LayoutNode) {
+  ctx.save()
+  const k = transformScale(ctx)
+  ctx.strokeStyle = 'rgba(0, 120, 255, 0.85)'
+  ctx.lineWidth = 1 / k
+  ctx.strokeRect(node.x + 0.5 / k, node.y + 0.5 / k, node.width, node.height)
+  ctx.strokeStyle = 'rgba(255, 40, 40, 0.85)'
+  ctx.strokeRect(node.x + node.ink.x + 0.5 / k, node.y + node.ink.y + 0.5 / k, node.ink.width, node.ink.height)
+  ctx.restore()
+}
+
+function drawCanvasNode(ctx: PaintCtx, node: CanvasLayoutNode) {
+  const bitmap = node.bitmap
+  if (!bitmap || node.width <= 0 || node.height <= 0) return
+  const k = transformScale(ctx)
+  const sharp = Math.abs(bitmap.width - node.width * k) < 0.5 && Math.abs(bitmap.height - node.height * k) < 0.5
+  const smoothing = ctx.imageSmoothingEnabled
+  ctx.imageSmoothingEnabled = !sharp
+  ctx.drawImage(bitmap, node.x, node.y, node.width, node.height)
+  ctx.imageSmoothingEnabled = smoothing
+}
+
+/** 绕 origin 旋转、缩放。支点用当前坐标系里的绝对位置，子绘制仍使用 node.x/node.y。 */
+function applyNodeTransform(ctx: CanvasRenderingContext2D, node: LayoutNode) {
+  if (node.motion) {
+    const m = absoluteNodeMatrix(node)
+    if (isIdentity(m)) return
+    ctx.transform(m.a, m.b, m.c, m.d, m.e, m.f)
+    return
+  }
+  if (node.rotate === 0 && node.scaleX === 1 && node.scaleY === 1) return
+  const o = originOffset(node.origin, node.width, node.height)
+  const px = node.x + o.x
+  const py = node.y + o.y
+  ctx.translate(px, py)
+  ctx.rotate((node.rotate * Math.PI) / 180)
+  ctx.scale(node.scaleX, node.scaleY)
+  ctx.translate(-px, -py)
+}
+
+function drawBoxSilhouette(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: number, ink = SILHOUETTE) {
+  const x = node.x - spread
+  const y = node.y - spread
+  const w = node.width + spread * 2
+  const h = node.height + spread * 2
+  if (w <= 0 || h <= 0) return
+  const radii = growCorners(cornerRadiiOf(node), spread)
+  ctx.fillStyle = ink
+  if (anyCorner(radii)) {
+    traceRoundedRect(ctx, x, y, w, h, radii)
+    ctx.fill()
+  } else ctx.fillRect(x, y, w, h)
+}
+
+function drawShapeSilhouette(ctx: CanvasRenderingContext2D, node: ShapeLayoutNode, spread: number, ink = SILHOUETTE) {
+  const hasFill = node.fill !== 'none'
+  const hasStroke = node.stroke !== 'none' && node.strokeWidth > 0
+  if (!hasFill && !hasStroke) return
+  ctx.save()
+  ctx.fillStyle = ink
+  ctx.strokeStyle = ink
+  if (hasFill) {
+    if (node.shape === 'rect') {
+      const x = node.x - spread
+      const y = node.y - spread
+      const w = node.width + spread * 2
+      const h = node.height + spread * 2
+      if (w > 0 && h > 0) {
+        const radius = Math.max(0, (node.rx ?? node.borderRadius ?? 0) + spread)
+        if (radius > 0) {
+          roundRectPath(ctx, x, y, w, h, radius)
+          ctx.fill()
+        } else ctx.fillRect(x, y, w, h)
+      }
+    } else if (node.shape === 'circle') {
+      const radius = (node.r ?? node.width / 2) + spread
+      if (radius > 0) {
+        ctx.beginPath()
+        ctx.arc(node.x + node.width / 2, node.y + node.height / 2, radius, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    } else {
+      const rx = (node.rxEllipse ?? node.width / 2) + spread
+      const ry = (node.ry ?? node.height / 2) + spread
+      if (rx > 0 && ry > 0) {
+        ctx.beginPath()
+        ctx.ellipse(node.x + node.width / 2, node.y + node.height / 2, rx, ry, 0, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    }
+  }
+  if (hasStroke) {
+    ctx.lineWidth = Math.max(0.5, node.strokeWidth + spread * 2)
+    if (node.dash?.length) {
+      ctx.setLineDash(node.dash)
+      ctx.lineDashOffset = node.dashOffset ?? 0
+    }
+    if (node.shape === 'rect') {
+      const r = node.rx ?? node.borderRadius ?? 0
+      if (r > 0) {
+        roundRectPath(ctx, node.x, node.y, node.width, node.height, r)
+        ctx.stroke()
+      } else ctx.strokeRect(node.x, node.y, node.width, node.height)
+    } else if (node.shape === 'circle') {
+      const radius = node.r ?? node.width / 2
+      if (radius > 0) {
+        ctx.beginPath()
+        ctx.arc(node.x + node.width / 2, node.y + node.height / 2, radius, 0, Math.PI * 2)
+        ctx.stroke()
+      }
+    } else {
+      const rx = node.rxEllipse ?? node.width / 2
+      const ry = node.ry ?? node.height / 2
+      if (rx > 0 && ry > 0) {
+        ctx.beginPath()
+        ctx.ellipse(node.x + node.width / 2, node.y + node.height / 2, rx, ry, 0, 0, Math.PI * 2)
+        ctx.stroke()
+      }
+    }
+  }
+  ctx.restore()
+}
+
+function drawEffect(
+  ctx: CanvasRenderingContext2D,
+  state: PaintState,
+  node: LayoutNode,
+  effect: { dx: number; dy: number; blur: number; spread: number; color: string },
+  drawSilhouette: (spread: number) => void,
+  blend: 'source-over' | 'screen' = 'source-over',
+) {
+  const matrix = (ctx as CanvasRenderingContext2D & { getTransform(): { a: number; b: number; c: number; d: number; e: number; f: number } }).getTransform()
+  const k = Math.sqrt(Math.abs(matrix.a * matrix.d - matrix.b * matrix.c)) || 1
+  const devX = matrix.a * effect.dx + matrix.c * effect.dy
+  const devY = matrix.b * effect.dx + matrix.d * effect.dy
+  const far =
+    2 * (state.canvasWidth + state.canvasHeight) +
+    4 * k * (node.width + node.height + Math.abs(effect.spread) + effect.blur) +
+    Math.abs(devX)
+  ctx.save()
+  ctx.setTransform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e - far, matrix.f)
+  ctx.globalCompositeOperation = blend
+  ctx.shadowColor = effect.color
+  ctx.shadowBlur = effect.blur * k
+  ctx.shadowOffsetX = devX + far
+  ctx.shadowOffsetY = devY
+  drawSilhouette(effect.spread)
+  ctx.restore()
+}
+
+function shadowEffect(shadow: ShadowSpec) {
+  return { dx: shadow.x, dy: shadow.y, blur: shadow.blur, spread: shadow.spread, color: shadow.color }
+}
+
+/** 三维场景的画面当成一层墨迹，好让写在这层上的阴影跟着已经画出来的物体。 */
+function drawMeshFrameInk(ctx: CanvasRenderingContext2D, node: LayerLayoutNode, state: PaintState) {
+  const frame = state.meshFrames?.get(node)
+  if (!frame || frame.width <= 0 || frame.height <= 0) return
+  const k = transformScale(ctx)
+  const tw = Math.max(1, Math.ceil(frame.width * k))
+  const th = Math.max(1, Math.ceil(frame.height * k))
+  const off = createCanvas(tw, th)
+  const octx = off.getContext('2d')
+  octx.drawImage(frame.canvas as unknown as Canvas, 0, 0, tw, th)
+  octx.globalCompositeOperation = 'source-in'
+  octx.fillStyle = SILHOUETTE
+  octx.fillRect(0, 0, tw, th)
+  ;(ctx as PaintCtx).drawImage(off, node.x + frame.x, node.y + frame.y, frame.width, frame.height)
+}
+
+/** 外阴影和外发光的墨迹。layer / flex 跟着子树，不跟着空的布局盒子。 */
+function drawOuterInk(ctx: CanvasRenderingContext2D, state: PaintState, node: LayoutNode, spread: number) {
+  if (node.kind === 'layer' && state.meshFrames?.has(node)) {
+    drawNodeInk(ctx, node, spread)
+    drawMeshFrameInk(ctx, node, state)
+    return
+  }
+  if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
+    drawSubtreeInk(ctx, node, spread, SILHOUETTE, state)
+    return
+  }
+  drawNodeInk(ctx, node, spread)
+}
+
+function paintGlow(ctx: CanvasRenderingContext2D, state: PaintState, node: LayoutNode, glow: GlowSpec, drawSilhouette: (spread: number) => void) {
+  const wide = { dx: 0, dy: 0, blur: glow.blur, spread: glow.spread, color: glow.color }
+  drawEffect(ctx, state, node, wide, drawSilhouette, 'screen')
+  drawEffect(ctx, state, node, { ...wide, blur: Math.max(2, glow.blur * 0.35) }, drawSilhouette, 'screen')
+}
+
+/**
+ * 效果用的着墨轮廓：跟真实画出来的像素走，不跟布局盒子。
+ * 文字 = 背景 chrome（若有）+ 字形；形状/线 = 几何墨迹；layer/flex = 仅自身背景/边框。
+ * layer / flex 的外阴影和外发光不走这里，改走子树，见 drawOuterInk。
+ */
+function drawNodeInk(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: number, ink = SILHOUETTE) {
+  if (node.kind === 'line') {
+    drawLine(ctx, node, true, spread)
+    return
+  }
+  if (node.kind === 'shape') {
+    drawShapeSilhouette(ctx, node, spread, ink)
+    return
+  }
+  if (node.kind === 'canvas') {
+    const drawRaw = (target: PaintCtx) => drawCanvasNode(target, node)
+    if (Math.abs(spread) < 1e-3) drawRaw(ctx as PaintCtx)
+    else paintDilatedInk(ctx as PaintCtx, spread, ink, leafInkBounds(node), drawRaw)
+    return
+  }
+  if (node.kind === 'text' || node.kind === 'image') {
+    if (node.background && node.background !== 'transparent') drawBoxSilhouette(ctx, node, spread, ink)
+    const drawRaw = (target: PaintCtx) => {
+      if (node.kind === 'text') drawTextNode(target, node, ink)
+      else drawImageNode(target, node, ink)
+    }
+    // 字形和图片 alpha 不能靠几何外扩。spread 为 0 时仍直接画，避免和以前有像素差。
+    if (Math.abs(spread) < 1e-3) drawRaw(ctx as PaintCtx)
+    else paintDilatedInk(ctx as PaintCtx, spread, ink, leafInkBounds(node), drawRaw)
+    return
+  }
+  if (node.kind === 'custom') {
+    if ((node.background && node.background !== 'transparent') || hasBorder(node.border)) {
+      drawBoxSilhouette(ctx, node, spread, ink)
+    }
+    return
+  }
+  if ((node.background && node.background !== 'transparent') || hasBorder(node.border)) {
+    drawBoxSilhouette(ctx, node, spread, ink)
+  }
+}
+
+/** layer overlay：自身 chrome + 子树着墨（子元素局部坐标）。不看这一层自己的 mask。 */
+function drawUnmaskedSubtree(
+  ctx: CanvasRenderingContext2D,
+  node: LayoutNode,
+  spread: number,
+  ink = SILHOUETTE,
+  state?: PaintState,
+) {
+  if (node.kind === 'group') {
+    ctx.save()
+    ctx.transform(node.svg.a, node.svg.b, node.svg.c, node.svg.d, node.svg.e, node.svg.f)
+    for (const ch of node.children) drawSubtreeInk(ctx, ch, spread, ink, state)
+    ctx.restore()
+    return
+  }
+  drawNodeInk(ctx, node, spread, ink)
+  if (node.kind === 'layer' && state?.meshFrames?.has(node)) drawMeshFrameInk(ctx, node, state)
+  if (node.kind !== 'layer' && node.kind !== 'flex') return
+  const inset = flexContentInset(node)
+  ctx.save()
+  ctx.translate(node.x, node.y)
+  if (overflowClips(node)) clipRoundedBox(ctx, 0, 0, node.width, node.height, node)
+  ctx.translate(inset.x, inset.y)
+  for (const ch of node.children) drawSubtreeInk(ctx, ch, spread, ink, state)
+  ctx.restore()
+}
+
+/**
+ * 蒙版留下的轮廓。先画没裁过的子树，再套 mask，最后按 spread 胀缩。
+ * 父层的描边和阴影跟着这块轮廓，不跟着没抠过的矩形。
+ */
+function drawMaskedLayerInk(
+  ctx: CanvasRenderingContext2D,
+  node: LayerLayoutNode,
+  spread: number,
+  ink = SILHOUETTE,
+  state?: PaintState,
+) {
+  const masks = node.mask
+  if (!masks || masks.length === 0) {
+    drawUnmaskedSubtree(ctx, node, spread, ink, state)
+    return
+  }
+  const full = { x: node.x, y: node.y, width: node.width, height: node.height }
+  const crop = visibleBitmap(ctx as PaintCtx, full, Math.ceil((node.maskFeather ?? 0) * 3 + Math.abs(spread) + 8))
+  if (!crop) return
+  const k = Math.max(transformScale(ctx), 1e-3)
+  const w = Math.max(1, Math.ceil(crop.width * k))
+  const h = Math.max(1, Math.ceil(crop.height * k))
+  const canvas = createCanvas(w, h)
+  const octx = canvas.getContext('2d') as PaintCtx
+  octx.setTransform(k, 0, 0, k, -crop.x * k, -crop.y * k)
+  drawUnmaskedSubtree(octx, node, 0, '#ffffff', state)
+  applyLayerMask(
+    canvas,
+    masks,
+    k,
+    node.x - crop.x,
+    node.y - crop.y,
+    0,
+    { canvasWidth: w, canvasHeight: h, frame: 0, fps: 30, issues: [] },
+    node.maskFeather ?? 0,
+    node.maskInvert ?? false,
+  )
+  octx.setTransform(1, 0, 0, 1, 0, 0)
+  octx.globalCompositeOperation = 'source-in'
+  octx.fillStyle = ink
+  octx.fillRect(0, 0, w, h)
+  const blit = (dctx: PaintCtx) => {
+    dctx.drawImage(canvas, crop.x, crop.y, crop.width, crop.height)
+  }
+  if (Math.abs(spread) < 1e-3) blit(ctx as PaintCtx)
+  else paintDilatedInk(ctx as PaintCtx, spread, ink, crop, blit)
+}
+
+/** layer overlay：自身 chrome + 子树着墨。写了 mask 的层用蒙版之后的轮廓。 */
+function drawSubtreeInk(
+  ctx: CanvasRenderingContext2D,
+  node: LayoutNode,
+  spread: number,
+  ink = SILHOUETTE,
+  state?: PaintState,
+) {
+  if (node.kind === 'layer' && node.mask && node.mask.length > 0) {
+    drawMaskedLayerInk(ctx, node, spread, ink, state)
+    return
+  }
+  drawUnmaskedSubtree(ctx, node, spread, ink, state)
+}
+
+function transformScale(ctx: CanvasRenderingContext2D): number {
+  const matrix = (
+    ctx as CanvasRenderingContext2D & { getTransform(): { a: number; b: number; c: number; d: number } }
+  ).getTransform()
+  return Math.sqrt(Math.abs(matrix.a * matrix.d - matrix.b * matrix.c)) || 1
+}
+
+function paintInnerEffect(
+  ctx: PaintCtx,
+  node: LayoutNode,
+  effect: { x: number; y: number; blur: number; spread: number; color: string },
+  blend: 'source-over' | 'screen',
+) {
+  if (node.width <= 0 || node.height <= 0) return
+  const k = transformScale(ctx)
+  const pad = Math.ceil(effect.blur * 2 + Math.abs(effect.spread) + Math.abs(effect.x) + Math.abs(effect.y) + 4)
+  const twLogic = Math.max(1, Math.ceil(node.width + pad * 2))
+  const thLogic = Math.max(1, Math.ceil(node.height + pad * 2))
+  const tw = Math.max(1, Math.ceil(twLogic * k))
+  const th = Math.max(1, Math.ceil(thLogic * k))
+
+  const fill = createCanvas(tw, th)
+  const fctx = fill.getContext('2d') as PaintCtx
+  fctx.setTransform(k, 0, 0, k, 0, 0)
+  fctx.translate(-node.x + pad, -node.y + pad)
+  drawNodeInk(fctx, node, Math.max(0, effect.spread), effect.color)
+
+  const cut = createCanvas(tw, th)
+  const cctx = cut.getContext('2d') as PaintCtx
+  cctx.setTransform(k, 0, 0, k, 0, 0)
+  cctx.translate(-node.x + pad, -node.y + pad)
+  drawNodeInk(cctx, node, -Math.max(0, effect.spread), '#000000')
+
+  const cutSoft = createCanvas(tw, th)
+  const sctx = cutSoft.getContext('2d') as PaintCtx
+  if (effect.blur > 0) sctx.filter = `blur(${effect.blur * k}px)`
+  // 反向偏移：正 y 的内阴影落在底部内侧
+  sctx.drawImage(cut, -effect.x * k, -effect.y * k)
+  sctx.filter = 'none'
+
+  fctx.setTransform(1, 0, 0, 1, 0, 0)
+  fctx.globalCompositeOperation = 'destination-out'
+  fctx.drawImage(cutSoft, 0, 0)
+
+  // 内效果也按墨迹 alpha 裁切，避免文字落成方块阴影
+  const clip = createCanvas(tw, th)
+  const clipCtx = clip.getContext('2d') as PaintCtx
+  clipCtx.setTransform(k, 0, 0, k, 0, 0)
+  clipCtx.translate(-node.x + pad, -node.y + pad)
+  drawNodeInk(clipCtx, node, 0, '#ffffff')
+  fctx.globalCompositeOperation = 'destination-in'
+  fctx.drawImage(clip, 0, 0)
+
+  ctx.save()
+  ctx.globalCompositeOperation = blend
+  ctx.drawImage(fill, node.x - pad, node.y - pad, twLogic, thLogic)
+  ctx.restore()
+}
+
+/** layer 专用：按子树墨迹裁切后叠加纯色/渐变。 */
+function paintOverlay(ctx: PaintCtx, node: LayoutNode, overlay: OverlaySpec, state?: PaintState) {
+  if (node.width <= 0 || node.height <= 0 || overlay.opacity <= 0) return
+  const w = Math.max(1, Math.ceil(node.width))
+  const h = Math.max(1, Math.ceil(node.height))
+  const k = transformScale(ctx)
+  const tw = Math.max(1, Math.ceil(w * k))
+  const th = Math.max(1, Math.ceil(h * k))
+  const off = createCanvas(tw, th)
+  const octx = off.getContext('2d') as PaintCtx
+  octx.setTransform(k, 0, 0, k, 0, 0)
+  octx.fillStyle = paintOf(octx, overlay.paint, 0, 0, node.width, node.height)
+  octx.fillRect(0, 0, node.width, node.height)
+
+  const clip = createCanvas(tw, th)
+  const clipCtx = clip.getContext('2d') as PaintCtx
+  clipCtx.setTransform(k, 0, 0, k, 0, 0)
+  clipCtx.translate(-node.x, -node.y)
+  drawSubtreeInk(clipCtx, node, 0, '#ffffff', state)
+  // 内描边落在本体内，从蒙版里挖掉，避免渐变 overlay 染到描边。
+  eraseInnerStrokes(clipCtx, node, state)
+  octx.globalCompositeOperation = 'destination-in'
+  octx.drawImage(clip, 0, 0)
+
+  ctx.save()
+  ctx.globalAlpha *= overlay.opacity
+  ctx.globalCompositeOperation = overlay.blend
+  ctx.drawImage(off, node.x, node.y, node.width, node.height)
+  ctx.restore()
+}
+
+type NoisePaint = typeof import('./paint-noise.js').paintNoise
+let paintNoiseFn: NoisePaint | null = null
+
+async function ensureNoise(): Promise<void> {
+  if (paintNoiseFn) return
+  const mod = await import('./paint-noise.js')
+  mod.bindNoise({ transformScale, drawNodeInk })
+  paintNoiseFn = mod.paintNoise
+}
+
+function paintNoise(ctx: PaintCtx, node: LayoutNode, noise: NoiseSpec, composite: 'soft-light' | 'source-over' = 'soft-light', frame = 0) {
+  if (!paintNoiseFn) throw new Error('噪点模块还没加载')
+  paintNoiseFn(ctx, node, noise, composite, frame)
+}
+
+function layerMaskOf(node: LayoutNode): LayoutNode[] | undefined {
+  if (node.kind !== 'layer' || !node.mask || node.mask.length === 0) return undefined
+  return node.mask
+}
+
+/** 把父画布已有像素拷进当前离屏，供 glass / backdrop-blur 取样。 */
+function copyParentUnderlay(parent: PaintCtx, dest: PaintCtx) {
+  const inv = invert(parent.getTransform())
+  if (!inv) return
+  const combined = multiply(dest.getTransform(), inv)
+  dest.save()
+  dest.setTransform(combined.a, combined.b, combined.c, combined.d, combined.e, combined.f)
+  dest.drawImage(parent.canvas, 0, 0)
+  dest.restore()
+}
+
+function maskComposite(
+  width: number,
+  height: number,
+  shapes: LayoutNode[],
+  prepare: (ctx: CanvasRenderingContext2D) => void,
+  feather: number,
+  invert: boolean,
+  t: number,
+  state: PaintState,
+) {
+  return compositeMask({
+    width,
+    height,
+    shapes,
+    feather,
+    invert,
+    prepare,
+    paintShape: (ctx, shape) => paintNode(ctx, shape, false, t, state),
+    enterGroup: (ctx, shape) => {
+      applyNodeTransform(ctx, shape)
+      ctx.transform(shape.svg.a, shape.svg.b, shape.svg.c, shape.svg.d, shape.svg.e, shape.svg.f)
+    },
+  })
+}
+
+/** 形状和图片按 op 合成，再用 destination-in 只保留 alpha。 */
+function applyLayerMask(
+  canvas: Canvas,
+  shapes: LayoutNode[],
+  k: number,
+  originX: number,
+  originY: number,
+  t: number,
+  state: PaintState,
+  feather = 0,
+  invert = false,
+) {
+  const pw = canvas.width
+  const ph = canvas.height
+  if (pw <= 0 || ph <= 0) return
+  const mask = maskComposite(
+    pw,
+    ph,
+    shapes,
+    (ctx) => ctx.setTransform(k, 0, 0, k, originX * k, originY * k),
+    feather * k,
+    invert,
+    t,
+    state,
+  )
+  const cctx = canvas.getContext('2d') as PaintCtx
+  cctx.save()
+  cctx.setTransform(1, 0, 0, 1, 0, 0)
+  cctx.globalAlpha = 1
+  cctx.globalCompositeOperation = 'destination-in'
+  cctx.drawImage(mask.canvas, 0, 0)
+  cctx.restore()
+}
+
+export type MaskRaster = {
+  /** 位图的像素宽高。 */
+  width: number
+  height: number
+  /** 一个位图像素等于多少个 layer 局部像素的倒数。大图会缩小来画。 */
+  scale: number
+  /** 每个像素的 alpha，逐行排列。 */
+  alpha: Uint8ClampedArray
+}
+
+const MASK_RASTER_LIMIT = 4_000_000
+
+/** 和绘制时同一套形状和图片，在 layer 布局盒里画成 alpha 位图。原点是 layer 左上角。 */
+export function rasterizeMask(
+  shapes: LayoutNode[],
+  width: number,
+  height: number,
+  options: { feather?: number; invert?: boolean } = {},
+): (MaskRaster & { steps: MaskOpReport[] }) | null {
+  if (!(width > 0) || !(height > 0)) return null
+  const scale = Math.min(1, Math.sqrt(MASK_RASTER_LIMIT / (width * height)))
+  const pw = Math.max(1, Math.ceil(width * scale))
+  const ph = Math.max(1, Math.ceil(height * scale))
+  const state: PaintState = { canvasWidth: pw, canvasHeight: ph, frame: 0, fps: 30, issues: [] }
+  const mask = maskComposite(
+    pw,
+    ph,
+    shapes,
+    (ctx) => ctx.setTransform(scale, 0, 0, scale, 0, 0),
+    (options.feather ?? 0) * scale,
+    options.invert ?? false,
+    0,
+    state,
+  )
+  return { width: pw, height: ph, scale, alpha: mask.alpha, steps: mask.steps }
+}
+
+function nodeDeviceBounds(ctx: PaintCtx, node: LayoutNode, padDevice: number) {
+  const matrix = ctx.getTransform()
+  const corners = [
+    { x: node.x, y: node.y },
+    { x: node.x + node.width, y: node.y },
+    { x: node.x, y: node.y + node.height },
+    { x: node.x + node.width, y: node.y + node.height },
+  ].map((p) => ({
+    x: matrix.a * p.x + matrix.c * p.y + matrix.e,
+    y: matrix.b * p.x + matrix.d * p.y + matrix.f,
+  }))
+  const minX = Math.max(0, Math.floor(Math.min(...corners.map((p) => p.x)) - padDevice))
+  const minY = Math.max(0, Math.floor(Math.min(...corners.map((p) => p.y)) - padDevice))
+  const maxX = Math.min(ctx.canvas.width, Math.ceil(Math.max(...corners.map((p) => p.x)) + padDevice))
+  const maxY = Math.min(ctx.canvas.height, Math.ceil(Math.max(...corners.map((p) => p.y)) + padDevice))
+  return { matrix, minX, minY, maxX, maxY, sw: maxX - minX, sh: maxY - minY }
+}
+
+/** 一步滤镜函数，走已注册的 `filter`。换掉 filter 的实现时，背景滤镜跟着换。 */
+function backdropColorCss(step: ColorFilterSpec, scale: number): string {
+  const render = getFilter('filter')?.canvasFilter
+  const css = render?.([step], scale)
+  if (css) return css
+  return colorFilterToCss([step], scale)
+}
+
+/**
+ * 背景采样用的 canvas filter。
+ * 只有 `backdrop-blur` 时就是 `blur()`。`backdrop-filter` 的色彩函数和 layer `filter` 同一条字符串。
+ */
+function backdropFilterCss(node: LayoutNode, k: number): string {
+  const steps = node.backdropFilter
+  if (steps && steps.length > 0) {
+    const parts: string[] = []
+    let sawBlur = false
+    for (const step of steps) {
+      if (step.name === 'blur') sawBlur = true
+      if (step.name === 'blur' && step.value <= 0) continue
+      const css = backdropColorCss(step, k)
+      if (css) parts.push(css)
+    }
+    if (!sawBlur && (node.backdropBlur ?? 0) > 0) parts.unshift(`blur(${node.backdropBlur! * k}px)`)
+    return parts.join(' ')
+  }
+  if ((node.backdropBlur ?? 0) > 0) return `blur(${node.backdropBlur! * k}px)`
+  return ''
+}
+
+function nodeHasBackdrop(node: LayoutNode): boolean {
+  return backdropFilterCss(node, 1) !== ''
+}
+
+function paintBackdrop(ctx: PaintCtx, node: LayoutNode) {
+  if (node.width <= 0 || node.height <= 0) return
+  const { matrix, minX, minY, sw, sh } = nodeDeviceBounds(ctx, node, 0)
+  if (sw <= 0 || sh <= 0) return
+  const k = Math.sqrt(Math.abs(matrix.a * matrix.d - matrix.b * matrix.c)) || 1
+  const filter = backdropFilterCss(node, k)
+  if (!filter) return
+  const snapshot = ctx.getImageData(minX, minY, sw, sh)
+  const src = createCanvas(sw, sh)
+  ;(src.getContext('2d') as PaintCtx).putImageData(snapshot, 0, 0)
+  const blurred = createCanvas(sw, sh)
+  const bctx = blurred.getContext('2d') as PaintCtx
+  bctx.filter = filter
+  bctx.drawImage(src, 0, 0)
+  bctx.filter = 'none'
+  // 按墨迹 alpha 贴回，文字/异形不会整块毛玻璃
+  const mask = createCanvas(sw, sh)
+  const mctx = mask.getContext('2d') as PaintCtx
+  mctx.setTransform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e - minX, matrix.f - minY)
+  drawNodeInk(mctx, node, 0, '#ffffff')
+  bctx.globalCompositeOperation = 'destination-in'
+  bctx.drawImage(mask, 0, 0)
+  ctx.save()
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.drawImage(blurred, minX, minY)
+  ctx.restore()
+}
+
+type DistanceModule = typeof import('./distance-field.js')
+let distanceApi: DistanceModule | null = null
+
+async function ensureDistanceField(): Promise<void> {
+  if (distanceApi) return
+  distanceApi = await import('./distance-field.js')
+}
+
+function distanceToSites(isSite: (index: number) => boolean, w: number, h: number, bias = 0): Float32Array {
+  if (!distanceApi) throw new Error('距离场还没加载')
+  return distanceApi.distanceToSites(isSite, w, h, bias)
+}
+
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  if (!distanceApi) throw new Error('距离场还没加载')
+  return distanceApi.smoothstep(edge0, edge1, x)
+}
+
+const RASTER_MAX_SIDE = 8192
+
+function rasterizeUser(bounds: Box, draw: (ctx: PaintCtx) => void): { canvas: Canvas; x: number; y: number } | null {
+  if (![bounds.x, bounds.y, bounds.width, bounds.height].every((n) => Number.isFinite(n))) return null
+  const x = Math.floor(bounds.x)
+  const y = Math.floor(bounds.y)
+  const w = Math.ceil(bounds.x + bounds.width) - x
+  const h = Math.ceil(bounds.y + bounds.height) - y
+  if (w < 1 || h < 1 || w > RASTER_MAX_SIDE || h > RASTER_MAX_SIDE) return null
+  const canvas = createCanvas(w, h)
+  const octx = canvas.getContext('2d') as PaintCtx
+  octx.translate(-x, -y)
+  draw(octx)
+  return { canvas, x, y }
+}
+
+type Mat2 = { a: number; b: number; c: number; d: number; e: number; f: number }
+
+/** 旋转或错切会把正的覆盖蒙版转成台阶。这种变换改在屏幕像素里栅格化，并超采样后再平均。 */
+function transformTurns(matrix: { b: number; c: number }): boolean {
+  return Math.abs(matrix.b) > 1e-4 || Math.abs(matrix.c) > 1e-4
+}
+
+/** 描边这棵子树里有旋转时，正着算距离再贴回去会在斜边上出台阶。 */
+function inkNeedsScreen(node: LayoutNode): boolean {
+  if (Math.abs(node.rotate) > 1e-4) return true
+  if (node.kind === 'group' && (Math.abs(node.svg.b) > 1e-4 || Math.abs(node.svg.c) > 1e-4)) return true
+  if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
+    return node.children.some(inkNeedsScreen)
+  }
+  return false
+}
+
+function rasterizeOnScreen(
+  matrix: Mat2,
+  bounds: Box,
+  draw: (ctx: PaintCtx) => void,
+  samples?: number,
+): { canvas: Canvas; x: number; y: number; scale: number; sample: number; dw: number; dh: number } | null {
+  if (![matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f, bounds.x, bounds.y, bounds.width, bounds.height].every((n) => Number.isFinite(n))) {
+    return null
+  }
+  const corners = [
+    [bounds.x, bounds.y],
+    [bounds.x + bounds.width, bounds.y],
+    [bounds.x, bounds.y + bounds.height],
+    [bounds.x + bounds.width, bounds.y + bounds.height],
+  ].map(([px, py]) => ({
+    x: matrix.a * px + matrix.c * py + matrix.e,
+    y: matrix.b * px + matrix.d * py + matrix.f,
+  }))
+  const x = Math.floor(Math.min(...corners.map((p) => p.x))) - 1
+  const y = Math.floor(Math.min(...corners.map((p) => p.y))) - 1
+  const dw = Math.ceil(Math.max(...corners.map((p) => p.x))) + 1 - x
+  const dh = Math.ceil(Math.max(...corners.map((p) => p.y))) + 1 - y
+  if (dw < 1 || dh < 1 || dw > RASTER_MAX_SIDE || dh > RASTER_MAX_SIDE) return null
+  let sample = samples != null && samples >= 1 ? samples : PERSPECTIVE_AA
+  while (sample > 1 && (dw * sample > RASTER_MAX_SIDE || dh * sample > RASTER_MAX_SIDE)) sample /= 2
+  const canvas = createCanvas(Math.max(1, Math.round(dw * sample)), Math.max(1, Math.round(dh * sample)))
+  const octx = canvas.getContext('2d') as PaintCtx
+  octx.setTransform(
+    matrix.a * sample,
+    matrix.b * sample,
+    matrix.c * sample,
+    matrix.d * sample,
+    (matrix.e - x) * sample,
+    (matrix.f - y) * sample,
+  )
+  draw(octx)
+  const scale = (Math.sqrt(Math.abs(matrix.a * matrix.d - matrix.b * matrix.c)) || 1) * sample
+  return { canvas, x, y, scale, sample, dw, dh }
+}
+
+type ScreenBlit = {
+  /** 覆盖蒙版在屏幕像素的超采样网格上。渐变仍按用户坐标，经这个矩阵变过去。 */
+  matrix: Mat2
+  cover: Box
+  sample: number
+  dw: number
+  dh: number
+}
+
+/** 把覆盖蒙版染成颜色或渐变，再画回。渐变坐标用元素盒子。`screen` 时按屏幕像素 1:1 贴，不再转一次。 */
+function blitCoverage(
+  ctx: PaintCtx,
+  originX: number,
+  originY: number,
+  alpha: Uint8ClampedArray,
+  w: number,
+  h: number,
+  color: string,
+  gradientBox: Box | null,
+  screen?: ScreenBlit,
+) {
+  let any = false
+  for (let i = 0; i < alpha.length; i++) {
+    if (alpha[i]! > 0) {
+      any = true
+      break
+    }
+  }
+  if (!any) return
+  const mask = createCanvas(w, h)
+  const mctx = mask.getContext('2d') as PaintCtx
+  const img = mctx.createImageData(w, h)
+  const px = img.data
+  for (let i = 0; i < w * h; i++) {
+    const a = alpha[i]!
+    if (a === 0) continue
+    const o = i * 4
+    px[o] = 255
+    px[o + 1] = 255
+    px[o + 2] = 255
+    px[o + 3] = a
+  }
+  mctx.putImageData(img, 0, 0)
+  const colored = createCanvas(w, h)
+  const cctx = colored.getContext('2d') as PaintCtx
+  if (gradientBox && isGradient(color)) {
+    if (screen) {
+      const m = screen.matrix
+      const s = screen.sample
+      cctx.setTransform(m.a * s, m.b * s, m.c * s, m.d * s, (m.e - originX) * s, (m.f - originY) * s)
+    } else cctx.translate(-originX, -originY)
+    cctx.fillStyle = paintOf(
+      cctx,
+      color,
+      gradientBox.x,
+      gradientBox.y,
+      Math.max(1, gradientBox.width),
+      Math.max(1, gradientBox.height),
+    )
+    if (screen) {
+      const cover = screen.cover
+      cctx.fillRect(cover.x - 4, cover.y - 4, cover.width + 8, cover.height + 8)
+    } else cctx.fillRect(originX, originY, w, h)
+    cctx.setTransform(1, 0, 0, 1, 0, 0)
+  } else {
+    cctx.fillStyle = color
+    cctx.fillRect(0, 0, w, h)
+  }
+  cctx.globalCompositeOperation = 'destination-in'
+  cctx.drawImage(mask, 0, 0)
+  const smoothing = ctx.imageSmoothingEnabled
+  ctx.imageSmoothingEnabled = false
+  if (screen) {
+    const image =
+      colored.width === screen.dw && colored.height === screen.dh
+        ? colored
+        : resolveSamples(colored, screen.dw, screen.dh)
+    ctx.save()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.drawImage(image, originX, originY)
+    ctx.restore()
+  } else ctx.drawImage(colored, originX, originY)
+  ctx.imageSmoothingEnabled = smoothing
+}
+
+/** 按墨迹 alpha 膨胀（spread > 0）或收缩（spread < 0）。只在墨迹外框加 |spread| 的范围内做距离变换。 */
+function paintDilatedInk(
+  ctx: PaintCtx,
+  spread: number,
+  color: string,
+  bounds: Box,
+  drawRaw: (ctx: PaintCtx) => void,
+) {
+  if (Math.abs(spread) < 1e-3) {
+    drawRaw(ctx)
+    return
+  }
+  const pad = Math.ceil(Math.abs(spread)) + 2
+  const raster = rasterizeUser(
+    { x: bounds.x - pad, y: bounds.y - pad, width: bounds.width + pad * 2, height: bounds.height + pad * 2 },
+    drawRaw,
+  )
+  if (!raster) {
+    drawRaw(ctx)
+    return
+  }
+  const { canvas, x, y } = raster
+  const w = canvas.width
+  const h = canvas.height
+  const data = (canvas.getContext('2d') as PaintCtx).getImageData(0, 0, w, h).data
+  const inkAt = (i: number) => data[i * 4 + 3]! >= 128
+  const alpha = new Uint8ClampedArray(w * h)
+  if (spread > 0) {
+    const outside = distanceToSites(inkAt, w, h, 0)
+    for (let i = 0; i < w * h; i++) {
+      if (inkAt(i)) {
+        alpha[i] = 255
+        continue
+      }
+      const d = outside[i]!
+      if (d <= 0 || d >= spread + 0.5) continue
+      alpha[i] = Math.round(255 * (1 - smoothstep(spread - 0.5, spread + 0.5, d)))
+    }
+  } else {
+    const inside = distanceToSites((i) => !inkAt(i), w, h, 0)
+    const radius = -spread
+    for (let i = 0; i < w * h; i++) {
+      if (!inkAt(i)) continue
+      alpha[i] = Math.round(255 * smoothstep(radius - 0.5, radius + 0.5, inside[i]!))
+    }
+  }
+  blitCoverage(ctx, x, y, alpha, w, h, color, null)
+}
+
+function leafInkBounds(node: LayoutNode): Box {
+  const slop = 4
+  const glyph =
+    node.ink.width > 0.5 && node.ink.height > 0.5
+      ? { x: node.x + node.ink.x, y: node.y + node.ink.y, width: node.ink.width, height: node.ink.height }
+      : { x: node.x, y: node.y, width: Math.max(1, node.width), height: Math.max(1, node.height) }
+  // 文字、图片的底板铺满外框。描边和阴影要绕着这块，不能只裁在字形上，否则会被后面的填充盖住。
+  const fillsBox =
+    (node.kind === 'text' || node.kind === 'image' || node.kind === 'custom') &&
+    ((node.background != null && node.background !== 'transparent') || hasBorder(node.border))
+  const b = fillsBox
+    ? unionBoxes(glyph, { x: node.x, y: node.y, width: Math.max(1, node.width), height: Math.max(1, node.height) })
+    : glyph
+  return { x: b.x - slop, y: b.y - slop, width: b.width + slop * 2, height: b.height + slop * 2 }
+}
+
+/** 子元素在父级内容坐标里的墨迹。旋转和缩放绕它自己的 origin，不含父级的平移。 */
+function placedChildInk(node: LayoutNode, state?: PaintState): Box | null {
+  const local = groupInkBounds(node, state)
+  if (!local) return null
+  const pose = absoluteNodeMatrix(node)
+  if (isIdentity(pose)) return local
+  return applyToBox(pose, local)
+}
+
+/**
+ * `<g>` 不另画一圈效果。这里把子路径变到父级内容坐标，供外层 layer 的描边和阴影用。
+ * SVG `transform` 已经含在结果里，不再加 `g` 自己的布局原点。
+ */
+function groupContentInk(node: LayoutNode & { kind: 'group' }, state?: PaintState): Box | null {
+  const parts: Box[] = []
+  for (const ch of node.children) {
+    const local = placedChildInk(ch, state)
+    if (!local) continue
+    parts.push(applyToBox(node.svg, local))
+  }
+  if (parts.length === 0) return null
+  let acc = parts[0]!
+  for (let i = 1; i < parts.length; i++) acc = unionBoxes(acc, parts[i]!)
+  return { x: acc.x - 2, y: acc.y - 2, width: acc.width + 4, height: acc.height + 4 }
+}
+
+/** 子树墨迹外框，坐标系与 drawInkMask 一致（含本节点的 x/y，不含本节点自己的旋转）。 */
+function groupInkBounds(node: LayoutNode, state?: PaintState): Box | null {
+  if (node.kind === 'group') return groupContentInk(node, state)
+  if (node.kind !== 'layer' && node.kind !== 'flex') return leafInkBounds(node)
+  const parts: Box[] = []
+  const add = (b: Box | null) => {
+    if (!b || b.width <= 0 || b.height <= 0) return
+    parts.push(b)
+  }
+  if ((node.background && node.background !== 'transparent') || hasBorder(node.border)) {
+    add({ x: node.x, y: node.y, width: node.width, height: node.height })
+  }
+  if (node.kind === 'layer') {
+    const frame = state?.meshFrames?.get(node)
+    if (frame && frame.width > 0 && frame.height > 0) {
+      add({ x: node.x + frame.x, y: node.y + frame.y, width: frame.width, height: frame.height })
+    }
+  }
+  const insetX = flexContentInset(node).x
+  const insetY = flexContentInset(node).y
+  for (const ch of node.children) {
+    const transformed = placedChildInk(ch, state)
+    if (!transformed) continue
+    add({
+      x: transformed.x + node.x + insetX,
+      y: transformed.y + node.y + insetY,
+      width: transformed.width,
+      height: transformed.height,
+    })
+  }
+  if (parts.length === 0) return null
+  let acc = parts[0]!
+  for (let i = 1; i < parts.length; i++) acc = unionBoxes(acc, parts[i]!)
+  return { x: acc.x - 2, y: acc.y - 2, width: acc.width + 4, height: acc.height + 4 }
+}
+
+/** 画本节点墨迹。Layer / flex 合并子树；`<g>` 只把子路径变进这棵子树，不单独描边。 */
+function drawInkMask(ctx: PaintCtx, node: LayoutNode, isTop: boolean, state?: PaintState) {
+  if (node.kind === 'layer' && node.mask && node.mask.length > 0) {
+    ctx.save()
+    if (!isTop) {
+      applyNodeTransform(ctx, node)
+      ctx.globalAlpha *= node.opacity
+    }
+    drawMaskedLayerInk(ctx, node, 0, '#ffffff')
+    ctx.restore()
+    return
+  }
+  ctx.save()
+  if (!isTop) {
+    applyNodeTransform(ctx, node)
+    ctx.globalAlpha *= node.opacity
+  }
+  if (node.kind === 'group') {
+    ctx.transform(node.svg.a, node.svg.b, node.svg.c, node.svg.d, node.svg.e, node.svg.f)
+    for (const ch of node.children) drawInkMask(ctx, ch, false, state)
+  } else if (node.kind === 'layer' || node.kind === 'flex') {
+    drawNodeInk(ctx, node, 0, '#ffffff')
+    if (node.kind === 'layer' && state?.meshFrames?.has(node)) drawMeshFrameInk(ctx, node, state)
+    const insetX = flexContentInset(node).x
+    const insetY = flexContentInset(node).y
+    ctx.translate(node.x + insetX, node.y + insetY)
+    for (const ch of node.children) drawInkMask(ctx, ch, false, state)
+  } else {
+    drawNodeInk(ctx, node, 0, '#ffffff')
+  }
+  ctx.restore()
+}
+
+/**
+ * 阴影 / 光晕的轮廓 = 本体 ∪ 外侧描边，再按 spread 胀缩。
+ * layer、flex、g 上的描边先合并子树再膨胀，重叠的字不会各留一圈。
+ */
+function drawEffectInk(ctx: CanvasRenderingContext2D, node: LayoutNode, spread: number, state?: PaintState) {
+  const extra = outerInkStrokeReach(node.inkStroke)
+  if ((node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') && extra > 0) {
+    const bounds = groupInkBounds(node, state)
+    if (!bounds) return
+    paintDilatedInk(ctx as PaintCtx, spread + extra, SILHOUETTE, bounds, (octx) => drawInkMask(octx, node, true, state))
+    return
+  }
+  if (state) drawOuterInk(ctx, state, node, spread + extra)
+  else drawNodeInk(ctx, node, spread + extra)
+}
+
+type StrokePaint = typeof import('./paint-stroke.js').paintInkStrokes
+let paintInkStrokesFn: StrokePaint | null = null
+
+async function ensureInkStroke(): Promise<void> {
+  if (paintInkStrokesFn) return
+  const mod = await import('./paint-stroke.js')
+  mod.bindStroke({
+    drawInkMask,
+    drawNodeInk,
+    groupInkBounds,
+    leafInkBounds,
+    rasterizeUser,
+    rasterizeOnScreen,
+    blitCoverage,
+    transformTurns,
+    inkNeedsScreen,
+  })
+  paintInkStrokesFn = mod.paintInkStrokes
+}
+
+function paintInkStrokes(
+  ctx: PaintCtx,
+  node: LayoutNode,
+  phase: 'outer' | 'inner',
+  source?: { bounds: Box; draw: (ctx: PaintCtx) => void },
+  state?: PaintState,
+) {
+  if (!node.inkStroke?.length) return
+  if (!paintInkStrokesFn) throw new Error('描边模块还没加载')
+  paintInkStrokesFn(ctx, node, phase, source, state)
+}
+
+/** 与 drawSubtreeInk 同一套坐标，把内侧描边从 overlay 蒙版里挖掉。 */
+function eraseInnerStrokes(ctx: PaintCtx, node: LayoutNode, state?: PaintState) {
+  if (node.inkStroke?.some((layer) => layer.position !== 'outside')) {
+    ctx.save()
+    ctx.globalCompositeOperation = 'destination-out'
+    paintInkStrokes(ctx, node, 'inner', undefined, state)
+    ctx.restore()
+  }
+  if (node.kind === 'group') {
+    ctx.save()
+    ctx.transform(node.svg.a, node.svg.b, node.svg.c, node.svg.d, node.svg.e, node.svg.f)
+    for (const ch of node.children) eraseInnerStrokes(ctx, ch, state)
+    ctx.restore()
+    return
+  }
+  if (node.kind !== 'layer' && node.kind !== 'flex') return
+  const insetX = flexContentInset(node).x
+  const insetY = flexContentInset(node).y
+  ctx.save()
+  ctx.translate(node.x + insetX, node.y + insetY)
+  for (const ch of node.children) eraseInnerStrokes(ctx, ch, state)
+  ctx.restore()
+}
+
+type GlassPaint = typeof import('./paint-glass.js').paintGlass
+let paintGlassFn: GlassPaint | null = null
+
+async function ensureGlass(): Promise<void> {
+  if (paintGlassFn) return
+  const mod = await import('./paint-glass.js')
+  mod.bindGlass({ transformScale, nodeDeviceBounds, drawNodeInk })
+  paintGlassFn = mod.paintGlass
+}
+
+function paintGlass(ctx: PaintCtx, node: LayoutNode, glass: GlassSpec, drawShadow?: () => void) {
+  if (!paintGlassFn) throw new Error('玻璃模块还没加载')
+  paintGlassFn(ctx, node, glass, drawShadow)
+}
+
+type BitmapCrop = { u: number; v: number; width: number; height: number; scaleX: number; scaleY: number }
+
+type PlaneBitmap = {
+  canvas: Canvas
+  pad: number
+  logicalWidth: number
+  logicalHeight: number
+  localX: number
+  localY: number
+  /** 内容坐标。有的话，网格只画这块可见多边形，不再用整张位图的四个角。 */
+  polygon?: Array<{ u: number; v: number }>
+}
+
+const PLANE_BITMAP_SIDE = 2048
+const PLANE_BITMAP_CAP = 4096
+
+function paintChildBitmap(
+  child: LayoutNode,
+  k: number,
+  t: number,
+  state: PaintState,
+  samples = 1,
+  crop?: BitmapCrop,
+): PlaneBitmap {
+  const pad = planeBitmapPad(child)
+  const frame = child.kind === 'layer' ? state.meshFrames?.get(child) : undefined
+  const extraL = frame ? Math.max(0, Math.ceil(-frame.x)) : 0
+  const extraT = frame ? Math.max(0, Math.ceil(-frame.y)) : 0
+  const extraR = frame ? Math.max(0, Math.ceil(frame.x + frame.width - child.width)) : 0
+  const extraB = frame ? Math.max(0, Math.ceil(frame.y + frame.height - child.height)) : 0
+  const originX = -(pad + extraL)
+  const originY = -(pad + extraT)
+  const fullW = child.width + pad * 2 + extraL + extraR
+  const fullH = child.height + pad * 2 + extraT + extraB
+  let u0 = 0
+  let v0 = 0
+  let logicalWidth = fullW
+  let logicalHeight = fullH
+  let sx = k
+  let sy = k
+  let sample = samples
+  if (crop) {
+    u0 = Math.max(0, Math.min(fullW, crop.u))
+    v0 = Math.max(0, Math.min(fullH, crop.v))
+    logicalWidth = Math.max(1, Math.min(fullW - u0, crop.width))
+    logicalHeight = Math.max(1, Math.min(fullH - v0, crop.height))
+    sx = Math.max(crop.scaleX, 1e-3)
+    sy = Math.max(crop.scaleY, 1e-3)
+    sample = samples * (Math.max(sx, sy) / Math.max(k, 1e-3))
+  }
+  let bw = Math.max(1, Math.ceil(logicalWidth * sx))
+  let bh = Math.max(1, Math.ceil(logicalHeight * sy))
+  if (bw > PLANE_BITMAP_CAP || bh > PLANE_BITMAP_CAP) {
+    const fit = PLANE_BITMAP_CAP / Math.max(bw, bh)
+    sx *= fit
+    sy *= fit
+    bw = Math.max(1, Math.ceil(logicalWidth * sx))
+    bh = Math.max(1, Math.ceil(logicalHeight * sy))
+  }
+  const canvas = createCanvas(bw, bh)
+  const octx = canvas.getContext('2d') as PaintCtx
+  // 位图是平面局部像素。rotate / scale 交给 posePoint，避免和投影各转一次。
+  octx.setTransform(sx, 0, 0, sy, (-child.x - originX - u0) * sx, (-child.y - originY - v0) * sy)
+  const previous = state.supersample
+  state.supersample = sample
+  paintNode(octx, child, false, t, state, true)
+  state.supersample = previous
+  return { canvas, pad, logicalWidth, logicalHeight, localX: originX + u0, localY: originY + v0 }
+}
+
+function emptyPlaneBitmap(): PlaneBitmap {
+  return { canvas: createCanvas(1, 1), pad: 0, logicalWidth: 0, logicalHeight: 0, localX: 0, localY: 0 }
+}
+
+type PlanePaint =
+  | { kind: 'skip' }
+  | { kind: 'full'; bitmap: PlaneBitmap }
+  | { kind: 'solid'; color: string; screen: Array<{ x: number; y: number }>; bitmap: PlaneBitmap }
+  | { kind: 'crop'; bitmap: PlaneBitmap; screen: ScreenPoint[] }
+
+/** 整张位图会比画布大很多时，只画落进取景窗的那一块。完全落在画面里的小平面仍走原来的位图。 */
+function choosePlane(
+  child: LayoutNode,
+  worldAt: (contentU: number, contentV: number) => { x: number; y: number; z: number },
+  perspective: Perspective,
+  vx: number,
+  vy: number,
+  view: { x: number; y: number; width: number; height: number } | null,
+  deviceScale: number,
+  textureScale: number,
+  t: number,
+  state: PaintState,
+): PlanePaint {
+  const probe = paintMetrics(child, state)
+  const corners: PlaneCorner[] = [
+    [0, 0],
+    [probe.fullW, 0],
+    [probe.fullW, probe.fullH],
+    [0, probe.fullH],
+  ].map(([u, v]) => {
+    const point = worldAt(probe.originX + u!, probe.originY + v!)
+    return { u: u!, v: v!, x: point.x, y: point.y, z: point.z }
+  })
+  const maxScale = Math.max(deviceScale, 1e-3) * textureScale
+  const fullSide = Math.max(probe.fullW, probe.fullH) * maxScale
+  const seen = view ? visiblePlaneWindow(corners, perspective, vx, vy, view, 4) : null
+  const scaleOf = (density: number) => Math.min(maxScale, Math.max(density, 0) * maxScale)
+  const cropSide = seen ? Math.max(seen.width * scaleOf(seen.densityU), seen.height * scaleOf(seen.densityV)) : fullSide
+  const useCrop = seen != null && fullSide > PLANE_BITMAP_SIDE && cropSide < fullSide * 0.85
+  if (view && !seen) return { kind: 'skip' }
+  if (!useCrop || !seen) {
+    return { kind: 'full', bitmap: paintChildBitmap(child, maxScale, t, state, textureScale) }
+  }
+  const contentPolygon = seen.polygon.map((point) => ({
+    u: probe.originX + point.u,
+    v: probe.originY + point.v,
+  }))
+  const fill = flatFill(child)
+  if (fill) {
+    const canvas = createCanvas(1, 1)
+    const solid = canvas.getContext('2d')
+    solid.fillStyle = fill
+    solid.fillRect(0, 0, 1, 1)
+    return {
+      kind: 'solid',
+      color: fill,
+      screen: seen.polygon,
+      bitmap: {
+        canvas,
+        pad: 0,
+        logicalWidth: seen.width,
+        logicalHeight: seen.height,
+        localX: probe.originX + seen.u,
+        localY: probe.originY + seen.v,
+        polygon: contentPolygon,
+      },
+    }
+  }
+  const bitmap = paintChildBitmap(child, maxScale, t, state, textureScale, {
+    u: seen.u,
+    v: seen.v,
+    width: seen.width,
+    height: seen.height,
+    scaleX: scaleOf(seen.densityU),
+    scaleY: scaleOf(seen.densityV),
+  })
+  bitmap.polygon = contentPolygon
+  return {
+    kind: 'crop',
+    bitmap,
+    screen: seen.polygon.map((point) => ({
+      u: point.u - seen.u,
+      v: point.v - seen.v,
+      x: point.x,
+      y: point.y,
+    })),
+  }
+}
+
+function userView(ctx: PaintCtx): { x: number; y: number; width: number; height: number } | null {
+  const canvas = ctx.canvas
+  if (!canvas || canvas.width <= 0 || canvas.height <= 0) return null
+  const tr = ctx.getTransform()
+  const inv = invert(tr)
+  if (!inv) return null
+  return applyToBox(inv, { x: 0, y: 0, width: canvas.width, height: canvas.height })
+}
+
+function paintMetrics(child: LayoutNode, state: PaintState) {
+  const pad = planeBitmapPad(child)
+  const frame = child.kind === 'layer' ? state.meshFrames?.get(child) : undefined
+  const extraL = frame ? Math.max(0, Math.ceil(-frame.x)) : 0
+  const extraT = frame ? Math.max(0, Math.ceil(-frame.y)) : 0
+  const extraR = frame ? Math.max(0, Math.ceil(frame.x + frame.width - child.width)) : 0
+  const extraB = frame ? Math.max(0, Math.ceil(frame.y + frame.height - child.height)) : 0
+  return {
+    originX: -(pad + extraL),
+    originY: -(pad + extraT),
+    fullW: child.width + pad * 2 + extraL + extraR,
+    fullH: child.height + pad * 2 + extraT + extraB,
+  }
+}
+
+function paintPerspectiveChildren(ctx: PaintCtx, node: LayerLayoutNode, debug: boolean, t: number, state: PaintState) {
+  const perspective = node.perspective!
+  const vx = node.width / 2
+  const vy = node.height / 2
+  const k = transformScale(ctx)
+  const ordered = node.children
+    .map((child, index) => ({ child, index, depth: planeDepth(child) }))
+    .sort((a, b) => a.depth - b.depth || a.index - b.index)
+  for (const { child, depth } of ordered) {
+    if (child.width <= 0 || child.height <= 0) continue
+    if (behindCamera(depth, perspective)) continue
+    if (!has3dPose(child)) {
+      paintNode(ctx, child, debug, t, state)
+      continue
+    }
+    const chosen = choosePlane(
+      child,
+      (u, v) => posePoint(child, u, v),
+      perspective,
+      vx,
+      vy,
+      userView(ctx),
+      k,
+      PERSPECTIVE_AA,
+      t,
+      state,
+    )
+    if (chosen.kind === 'full') {
+      const { canvas: bitmap, localX, localY, logicalWidth, logicalHeight } = chosen.bitmap
+      const at = (u: number, v: number) => project(vx, vy, perspective, posePoint(child, u + localX, v + localY))
+      drawTexturedPlane(ctx, bitmap, logicalWidth, logicalHeight, at)
+    } else if (chosen.kind === 'solid') {
+      drawSolidPolygon(ctx, chosen.color, chosen.screen)
+    } else if (chosen.kind === 'crop') {
+      drawTexturedPolygon(ctx, chosen.bitmap.canvas, chosen.bitmap.logicalWidth, chosen.bitmap.logicalHeight, chosen.screen)
+    }
+    if (debug) strokeProjectedQuad(ctx, child, vx, vy, perspective)
+  }
+}
+
+function paintProjectedChildren(ctx: PaintCtx, node: LayerLayoutNode, debug: boolean, t: number, state: PaintState) {
+  const perspective = node.perspective!
+  const k = transformScale(ctx)
+  const planes = cameraItems(node)
+    .filter((item) => item.kind !== 'mesh')
+    .sort((a, b) => a.depth - b.depth || a.index - b.index)
+  for (const item of planes) {
+    const child = item.kind === 'chrome' ? ({ ...item.node, children: [] } as LayoutNode) : item.node
+    if (child.width <= 0 || child.height <= 0) continue
+    if (item.behind) continue
+    if (!item.posed) {
+      paintNode(ctx, child, debug, t, state)
+      continue
+    }
+    const vx = node.width / 2 + (node.vanishX ?? 0)
+    const vy = node.height / 2 + (node.vanishY ?? 0)
+    const chosen = choosePlane(
+      child,
+      (u, v) => applyPoseMatrix(item.toLayer, u, v, 0),
+      perspective,
+      vx,
+      vy,
+      userView(ctx),
+      k,
+      PERSPECTIVE_AA,
+      t,
+      state,
+    )
+    if (chosen.kind === 'full') {
+      const { canvas: bitmap, localX, localY, logicalWidth, logicalHeight } = chosen.bitmap
+      const at = (u: number, v: number) => projectOnLayer(node, item.toLayer, u + localX, v + localY)
+      drawTexturedPlane(ctx, bitmap, logicalWidth, logicalHeight, at)
+    } else if (chosen.kind === 'solid') {
+      drawSolidPolygon(ctx, chosen.color, chosen.screen)
+    } else if (chosen.kind === 'crop') {
+      drawTexturedPolygon(ctx, chosen.bitmap.canvas, chosen.bitmap.logicalWidth, chosen.bitmap.logicalHeight, chosen.screen)
+    }
+    if (debug) {
+      const pts = [
+        [0, 0],
+        [child.width, 0],
+        [child.width, child.height],
+        [0, child.height],
+      ]
+        .map(([u, v]) => projectOnLayer(node, item.toLayer, u!, v!))
+      if (pts.every((point) => point != null)) {
+        ctx.save()
+        ctx.strokeStyle = 'rgba(0, 210, 90, 0.95)'
+        ctx.lineWidth = 1.5 / transformScale(ctx)
+        ctx.beginPath()
+        ctx.moveTo(pts[0]!.x, pts[0]!.y)
+        for (const point of pts.slice(1)) ctx.lineTo(point!.x, point!.y)
+        ctx.closePath()
+        ctx.stroke()
+        ctx.restore()
+      }
+    }
+  }
+}
+
+function strokeProjectedQuad(
+  ctx: PaintCtx,
+  child: LayoutNode,
+  vx: number,
+  vy: number,
+  perspective: Perspective,
+) {
+  const locals: Array<[number, number]> = [
+    [0, 0],
+    [child.width, 0],
+    [child.width, child.height],
+    [0, child.height],
+  ]
+  const pts = []
+  for (const [u, v] of locals) {
+    const q = project(vx, vy, perspective, posePoint(child, u, v))
+    if (!q) return
+    pts.push(q)
+  }
+  ctx.save()
+  ctx.strokeStyle = 'rgba(0, 210, 90, 0.95)'
+  ctx.lineWidth = 1.5 / transformScale(ctx)
+  ctx.beginPath()
+  ctx.moveTo(pts[0]!.x, pts[0]!.y)
+  for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y)
+  ctx.closePath()
+  ctx.stroke()
+  ctx.restore()
+}
+
+function paintBody(ctx: PaintCtx, node: LayoutNode, debug: boolean, t: number, state: PaintState) {
+  if (node.kind === 'text') {
+    drawBoxChrome(ctx, node)
+    if (node.overflow === 'hidden') {
+      ctx.save()
+      clipRoundedBox(ctx, node.x, node.y, node.width, node.height, node)
+      drawTextNode(ctx, node)
+      ctx.restore()
+    } else drawTextNode(ctx, node)
+  } else if (node.kind === 'image') {
+    drawBoxChrome(ctx, node)
+    drawImageNode(ctx, node)
+  } else if (node.kind === 'shape') {
+    drawShape(ctx, node)
+  } else if (node.kind === 'line') {
+    drawLine(ctx, node)
+  } else if (node.kind === 'custom') {
+    drawBoxChrome(ctx, node)
+  } else if (node.kind === 'canvas') {
+    drawBoxChrome(ctx, node)
+    drawCanvasNode(ctx, node)
+  } else if (node.kind === 'group') {
+    ctx.save()
+    ctx.transform(node.svg.a, node.svg.b, node.svg.c, node.svg.d, node.svg.e, node.svg.f)
+    for (const ch of node.children) paintNode(ctx, ch, debug, t, state)
+    ctx.restore()
+  } else if (node.kind === 'flex' || node.kind === 'layer') {
+    drawBoxChrome(ctx, node)
+    ctx.save()
+    ctx.translate(node.x, node.y)
+    if ((node.kind === 'layer' && (node.overflow === 'hidden' || node.view)) || overflowClips(node)) {
+      clipRoundedBox(ctx, 0, 0, node.width, node.height, node)
+    }
+    const inset = flexContentInset(node)
+    ctx.translate(inset.x, inset.y)
+    if (node.kind === 'layer' && node.view) {
+      const mapping = viewMatrix(node.width, node.height, node.view)
+      ctx.transform(mapping.a, mapping.b, mapping.c, mapping.d, mapping.e, mapping.f)
+    }
+    const meshFrame = node.kind === 'layer' ? state.meshFrames?.get(node) : undefined
+    if (meshFrame && meshFrame.width > 0 && meshFrame.height > 0) {
+      ctx.imageSmoothingEnabled = true
+      ctx.drawImage(meshFrame.canvas, meshFrame.x, meshFrame.y, meshFrame.width, meshFrame.height)
+    } else if (meshFrame) {
+      // 投影落在可见范围外，这一层不再走二维透视。
+    } else if (node.kind === 'layer' && hasPerspective(node.perspective) && (cameraSceneCustom(node) || node.children.some(has3dPose))) {
+      if (cameraSceneCustom(node)) paintProjectedChildren(ctx, node, debug, t, state)
+      else paintPerspectiveChildren(ctx, node, debug, t, state)
+    } else {
+      for (const ch of node.children) paintNode(ctx, ch, debug, t, state)
+    }
+    ctx.restore()
+  }
+}
+
+function paintNodeEffectsAndBody(
+  ctx: PaintCtx,
+  node: LayoutNode,
+  debug: boolean,
+  t: number,
+  state: PaintState,
+  opts: { sampleBackdrop: boolean; skipNoise?: boolean; skipOwnOuter?: boolean },
+) {
+  // glass 未写 shadow 时补一层柔和投影，接近系统控件浮起感
+  const drawShadow = () => {
+    const shadows = shadowLayers(node.shadow, node.shadowList)
+    if (shadows.length > 0) {
+      for (let i = shadows.length - 1; i >= 0; i--) {
+        drawEffect(ctx, state, node, shadowEffect(shadows[i]!), (spread) => drawEffectInk(ctx, node, spread, state))
+      }
+    } else if (node.glass) {
+      const depth = node.glass.variant === 'thick' ? 18 : node.glass.variant === 'clear' ? 12 : 14
+      drawEffect(
+        ctx,
+        state,
+        node,
+        { dx: 0, dy: depth * 0.35, blur: depth, spread: 0, color: '#0000002e' },
+        (spread) => drawEffectInk(ctx, node, spread, state),
+      )
+    }
+  }
+  // glass / backdrop-blur 采样背后像素，只能在主画布上做一次
+  if (opts.sampleBackdrop && node.glass) {
+    paintGlass(ctx, node, node.glass, drawShadow)
+  } else {
+    if (opts.sampleBackdrop && nodeHasBackdrop(node)) paintBackdrop(ctx, node)
+    if (!opts.skipOwnOuter) drawShadow()
+  }
+  if (!opts.skipOwnOuter && node.glow) paintGlow(ctx, state, node, node.glow, (spread) => drawEffectInk(ctx, node, spread, state))
+  if (!opts.skipOwnOuter) paintInkStrokes(ctx, node, 'outer', undefined, state)
+  paintBody(ctx, node, debug, t, state)
+  paintInkStrokes(ctx, node, 'inner', undefined, state)
+  for (const shadow of shadowLayers(node.innerShadow, node.innerShadowList).slice().reverse()) {
+    paintInnerEffect(ctx, node, shadow, 'source-over')
+  }
+  if (node.innerGlow) {
+    paintInnerEffect(
+      ctx,
+      node,
+      { x: 0, y: 0, blur: node.innerGlow.blur, spread: node.innerGlow.spread, color: node.innerGlow.color },
+      'screen',
+    )
+    paintInnerEffect(
+      ctx,
+      node,
+      {
+        x: 0,
+        y: 0,
+        blur: Math.max(2, node.innerGlow.blur * 0.35),
+        spread: node.innerGlow.spread,
+        color: node.innerGlow.color,
+      },
+      'screen',
+    )
+  }
+  if (node.overlay) paintOverlay(ctx, node, node.overlay, state)
+  if (node.noise && !opts.skipNoise) paintNoise(ctx, node, node.noise, 'soft-light', state.frame)
+}
+
+/**
+ * 按注册顺序跑像素滤镜。origin 是盒子左上角在缓冲里的逻辑坐标，k 是逻辑到像素的缩放。
+ * 遮罩按盒子铺，alpha 是强度。
+ */
+export function applyPixelFilters(
+  canvas: Canvas,
+  filters: AppliedFilter[],
+  k: number,
+  originX: number,
+  originY: number,
+  width: number,
+  height: number,
+) {
+  if (filters.length === 0) return
+  const pw = canvas.width
+  const ph = canvas.height
+  if (pw <= 0 || ph <= 0) return
+  const cctx = canvas.getContext('2d') as PaintCtx
+  const image = cctx.getImageData(0, 0, pw, ph)
+  const frame = { x: originX * k, y: originY * k, width: width * k, height: height * k }
+  for (const item of filters) {
+    const apply = getFilter(item.name)?.apply
+    if (!apply) continue
+    let mask: Uint8ClampedArray | undefined
+    if (item.mask) {
+      const m = createCanvas(pw, ph)
+      const mctx = m.getContext('2d') as PaintCtx
+      mctx.setTransform(k, 0, 0, k, originX * k, originY * k)
+      mctx.fillStyle = paintOf(mctx, item.mask, 0, 0, width, height)
+      mctx.fillRect(-originX, -originY, pw / k, ph / k)
+      mask = mctx.getImageData(0, 0, pw, ph).data
+    }
+    const before = mask ? image.data.slice() : undefined
+    apply({ data: image.data, width: pw, height: ph, frame, mask }, item.spec)
+    if (before && mask) {
+      const data = image.data
+      for (let i = 0; i < data.length; i += 4) {
+        const m = mask[i + 3]! / 255
+        if (m >= 1) continue
+        data[i] = before[i]! + (data[i]! - before[i]!) * m
+        data[i + 1] = before[i + 1]! + (data[i + 1]! - before[i + 1]!) * m
+        data[i + 2] = before[i + 2]! + (data[i + 2]! - before[i + 2]!) * m
+        data[i + 3] = before[i + 3]! + (data[i + 3]! - before[i + 3]!) * m
+      }
+    }
+  }
+  cctx.putImageData(image, 0, 0)
+}
+
+function canvasFilterCss(node: LayoutNode, samples = 1): string {
+  const parts: string[] = []
+  if ((node.blur ?? 0) > 0) parts.push(`blur(${node.blur! * samples}px)`)
+  for (const item of orderedFilters(node.filters, 'canvas')) {
+    const css = getFilter(item.name)?.canvasFilter?.(item.spec, samples)
+    if (css) parts.push(css)
+  }
+  return parts.join(' ')
+}
+
+function hasOwnOuter(node: LayoutNode): boolean {
+  if (shadowLayers(node.shadow, node.shadowList).length > 0 || node.glow) return true
+  return node.inkStroke?.some((layer) => layer.position === 'outside' || layer.position === 'center') ?? false
+}
+
+/** 蒙版裁完之后，用留下的轮廓画这一层自己的阴影、光晕和外侧描边。 */
+function compositeMaskedOuter(
+  body: Canvas,
+  node: LayoutNode,
+  k: number,
+  crop: Box,
+  state: PaintState,
+): Canvas {
+  const sil = createCanvas(body.width, body.height)
+  const sctx = sil.getContext('2d')
+  sctx.drawImage(body, 0, 0)
+  sctx.globalCompositeOperation = 'source-in'
+  sctx.fillStyle = SILHOUETTE
+  sctx.fillRect(0, 0, sil.width, sil.height)
+  const out = createCanvas(body.width, body.height)
+  const octx = out.getContext('2d') as PaintCtx
+  octx.setTransform(k, 0, 0, k, 0, 0)
+  octx.translate(-crop.x, -crop.y)
+  const bounds = crop
+  const drawSil = (spread: number) => {
+    const blit = (dctx: PaintCtx) => {
+      dctx.drawImage(sil, crop.x, crop.y, crop.width, crop.height)
+    }
+    if (Math.abs(spread) < 1e-3) blit(octx)
+    else paintDilatedInk(octx, spread, SILHOUETTE, bounds, blit)
+  }
+  for (const shadow of shadowLayers(node.shadow, node.shadowList).slice().reverse()) {
+    drawEffect(octx, state, node, shadowEffect(shadow), drawSil)
+  }
+  if (node.glow) paintGlow(octx, state, node, node.glow, drawSil)
+  paintInkStrokes(octx, node, 'outer', {
+    bounds,
+    draw: (dctx) => {
+      dctx.drawImage(sil, crop.x, crop.y, crop.width, crop.height)
+    },
+  })
+  octx.setTransform(1, 0, 0, 1, 0, 0)
+  octx.drawImage(body, 0, 0)
+  return out
+}
+
+/** 当前画布四个角逆变换后的外接矩形。旋转时比真正看得见的区域略大。 */
+function canvasUserBounds(ctx: PaintCtx): Box | null {
+  const canvas = ctx.canvas
+  if (canvas.width <= 0 || canvas.height <= 0) return null
+  const inv = invert(ctx.getTransform())
+  if (!inv) return null
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const dx of [0, canvas.width]) {
+    for (const dy of [0, canvas.height]) {
+      const [x, y] = apply(inv, dx, dy)
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null
+      minX = Math.min(minX, x)
+      minY = Math.min(minY, y)
+      maxX = Math.max(maxX, x)
+      maxY = Math.max(maxY, y)
+    }
+  }
+  if (maxX - minX < 1e-3 || maxY - minY < 1e-3) return null
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
+}
+
+/**
+ * 离屏只留落在当前画布里的一块，再向外留出模糊和羽化要采样的边。
+ * 整张都看得见时返回原来的矩形，调用方可以走和以前一样的尺寸。
+ */
+function visibleBitmap(ctx: PaintCtx, full: Box, margin: number): Box | null {
+  const seen = canvasUserBounds(ctx)
+  if (!seen) return full
+  const minX = seen.x - margin
+  const minY = seen.y - margin
+  const maxX = seen.x + seen.width + margin
+  const maxY = seen.y + seen.height + margin
+  if (
+    minX <= full.x + 0.5 &&
+    minY <= full.y + 0.5 &&
+    maxX >= full.x + full.width - 0.5 &&
+    maxY >= full.y + full.height - 0.5
+  ) {
+    return full
+  }
+  const x0 = Math.max(full.x, minX)
+  const y0 = Math.max(full.y, minY)
+  const x1 = Math.min(full.x + full.width, maxX)
+  const y1 = Math.min(full.y + full.height, maxY)
+  if (x1 - x0 < 1 || y1 - y0 < 1) return null
+  const sx0 = Math.max(full.x, Math.floor(x0))
+  const sy0 = Math.max(full.y, Math.floor(y0))
+  const sx1 = Math.min(full.x + full.width, Math.ceil(x1))
+  const sy1 = Math.min(full.y + full.height, Math.ceil(y1))
+  if (sx1 - sx0 < 1 || sy1 - sy0 < 1) return null
+  if (
+    sx0 <= full.x + 1e-6 &&
+    sy0 <= full.y + 1e-6 &&
+    sx1 >= full.x + full.width - 1e-6 &&
+    sy1 >= full.y + full.height - 1e-6
+  ) {
+    return full
+  }
+  return { x: sx0, y: sy0, width: sx1 - sx0, height: sy1 - sy0 }
+}
+
+/** 布局盒子并上着墨。行内字转出盒子时，模糊和滤镜的离屏要盖住那一块。 */
+function coveredBounds(node: LayoutNode): Box {
+  const box = { x: node.x, y: node.y, width: Math.max(0, node.width), height: Math.max(0, node.height) }
+  if (node.ink.width <= 1e-3 || node.ink.height <= 1e-3) return box
+  return unionBoxes(box, {
+    x: node.x + node.ink.x,
+    y: node.y + node.ink.y,
+    width: node.ink.width,
+    height: node.ink.height,
+  })
+}
+
+function paintWithLayerFilter(ctx: PaintCtx, node: LayoutNode, debug: boolean, t: number, state: PaintState) {
+  const blur = node.blur ?? 0
+  const pixel = orderedFilters(node.filters, 'pixel')
+  const filter = canvasFilterCss(node, state.supersample ?? 1)
+  const masks = layerMaskOf(node)
+  const strokeReach = outerInkStrokeReach(node.inkStroke)
+  const pad = Math.ceil(blur * 2 + 4 + filtersPad(node.filters))
+  const shadowPad = shadowLayers(node.shadow, node.shadowList).reduce(
+    (pad, shadow) =>
+      Math.max(pad, shadow.blur * 2 + shadow.spread + strokeReach + Math.max(Math.abs(shadow.x), Math.abs(shadow.y))),
+    0,
+  )
+  const glowPad = node.glow ? node.glow.blur * 2 + node.glow.spread + strokeReach : 0
+  let effectPad = Math.max(pad, Math.ceil(shadowPad), Math.ceil(glowPad), Math.ceil(strokeReach))
+  if (masks && node.glass) effectPad = Math.max(effectPad, Math.ceil(node.glass.blur * 2 + 8))
+  if (masks && nodeHasBackdrop(node)) {
+    effectPad = Math.max(effectPad, Math.ceil((node.backdropBlur ?? 0) * 2 + 4))
+  }
+  const cover = coveredBounds(node)
+  const tw = Math.max(1, Math.ceil(cover.width + effectPad * 2))
+  const th = Math.max(1, Math.ceil(cover.height + effectPad * 2))
+  const full = { x: cover.x - effectPad, y: cover.y - effectPad, width: tw, height: th }
+  const feather = node.kind === 'layer' ? node.maskFeather ?? 0 : 0
+  const crop = visibleBitmap(ctx, full, Math.max(effectPad, Math.ceil(blur * 3 + feather * 3 + 8)))
+  if (!crop) return
+  const k = transformScale(ctx)
+  const off = createCanvas(Math.max(1, Math.ceil(crop.width * k)), Math.max(1, Math.ceil(crop.height * k)))
+  const octx = off.getContext('2d') as PaintCtx
+  octx.setTransform(k, 0, 0, k, 0, 0)
+  octx.translate(-crop.x, -crop.y)
+  const originX = node.x - crop.x
+  const originY = node.y - crop.y
+  // 有 mask 时玻璃必须画进离屏，采样仍来自主画布，最后和阴影、模糊一起被裁掉
+  const sampleHere = masks != null && (node.glass != null || nodeHasBackdrop(node))
+  const deferOuter = masks != null && node.glass == null && hasOwnOuter(node)
+  if (sampleHere) copyParentUnderlay(ctx, octx)
+  // 有像素滤镜时颗粒在调色之后再叠，不被染色。蒙版层自己的外扩效果等裁完再画。
+  paintNodeEffectsAndBody(octx, node, debug, t, state, {
+    sampleBackdrop: sampleHere,
+    skipNoise: pixel.length > 0,
+    skipOwnOuter: deferOuter,
+  })
+  if (pixel.length) applyPixelFilters(off, pixel, k, originX, originY, node.width, node.height)
+  if (!masks) {
+    ctx.save()
+    ctx.filter = filter || 'none'
+    ctx.drawImage(off, crop.x, crop.y, crop.width, crop.height)
+    ctx.filter = 'none'
+    ctx.restore()
+    if (pixel.length && node.noise) paintNoise(ctx, node, node.noise, 'soft-light', state.frame)
+    return
+  }
+  let target = off
+  if (filter) {
+    target = createCanvas(off.width, off.height)
+    const fctx = target.getContext('2d') as PaintCtx
+    fctx.setTransform(k, 0, 0, k, 0, 0)
+    fctx.filter = filter
+    fctx.drawImage(off, 0, 0, crop.width, crop.height)
+    fctx.filter = 'none'
+  }
+  if (pixel.length && node.noise) {
+    const nctx = target.getContext('2d') as PaintCtx
+    nctx.save()
+    nctx.setTransform(k, 0, 0, k, 0, 0)
+    nctx.translate(-crop.x, -crop.y)
+    paintNoise(nctx, node, node.noise, 'soft-light', state.frame)
+    nctx.restore()
+  }
+  applyLayerMask(target, masks, k, originX, originY, t, state, feather, node.kind === 'layer' ? node.maskInvert ?? false : false)
+  if (deferOuter) target = compositeMaskedOuter(target, node, k, crop, state)
+  ctx.save()
+  ctx.filter = 'none'
+  ctx.drawImage(target, crop.x, crop.y, crop.width, crop.height)
+  ctx.restore()
+}
+
+function paintNode(
+  ctx: CanvasRenderingContext2D,
+  node: LayoutNode,
+  debug: boolean,
+  t: number,
+  state: PaintState,
+  skipTransform = false,
+) {
+  const pctx = ctx as PaintCtx
+  pctx.save()
+  pctx.globalAlpha *= node.opacity
+  if (!skipTransform) applyNodeTransform(pctx, node)
+  if (node.blend && node.blend !== 'source-over') {
+    pctx.globalCompositeOperation = node.blend
+  }
+  const hasMask = layerMaskOf(node) != null
+  const useLayerFilter = (node.blur != null && node.blur > 0) || (node.filters != null && node.filters.length > 0) || hasMask
+  if (useLayerFilter) {
+    // 先在主画布采样玻璃/背景模糊，再把本体效果离屏糊上。有 mask 时改在离屏里采样，好让 mask 一并裁掉。
+    if (!hasMask) {
+      if (node.glass) paintGlass(pctx, node, node.glass)
+      else if (nodeHasBackdrop(node)) paintBackdrop(pctx, node)
+    }
+    paintWithLayerFilter(pctx, node, debug, t, state)
+  } else {
+    paintNodeEffectsAndBody(pctx, node, debug, t, state, { sampleBackdrop: true })
+  }
+  if (debug) drawDebugOverlay(pctx, node)
+  pctx.restore()
+}
+
+function nodePose(node: LayoutNode): Matrix {
+  return absoluteNodeMatrix(node)
+}
+
+/** 文档画布和沿途裁剪，换算到这一层绘制网格时的坐标。 */
+export function meshVisibleRect(docWidth: number, docHeight: number, root: LayerLayoutNode, target: LayerLayoutNode): Box {
+  let found: Box | null = null
+  const visit = (node: LayoutNode, parent: Matrix, clip: Box) => {
+    if (found) return
+    const posed = multiply(parent, nodePose(node))
+    const insetX = flexContentInset(node).x
+    const insetY = flexContentInset(node).y
+    const preView = node.kind === 'group' ? posed : multiply(posed, translated(node.x + insetX, node.y + insetY))
+    let nextClip = clip
+    if (node.kind === 'layer' && (node.overflow === 'hidden' || node.view)) {
+      nextClip = intersectBox(clip, applyToBox(preView, { x: 0, y: 0, width: node.width, height: node.height }))
+    }
+    let content = preView
+    if (node.kind === 'layer' && node.view) content = multiply(preView, viewMatrix(node.width, node.height, node.view))
+    if (node.kind === 'group') content = multiply(posed, node.svg)
+    if (node === target && node.kind === 'layer') {
+      const inv = invert(content)
+      found = inv ? applyToBox(inv, nextClip) : { x: 0, y: 0, width: node.width, height: node.height }
+      return
+    }
+    if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
+      for (const child of node.children) visit(child, content, nextClip)
+    }
+  }
+  visit(root, IDENTITY, { x: 0, y: 0, width: docWidth, height: docHeight })
+  return found ?? { x: 0, y: 0, width: target.width, height: target.height }
+}
+
+async function prepareMeshFrames(
+  root: LayerLayoutNode,
+  scale: number,
+  t: number,
+  clock: { frame: number; fps: number },
+  issues: Issue[],
+  docWidth: number,
+  docHeight: number,
+  mesh: { samples?: 1 | 2 | 4; cacheBytes?: number | false },
+): Promise<Map<LayerLayoutNode, MeshFrame>> {
+  const frames = new Map<LayerLayoutNode, MeshFrame>()
+  const state: PaintState = { canvasWidth: 0, canvasHeight: 0, frame: clock.frame, fps: clock.fps, issues, meshFrames: frames }
+  const visit = async (node: LayoutNode, parentK: number) => {
+    const k = parentK * layoutScale(node)
+    if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
+      for (const child of node.children) await visit(child, k)
+    }
+    if (node.kind !== 'layer' || !hasPerspective(node.perspective)) return
+    if (!ownsMeshScene(node) && node.dof == null) return
+    const clip = meshVisibleRect(docWidth, docHeight, root, node)
+    const frame = renderMeshLayer(
+      node,
+      k,
+      (peeled, toLayer) => {
+        if (!toLayer || !hasPerspective(node.perspective)) return paintChildBitmap(peeled, Math.max(k, 1e-3) * 2, t, state, 2)
+        const chosen = choosePlane(
+          peeled,
+          (u, v) => applyPoseMatrix(toLayer, u, v, 0),
+          node.perspective,
+          node.width / 2 + (node.vanishX ?? 0),
+          node.height / 2 + (node.vanishY ?? 0),
+          clip,
+          Math.max(k, 1e-3),
+          2,
+          t,
+          state,
+        )
+        if (chosen.kind === 'skip') return emptyPlaneBitmap()
+        return chosen.bitmap
+      },
+      {
+        clip,
+        samples: mesh.samples,
+        cacheBytes: mesh.cacheBytes,
+      },
+    )
+    if (frame) frames.set(node, frame)
+  }
+  await visit(root, scale)
+  return frames
+}
+
+/** 把这一层画在自己的布局盒里，原点是左上角。`masked` 为假时不套蒙版。 */
+export function paintLayerIsolated(node: LayerLayoutNode, masked: boolean): Canvas {
+  const width = Math.max(1, Math.ceil(node.width))
+  const height = Math.max(1, Math.ceil(node.height))
+  const canvas = createCanvas(width, height)
+  const state: PaintState = { canvasWidth: width, canvasHeight: height, frame: 0, fps: 30, issues: [] }
+  const clone: LayerLayoutNode = { ...node, x: 0, y: 0, mask: masked ? node.mask : undefined }
+  paintNode(canvas.getContext('2d'), clone, false, 0, state)
+  return canvas
+}
+
+function paintFeatureNeeds(node: LayoutNode): { distance: boolean; stroke: boolean; glass: boolean; noise: boolean } {
+  const need = { distance: false, stroke: false, glass: false, noise: false }
+  const spread = (spec?: { spread: number }) => spec != null && Math.abs(spec.spread) > 1e-3
+  const walk = (current: LayoutNode) => {
+    if (current.inkStroke?.length) {
+      need.stroke = true
+      need.distance = true
+    }
+    if (current.glass) {
+      need.glass = true
+      need.distance = true
+    }
+    if (current.noise && current.noise.amount > 0) need.noise = true
+    const spreads = [
+      ...shadowLayers(current.shadow, current.shadowList),
+      ...shadowLayers(current.innerShadow, current.innerShadowList),
+      current.glow,
+      current.innerGlow,
+    ]
+    if (spreads.some((spec) => spread(spec))) need.distance = true
+    if (current.kind === 'layer' || current.kind === 'flex' || current.kind === 'group') {
+      for (const child of current.children) walk(child)
+      if (current.kind === 'layer' && current.mask) for (const child of current.mask) walk(child)
+    }
+  }
+  walk(node)
+  return need
+}
+
+/** 开画之前装上这棵树用到的距离场、描边、玻璃和噪点。没写的不装。 */
+export async function ensurePaintFeatures(root: LayoutNode): Promise<void> {
+  const need = paintFeatureNeeds(root)
+  if (need.distance) await ensureDistanceField()
+  if (need.stroke) await ensureInkStroke()
+  if (need.glass) await ensureGlass()
+  if (need.noise) await ensureNoise()
+}
+
+export async function paintDocument(_root: LayerLayoutNode, _opts: PaintOptions): Promise<Canvas> {
+  throw new Error('JS 绘制器已移除。出图只走带上限的插件。')
+}
+
+await ensureDistanceField()
+await ensureInkStroke()
+await ensureGlass()
+await ensureNoise()
+
