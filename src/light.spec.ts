@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
+import { h } from './h.js'
 import { layoutSync, prepareAssets, readLayerRoot } from './layout.js'
 import { checkLayer, inheritQuality } from './render.js'
+
+async function laidOut(source: string) {
+  const opened = readLayerRoot(source)
+  const assets = await prepareAssets(opened.root, process.cwd(), { fonts: opened.fonts })
+  return layoutSync(opened.root, assets)
+}
 
 describe('author lights', () => {
   it('镜头上的 light 被记下，未知类型和越界粗糙度会警告', async () => {
@@ -30,6 +37,61 @@ describe('author lights', () => {
     expect(messages).toContain('candle')
     expect(messages).toContain('roughness')
     expect(report.issues.some((issue) => issue.code === 'unknown-tag')).toBe(false)
+  })
+})
+
+describe('material phrase', () => {
+  it('finish 和 color 收在 material 里，color 盖过 fill', async () => {
+    const doc = await laidOut(`<layer width="200" height="80" camera="200">
+      <sphere cx="30" cy="40" r="16" fill="#111111" material="finish metal, color #c6c9ce, roughness 0.28, metalness 1" />
+      <sphere cx="80" cy="40" r="16" fill="#445566" material="finish metal, color #c6c9ce" />
+      <sphere cx="140" cy="40" r="12" fill="#445566" material="metal" />
+    </layer>`)
+    const meshes = doc.root.children.filter((child) => child.kind === 'mesh')
+    const physical = meshes[0]
+    const baked = meshes[1]
+    const legacy = meshes[2]
+    expect(physical && physical.kind === 'mesh' ? physical.fill : '').toBe('#c6c9ce')
+    expect(physical && physical.kind === 'mesh' ? physical.material : undefined).toMatchObject({
+      kind: 'metal',
+      roughness: 0.28,
+      metalness: 1,
+    })
+    expect(physical && physical.kind === 'mesh' ? physical.material?.matcap : 'set').toBeUndefined()
+    expect(baked && baked.kind === 'mesh' ? baked.fill : '').toBe('#c6c9ce')
+    expect(baked && baked.kind === 'mesh' ? baked.material?.matcap : '').toBe('metal')
+    expect(legacy && legacy.kind === 'mesh' ? legacy.fill : '').toBe('#445566')
+    expect(legacy && legacy.kind === 'mesh' ? legacy.material?.matcap : '').toBe('metal')
+    expect(doc.issues.filter((issue) => issue.code === 'invalid-attr')).toEqual([])
+  })
+
+  it('tsx 对象收成同一句，玻璃和未知 finish 分开', async () => {
+    const root = h(
+      'layer',
+      { width: 80, height: 80, camera: 200 },
+      h('sphere', {
+        cx: 40,
+        cy: 40,
+        r: 16,
+        fill: '#111111',
+        material: { finish: 'glass', color: 'rgb(198, 201, 206)', roughness: 0.05, transmission: 1, ior: 1.5 },
+      }),
+    )
+    const sphere = root.children[0]
+    expect(typeof sphere !== 'string' && sphere?.attrs.material).toBe('finish glass, color rgb(198, 201, 206), roughness 0.05, transmission 1, ior 1.5')
+    const assets = await prepareAssets(root, process.cwd())
+    const doc = layoutSync(root, assets)
+    const mesh = doc.root.children.find((child) => child.kind === 'mesh')
+    expect(mesh && mesh.kind === 'mesh' ? mesh.fill : '').toBe('rgb(198, 201, 206)')
+    expect(mesh && mesh.kind === 'mesh' ? mesh.material : undefined).toMatchObject({
+      kind: 'glass',
+      roughness: 0.05,
+      transmission: 1,
+      ior: 1.5,
+    })
+
+    const report = await checkLayer(`<layer width="80" height="80" camera="200"><sphere cx="40" cy="40" r="12" material="finish wood, color #fff" /></layer>`)
+    expect(report.issues.some((issue) => issue.message.includes('不认识的 finish'))).toBe(true)
   })
 })
 

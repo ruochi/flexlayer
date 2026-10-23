@@ -458,7 +458,13 @@ export const ATTRS: AttrDef[] = [
   },
   { name: 'hidden', docGroup: 'graphic' },
   { name: 'halo', docGroup: 'graphic', syntax: 'px', example: '3' },
-  { name: 'material', docGroup: 'graphic', syntax: 'clay | plastic | metal | mirror | brushed | lamp | neon | matte | glass [roughness]', example: 'metal' },
+  {
+    name: 'material',
+    docGroup: 'graphic',
+    syntax: 'finish metal, color #c6c9ce, roughness 0.28, metalness 1',
+    example: 'finish metal, color #c6c9ce, roughness 0.28, metalness 1',
+    note: 'On a solid. finish is clay, plastic, metal, mirror, brushed, glass, lamp, neon, or matte. color replaces fill. roughness, metalness, clearcoat, transmission, ior, sheen, anisotropy, and emissive are the MeshPhysicalMaterial fields',
+  },
   {
     name: 'cast-shadow',
     forbidInStyle: true,
