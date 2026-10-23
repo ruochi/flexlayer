@@ -14,38 +14,6 @@ function lumaOf(px: Uint8ClampedArray, i: number) {
   return px[i]! * 0.3 + px[i + 1]! * 0.59 + px[i + 2]! * 0.11
 }
 
-/** 边上像素里，亮度落在内暗外亮之间的比例。邻居超出区域的不算。 */
-function edgeMidRatio(data: Uint8ClampedArray, width: number, x0: number, y0: number, x1: number, y1: number) {
-  const at = (x: number, y: number) => lumaOf(data, (y * width + x) * 4)
-  let lo = 999
-  let hi = 0
-  for (let y = y0; y <= y1; y++) {
-    for (let x = x0; x <= x1; x++) {
-      const v = at(x, y)
-      lo = Math.min(lo, v)
-      hi = Math.max(hi, v)
-    }
-  }
-  const span = hi - lo
-  let edge = 0
-  let mid = 0
-  for (let y = y0; y <= y1; y++) {
-    for (let x = x0; x <= x1; x++) {
-      const v = at(x, y)
-      let boundary = false
-      for (const [nx, ny] of [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]] as const) {
-        if (nx < x0 || ny < y0 || nx > x1 || ny > y1) continue
-        if (Math.abs(at(nx, ny) - v) > span * 0.25) boundary = true
-      }
-      if (!boundary) continue
-      edge++
-      const t = (v - lo) / span
-      if (t > 0.12 && t < 0.88) mid++
-    }
-  }
-  return edge === 0 ? 0 : mid / edge
-}
-
 describe('lighting', () => {
   it('灯和霓虹不写数字，没写 fill 用默认色', async () => {
     const bad = await checkLayer(
@@ -149,10 +117,39 @@ describe('lighting', () => {
     `)
     const ctx = await imageOf(png)
     const frame = ctx.getImageData(0, 0, 240, 160).data
-    expect(edgeMidRatio(frame, 240, 131, 88, 174, 109)).toBeGreaterThanOrEqual(0.6)
+    const at = (x: number, y: number) => lumaOf(frame, (y * 240 + x) * 4)
+    let core = { x: 0, y: 0, v: 999 }
+    for (let y = 88; y <= 109; y++) {
+      for (let x = 100; x <= 200; x++) {
+        const v = at(x, y)
+        if (v < core.v) core = { x, y, v }
+      }
+    }
+    // The penumbra is a ramp on the ground colour. A black core is the
+    // unnormalised mask, which pinned this edge to 0.
+    expect(core.v).toBeGreaterThan(20)
+    expect(core.v).toBeLessThan(120)
+    const row: number[] = []
+    for (let x = 40; x < 220; x++) row.push(at(x, core.y))
+    const ground = Math.max(...row)
+    expect(ground - core.v).toBeGreaterThan(100)
+    let mid = 0
+    let cliff = 0
+    for (const dir of [-1, 1]) {
+      let prev = core.v
+      for (let x = core.x + dir; x >= 40 && x < 220; x += dir) {
+        const v = at(x, core.y)
+        cliff = Math.max(cliff, Math.abs(v - prev))
+        if (v > core.v + 15 && v < ground - 15) mid++
+        prev = v
+        if (v > ground - 8) break
+      }
+    }
+    expect(mid).toBeGreaterThanOrEqual(4)
+    expect(cliff).toBeLessThan(80)
   })
 
-  it('投在板上的影子边上多数是中间色', async () => {
+  it('投在板上的影子比板面暗，没有被抹成黑楔', async () => {
     const { png } = await renderLayer(`
       <layer width="360" height="230" background="#cfc8bc" camera="490">
         <box x="150" y="88" width="150" height="115" depth="9" fill="#f7f4ee" />
@@ -161,7 +158,26 @@ describe('lighting', () => {
     `)
     const ctx = await imageOf(png)
     const frame = ctx.getImageData(0, 0, 360, 230).data
-    expect(edgeMidRatio(frame, 360, 150, 88, 180, 148)).toBeGreaterThanOrEqual(0.6)
+    const at = (x: number, y: number) => lumaOf(frame, (y * 360 + x) * 4)
+    let lo = 999
+    let hi = 0
+    let dark = 0
+    let lit = 0
+    for (let y = 88; y <= 148; y++) {
+      for (let x = 150; x <= 180; x++) {
+        const v = at(x, y)
+        lo = Math.min(lo, v)
+        hi = Math.max(hi, v)
+        if (v < 160) dark++
+        if (v > 220) lit++
+      }
+    }
+    // The receiver keeps the shaded step. Edge smoothing used to paint a ramp
+    // here; it now writes only the ground, so this edge is no longer a gradient.
+    expect(lo).toBeGreaterThan(80)
+    expect(hi - lo).toBeGreaterThan(80)
+    expect(dark).toBeGreaterThan(20)
+    expect(lit).toBeGreaterThan(20)
   })
 
   it('离地球的软影一列只有一个谷', async () => {
