@@ -45,7 +45,8 @@
     "bench": "node scripts/bench-mesh.mjs",
     "flexlayer": "tsx src/cli.ts",
     "docs:attrs": "tsx scripts/gen-attr-docs.ts",
-    "gallery": "tsx scripts/render-gallery.ts"
+    "gallery": "tsx scripts/render-gallery.ts",
+    "gallery:3d": "tsx scripts/gallery-3d.ts"
   },
   "license": "MIT",
   "dependencies": {
