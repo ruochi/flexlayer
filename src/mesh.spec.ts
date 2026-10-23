@@ -778,6 +778,40 @@ describe('网格绘制', () => {
     expect(kept.issues.filter((item) => item.code === 'invalid-attr')).toEqual([])
   }, 30000)
 
+  it('brushed 的银色在低机位下顶面仍然读得出', async () => {
+    const { png } = await renderLayer(`
+      <layer width="1440" height="1800" background="#f6f3ee">
+        <layer width="1440" height="1800" camera="fov 28, orbit 16 14">
+          <layer x="310" y="1030" width="980" height="650" origin="490 0" rotateX="90">
+            <rect x="0" y="0" width="980" height="650" rx="14" fill="#c8ccd1" material="brushed" depth="28" />
+          </layer>
+          <layer x="318" y="380" width="980" height="650" origin="490 650" rotateX="8">
+            <rect x="0" y="0" width="980" height="650" rx="4" fill="#c8ccd1" material="brushed" depth="8" z="-10" />
+          </layer>
+          <ground y="1044" rotateX="90" fill="#efe8df" shadow-blur="36" shadow-opacity="0.34" />
+        </layer>
+      </layer>
+    `)
+    const image = await imageOf(png)
+    const luma = (x: number, y: number) => {
+      const px = image.at(x, y)
+      return 0.2126 * px[0]! + 0.7152 * px[1]! + 0.0722 * px[2]!
+    }
+    const average = (x0: number, y0: number, x1: number, y1: number) => {
+      let sum = 0
+      let count = 0
+      for (let y = y0; y < y1; y += 4) {
+        for (let x = x0; x < x1; x += 4) {
+          sum += luma(x, y)
+          count += 1
+        }
+      }
+      return sum / count
+    }
+    expect(average(600, 1100, 900, 1180)).toBeGreaterThan(140)
+    expect(average(500, 500, 900, 800)).toBeLessThan(240)
+  }, 30000)
+
   it('网格上的渐变、shadow、glow 会警告', async () => {
     const report = await checkLayer(
       `<layer width="160" height="120" camera="400"><box x="60" y="45" width="40" height="30" depth="20" fill="linear-gradient(#fff, #000)" shadow="0 8 12 #000" glow="10 #fff" /></layer>`,
