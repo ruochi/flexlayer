@@ -1,9 +1,10 @@
-import { createCanvas } from '@napi-rs/canvas'
+import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { applyCanvasFont, initFontsForMeasure } from './fonts.js'
+import { applyCanvasFont, ensureBuiltinFonts, initFontsForMeasure } from './fonts.js'
 import { layoutSource } from './layout.js'
+import { renderLayer } from './render.js'
 import { layoutText } from './text.js'
 import type { TextSegment } from './types.js'
 
@@ -241,5 +242,57 @@ describe('行内空白', () => {
     expect(w450).toBeGreaterThan(w400 * 0.8)
     expect(w450).toBeLessThan(w400 * 1.25)
     expect(w450).toBeLessThan(200)
+  })
+
+  it('Inter 量 → 得到的不是空宽，也不是缺字方框的宽度', async () => {
+    if (!hasFont) return
+    await ensureBuiltinFonts(['Inter'])
+    const canvas = createCanvas(10, 10)
+    const ctx = canvas.getContext('2d')
+    applyCanvasFont(ctx, 'Inter', 400, 40)
+    const arrow = ctx.measureText('→').width
+    const missing = ctx.measureText('\uE000').width
+    expect(arrow).toBeGreaterThan(8)
+    expect(Math.abs(arrow - missing)).toBeGreaterThan(1)
+  })
+
+  it('Inter 里没有的箭头画成默认字体的笔画，不是空心方框', async () => {
+    if (!hasFont) return
+    const scene = (family: string) =>
+      `<layer width="96" height="56" background="#ffffff"><p style="font-family:${family}; font-size:36px; color:#111">→</p></layer>`
+    const inter = await renderLayer(scene('Inter'), { baseDir: process.cwd() })
+    const sans = await renderLayer(scene('ChillDuanSans'), { baseDir: process.cwd() })
+    const ink = async (png: Buffer) => {
+      const image = await loadImage(png)
+      const canvas = createCanvas(image.width, image.height)
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(image, 0, 0)
+      const data = ctx.getImageData(0, 0, image.width, image.height).data
+      let minX = image.width
+      let minY = image.height
+      let maxX = -1
+      let maxY = -1
+      for (let y = 0; y < image.height; y++) {
+        for (let x = 0; x < image.width; x++) {
+          const i = (y * image.width + x) * 4
+          const luma = data[i]! * 0.3 + data[i + 1]! * 0.59 + data[i + 2]! * 0.11
+          if (luma > 210) continue
+          minX = Math.min(minX, x)
+          minY = Math.min(minY, y)
+          maxX = Math.max(maxX, x)
+          maxY = Math.max(maxY, y)
+        }
+      }
+      const cx = Math.round((minX + maxX) / 2)
+      const cy = Math.round((minY + maxY) / 2)
+      const ci = (cy * image.width + cx) * 4
+      const center = data[ci]! * 0.3 + data[ci + 1]! * 0.59 + data[ci + 2]! * 0.11
+      return { aspect: (maxX - minX + 1) / Math.max(1, maxY - minY + 1), center }
+    }
+    const drawn = await ink(inter.png)
+    const reference = await ink(sans.png)
+    expect(drawn.aspect).toBeGreaterThan(1.4)
+    expect(drawn.center).toBeLessThan(80)
+    expect(Math.abs(drawn.aspect - reference.aspect)).toBeLessThan(0.35)
   })
 })
