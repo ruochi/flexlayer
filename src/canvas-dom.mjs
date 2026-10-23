@@ -97,6 +97,16 @@ export function createCanvasSession(input) {
       dataset,
       style: { ...spec.style },
       computed: spec.computed,
+      report(item) {
+        issues.push({
+          level: item?.level === 'error' ? 'error' : 'warn',
+          code: item?.code || 'unsupported-webgl',
+          path: spec.path,
+          message: item?.message || 'WebGL 绘制没有落在画布上',
+          ...(item?.hint ? { hint: item.hint } : {}),
+          ...(input.sources?.[spec.path] ? { source: input.sources[spec.path] } : {}),
+        })
+      },
     }
     hosts.push(host)
   }

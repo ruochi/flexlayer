@@ -187,6 +187,23 @@ export interface FillConfig {
   shadows: boolean
   keepHi: boolean
   shading?: string
+  view?: Array<number>
+  lightSpace?: string
+  quality?: string
+  lights?: Array<FillLight>
+}
+export interface FillLight {
+  kind: string
+  r: number
+  g: number
+  b: number
+  intensity: number
+  x: number
+  y: number
+  z: number
+  tx: number
+  ty: number
+  tz: number
 }
 export interface FillFrame {
   pixels: Uint8ClampedArray
@@ -582,6 +599,25 @@ export declare function contactSheet(pngs: Array<Buffer>): Buffer
  * `+cap1080` refuses a delivered long edge above 1920.
  * `+unlimited` is the server build and is never exported.
  */
+export interface WebglDraw {
+  width: number
+  height: number
+  clip: Float32Array
+  indices: Uint32Array
+  colorR: number
+  colorG: number
+  colorB: number
+  colorA: number
+  shaded: boolean
+  shader?: string
+}
+export interface WebglFrame {
+  pixels: Uint8ClampedArray
+  covered: boolean
+}
+export declare function renderDrawList(width: number, height: number, clip: Float32Array, indices: Uint32Array, rgba: Array<number>): Uint8ClampedArray
+export declare function webglDraw(draw: WebglDraw): WebglFrame
+export declare function pickRay(positions: Float32Array, indices: Uint32Array, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number): number
 export declare function engine(): string
 /**
  * One solid PNG, so Node can take bytes from the addon.

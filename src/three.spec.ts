@@ -11,7 +11,7 @@ import { solidBoxGlb } from './glb.js'
 import { h } from './h.js'
 import { loadLayerFile } from './load-source.js'
 import { checkLayer, renderLayer } from './render.js'
-import { fromThree } from './three.js'
+import { fromThree, lightsFromThree } from './three.js'
 import { typecheckLayerFile } from './typecheck.js'
 
 const pkgDir = join(fileURLToPath(import.meta.url), '..', '..')
@@ -514,6 +514,25 @@ describe('three 的模块', () => {
       await rm(dir, { recursive: true, force: true })
     }
   }, 30000)
+
+  it('读 three.js 的灯和透射', () => {
+    const lights = lightsFromThree({
+      children: [
+        { isDirectionalLight: true, intensity: 2, color: { r: 1, g: 1, b: 1 }, position: { x: 0, y: 1, z: 3 } },
+        { isAmbientLight: true, intensity: 0.2, color: { r: 1, g: 1, b: 1 } },
+      ],
+    })
+    expect(lights.map((light) => light.type)).toEqual(['directional', 'ambient'])
+    expect(lights[0]?.intensity).toBe(2)
+    expect(lights[0]?.z).toBe(3)
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 4, 3),
+      new THREE.MeshPhysicalMaterial({ transmission: 1, ior: 1.5, roughness: 0, metalness: 0 }),
+    )
+    const prims = fromThree(mesh)
+    expect(prims[0]?.transmission).toBeCloseTo(1)
+    expect(prims[0]?.ior).toBeCloseTo(1.5)
+  })
 
   it('仓库外的文件运行时和类型检查都找不到 three', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'flexlayer-outside-three-'))

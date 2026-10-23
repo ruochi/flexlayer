@@ -17,7 +17,8 @@ const CONTACT_LIMIT = 300
 function usage(): never {
   console.error(`用法:
   flexlayer render <file> [<file>...] [-o out.png|dir] [--report out.json|dir] [--scale 1] [--scale 2] [--debug] [--preview out.png] [--emit out.layer|dir] [--frame N] [--frames dir] [--from N] [--to N] [--step N] [--rgba -|file] [--mesh-samples 1|2|4] [--no-script] [--typecheck] [--watch]
-  flexlayer check <file> [<file>...] [--report out.json|dir] [--emit out.layer|dir] [--frame N] [--frames all|ends|A-B|N] [--step N] [--no-script] [--no-typecheck] [--watch]
+  flexlayer check <file> [<file>...] [--report out.json|dir] [--emit out.layer|dir] [--frame N] [--frames all|ends|A-B|N] [--step N] [--no-script] [--no-typecheck] [--watch] [--quality draft|final]
+  flexlayer pick --positions x,y,z,... --indices i,j,k,... --from ox,oy,oz --dir dx,dy,dz
 
 .tsx / .jsx / .ts / .js 会先执行，得到和 .layer 相同的节点树。
 类型检查只在 check 时做。render 要一起查类型就加 --typecheck。check 要跳过就加 --no-typecheck。
@@ -31,7 +32,9 @@ check 不写 --frames 时大约每 0.5 秒抽一帧，最多 96 帧，并写明�
 --emit 把展开后的节点写回 .layer。
 --preview 按文档里的 <preview> 另写一张选区预览，正常成片不包含它。
 --no-script 不执行 <script>，canvas 保持透明。
---watch 在源文件和它引用的相对路径变化后再跑一遍。不和 --rgba、--frames 一起用。`)
+--watch 在源文件和它引用的相对路径变化后再跑一遍。不和 --rgba、--frames 一起用。
+--quality draft|final 覆盖根上的 quality。不写时用文件里的值，检查默认是 draft。
+pick 用实体的包围体射线，打印 { "hit": N } 或 { "hit": null }。`)
   process.exit(2)
 }
 
@@ -56,6 +59,7 @@ function parseArgs(argv: string[]) {
   let noScript = false
   let typecheckFlag = false
   let noTypecheckFlag = false
+  let quality: 'draft' | 'final' | undefined
   for (let i = 1; i < argv.length; i++) {
     const a = argv[i]!
     if (!a.startsWith('-')) {
@@ -87,7 +91,11 @@ function parseArgs(argv: string[]) {
     else if (a === '--no-script') noScript = true
     else if (a === '--typecheck') typecheckFlag = true
     else if (a === '--no-typecheck') noTypecheckFlag = true
-    else if (a === '--mesh-samples') {
+    else if (a === '--quality') {
+      const value = next()
+      if (value !== 'draft' && value !== 'final') usage()
+      quality = value
+    } else if (a === '--mesh-samples') {
       const n = Number(next())
       if (n !== 1 && n !== 2 && n !== 4) usage()
       meshSamples = n
@@ -110,7 +118,7 @@ function parseArgs(argv: string[]) {
   if (batch && watchMode) usage()
   if (cmd === 'render' && batch && (preview || framesArg || rgba != null || frame != null || from != null || to != null || step != null)) usage()
   const typecheck = cmd === 'check' ? !noTypecheckFlag : typecheckFlag
-  return { cmd, files, out, report, emit, framesArg, rgba, frame, from, to, step, scales, debug, preview, meshSamples, watchMode, noScript, typecheck }
+  return { cmd, files, out, report, emit, framesArg, rgba, frame, from, to, step, scales, debug, preview, meshSamples, watchMode, noScript, typecheck, quality }
 }
 
 function frameInput(frame: number, fps: number): FrameInput {
@@ -381,8 +389,51 @@ async function runAll(args: Parsed) {
   if (failed) process.exit(1)
 }
 
+function numberList(raw: string | undefined, label: string): number[] {
+  if (!raw) throw new Error(`pick 需要 --${label}`)
+  const values = raw.split(',').map(Number)
+  if (values.some((n) => !Number.isFinite(n))) throw new Error(`pick 的 --${label} 不是数字`)
+  return values
+}
+
+async function runPick(argv: string[]) {
+  let positions: string | undefined
+  let indices: string | undefined
+  let from: string | undefined
+  let dir: string | undefined
+  for (let i = 0; i < argv.length; i++) {
+    const flag = argv[i]
+    const value = argv[++i]
+    if (value == null) throw new Error(`pick 缺少 ${flag} 的值`)
+    if (flag === '--positions') positions = value
+    else if (flag === '--indices') indices = value
+    else if (flag === '--from') from = value
+    else if (flag === '--dir') dir = value
+    else throw new Error(`pick 不认识 ${flag}`)
+  }
+  const xyz = numberList(positions, 'positions')
+  const ids = numberList(indices, 'indices')
+  const origin = numberList(from, 'from')
+  const direction = numberList(dir, 'dir')
+  if (origin.length !== 3 || direction.length !== 3) throw new Error('pick 的 --from 和 --dir 各要 3 个数')
+  const { loadNativeRender } = await import('./native.js')
+  const native = loadNativeRender() as { pickRay?: Function } | null
+  if (!native?.pickRay) throw new Error('pick 需要带 pickRay 的 flexlayer-render')
+  const hit = native.pickRay(new Float32Array(xyz), new Uint32Array(ids), origin[0], origin[1], origin[2], direction[0], direction[1], direction[2])
+  console.log(JSON.stringify({ hit: hit < 0 ? null : hit }))
+}
+
 export async function main() {
   const command = process.argv[2]
+  if (command === 'pick') {
+    try {
+      await runPick(process.argv.slice(3))
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : err)
+      process.exit(1)
+    }
+    return
+  }
   if (command && MATERIAL_COMMANDS.has(command)) rejectMaterialCommand(command)
   const args = parseArgs(process.argv.slice(2))
   if (!args.watchMode) {
@@ -455,7 +506,7 @@ async function execute(args: RunArgs, input: LoadedJob): Promise<boolean> {
   if (args.cmd === 'check') {
     if (loaded.kind !== 'composition') {
       const node = loaded.kind === 'markup' ? loaded.source : loaded.node
-      const report = await checkLayer(node, { baseDir, noScript: args.noScript })
+      const report = await checkLayer(node, { baseDir, noScript: args.noScript, quality: args.quality })
       if (typeof node !== 'string') await emitNode(node, args.emit, report)
       attachFileIssues(report)
       printCheckResult(report, args.showType)
@@ -474,7 +525,7 @@ async function execute(args: RunArgs, input: LoadedJob): Promise<boolean> {
     let emitAt: LayerNode | undefined
     for (const frame of frames) {
       const node = loaded.composition.component(frameInput(frame, loaded.composition.fps))
-      const one = await checkLayer(node, { baseDir, noScript: args.noScript, t: frame / loaded.composition.fps, frame, fps: loaded.composition.fps })
+      const one = await checkLayer(node, { baseDir, noScript: args.noScript, quality: args.quality, t: frame / loaded.composition.fps, frame, fps: loaded.composition.fps })
       if (!report) report = one
       if (frame === (args.frame ?? 0)) emitAt = node
       parts.push({ frame, issues: one.issues, elements: one.elements })
@@ -504,7 +555,7 @@ async function execute(args: RunArgs, input: LoadedJob): Promise<boolean> {
         frame: args.frame,
         fps: comp.fps,
         meshSamples: args.meshSamples,
-        noScript: args.noScript,
+        noScript: args.noScript, quality: args.quality,
       })
       attachFileIssues(report)
       await emitNode(node, args.emit, report)
@@ -556,7 +607,7 @@ async function execute(args: RunArgs, input: LoadedJob): Promise<boolean> {
       step: args.step,
       format: args.rgba ? 'rgba' : 'png',
       meshSamples: args.meshSamples,
-      noScript: args.noScript,
+      noScript: args.noScript, quality: args.quality,
     })) {
       if (rendered.rgba && rgbaStream) await writeChunk(rgbaStream, rendered.rgba)
       if (args.framesArg && rendered.png) {
@@ -595,7 +646,7 @@ async function execute(args: RunArgs, input: LoadedJob): Promise<boolean> {
   }
 
   const source = loaded.kind === 'markup' ? loaded.source : loaded.node
-  const { png, report } = await renderLayer(source, { baseDir, scale: args.scale, debug: args.debug, meshSamples: args.meshSamples, noScript: args.noScript })
+  const { png, report } = await renderLayer(source, { baseDir, scale: args.scale, debug: args.debug, meshSamples: args.meshSamples, noScript: args.noScript, quality: args.quality })
   if (loaded.kind === 'node') await emitNode(loaded.node, args.emit, report)
   attachFileIssues(report)
   const outPath = outPng(abs, args.out)

@@ -173,6 +173,26 @@ export function rasterizeNative(
       shadows: layer.shadows !== 'none',
       keepHi,
       ...(layer.shading ? { shading: layer.shading } : {}),
+      ...(layer.cameraView ? { view: layer.cameraView } : {}),
+      ...(layer.lightSpace ? { lightSpace: layer.lightSpace } : {}),
+      ...(layer.quality ? { quality: layer.quality } : {}),
+      ...(layer.lights?.length
+        ? {
+            lights: layer.lights.map((light) => ({
+              kind: light.type,
+              r: light.color[0],
+              g: light.color[1],
+              b: light.color[2],
+              intensity: light.intensity,
+              x: light.x,
+              y: light.y,
+              z: light.z,
+              tx: light.target[0],
+              ty: light.target[1],
+              tz: light.target[2],
+            })),
+          }
+        : {}),
     },
     batches,
     grounds,

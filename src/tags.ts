@@ -41,6 +41,7 @@ const KNOWN_TAGS = new Set([
   'extrude',
   'model',
   'ground',
+  'light',
   'math',
   'mrow',
   'mi',
