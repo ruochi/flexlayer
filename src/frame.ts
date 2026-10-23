@@ -1,7 +1,8 @@
-import { createCanvas, loadImage, type Canvas } from '@napi-rs/canvas'
+import { createCanvas, type Canvas } from '@napi-rs/canvas'
+import { loadNativeRender } from './native.js'
 import type { LayerNode } from './parse.js'
 import { prepareAssets } from './layout.js'
-import { renderToCanvas } from './render.js'
+import { painterMode, renderFrameBatch } from './render.js'
 import { setFontsCacheDir } from './fonts.js'
 import type { LayerReport, RenderOptions } from './types.js'
 
@@ -251,22 +252,10 @@ export function sequence<T>(
   })
 }
 
-const CONTACT_CELL_MAX = 480
-const CONTACT_SHEET_MAX_WIDTH = 3840
-
 export type ContactSheet = {
   /** PNG 会先解码。调用次数不能超过创建时的 count。 */
   add(frame: Canvas | Buffer): Promise<void>
   toPng(): Buffer
-}
-
-function contactGrid(count: number, srcW: number, srcH: number) {
-  const columns = Math.ceil(Math.sqrt(count))
-  const rows = Math.ceil(count / columns)
-  const fit = Math.min(1, CONTACT_CELL_MAX / Math.max(srcW, srcH), CONTACT_SHEET_MAX_WIDTH / (columns * srcW))
-  const cellW = Math.max(1, Math.round(srcW * fit))
-  const cellH = Math.max(1, Math.round(srcH * fit))
-  return { columns, cellW, cellH }
 }
 
 function blankPng(): Buffer {
@@ -282,32 +271,18 @@ function blankPng(): Buffer {
  * 单元格最长边不超过 480px，整张宽度不超过 3840px。
  */
 export function createContactSheet(input: { count: number; width: number; height: number }): ContactSheet {
-  if (!(input.count >= 1) || input.width <= 0 || input.height <= 0) {
-    return {
-      async add() {
-        throw new Error('空的联系表不能再加帧')
-      },
-      toPng: blankPng,
-    }
-  }
-  const { columns, cellW, cellH } = contactGrid(input.count, input.width, input.height)
-  const rows = Math.ceil(input.count / columns)
-  const canvas = createCanvas(columns * cellW, rows * cellH)
-  const ctx = canvas.getContext('2d')
-  ctx.fillStyle = '#ffffff'
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-  let placed = 0
+  painterMode()
+  const frames: Buffer[] = []
   return {
     async add(frame) {
-      if (placed >= input.count) throw new Error('联系表已经放满')
-      const col = placed % columns
-      const row = Math.floor(placed / columns)
-      const image = Buffer.isBuffer(frame) ? await loadImage(frame) : frame
-      ctx.drawImage(image as Canvas, col * cellW, row * cellH, cellW, cellH)
-      placed++
+      if (!(input.count >= 1) || frames.length >= input.count) throw new Error('联系表已经放满')
+      frames.push(Buffer.isBuffer(frame) ? frame : frame.toBuffer('image/png'))
     },
     toPng() {
-      return canvas.toBuffer('image/png')
+      if (frames.length === 0) return blankPng()
+      const native = loadNativeRender()
+      if (!native?.contactSheet) throw new Error('联系表需要带 contactSheet 的 flexlayer-render。')
+      return native.contactSheet(frames)
     },
   }
 }
@@ -317,11 +292,11 @@ export function createContactSheet(input: { count: number; width: number; height
  * 单元格最长边不超过 480px，整张宽度不超过 3840px。
  */
 export async function contactSheetFromPngs(frames: Buffer[]): Promise<Buffer> {
+  painterMode()
   if (frames.length === 0) return blankPng()
-  const first = await loadImage(frames[0]!)
-  const sheet = createContactSheet({ count: frames.length, width: first.width, height: first.height })
-  for (const frame of frames) await sheet.add(frame)
-  return sheet.toPng()
+  const native = loadNativeRender()
+  if (!native?.contactSheet) throw new Error('联系表需要带 contactSheet 的 flexlayer-render。')
+  return native.contactSheet(frames)
 }
 
 function assertComposition(comp: Composition) {
@@ -345,40 +320,59 @@ function frameList(comp: Composition, options: RenderFramesOptions): number[] {
   return frames
 }
 
-function canvasRgba(canvas: Canvas): Buffer {
-  const image = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height)
-  return Buffer.from(image.data)
-}
-
-/** 逐帧产出。`to` 含端点。字体和图片在第一帧之前准备一次。 */
+/** 逐帧产出。`to` 含端点。字体和图片在第一帧之前准备一次。这一批一次交给插件。 */
 export async function* renderFrames(
   comp: Composition,
   options: RenderFramesOptions = {},
 ): AsyncGenerator<RenderedFrame> {
+  painterMode()
   const baseDir = options.baseDir ?? process.cwd()
   if (options.fontsCacheDir) setFontsCacheDir(options.fontsCacheDir)
   // 字体、图片和 Yoga 在进程里只准备一次。后面的帧接着用，没见过的图再补上。
   await prepareAssets(null, baseDir)
   const format = options.format ?? 'png'
-  for (const frame of frameList(comp, options)) {
-    const t = frame / comp.fps
-    const node = comp.component({ frame, fps: comp.fps, t })
-    const { canvas, report } = await renderToCanvas(node, {
-      t,
-      frame,
-      fps: comp.fps,
-      scale: options.scale,
-      debug: options.debug,
-      baseDir,
-      fontsCacheDir: options.fontsCacheDir,
-      meshSamples: options.meshSamples,
-      meshCache: options.meshCache,
-      noScript: options.noScript,
-    })
-    const rendered: RenderedFrame = { frame, t, width: canvas.width, height: canvas.height, report }
-    if (format === 'rgba') rendered.rgba = canvasRgba(canvas)
-    else rendered.png = canvas.toBuffer('image/png')
-    yield rendered
+  const frames = frameList(comp, options)
+  {
+    const painted = await renderFrameBatch(
+      frames.map((frame) => {
+        const t = frame / comp.fps
+        return {
+          source: comp.component({ frame, fps: comp.fps, t }),
+          options: {
+            t,
+            frame,
+            fps: comp.fps,
+            scale: options.scale,
+            debug: options.debug,
+            baseDir,
+            fontsCacheDir: options.fontsCacheDir,
+            meshSamples: options.meshSamples,
+            meshCache: options.meshCache,
+            noScript: options.noScript,
+          },
+        }
+      }),
+      format === 'rgba',
+    )
+    for (let index = 0; index < frames.length; index++) {
+      const frame = frames[index]!
+      const item = painted[index]
+      if (!item || (format !== 'rgba' && !item.png?.length)) {
+        const message = item?.report.issues.find((issue) => issue.level === 'error')?.message ?? '绘制失败'
+        throw new Error(message)
+      }
+      const rendered: RenderedFrame = {
+        frame,
+        t: frame / comp.fps,
+        width: item.width,
+        height: item.height,
+        report: item.report,
+      }
+      if (format === 'rgba') rendered.rgba = item.rgba
+      else rendered.png = item.png
+      yield rendered
+    }
+    return
   }
 }
 

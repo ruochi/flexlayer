@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { parseGradient, sampleGradient } from './gradient.js'
 import { layoutSource } from './layout.js'
-import { paintDocument } from './paint.js'
+import { renderLayer } from './render.js'
 import { parseGlow, parseShadow } from './style.js'
 
 describe('parseGradient', () => {
@@ -60,15 +60,8 @@ async function pixelAt(png: Buffer, x: number, y: number): Promise<[number, numb
 
 async function render(source: string, scale = 1) {
   const doc = await layoutSource(source, process.cwd())
-  const canvas = await paintDocument(doc.root, {
-    width: doc.width,
-    height: doc.height,
-    background: doc.background,
-    scale,
-    debug: false,
-    t: 0,
-  })
-  return { doc, png: canvas.toBuffer('image/png') }
+  const painted = await renderLayer(source, { scale, baseDir: process.cwd() })
+  return { doc, png: painted.png }
 }
 
 describe('CSS 渐变绘制', () => {

@@ -23,7 +23,12 @@ describe('预编译渲染器', () => {
     }
     const native = loadNativeRender()
     expect(native).not.toBeNull()
-    expect(native!.engine()).toBe('flexlayer-render/0.0.2')
+    expect(native!.engine()).toMatch(/^flexlayer-render\/0\.0\.2\+cap1080$/)
+    expect(typeof native!.render).toBe('function')
+    expect(typeof native!.previewSheet).toBe('function')
+    expect(typeof native!.renderFrames).toBe('function')
+    expect(typeof native!.renderStylePng).toBe('function')
+    expect(typeof native!.renderScenePng).toBe('function')
     expect(Buffer.from(native!.solidPng(2, 2, '#ffffff')).subarray(0, 8)).toEqual(
       Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
     )
@@ -32,7 +37,11 @@ describe('预编译渲染器', () => {
   it('公开目录里只有这一次的二进制', () => {
     const dir = fileURLToPath(new URL('../native/flexlayer-render', import.meta.url))
     const names = readdirSync(dir)
-    expect(names.some((name) => name.endsWith('.node'))).toBe(true)
+    expect(names).toEqual(expect.arrayContaining([
+      'flexlayer-render.linux-x64-gnu.node',
+      'flexlayer-render.darwin-arm64.node',
+      'flexlayer-render.win32-x64-msvc.node',
+    ]))
     expect(names.some((name) => name.endsWith('.rs') || name === 'Cargo.toml' || name === 'Cargo.lock')).toBe(false)
   })
 

@@ -19,7 +19,7 @@ import { classAttr, ICON_FONT_FAMILY, symbolsClassOf } from './icons.js'
 import { materialize } from './components.js'
 import { catmullRomPath } from './curve.js'
 import { isGradient, parseGradient, solidPaint } from './gradient.js'
-import { MATCAP_DEFAULTS } from './matcaps.js'
+import { LIGHT_DEFAULTS, MATCAP_DEFAULTS } from './matcaps.js'
 import { isGradientPaint } from './gradientField.js'
 import { glbBounds, glbSpan, primitiveBounds, primitiveSpan, resolveModelFile } from './glb.js'
 import { fromThree, holdModelPrims, modelRevision } from './three.js'
@@ -1874,10 +1874,11 @@ function readMeshLines(node: LayerNode, ctx: LayoutContext): { stroke: string; s
   return { stroke, strokeWidths, hidden, halo, ...(strokeOff ? { strokeOff: true as const } : {}) }
 }
 
-const MESH_MATERIALS = new Set(['matte', 'plastic', 'metal', 'glass', 'clay', 'mirror', 'brushed'])
-const MESH_ROUGHNESS = { matte: 1, plastic: 0.4, metal: 0.25, glass: 0.08, clay: 1, mirror: 1, brushed: 1 }
+const MESH_MATERIALS = new Set(['matte', 'plastic', 'metal', 'glass', 'clay', 'mirror', 'brushed', 'lamp', 'neon'])
+const MESH_ROUGHNESS = { matte: 1, plastic: 0.4, metal: 0.25, glass: 0.08, clay: 1, mirror: 1, brushed: 1, lamp: 1, neon: 1 }
 const MATCAP_ONLY = new Set(['clay', 'mirror', 'brushed'])
-const MATERIAL_HINT = '写成 clay、plastic、metal、mirror、brushed 或 glass。不写是磨砂。旧写法可以在 matte、plastic、metal、glass 后面跟粗糙度，例如 material="metal 0.35"'
+const LIGHTS = new Set(['lamp', 'neon'])
+const MATERIAL_HINT = '写成 clay、plastic、metal、mirror、brushed、glass、lamp 或 neon。不写是磨砂。旧写法可以在 matte、plastic、metal、glass 后面跟粗糙度，例如 material="metal 0.35"'
 
 function readMeshMaterial(raw: string | undefined, ctx: LayoutContext, tag: string): MeshMaterial | undefined {
   if (raw == null) return undefined
@@ -1896,6 +1897,18 @@ function readMeshMaterial(raw: string | undefined, ctx: LayoutContext, tag: stri
     return undefined
   }
   const kind = name as MeshMaterial['kind']
+  if (LIGHTS.has(name)) {
+    if (parts.length > 1) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${tag} 的 ${name} 不写粗糙度`,
+        hint: '删掉数字。颜色写 fill，例如 material="neon" fill="#3ad8ff"',
+      })
+    }
+    return { kind, roughness: MESH_ROUGHNESS[kind] }
+  }
   if (MATCAP_ONLY.has(name) || ((name === 'plastic' || name === 'metal') && parts.length === 1)) {
     if (parts.length > 1) {
       ctx.issues.push({
@@ -2337,8 +2350,8 @@ function layoutMesh(node: LayerNode, ctx: LayoutContext): MeshLayoutNode {
     })
   }
   const material = readMeshMaterial(node.attrs.material, ctx, node.tag)
-  if ((node.attrs.fill == null || node.attrs.fill.trim() === '') && material?.matcap) {
-    const fallback = MATCAP_DEFAULTS[material.matcap]
+  if (node.attrs.fill == null || node.attrs.fill.trim() === '') {
+    const fallback = material?.matcap ? MATCAP_DEFAULTS[material.matcap] : material ? LIGHT_DEFAULTS[material.kind] : undefined
     if (fallback) fill = fallback
   }
   return {
