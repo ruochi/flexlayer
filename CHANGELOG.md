@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.16.0
+
+`rotate`, `rotateX`, and `rotateY` in `style` need a unit. `rotate: 30` reports `invalid-attr` and does not rotate. `0` may still omit the unit. `rotate="30"` on a shape, a line, or a `layer` is still degrees.
+
+`<box>` and `<extrude>` are unknown tags. A box is `<rect depth>`. An extrusion is `<path depth>`. `<cylinder>` remains the upright cylinder: `cx`, `cy`, `r`, and `height`.
+
 ## 0.15.3
 
 `material` takes the preset and the physical fields together: `finish metal, color #c6c9ce, roughness 0.28, metalness 1`. `color` replaces `fill`. In tsx the same fields are an object, `material={{ finish: "metal", color: "#c6c9ce", roughness: 0.28, metalness: 1 }}`. A bare name such as `material="metal"` still selects that baked finish.

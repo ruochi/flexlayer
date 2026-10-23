@@ -4,9 +4,9 @@
   </layer>
 
   <layer camera="1500" width="1600" height="1080">
-    <box x="70" y="130" width="68" height="340" depth="108" rx="26" fill="#23262c" material="metal 0.1" rotateY="32" />
-    <box x="280" y="160" width="210" height="240" depth="84" rx="24" fill="#e4e7ee" material="metal 0.08" rotateY="46" rotateX="12" />
-    <box x="640" y="150" width="76" height="300" depth="96" rx="26" fill="#c9a24a" material="metal 0.12" rotateY="38" />
+    <rect x="70" y="130" width="68" height="340" depth="108" rx="26" fill="#23262c" material="metal 0.1" rotateY="32" />
+    <rect x="280" y="160" width="210" height="240" depth="84" rx="24" fill="#e4e7ee" material="metal 0.08" rotateY="46" rotateX="12" />
+    <rect x="640" y="150" width="76" height="300" depth="96" rx="26" fill="#c9a24a" material="metal 0.12" rotateY="38" />
     <cylinder cx="1040" cy="300" r="76" height="250" fill="#d5d8e0" material="metal 0.14" />
     <cylinder cx="1360" cy="310" r="38" height="340" rx="14" fill="#23262c" material="metal 0.1" />
 
@@ -15,7 +15,7 @@
     <cylinder cx="640" cy="840" r="30" height="250" rx="12" fill="#23262c" material="metal 0.12" />
     <cylinder cx="730" cy="840" r="30" height="250" rx="12" fill="#23262c" material="metal 0.12" />
     <tube x="860" y="700" d="M24 180 C24 60 100 24 180 24" r="14" fill="#d5d8e0" material="metal 0.16" rotateX="62" />
-    <box x="1180" y="740" width="240" height="150" depth="52" rx="18" fill="#f3f1ec" material="plastic 0.28" rotateY="28" rotateX="-10" />
+    <rect x="1180" y="740" width="240" height="150" depth="52" rx="18" fill="#f3f1ec" material="plastic 0.28" rotateY="28" rotateX="-10" />
   </layer>
 
   <layer x="48" y="490" width="160">

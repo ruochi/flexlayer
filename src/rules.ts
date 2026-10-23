@@ -1,7 +1,7 @@
 import { filterIsLayerOnly, listFilters } from './filter.js'
 import type { LayerChild, LayerNode } from './parse.js'
 import { ATTRS, ATTR_ORDER, HTML_STYLE_ATTRS, attrByName, issueFor } from './schema.js'
-import { cssPropertyNames, diagnoseStyle, parseAngle, parseNumber, parseStyle, readOrigin } from './style.js'
+import { cssPropertyNames, diagnoseStyle, parseNumber, parseStyle, readOrigin } from './style.js'
 import { MATH_TAGS } from './math/rules.js'
 import { isInlineTag, isTextBoxTag } from './text.js'
 import type { Issue, IssueLevel } from './types.js'
@@ -199,7 +199,7 @@ function usesAttributes(node: LayerNode): boolean {
   )
 }
 
-const LEGACY_CENTER_TAGS = new Set(['layer', 'use', 'rect', 'box', 'extrude', 'tube'])
+const LEGACY_CENTER_TAGS = new Set(['layer', 'use', 'rect', 'tube'])
 
 function fmtHint(n: number): string {
   const rounded = Math.round(n * 1000) / 1000
@@ -246,7 +246,7 @@ function legacyCenterHint(attrs: Record<string, string>, tag: string): string {
   return '改成 x、y，表示左上角。原先的 cx、cy 是定位点，anchor 默认 center'
 }
 
-/** layer、use、rect、box、extrude、tube 上的 cx、cy 已忽略。hint 给出等价的 x、y。 */
+/** layer、use、rect、tube 上的 cx、cy 已忽略。hint 给出等价的 x、y。 */
 export function legacyCenterIssues(node: LayerNode, path: string): Issue[] {
   if (!LEGACY_CENTER_TAGS.has(node.tag)) return []
   if (!present(node.attrs, 'cx') && !present(node.attrs, 'cy')) return []
@@ -453,17 +453,7 @@ export function styleIssues(node: LayerNode, path: string): Issue[] {
   for (const [key, value] of Object.entries(style)) {
     if (owned.has(key)) continue
     const diag = diagnoseStyle(key, value)
-    if (diag == null) {
-      const label = key === 'rotate' ? 'rotate' : key === 'rotatex' ? 'rotateX' : key === 'rotatey' ? 'rotateY' : ''
-      if (label) {
-        const parsed = parseAngle(value)
-        if (parsed?.unitless && parsed.degrees !== 0) {
-          const shown = value.trim()
-          out.push(flagged('info', 'non-canonical', path, `${label} 的 ${shown} 不带单位`, `改成 ${shown}deg。0 可以不带单位`))
-        }
-      }
-      continue
-    }
+    if (diag == null) continue
     if (diag === 'unknown') {
       const suggestions = suggestNames(key, cssPropertyNames())
       out.push(

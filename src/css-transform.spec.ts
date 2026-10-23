@@ -29,7 +29,8 @@ describe('parseAngle', () => {
     expect(parseCssTransform('skew(10deg)')).toEqual({ ok: false })
     expect(parseCssTransform('none')).toEqual({ ok: true, steps: [] })
     expect(diagnoseStyle('rotate', '30deg')).toBeNull()
-    expect(diagnoseStyle('rotate', '30')).toBeNull()
+    expect(diagnoseStyle('rotate', '30')).toEqual({ hint: expect.stringContaining('30deg') })
+    expect(diagnoseStyle('rotate', '0')).toBeNull()
     expect(diagnoseStyle('rotate', '30px')).toEqual({ hint: expect.stringContaining('30deg') })
     expect(diagnoseStyle('transform', 'rotate(30deg)')).toBeNull()
     expect(diagnoseStyle('transform-origin', '0 0')).toBeNull()
@@ -66,8 +67,11 @@ describe('css rotate render', () => {
     const fromTurn = await renderLayer(page(`rotate: ${turn}turn`))
     const fromTransform = await renderLayer(page('transform: rotate(30deg)'))
     const bare = await renderLayer(page('rotate: 30'))
+    const still = await renderLayer(page(''))
     expect(fromTransform.png.equals(deg.png)).toBe(true)
-    expect(bare.png.equals(deg.png)).toBe(true)
+    expect(bare.png.equals(still.png)).toBe(true)
+    expect(bare.report.issues.filter((issue) => issue.code === 'invalid-attr')).toHaveLength(1)
+    expect(bare.report.issues.some((issue) => issue.code === 'non-canonical')).toBe(false)
     const degInk = deg.report.elements.find((el) => el.tag === 'div')!.ink
     for (const report of [fromRad.report, fromTurn.report]) {
       const ink = report.elements.find((el) => el.tag === 'div')!.ink
@@ -86,14 +90,15 @@ describe('css rotate render', () => {
     expect(approxInk.y).toBeCloseTo(degInk.y, 0)
   })
 
-  it('rotate: 30 出图，并只有一条兼容警告', async () => {
+  it('rotate: 30 不旋转，并报缺少单位', async () => {
     const result = await renderLayer(page('rotate: 30'))
-    const compat = result.report.issues.filter((issue) => issue.code === 'non-canonical')
-    expect(compat).toHaveLength(1)
-    expect(compat[0]?.message).toContain('30')
-    expect(compat[0]?.hint).toContain('30deg')
-    expect(result.report.issues.some((issue) => issue.code === 'invalid-attr')).toBe(false)
-    expect(result.png.length).toBeGreaterThan(8)
+    const plain = await renderLayer(page(''))
+    const hit = result.report.issues.filter((issue) => issue.code === 'invalid-attr')
+    expect(hit).toHaveLength(1)
+    expect(hit[0]?.message).toContain('30')
+    expect(hit[0]?.hint).toContain('30deg')
+    expect(result.report.issues.some((issue) => issue.code === 'non-canonical')).toBe(false)
+    expect(result.png.equals(plain.png)).toBe(true)
   })
 
   it('rotate: 0 不警告，30px 警告并当成没有旋转', async () => {

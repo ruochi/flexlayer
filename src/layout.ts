@@ -55,6 +55,7 @@ import {
   parseLineHeight,
   parseLetterSpacing,
   parseAngle,
+  styleAngle,
   parseCssLength,
   parseCssTransform,
   parseNumber,
@@ -680,7 +681,7 @@ function scalePair(raw: string | undefined): { scaleX: number; scaleY: number } 
 
 function angleOf(raw: string | undefined): number {
   if (raw == null) return 0
-  return parseAngle(raw)?.degrees ?? 0
+  return styleAngle(raw)?.degrees ?? 0
 }
 
 const ANGLE_ATTR_HINT = '写成 30、30deg、0.5rad 或 0.25turn'
@@ -1748,32 +1749,6 @@ function readPositiveAttr(
   return parsed
 }
 
-function readDepth(raw: string | undefined, fallback: number, ctx: LayoutContext, tag: string): number {
-  const fb = fallback > 0 ? fallback : 1
-  if (raw == null || raw.trim() === '') {
-    ctx.issues.push({
-      level: 'warn',
-      code: 'invalid-attr',
-      path: ctx.pathPrefix,
-      message: `${tag} 缺少 depth，已用 ${fb}`,
-      hint: '写成像素厚度，例如 depth="40"',
-    })
-    return fb
-  }
-  const parsed = parseNumber(raw)
-  if (parsed == null || !(parsed > 0)) {
-    ctx.issues.push({
-      level: 'warn',
-      code: 'invalid-attr',
-      path: ctx.pathPrefix,
-      message: `无法解析 depth: ${raw}`,
-      hint: '写成正的像素厚度，例如 depth="40"',
-    })
-    return fb
-  }
-  return parsed
-}
-
 function readMeshLines(node: LayerNode, ctx: LayoutContext): { stroke: string; strokeWidths: [number, number, number]; hidden: string; halo: number; strokeOff?: true } {
   const rawStroke = strokeTakesInk(node.attrs.stroke) ? undefined : node.attrs.stroke
   const strokeOff = rawStroke != null && rawStroke.trim().toLowerCase() === 'none'
@@ -2157,28 +2132,8 @@ function polygonOutline(points: string): string {
   return `M ${first![0]} ${first![1]} ${rest.map((pair) => `L ${pair[0]} ${pair[1]}`).join(' ')} Z`
 }
 
-function noteMeshAlias(node: LayerNode, ctx: LayoutContext) {
-  const hint =
-    node.tag === 'box'
-      ? '改成 <rect width="…" height="…" depth="…" />。rx 是圆棱'
-      : node.tag === 'cylinder'
-        ? '改成 <circle r="…" depth="…" />。轴沿 z，要竖着放写 rotateX="90"'
-        : node.tag === 'extrude'
-          ? '改成 <path d="…" depth="…" />。洞用 fill-rule'
-          : ''
-  if (!hint) return
-  ctx.issues.push({
-    level: 'info',
-    code: 'non-canonical',
-    path: ctx.pathPrefix,
-    message: `${node.tag} 是别名`,
-    hint,
-  })
-}
-
 function layoutMesh(node: LayerNode, ctx: LayoutContext): MeshLayoutNode {
   warnNestedMasks(node, ctx)
-  noteMeshAlias(node, ctx)
   const appearance = readAttrAppearance(node.attrs, ctx)
   let fill = readPaint(node.attrs.fill ?? '#000000', '#000000', ctx, 'fill')
   let x = 0
@@ -2204,7 +2159,7 @@ function layoutMesh(node: LayerNode, ctx: LayoutContext): MeshLayoutNode {
     x = cx - radius
     y = cy - radius
     mesh = { type: 'sphere', r: radius }
-  } else if (node.tag === 'box' || node.tag === 'rect') {
+  } else if (node.tag === 'rect') {
     width = parseNumber(node.attrs.width) ?? 0
     height = parseNumber(node.attrs.height) ?? 0
     if (!(width > 0) || !(height > 0)) {
@@ -2216,10 +2171,7 @@ function layoutMesh(node: LayerNode, ctx: LayoutContext): MeshLayoutNode {
         hint: '例如 <rect x="40" y="30" width="150" height="100" depth="60" />',
       })
     }
-    const depth =
-      node.tag === 'rect'
-        ? Math.max(0, parseNumber(node.attrs.depth) ?? 0)
-        : readDepth(node.attrs.depth, Math.min(width, height), ctx, 'box')
+    const depth = Math.max(0, parseNumber(node.attrs.depth) ?? 0)
     const fillet = readBoxFillet(node.attrs.rx, node.attrs.round, width, height, depth)
     for (const issue of fillet.issues) {
       ctx.issues.push({
@@ -2231,11 +2183,9 @@ function layoutMesh(node: LayerNode, ctx: LayoutContext): MeshLayoutNode {
       })
     }
     mesh = { type: 'box', depth, rx: fillet.rx, edges: fillet.edges }
-    if (node.tag === 'rect') {
-      x = parseNumber(node.attrs.x) ?? 0
-      y = parseNumber(node.attrs.y) ?? 0
-    }
-  } else if (node.tag === 'extrude' || node.tag === 'path' || node.tag === 'polygon' || node.tag === 'ellipse') {
+    x = parseNumber(node.attrs.x) ?? 0
+    y = parseNumber(node.attrs.y) ?? 0
+  } else if (node.tag === 'path' || node.tag === 'polygon' || node.tag === 'ellipse') {
     let d = node.attrs.d ?? ''
     if (node.tag === 'ellipse') {
       const rx = Math.max(0, parseNumber(node.attrs.rx) ?? 0)
@@ -2281,10 +2231,7 @@ function layoutMesh(node: LayerNode, ctx: LayoutContext): MeshLayoutNode {
     const box = pathBoundsOf(d, ctx)
     width = box.width
     height = box.height
-    const depth =
-      node.tag === 'extrude'
-        ? readDepth(node.attrs.depth, Math.min(width, height), ctx, 'extrude')
-        : Math.max(0, parseNumber(node.attrs.depth) ?? 0)
+    const depth = Math.max(0, parseNumber(node.attrs.depth) ?? 0)
     const fillRule = readFillRule(node.attrs['fill-rule'], ctx)
     mesh = { type: 'extrude', d: translateSvgPath(d, -box.x, -box.y), depth, fillRule }
     if (node.tag === 'path' || node.tag === 'polygon') {

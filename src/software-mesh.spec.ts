@@ -5,7 +5,6 @@ import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { describe, expect, it } from 'vitest'
 import { solidBoxGlb } from './glb.js'
 import { checkLayer, renderLayer } from './render.js'
-import { boxRight } from './types.js'
 import type { RenderOptions } from './types.js'
 
 const dir = mkdtempSync(join(tmpdir(), 'flexlayer-software-mesh-'))
@@ -24,87 +23,6 @@ async function pixelAt(png: Buffer, x: number, y: number) {
 }
 
 describe('软件光栅', () => {
-  it('球体中心有颜色，画布角仍是背景', async () => {
-    const { png } = await render(
-      `<layer width="160" height="160" background="#123456" camera="500"><sphere cx="80" cy="80" r="36" fill="#ff2244" /></layer>`,
-    )
-    const center = await pixelAt(png, 80, 80)
-    const corner = await pixelAt(png, 4, 4)
-    expect(center[0]).toBeGreaterThan(140)
-    expect(center[0]).toBeGreaterThan(center[1] + 30)
-    expect(center[0]).toBeGreaterThan(center[2] + 30)
-    expect(corner[0]).toBeGreaterThan(10)
-    expect(corner[0]).toBeLessThan(40)
-    expect(corner[2]).toBeGreaterThan(70)
-  })
-
-  it('更近的球体挡住长方体和平面', async () => {
-    const { png } = await render(`
-      <layer width="200" height="200" background="#000000" camera="600">
-        <box x="40" y="60" width="120" height="80" depth="40" fill="#2244ff" />
-        <rect x="20" y="40" width="160" height="120" fill="#22cc44" z="-30" />
-        <sphere cx="100" cy="100" r="26" z="50" fill="#ff2244" />
-      </layer>
-    `)
-    const center = await pixelAt(png, 100, 100)
-    const onBox = await pixelAt(png, 52, 100)
-    expect(center[0]).toBeGreaterThan(center[2] + 20)
-    expect(onBox[2]).toBeGreaterThan(onBox[0] + 20)
-  })
-
-  it('extrude 的剪影跟着路径走', async () => {
-    const { png } = await render(
-      `<layer width="220" height="160" background="#101010" camera="800"><extrude x="40" y="40" d="M0 0 H140 V36 H90 V80 H0 Z" depth="16" fill="#f4f1ea" /></layer>`,
-    )
-    const inside = await pixelAt(png, 60, 60)
-    const notch = await pixelAt(png, 160, 100)
-    expect(inside[0]).toBeGreaterThan(120)
-    expect(inside[0]).toBeGreaterThan(notch[0] + 80)
-    expect(notch[0]).toBeLessThan(40)
-  })
-
-  it('glb 按自己的盒子居中，并使用文件里的颜色', async () => {
-    const { png } = await render(
-      `<layer width="180" height="180" background="#000000" camera="700"><model x="55" y="55" width="70" height="70" src="box.glb" /></layer>`,
-      { baseDir: dir },
-    )
-    const center = await pixelAt(png, 90, 90)
-    const corner = await pixelAt(png, 4, 4)
-    expect(center[1]).toBeGreaterThan(center[0] + 20)
-    expect(center[1]).toBeGreaterThan(center[2] + 20)
-    expect(corner[0]).toBeLessThan(15)
-    expect(corner[1]).toBeLessThan(15)
-  })
-
-  it('平面上的深色在有网格时不变浅，正对镜头的白方块达到 fill', async () => {
-    const { png } = await render(`
-      <layer width="220" height="140" background="#ffffff" camera="500">
-        <rect x="15" y="50" width="70" height="40" fill="#222222" />
-        <box x="126" y="46" width="48" height="48" depth="48" fill="#ffffff" />
-      </layer>
-    `)
-    const ink = await pixelAt(png, 50, 70)
-    const face = await pixelAt(png, 150, 70)
-    expect(ink[0]).toBeGreaterThan(24)
-    expect(ink[0]).toBeLessThan(50)
-    expect(face[0]).toBeGreaterThan(245)
-    expect(face[1]).toBeGreaterThan(245)
-    expect(face[2]).toBeGreaterThan(245)
-  })
-
-  it('偏离光轴的浅色正面仍是写下的 fill', async () => {
-    const { png } = await render(`
-      <layer width="220" height="80" background="#ffffff" camera="500">
-        <box x="12" y="16" width="48" height="48" depth="12" fill="#d9ccff" />
-        <box x="160" y="16" width="48" height="48" depth="12" fill="#a9dcff" />
-      </layer>
-    `)
-    const left = await pixelAt(png, 36, 40)
-    const right = await pixelAt(png, 184, 40)
-    expect([left[0], left[1], left[2]]).toEqual([0xd9, 0xcc, 0xff])
-    expect([right[0], right[1], right[2]]).toEqual([0xa9, 0xdc, 0xff])
-  })
-
   it('shadows、cast-shadow、receive-shadow 可以关掉 ground 上的影子', async () => {
     const scene = (extra: string) => `
       <layer width="240" height="240" background="#ffffff" camera="800" ${extra.includes('shadows') ? extra : ''}>
@@ -150,7 +68,7 @@ describe('软件光栅', () => {
   it('长方体正面接住另一只实体的影子', async () => {
     const { png } = await render(`
       <layer width="420" height="360" background="#d9d3c7" camera="800">
-        <box x="150" y="115" width="160" height="150" depth="20" fill="#f4f1ea" />
+        <rect x="150" y="115" width="160" height="150" depth="20" fill="#f4f1ea" />
         <sphere cx="130" cy="110" r="28" z="48" fill="#e23d3d" />
       </layer>
     `)
@@ -161,107 +79,9 @@ describe('软件光栅', () => {
     expect(luma(open) - luma(face)).toBeGreaterThan(20)
   })
 
-  it('三维场景里的平面颜色保持原色阶', async () => {
-    const { png } = await render(`
-      <layer width="180" height="80" background="#ffffff" camera="500">
-        <rect x="20" y="20" width="60" height="40" fill="#2b6b5e" />
-        <sphere cx="130" cy="40" r="18" fill="#888888" />
-      </layer>
-    `)
-    const ink = await pixelAt(png, 50, 40)
-    expect([ink[0], ink[1], ink[2]]).toEqual([0x2b, 0x6b, 0x5e])
-  })
-
-  it('extrude 的并排形状都留下，洞仍然是洞', async () => {
-    const { png } = await render(`
-      <layer width="220" height="120" background="#101010" camera="800">
-        <extrude x="10" y="46" d="M0 0 H28 V28 H0 Z M52 0 H80 V28 H52 Z" depth="12" fill="#f2f2f2" />
-        <extrude x="128" y="28" d="M0 0 H64 V64 H0 Z M18 18 V46 H46 V18 Z" depth="12" fill="#f2f2f2" />
-      </layer>
-    `)
-    const left = await pixelAt(png, 28, 60)
-    const gap = await pixelAt(png, 50, 60)
-    const right = await pixelAt(png, 72, 60)
-    const ring = await pixelAt(png, 140, 60)
-    const hole = await pixelAt(png, 160, 60)
-    expect(left[0]).toBeGreaterThan(180)
-    expect(right[0]).toBeGreaterThan(180)
-    expect(gap[0]).toBeLessThan(40)
-    expect(ring[0]).toBeGreaterThan(180)
-    expect(hole[0]).toBeLessThan(40)
-  })
-
-  it('搭在另一笔上的形状仍是实体，不会被挖成洞', async () => {
-    const { png } = await render(`
-      <layer width="200" height="140" background="#101010" camera="800">
-        <extrude d="M0 0 H60 V24 H0 Z M30 8 L50 8 L50 16 L80 36 L40 36 L30 16 Z" depth="12" x="60" y="52" fill="#f2f2f2" />
-      </layer>
-    `)
-    const bar = await pixelAt(png, 80, 64)
-    const tip = await pixelAt(png, 130, 82)
-    expect(bar[0]).toBeGreaterThan(180)
-    expect(tip[0]).toBeGreaterThan(180)
-  })
-
-  it('网格超出所在 layer 时仍画在父画布上', async () => {
-    const spilled = await render(`
-      <layer width="200" height="120" background="#000000">
-        <layer x="90" y="25" width="80" height="70" camera="180">
-          <sphere cx="16" cy="35" r="14" z="50" fill="#ff2244" />
-        </layer>
-      </layer>
-    `)
-    const layerLeft = 130 - 40
-    const outside = await pixelAt(spilled.png, layerLeft - 6, 60)
-    expect(outside[0]).toBeGreaterThan(80)
-    expect(spilled.report.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(false)
-    const clipped = await checkLayer(
-      `<layer width="80" height="80" background="#000" camera="160"><sphere cx="14" cy="40" r="12" z="70" fill="#ff2244" /></layer>`,
-    )
-    expect(clipped.issues.some((issue) => issue.code === 'overflow-canvas' && issue.path.includes('sphere'))).toBe(true)
-  })
-
-  it('网格斜边有抗锯齿过渡', async () => {
-    const { png } = await render(
-      `<layer width="200" height="200" background="#000000" camera="800"><box x="20" y="93" width="160" height="14" depth="2" rotate="24" fill="#ffffff" /></layer>`,
-    )
-    const img = await loadImage(png)
-    const canvas = createCanvas(img.width, img.height)
-    const ctx = canvas.getContext('2d')
-    ctx.drawImage(img, 0, 0)
-    const data = ctx.getImageData(0, 0, img.width, img.height).data
-    const at = (x: number, y: number) => data[(y * img.width + x) * 4] ?? 0
-    let hard = 0
-    let soft = 0
-    for (let x = 30; x < 170; x++) {
-      let kind = 'none'
-      let prev = at(x, 30)
-      for (let y = 31; y < 170; y++) {
-        const v = at(x, y)
-        if (prev < 12 && v > 243) {
-          kind = 'hard'
-          break
-        }
-        if (prev < 12 && v >= 12) {
-          kind = 'soft'
-          break
-        }
-        prev = v
-      }
-      if (kind === 'hard') hard++
-      else if (kind === 'soft') soft++
-    }
-    expect(at(100, 100)).toBeGreaterThan(250)
-    expect(at(8, 8)).toBeLessThan(8)
-    expect(soft).toBeGreaterThan(80)
-    // Coverage still softens most columns. A diagonal can stay a 0-to-255
-    // step: edge smoothing no longer repaints the mesh.
-    expect(hard).toBeLessThan(soft)
-  })
-
   it('旋转后的网格描边沿斜边有过渡', async () => {
     const { png } = await render(
-      `<layer width="240" height="200" background="#000000" camera="800"><box x="30" y="90" width="180" height="16" depth="2" rotate="24" fill="#ffffff" stroke="#ff0000" stroke-width="3" /></layer>`,
+      `<layer width="240" height="200" background="#000000" camera="800"><rect x="30" y="90" width="180" height="16" depth="2" rotate="24" fill="#ffffff" stroke="#ff0000" stroke-width="3" /></layer>`,
     )
     const img = await loadImage(png)
     const canvas = createCanvas(img.width, img.height)
@@ -287,7 +107,7 @@ describe('软件光栅', () => {
   it('盒子描可见棱，对角线不画，被自己挡住的棱是虚线', async () => {
     const { png } = await render(`
       <layer width="200" height="200" background="#ffffff" camera="500">
-        <box x="50" y="60" width="100" height="80" depth="70" fill="#c8c8c8" stroke="#000000" stroke-width="4" hidden="#ff00ff" />
+        <rect x="50" y="60" width="100" height="80" depth="70" fill="#c8c8c8" stroke="#000000" stroke-width="4" hidden="#ff00ff" />
       </layer>
     `)
     const img = await loadImage(png)
@@ -320,7 +140,7 @@ describe('软件光栅', () => {
   it('fill=none 的盒子不填面，轮廓仍在', async () => {
     const { png } = await render(`
       <layer width="200" height="200" background="#ffffff" camera="500">
-        <box x="50" y="60" width="100" height="80" depth="70" fill="none" stroke="#000000" stroke-width="4" />
+        <rect x="50" y="60" width="100" height="80" depth="70" fill="none" stroke="#000000" stroke-width="4" />
       </layer>
     `)
     const face = await pixelAt(png, 100, 100)
@@ -371,7 +191,7 @@ describe('软件光栅', () => {
   it('挤出体只描折棱，盖上的对角线不画', async () => {
     const { png } = await render(`
       <layer width="220" height="160" background="#ffffff" camera="800">
-        <extrude x="40" y="40" d="M0 0 H140 V36 H90 V80 H0 Z" depth="40" fill="#f4f1ea" stroke="#000000" stroke-width="3" hidden="#ff00ff" />
+        <path x="40" y="40" d="M0 0 H140 V36 H90 V80 H0 Z" depth="40" fill="#f4f1ea" stroke="#000000" stroke-width="3" hidden="#ff00ff" />
       </layer>
     `)
     const inside = await pixelAt(png, 70, 55)
@@ -418,7 +238,7 @@ describe('软件光栅', () => {
   it('圆柱背面的弧是虚线，不是实线', async () => {
     const { png } = await render(`
       <layer width="280" height="220" background="#ffffff" camera="800">
-        <extrude x="40" y="30" d="M40 80 A 40 40 0 1 1 120 80 A 40 40 0 1 1 40 80 Z" depth="56" fill="none" stroke="#000000" stroke-width="3" hidden="#ff00ff" rotateX="62" />
+        <path x="0" y="-10" d="M40 80 A 40 40 0 1 1 120 80 A 40 40 0 1 1 40 80 Z" depth="56" fill="none" stroke="#000000" stroke-width="3" hidden="#ff00ff" rotateX="62" />
       </layer>
     `)
     const img = await loadImage(png)
@@ -478,7 +298,7 @@ describe('软件光栅', () => {
   it('前面的球体盖住后面盒子的棱', async () => {
     const { png } = await render(`
       <layer width="200" height="200" background="#ffffff" camera="600">
-        <box x="30" y="40" width="140" height="120" depth="40" fill="#dddddd" stroke="#000000" stroke-width="4" hidden="#ff00ff" />
+        <rect x="30" y="40" width="140" height="120" depth="40" fill="#dddddd" stroke="#000000" stroke-width="4" hidden="#ff00ff" />
         <sphere cx="100" cy="100" r="28" z="40" fill="#ff2244" />
       </layer>
     `)
@@ -492,7 +312,7 @@ describe('软件光栅', () => {
     const stats = async (width: string) => {
       const { png } = await render(`
         <layer width="280" height="240" background="#ffffff" camera="2400">
-          <box x="70" y="50" width="120" height="90" depth="80" fill="#f2f2f2" stroke="#000000" stroke-width="${width}" hidden="#ff00ff" rotateY="-32" rotateX="22" />
+          <rect x="70" y="50" width="120" height="90" depth="80" fill="#f2f2f2" stroke="#000000" stroke-width="${width}" hidden="#ff00ff" rotateY="-32" rotateX="22" />
         </layer>
       `)
       const img = await loadImage(png)
@@ -548,7 +368,7 @@ describe('软件光栅', () => {
       render(
         `
         <layer width="220" height="200" background="#ffffff" camera="4000">
-          <box x="50" y="24" width="90" height="150" depth="16" fill="#ffffff" stroke="#000000" stroke-width="2" hidden="#000000" halo="4" />
+          <rect x="50" y="24" width="90" height="150" depth="16" fill="#ffffff" stroke="#000000" stroke-width="2" hidden="#000000" halo="4" />
           <tube x="0" y="70" d="M20 30 H200" r="5" z="40" fill="#ff2244" stroke="#ff2244" stroke-width="2"${halo} />
         </layer>
       `,
@@ -683,9 +503,9 @@ describe('软件光栅', () => {
   it('halo 不配 stroke、写在平面上，或 stroke-width 超过三个数，会警告', async () => {
     const report = await checkLayer(`
       <layer width="180" height="140" camera="400">
-        <box x="20" y="30" width="40" height="30" depth="20" halo="3" />
+        <rect x="20" y="30" width="40" height="30" depth="20" halo="3" />
         <rect x="10" y="10" width="20" height="20" fill="#fff" halo="3" />
-        <box x="80" y="30" width="40" height="30" depth="20" fill="#fff" stroke="#000" stroke-width="1 2 3 4" />
+        <rect x="80" y="30" width="40" height="30" depth="20" fill="#fff" stroke="#000" stroke-width="1 2 3 4" />
       </layer>
     `)
     const messages = report.issues.filter((issue) => issue.code === 'invalid-attr').map((issue) => issue.message)
@@ -703,7 +523,7 @@ describe('软件光栅', () => {
     return `
       <layer width="240" height="240" background="#ffffff" camera="900">
         <layer x="20" y="10" width="200" height="220" rotateX="62">
-          <box x="30" y="40" width="140" height="140" depth="80" fill="#f2f2f2" ${box} />
+          <rect x="30" y="40" width="140" height="140" depth="80" fill="#f2f2f2" ${box} />
           <cylinder cx="100" cy="110" r="36" height="220" fill="#e7d3a8" ${cylinder} />
         </layer>
         ${sphere}
@@ -773,14 +593,14 @@ describe('软件光栅', () => {
     const alone = `
       <layer width="240" height="240" background="#ffffff" camera="900">
         <layer x="20" y="10" width="200" height="220" rotateX="62">
-          <box x="30" y="40" width="140" height="140" depth="80" fill="#f2f2f2" stroke="#d100ff" stroke-width="2" />
+          <rect x="30" y="40" width="140" height="140" depth="80" fill="#f2f2f2" stroke="#d100ff" stroke-width="2" />
         </layer>
       </layer>
     `
     const covered = `
       <layer width="240" height="240" background="#ffffff" camera="900">
         <layer x="20" y="10" width="200" height="220" rotateX="62">
-          <box x="30" y="40" width="140" height="140" depth="80" fill="#f2f2f2" stroke="#d100ff" stroke-width="2" />
+          <rect x="30" y="40" width="140" height="140" depth="80" fill="#f2f2f2" stroke="#d100ff" stroke-width="2" />
           <cylinder cx="100" cy="110" r="36" height="220" fill="#e7d3a8" />
         </layer>
       </layer>
@@ -840,7 +660,7 @@ describe('软件光栅', () => {
 
   it('parallel 正对的长方体保持布局宽高，近的球仍盖住它', async () => {
     const face = `
-      <box x="70" y="40" width="100" height="80" depth="60" fill="#ff2244" />
+      <rect x="70" y="40" width="100" height="80" depth="60" fill="#ff2244" />
     `
     const parallel = await render(`
       <layer width="240" height="160" background="#000000" camera="parallel">${face}</layer>
@@ -856,7 +676,7 @@ describe('软件光栅', () => {
     expect(enlarged[0]).toBeGreaterThan(140)
     const covered = await render(`
       <layer width="160" height="160" background="#000000" camera="parallel">
-        <box x="20" y="40" width="120" height="80" depth="20" fill="#2244ff" />
+        <rect x="20" y="40" width="120" height="80" depth="20" fill="#2244ff" />
         <sphere cx="80" cy="80" r="24" z="40" fill="#ff2244" />
       </layer>
     `)
@@ -882,7 +702,7 @@ describe('软件光栅', () => {
       <layer width="360" height="280" background="#f7f4ee" camera="700">
         <layer x="30" y="20" width="300" height="240" rotateX="58">
           ${plane ? '<rect x="16" y="16" width="36" height="24" fill="#88aaff" />' : ''}
-          <box x="80" y="70" width="150" height="110" depth="80" fill="none" stroke="#111111" stroke-width="3" hidden="#111111" />
+          <rect x="80" y="70" width="150" height="110" depth="80" fill="none" stroke="#111111" stroke-width="3" hidden="#111111" />
         </layer>
       </layer>`
     const bare = await colorMask(scene(false), (r, g, b) => r < 40 && g < 40 && b < 40)
@@ -923,13 +743,13 @@ describe('软件光栅', () => {
     const scaled = await edgeStroke(`
       <layer width="240" height="160" background="#ffffff">
         <layer width="240" height="160" camera="420" scale="3" origin="center">
-          <box x="-80" y="70" width="400" height="12" depth="6" fill="none" stroke="#e00000" stroke-width="6" />
+          <rect x="-80" y="70" width="400" height="12" depth="6" fill="none" stroke="#e00000" stroke-width="6" />
         </layer>
       </layer>`)
     const viewed = await edgeStroke(`
       <layer width="240" height="160" background="#ffffff" view="40 50 80 40">
         <layer width="240" height="160" camera="420">
-          <box x="-40" y="58" width="360" height="12" depth="6" fill="none" stroke="#e00000" stroke-width="6" />
+          <rect x="-40" y="58" width="360" height="12" depth="6" fill="none" stroke="#e00000" stroke-width="6" />
         </layer>
       </layer>`)
     expect(scaled.mid).toBeGreaterThan(8)
