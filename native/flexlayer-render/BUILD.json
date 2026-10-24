@@ -1,0 +1,16 @@
+{
+  "binaries": {
+    "flexlayer-render.darwin-arm64.node": {
+      "commit": "f1075b772842e5c2c415bc387757019ea1375362",
+      "engine": "flexlayer-render/0.0.2+cap1080"
+    },
+    "flexlayer-render.linux-x64-gnu.node": {
+      "commit": "a33bf8f36f5540a51444bc831f903d3a76f2958a",
+      "engine": null
+    },
+    "flexlayer-render.win32-x64-msvc.node": {
+      "commit": "f1075b772842e5c2c415bc387757019ea1375362",
+      "engine": null
+    }
+  }
+}
