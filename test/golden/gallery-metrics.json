@@ -1,6 +1,7 @@
 {
   "platform": "darwin-arm64",
   "engine": "flexlayer-render/0.0.2+cap1080",
+  "pixels": 503360,
   "gates": {
     "overexposureMax": 0.005,
     "draftFinalLumaDeltaMax": 6,
