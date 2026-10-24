@@ -1,5 +1,6 @@
 import {
   createCanvas,
+  Path2D,
   type Canvas,
   type CanvasRenderingContext2D,
   type SKRSContext2D,
@@ -8,6 +9,7 @@ import {
 /** 运行时就是这份上下文。标准 2D 类型没有 `drawImage`。 */
 type PaintCtx = SKRSContext2D
 import { applyCanvasFont } from './fonts.js'
+import { checkMarkPath, markStandIn } from './glyph.js'
 import { planLinePaint, runOpacity, segmentNeedsPaint } from './text.js'
 import { backdropFilters, filtersPad, getFilter, orderedFilters } from './filter.js'
 import { fitImageRect } from './image.js'
@@ -286,9 +288,28 @@ function runBox(
   }
 }
 
+/** 细长对勾不换字体，直接填固定路径。路径的基线在 y=0。 */
+function checkOutline(text: string, family: string, weight: number, size: number): string | null {
+  if (text !== '\u2713') return null
+  if (!markStandIn(text, family, weight)?.check) return null
+  return checkMarkPath(size).d
+}
+
+function fillGlyph(ctx: PaintCtx, text: string, x: number, baseline: number, pathD: string | null) {
+  if (!pathD) {
+    ctx.fillText(text, x, baseline)
+    return
+  }
+  ctx.save()
+  ctx.translate(x, baseline)
+  ctx.fill(new Path2D(pathD))
+  ctx.restore()
+}
+
 /**
  * 渐变不要直接交给 fillText。倍率不是 1 时，着色器会把字画偏，并且缩成大约一半。
  * 字形先画成实色蒙版，渐变只铺在矩形上，再按设备像素 1:1 贴回当前画布。
+ * `pathD` 是相对基线的对勾，用来代替字体里没有的字形。
  */
 function fillTextPaint(
   ctx: PaintCtx,
@@ -298,18 +319,31 @@ function fillTextPaint(
   color: string,
   box: PaintBox,
   fontSize: number,
+  pathD: string | null = null,
 ) {
   if (!text || !isGradient(color)) {
     ctx.fillStyle = color
-    ctx.fillText(text, x, baseline)
+    fillGlyph(ctx, text, x, baseline, pathD)
     return
   }
-  const metrics = ctx.measureText(text)
+  let left: number
+  let right: number
+  let ascent: number
+  let descent: number
+  if (pathD) {
+    const [l, t, r, b] = new Path2D(pathD).computeTightBounds()
+    left = Math.max(0, -l)
+    right = Math.max(r, 0)
+    ascent = Math.max(0, -t)
+    descent = Math.max(0, b)
+  } else {
+    const metrics = ctx.measureText(text)
+    left = metrics.actualBoundingBoxLeft
+    right = metrics.actualBoundingBoxRight > 0 ? metrics.actualBoundingBoxRight : metrics.width
+    ascent = metrics.actualBoundingBoxAscent > 0 ? metrics.actualBoundingBoxAscent : fontSize * 0.8
+    descent = metrics.actualBoundingBoxDescent > 0 ? metrics.actualBoundingBoxDescent : fontSize * 0.2
+  }
   const pad = Math.max(4, fontSize * 0.2)
-  const left = metrics.actualBoundingBoxLeft
-  const right = metrics.actualBoundingBoxRight > 0 ? metrics.actualBoundingBoxRight : metrics.width
-  const ascent = metrics.actualBoundingBoxAscent > 0 ? metrics.actualBoundingBoxAscent : fontSize * 0.8
-  const descent = metrics.actualBoundingBoxDescent > 0 ? metrics.actualBoundingBoxDescent : fontSize * 0.2
   const gx = x - left - pad
   const gy = baseline - ascent - pad
   const gw = Math.max(1, left + right + pad * 2)
@@ -339,7 +373,7 @@ function fillTextPaint(
   const dh = Math.ceil(maxY) - oy + 1
   if (!(dw > 0) || !(dh > 0) || dw > TEXT_MASK_LIMIT || dh > TEXT_MASK_LIMIT || dw * dh > 8_000_000) {
     ctx.fillStyle = paintOf(ctx, color, box.x, box.y, Math.max(box.width, 1), Math.max(box.height, 1))
-    ctx.fillText(text, x, baseline)
+    fillGlyph(ctx, text, x, baseline, pathD)
     return
   }
   const mask = createCanvas(dw, dh)
@@ -352,7 +386,7 @@ function fillTextPaint(
   mctx.textBaseline = ctx.textBaseline
   mctx.direction = ctx.direction
   mctx.fillStyle = '#000000'
-  mctx.fillText(text, x, baseline)
+  fillGlyph(mctx, text, x, baseline, pathD)
 
   const off = createCanvas(dw, dh)
   const octx = off.getContext('2d')
@@ -384,9 +418,11 @@ function drawTextRun(
   fontSize: number,
   underline: boolean,
   inkColor: string | undefined,
+  family = '',
+  weight = 400,
 ) {
   if (!text) return
-  fillTextPaint(ctx, text, x, baseline, color, box, fontSize)
+  fillTextPaint(ctx, text, x, baseline, color, box, fontSize, checkOutline(text, family, weight, fontSize))
   if (!underline) return
   const y = baseline + Math.max(1, fontSize * 0.12)
   ctx.strokeStyle = !inkColor && isGradient(color) ? paintOf(ctx, color, box.x, box.y, Math.max(box.width, 1), Math.max(box.height, 1)) : color
@@ -422,7 +458,7 @@ function drawTextNode(ctx: PaintCtx, node: TextLayoutNode, inkColor?: string) {
       ctx.letterSpacing = `${seg.style.letterSpacing}px`
       const color = inkColor ?? seg.style.fill ?? seg.style.color
       const box = inkColor ? glyphRun : textPaintBox(node, color, glyphRun)
-      drawTextRun(ctx, seg.text, x, seg.width, contentY + line.baselineY, color, box, seg.style.fontSize, seg.style.underline === true, inkColor)
+      drawTextRun(ctx, seg.text, x, seg.width, contentY + line.baselineY, color, box, seg.style.fontSize, seg.style.underline === true, inkColor, seg.style.fontFamily, seg.style.fontWeight)
     }
     for (let segIndex = 0; segIndex < line.segments.length; ) {
       if (!segmentNeedsPaint(line.segments[segIndex]!.style)) {
@@ -451,7 +487,7 @@ function drawTextNode(ctx: PaintCtx, node: TextLayoutNode, inkColor?: string) {
           ctx.letterSpacing = `${piece.style.letterSpacing}px`
           const color = inkColor ?? piece.style.fill ?? piece.style.color
           const box = { x: piece.x, y: line.y, width: Math.max(piece.width, 1), height: Math.max(line.height, 1) }
-          drawTextRun(ctx, piece.text, piece.x, piece.width, line.baselineY, color, box, piece.style.fontSize, piece.style.underline === true, inkColor)
+          drawTextRun(ctx, piece.text, piece.x, piece.width, line.baselineY, color, box, piece.style.fontSize, piece.style.underline === true, inkColor, piece.style.fontFamily, piece.style.fontWeight)
         }
         ctx.restore()
       }

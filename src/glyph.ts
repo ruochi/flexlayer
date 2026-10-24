@@ -1,5 +1,7 @@
 import { convertSVGTextToPath, createCanvas, Path2D, SvgExportFlag } from '@napi-rs/canvas'
-import { applyCanvasFont, resolveOutlineFont, type OutlineFont } from './fonts.js'
+import { readFileSync } from 'node:fs'
+import { inflateSync } from 'node:zlib'
+import { applyCanvasFont, fontFileFor, resolveOutlineFont, type OutlineFont } from './fonts.js'
 import { getMeasureCtx } from './measureCtx.js'
 import { parseSvgPath, serializeSvgPath, translateSvgPath } from './path.js'
 
@@ -109,8 +111,12 @@ function absoluteSvgPath(d: string): string {
   return serializeSvgPath(out)
 }
 
+function faceKey(face: OutlineFont): string {
+  return `${face.canvasFamily}|${face.weight}|${face.variation ? 1 : 0}`
+}
+
 function fontBox(face: OutlineFont, size: number): FontBox {
-  const key = `${face.canvasFamily}|${face.weight}|${size}`
+  const key = `${faceKey(face)}|${size}`
   const hit = boxCache.get(key)
   if (hit) return hit
   const ctx = getMeasureCtx()
@@ -124,7 +130,7 @@ function fontBox(face: OutlineFont, size: number): FontBox {
 }
 
 function notdefOutline(face: OutlineFont, size: number): string {
-  const key = `${face.canvasFamily}|${face.weight}|${size}`
+  const key = `${faceKey(face)}|${size}`
   const hit = notdefCache.get(key)
   if (hit != null) return hit
   const paths = NOTDEF_PROBES.map((ch) => outlineOf(ch, face, size)).filter((d) => d.trim())
@@ -222,46 +228,195 @@ function scalePathX(d: string, factor: number): string {
   return serializeSvgPath(commands)
 }
 
-const CHECK_FONT = 'Inter'
+/**
+ * 固定对勾。单位是 em，y 向下，基线在 0。
+ * 目录里的拉丁子集没有 U+2713。自带这个码位的字面都是又高又瘦的勾。
+ * 这条路径比高更宽，画出来是对勾，不靠系统字体回退。
+ */
+const CHECK_EM: Array<[number, number]> = [
+  [0.05, -0.22],
+  [0.3, 0.04],
+  [0.96, -0.4],
+  [0.86, -0.5],
+  [0.28, -0.1],
+  [0.14, -0.28],
+]
+const CHECK_ADVANCE = 1.02
+
+const cmapCache = new Map<string, boolean>()
+
+function fontTables(buf: Buffer): Map<string, Buffer> | null {
+  if (buf.length < 12) return null
+  const signature = buf.toString('latin1', 0, 4)
+  const tables = new Map<string, Buffer>()
+  if (signature === 'wOFF') {
+    const count = buf.readUInt16BE(12)
+    if (count < 1 || count > 512 || 44 + count * 20 > buf.length) return null
+    for (let i = 0; i < count; i++) {
+      const at = 44 + i * 20
+      const tag = buf.toString('latin1', at, at + 4)
+      const offset = buf.readUInt32BE(at + 4)
+      const compLength = buf.readUInt32BE(at + 8)
+      const origLength = buf.readUInt32BE(at + 12)
+      if (compLength > buf.length || offset > buf.length - compLength) return null
+      const raw = buf.subarray(offset, offset + compLength)
+      tables.set(tag, compLength < origLength ? inflateSync(raw) : Buffer.from(raw))
+    }
+    return tables
+  }
+  if (signature === 'wOF2' || signature === 'ttcf') return null
+  const count = buf.readUInt16BE(4)
+  if (count < 1 || count > 512 || 12 + count * 16 > buf.length) return null
+  for (let i = 0; i < count; i++) {
+    const at = 12 + i * 16
+    const tag = buf.toString('latin1', at, at + 4)
+    const offset = buf.readUInt32BE(at + 8)
+    const length = buf.readUInt32BE(at + 12)
+    if (length > buf.length || offset > buf.length - length) return null
+    tables.set(tag, buf.subarray(offset, offset + length))
+  }
+  return tables
+}
+
+/** 字文件的 cmap 里有没有这个码位。读不到表就当没有，避免把系统回退当成这套字自己的字形。 */
+function faceCovers(face: OutlineFont, cp: number): boolean {
+  let path = ''
+  try {
+    path = fontFileFor(face.canvasFamily, face.weight).path
+  } catch {
+    return false
+  }
+  const key = `${path}\0${cp}`
+  const hit = cmapCache.get(key)
+  if (hit != null) return hit
+  let covered = false
+  try {
+    const cmap = fontTables(readFileSync(path))?.get('cmap')
+    covered = cmap != null && cmap.length >= 4 && cmapGlyph(cmap, cp) > 0
+  } catch {
+    covered = false
+  }
+  cmapCache.set(key, covered)
+  return covered
+}
+
+function cmapGlyph(cmap: Buffer, cp: number): number {
+  const n = cmap.readUInt16BE(2)
+  if (n < 1 || 4 + n * 8 > cmap.length) return 0
+  let format12 = -1
+  let format4 = -1
+  for (let i = 0; i < n; i++) {
+    const rec = 4 + i * 8
+    const platform = cmap.readUInt16BE(rec)
+    const encoding = cmap.readUInt16BE(rec + 2)
+    const offset = cmap.readUInt32BE(rec + 4)
+    if (offset + 2 > cmap.length) continue
+    const format = cmap.readUInt16BE(offset)
+    if (format === 12 && (platform === 3 || platform === 0)) format12 = offset
+    if (format === 4 && ((platform === 3 && encoding === 1) || platform === 0)) format4 = offset
+  }
+  if (format12 >= 0) {
+    const at = format12
+    if (at + 16 > cmap.length) return 0
+    const groups = cmap.readUInt32BE(at + 12)
+    if (groups > 1_000_000 || at + 16 + groups * 12 > cmap.length) return 0
+    let lo = 0
+    let hi = groups - 1
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1
+      const g = at + 16 + mid * 12
+      const start = cmap.readUInt32BE(g)
+      const end = cmap.readUInt32BE(g + 4)
+      if (cp < start) hi = mid - 1
+      else if (cp > end) lo = mid + 1
+      else return cmap.readUInt32BE(g + 8) + cp - start
+    }
+    return 0
+  }
+  if (format4 >= 0) {
+    const at = format4
+    if (at + 14 > cmap.length) return 0
+    const segX2 = cmap.readUInt16BE(at + 6)
+    const ends = at + 14
+    const starts = ends + segX2 + 2
+    const deltas = starts + segX2
+    const ranges = deltas + segX2
+    if (cp > 0xffff || ranges + segX2 > cmap.length) return 0
+    for (let i = 0; i < segX2; i += 2) {
+      if (cp > cmap.readUInt16BE(ends + i)) continue
+      const start = cmap.readUInt16BE(starts + i)
+      if (cp < start) return 0
+      const delta = cmap.readInt16BE(deltas + i)
+      const range = cmap.readUInt16BE(ranges + i)
+      if (range === 0) return (cp + delta) & 0xffff
+      const glyphAt = ranges + i + range + (cp - start) * 2
+      if (glyphAt + 2 > cmap.length) return 0
+      const g = cmap.readUInt16BE(glyphAt)
+      return g === 0 ? 0 : (g + delta) & 0xffff
+    }
+  }
+  return 0
+}
+
+function checkCommands(size: number, baseline: number): Array<{ op: string; args: number[] }> {
+  const points = CHECK_EM.map(([x, y]) => [round3(x * size), round3(baseline + y * size)])
+  return [
+    { op: 'M', args: points[0]! },
+    ...points.slice(1).map((point) => ({ op: 'L', args: point })),
+    { op: 'Z', args: [] },
+  ]
+}
+
+/** 相对基线的对勾。`d` 的 y 向下，基线在 0。`width` 是字宽。 */
+export function checkMarkPath(size: number): { d: string; width: number } {
+  return { d: serializeSvgPath(checkCommands(size, 0)), width: round3(CHECK_ADVANCE * size) }
+}
+
+/** 排版用的字宽和着墨。着墨相对基线：基线之上是 ascent。 */
+export function checkMarkMetrics(size: number): { width: number; left: number; right: number; ascent: number; descent: number } {
+  const mark = checkMarkPath(size)
+  const [left, top, right, bottom] = new Path2D(mark.d).computeTightBounds()
+  return {
+    width: mark.width,
+    left: round3(Math.max(0, -left)),
+    right: round3(Math.max(right, 0)),
+    ascent: round3(Math.max(0, -top)),
+    descent: round3(Math.max(0, bottom)),
+  }
+}
 
 /**
  * 正文和 `glyph()` 共用。
  * 字体里没有 en dash 时，用同一套字的数字短横。
- * 对勾是细长的根号形时，改用 Inter 的对勾。
+ * 对勾缺字，或画成细长的根号形时，改用固定路径。`check` 为真时不要换字体。
  */
-export function markStandIn(ch: string, font?: string, weight?: number): { text: string; font?: string } | null {
+export function markStandIn(ch: string, font?: string, weight?: number): { text: string; font?: string; check?: boolean } | null {
   if (ch !== '\u2013' && ch !== '\u2713') return null
   const face = resolveOutlineFont(font, weight)
-  if (ch === '\u2713' && (face.family === CHECK_FONT || face.canvasFamily === CHECK_FONT)) return null
   const box = fontBox(face, 40)
-  const raw = oneGlyph(ch, face, 40, box, false)
-  if (ch === '\u2013') {
-    if (!raw.missing) return null
-    const figure = oneGlyph('\u2012', face, 40, box, false)
-    if (!figure.missing && figure.d) return { text: '\u2012' }
-    const em = oneGlyph('\u2014', face, 40, box, false)
-    if (!em.missing && em.d) return { text: '\u2014' }
+  if (ch === '\u2713') {
+    if (!faceCovers(face, 0x2713)) return { text: ch, check: true }
+    // 可变字体的非默认档会把同一条细勾拆成很多曲线。是否像根号，看默认实例。
+    const probe = face.variation ? { ...face, variation: false } : face
+    const raw = oneGlyph(ch, probe, 40, fontBox(probe, 40), false)
+    if (raw.missing || radicalTick(raw)) return { text: ch, check: true }
     return null
   }
-  if (raw.missing || radicalTick(raw)) return { text: ch, font: CHECK_FONT }
+  const raw = oneGlyph(ch, face, 40, box, false)
+  if (!raw.missing) return null
+  const figure = oneGlyph('\u2012', face, 40, box, false)
+  if (!figure.missing && figure.d) return { text: '\u2012' }
+  const em = oneGlyph('\u2014', face, 40, box, false)
+  if (!em.missing && em.d) return { text: '\u2014' }
   return null
-}
-
-function borrowCheck(size: number, weight: number, host: FontBox): { d: string; width: number } | null {
-  const face = resolveOutlineFont(CHECK_FONT, weight)
-  const box = fontBox(face, size)
-  const glyph = oneGlyph('\u2713', face, size, box, false)
-  if (glyph.missing || !glyph.d) return null
-  return { d: translateSvgPath(glyph.d, 0, host.baseline - glyph.baseline), width: glyph.width }
 }
 
 function applyStandIn(raw: Glyph, face: OutlineFont, size: number, box: FontBox): Glyph {
   const sub = markStandIn(raw.text, face.family, face.weight)
   if (!sub) return raw
-  if (sub.font) {
-    const borrowed = borrowCheck(size, face.weight, box)
-    if (!borrowed) return raw
-    return { ...raw, d: borrowed.d, width: borrowed.width, ink: inkOf(borrowed.d), missing: false }
+  if (sub.check) {
+    const d = serializeSvgPath(checkCommands(size, box.baseline))
+    return { ...raw, d, width: round3(CHECK_ADVANCE * size), ink: inkOf(d), missing: false }
   }
   if (sub.text === '\u2012') {
     const figure = oneGlyph(sub.text, face, size, box, false)
@@ -275,7 +430,7 @@ function applyStandIn(raw: Glyph, face: OutlineFont, size: number, box: FontBox)
 }
 
 function oneGlyph(ch: string, face: OutlineFont, size: number, box: FontBox, standIn = true): Glyph {
-  const key = `${face.canvasFamily}|${face.weight}|${size}|${ch}|${standIn ? 1 : 0}`
+  const key = `${faceKey(face)}|${size}|${ch}|${standIn ? 1 : 0}`
   const hit = glyphCache.get(key)
   if (hit) return expose(hit)
   const ctx = getMeasureCtx()
@@ -310,7 +465,7 @@ function oneGlyph(ch: string, face: OutlineFont, size: number, box: FontBox, sta
  * 从字体取出每个字的轮廓。按码位拆开，空字符串返回空数组。
  * 字宽和字身高度来自字体，不来自路径的外接框。
  * 同步返回。目录里的字体第一次用时会下载，下完直接给出数组，可以写在 `layer.create` 前面。
- * 字体里没有 en dash 时用同一套字的数字短横。细长得像根号的对勾改用 Inter，仍放在这套字的基线上。
+ * 字体里没有 en dash 时用同一套字的数字短横。细长得像根号的对勾改用固定路径，仍放在这套字的基线上。
  */
 export function glyph(text: string, options: GlyphOptions = {}): Glyph[] {
   const size = options.size ?? 40

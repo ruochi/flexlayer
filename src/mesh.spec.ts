@@ -743,7 +743,7 @@ describe('网格绘制', () => {
 
   it('材质球名字跟插件一致，没写 fill 用表里的颜色，名字后面的数字要删掉', async () => {
     const require = createRequire(import.meta.url)
-    const native = require(fileURLToPath(new URL('../native/flexlayer-render/flexlayer-render.linux-x64-gnu.node', import.meta.url))) as {
+    const native = require(fileURLToPath(new URL('../native/flexlayer-render/index.cjs', import.meta.url))) as {
       matcapNames: () => string
     }
     const rows = native

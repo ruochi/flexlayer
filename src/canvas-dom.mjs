@@ -2,6 +2,7 @@
 // globalThis.__flexlayerNativeAddon is set before this module loads
 
 import { createCanvas } from '@napi-rs/canvas'
+import { realpathSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { createFakeWebGL } from './webgl-fake.mjs'
 
@@ -418,7 +419,16 @@ async function readStdin() {
   return Buffer.concat(chunks).toString('utf8')
 }
 
-const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href
+// import.meta.url 是解析过符号链接的路径（macOS 的 /var 指向 /private/var），argv[1] 不是。
+function mainHref(file) {
+  try {
+    return pathToFileURL(realpathSync(file)).href
+  } catch {
+    return pathToFileURL(file).href
+  }
+}
+
+const isMain = process.argv[1] && import.meta.url === mainHref(process.argv[1])
 
 if (isMain) {
   const raw = await readStdin()
