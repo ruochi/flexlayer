@@ -25,6 +25,7 @@ type PackOptions = {
   frame: number
   baseDir: string
   meshSamples?: 1 | 2 | 4
+  meshCache?: number | false
   native: NativeRender
 }
 
@@ -226,7 +227,7 @@ export function packPaintTree(doc: LayerDocument, options: PackOptions): PackedP
         if (node.mask?.length) out.mask = node.mask.map((child) => packNode(child, true))
         if (!skipMesh && options.native.render && (ownsMeshScene(node) || node.dof)) {
           const clip = meshVisibleRect(doc.width, doc.height, doc.root, node)
-          const frame = renderMeshLayer(node, options.scale, rasterPlane, { samples: options.meshSamples, clip })
+          const frame = renderMeshLayer(node, options.scale, rasterPlane, { samples: options.meshSamples, clip, cacheBytes: options.meshCache })
           if (frame && frame.width > 0 && frame.height > 0) {
             out.meshFrame = {
               rasterId: takeRaster(frame.canvas),

@@ -1343,6 +1343,58 @@ describe('shading', () => {
     expect(hit?.hint).toContain('studio')
   })
 
+  it('technical 的隐藏线落在实体轮廓里', async () => {
+    const scene = (shading: string) =>
+      `<layer width="220" height="180" background="#241f1b" camera="fov 30, orbit 28 18, distance 640, at 110 100 0" shading="${shading}"><ground y="150" rotateX="90" fill="#e7e0d4" /><cylinder cx="110" cy="108" r="26" height="80" fill="#e0a33a" /></layer>`
+    const technical = await imageOf((await renderLayer(scene('technical'))).png)
+    const studio = await imageOf((await renderLayer(scene('studio'))).png)
+    const { width, height } = technical
+    const near = (px: Uint8ClampedArray, rgb: number[], slack: number) => {
+      const d = Math.hypot(px[0]! - rgb[0]!, px[1]! - rgb[1]!, px[2]! - rgb[2]!)
+      return d < slack
+    }
+    const solid = new Uint8Array(width * height)
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const px = studio.at(x, y)
+        if (px[3]! < 200 || near(px, [36, 31, 27], 12) || near(px, [231, 224, 212], 18)) continue
+        solid[y * width + x] = 1
+      }
+    }
+    const dist = new Float32Array(width * height).fill(1e6)
+    for (let i = 0; i < solid.length; i++) if (solid[i]) dist[i] = 0
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = y * width + x
+        if (x > 0) dist[i] = Math.min(dist[i], dist[i - 1]! + 1)
+        if (y > 0) dist[i] = Math.min(dist[i], dist[i - width]! + 1)
+      }
+    }
+    for (let y = height - 1; y >= 0; y--) {
+      for (let x = width - 1; x >= 0; x--) {
+        const i = y * width + x
+        if (x + 1 < width) dist[i] = Math.min(dist[i], dist[i + 1]! + 1)
+        if (y + 1 < height) dist[i] = Math.min(dist[i], dist[i + width]! + 1)
+      }
+    }
+    let hidden = 0
+    let outside = 0
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const px = technical.at(x, y)
+        const base = studio.at(x, y)
+        const hid = Math.hypot(px[0]! - 154, px[1]! - 143, px[2]! - 128)
+        const ink = Math.hypot(px[0]! - 28, px[1]! - 25, px[2]! - 21)
+        const changed = Math.hypot(px[0]! - base[0]!, px[1]! - base[1]!, px[2]! - base[2]!)
+        if (hid > 28 || hid > ink || changed < 24) continue
+        hidden++
+        if (dist[y * width + x]! > 2) outside++
+      }
+    }
+    expect(hidden).toBeGreaterThan(20)
+    expect(outside).toBe(0)
+  }, 30000)
+
   it('作者写的 stroke 在 technical 下仍是红色', async () => {
     const { png } = await renderLayer(
       `<layer width="160" height="160" background="#f6f3ec" camera="500" shading="technical"><sphere cx="80" cy="80" r="36" fill="#88aacc" stroke="#ff0000" /></layer>`,
