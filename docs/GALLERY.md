@@ -14,6 +14,8 @@ Each picture is a grid. The label under a cell is the attribute name. Sources ar
 | [flex.png](gallery/flex.png) | A tag cloud with `flex-wrap`, and a card grid with `column-gap` / `row-gap` |
 | [matcaps.png](gallery/matcaps.png) | `clay`, `plastic`, `metal`, `mirror`, `brushed`. The top row is the finish color. The bottom row is the same finish with `fill` |
 | [lighting.png](gallery/lighting.png) | Contact-hardening ground shadow, color bleed, `lamp`, `neon`, and a glass tint |
+| [finish-mix.png](gallery/finish-mix.png) | One table: a matte box, then `clay`, `plastic`, `glass`, `metal`, `brushed`, and `mirror` |
+| [finish-pairs.png](gallery/finish-pairs.png) | The same `fill` on a bare finish and on a roughness number |
 
 The smallest forms:
 
