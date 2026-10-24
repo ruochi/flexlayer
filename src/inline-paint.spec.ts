@@ -53,7 +53,7 @@ describe('行内绘制变换', () => {
     const plain = textNode(await layoutSource(page('<p style="font-size:40px; width:80px">你好世界</p>'), process.cwd()))
     const scaled = textNode(
       await layoutSource(
-        page('<p style="font-size:40px; width:80px"><span style="scale:2; rotate:30; translate: 0 -12">你好世界</span></p>'),
+        page('<p style="font-size:40px; width:80px"><span style="scale:2; rotate:30deg; translate: 0 -12">你好世界</span></p>'),
         process.cwd(),
       ),
     )
@@ -68,10 +68,10 @@ describe('行内绘制变换', () => {
 
   it('整段的 rotate 仍转盒子，split="chars" 改到每个字上', async () => {
     if (!hasFont) return
-    const box = textNode(await layoutSource(page('<p style="font-size:40px; rotate:15">你好</p>'), process.cwd()))
-    const split = textNode(await layoutSource(page('<p split="chars" style="font-size:40px; rotate:90">你好</p>'), process.cwd()))
+    const box = textNode(await layoutSource(page('<p style="font-size:40px; rotate:15deg">你好</p>'), process.cwd()))
+    const split = textNode(await layoutSource(page('<p split="chars" style="font-size:40px; rotate:90deg">你好</p>'), process.cwd()))
     const group = textNode(
-      await layoutSource(page('<p style="font-size:40px"><span style="rotate:90">你好</span></p>'), process.cwd()),
+      await layoutSource(page('<p style="font-size:40px"><span style="rotate:90deg">你好</span></p>'), process.cwd()),
     )
     expect(box.rotate).toBe(15)
     expect(split.rotate).toBe(0)
@@ -99,7 +99,7 @@ describe('行内绘制变换', () => {
     if (!hasFont) return
     const node = textNode(
       await layoutSource(
-        page('<p style="font-size:40px; white-space:nowrap"><span style="rotate:20">字</span>，<span style="rotate:40">句</span></p>'),
+        page('<p style="font-size:40px; white-space:nowrap"><span style="rotate:20deg">字</span>，<span style="rotate:40deg">句</span></p>'),
         process.cwd(),
       ),
     )
@@ -111,7 +111,7 @@ describe('行内绘制变换', () => {
     if (!hasFont) return
     const stuck = textNode(
       await layoutSource(
-        page('<p style="font-size:40px; width:46px"><span style="rotate:12">字</span><span style="rotate:40">，</span>后</p>'),
+        page('<p style="font-size:40px; width:46px"><span style="rotate:12deg">字</span><span style="rotate:40deg">，</span>后</p>'),
         process.cwd(),
       ),
     )
@@ -125,7 +125,7 @@ describe('行内绘制变换', () => {
 
     const withImage = textNode(
       await layoutSource(
-        page('<p style="font-size:40px; width:50px"><img src="x.png" style="width:40px; height:40px" /><span style="rotate:40">，</span>后</p>'),
+        page('<p style="font-size:40px; width:50px"><img src="x.png" style="width:40px; height:40px" /><span style="rotate:40deg">，</span>后</p>'),
         process.cwd(),
       ),
     )
@@ -140,7 +140,7 @@ describe('行内绘制变换', () => {
     const node = textNode(
       await layoutSource(
         page(
-          '<p style="font-size:40px; width:50px"><img src="x.png" style="width:40px; height:40px" /><span id="c" style="rotate:40">，</span>后</p>',
+          '<p style="font-size:40px; width:50px"><img src="x.png" style="width:40px; height:40px" /><span id="c" style="rotate:40deg">，</span>后</p>',
         ),
         process.cwd(),
       ),
@@ -153,7 +153,7 @@ describe('行内绘制变换', () => {
   it('报告里的盒子留在原位，着墨框跟着转', async () => {
     if (!hasFont) return
     const report = await checkLayer(
-      page('<p style="font-size:48px; white-space:nowrap">甲<span id="mark" style="rotate:90">乙丙</span>丁</p>'),
+      page('<p style="font-size:48px; white-space:nowrap">甲<span id="mark" style="rotate:90deg">乙丙</span>丁</p>'),
     )
     const span = report.elements.find((el) => el.id === 'mark')
     expect(span?.inline).toBe(true)

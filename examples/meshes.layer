@@ -4,10 +4,10 @@
   <sphere cx="220" cy="340" r="90" z="50" fill="#4CC3D9" />
   
   
-  <box width="150" height="100" depth="60" z="-20" fill="#EF2D5E" x="355" y="350" />
+  <rect width="150" height="100" depth="60" z="-20" fill="#EF2D5E" x="355" y="350" />
   
   
-  <extrude d="M0 0 H140 V36 H90 V80 H0 Z" depth="18" fill="#f4f1ea" x="250" y="600" />
+  <path d="M0 0 H140 V36 H90 V80 H0 Z" depth="18" fill="#f4f1ea" x="250" y="600" />
   
   
   <model src="box.glb" x="220" y="80" width="200" height="200" z="10" />

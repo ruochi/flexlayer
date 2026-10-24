@@ -513,7 +513,7 @@ describe('layer.create', () => {
         'layer',
         { width: '480', height: '360', camera: '2000' },
         h('rect', { id: 'card', x: '16', y: '16', width: '40', height: '24', fill: '#fff' }),
-        h('box', { id: 'cube', x: '160', y: '120', width: '160', height: '120', depth: '80', fill: '#fff' }),
+        h('rect', { id: 'cube', x: '160', y: '120', width: '160', height: '120', depth: '80', fill: '#fff' }),
         h('sphere', { id: 'ball', cx: '80', cy: '280', r: '36', fill: '#fff' }),
       ),
     )
@@ -576,7 +576,7 @@ describe('layer.create', () => {
       h(
         'layer',
         { width: '240', height: '180', camera: '4000' },
-        h('box', { id: 'cube', x: '40', y: '30', width: '80', height: '60', depth: '40' }),
+        h('rect', { id: 'cube', x: '40', y: '30', width: '80', height: '60', depth: '40' }),
       ),
     )
     const nested = layer.create(
@@ -586,7 +586,7 @@ describe('layer.create', () => {
         h(
           'layer',
           { x: '100', y: '80', width: '240', height: '180', camera: '4000' },
-          h('box', { id: 'cube', x: '40', y: '30', width: '80', height: '60', depth: '40' }),
+          h('rect', { id: 'cube', x: '40', y: '30', width: '80', height: '60', depth: '40' }),
         ),
       ),
     )
@@ -606,7 +606,7 @@ describe('layer.create', () => {
         h(
           'layer',
           { x: '10', y: '20', width: '240', height: '180', camera: '4000', scale: '2', origin: 'top-left' },
-          h('box', { id: 'cube', x: '40', y: '30', width: '80', height: '60', depth: '40' }),
+          h('rect', { id: 'cube', x: '40', y: '30', width: '80', height: '60', depth: '40' }),
         ),
       ),
     )
@@ -621,8 +621,8 @@ describe('layer.create', () => {
       h(
         'layer',
         { width: '480', height: '360', camera: '2000' },
-        h('box', { id: 'far', x: '160', y: '110', width: '160', height: '140', depth: '40', z: '-60' }),
-        h('box', { id: 'near', x: '160', y: '110', width: '160', height: '140', depth: '40', z: '60' }),
+        h('rect', { id: 'far', x: '160', y: '110', width: '160', height: '140', depth: '40', z: '-60' }),
+        h('rect', { id: 'near', x: '160', y: '110', width: '160', height: '140', depth: '40', z: '60' }),
       ),
     )
     const far = stacked.elements.find((element) => element.id === 'far')!

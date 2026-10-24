@@ -541,7 +541,7 @@ describe('绘制', () => {
 
     const mesh = await renderLayer(`
       <layer width="180" height="150" background="#ffffff" camera="500" shadow="0 48 0 #ff0000">
-        <box x="70" y="32" width="40" height="36" depth="16" fill="#0000ff" />
+        <rect x="70" y="32" width="40" height="36" depth="16" fill="#0000ff" />
       </layer>
     `)
     const scene = await pixels(mesh.png)
@@ -1115,14 +1115,14 @@ describe('墨迹 spread 与 stroke', () => {
     const scene = `
       <layer width="320" height="220" background="#ffffff">
         <layer x="30" y="24" width="260" height="170" camera="640" stroke="8 #e00000" shadow="18 20 0 #2244aa">
-          <box x="60" y="40" width="140" height="80" depth="50" fill="#f2efe6" rotateY="-28" rotateX="22" />
+          <rect x="60" y="40" width="140" height="80" depth="50" fill="#f2efe6" rotateY="-28" rotateX="22" />
         </layer>
       </layer>`
     const wrapped = `
       <layer width="320" height="220" background="#ffffff">
         <layer x="24" y="18" width="272" height="184" stroke="8 #e00000" shadow="18 20 0 #2244aa">
           <layer width="272" height="184" camera="640">
-            <box x="60" y="36" width="140" height="80" depth="50" fill="#f2efe6" rotateY="-28" rotateX="22" />
+            <rect x="60" y="36" width="140" height="80" depth="50" fill="#f2efe6" rotateY="-28" rotateX="22" />
           </layer>
         </layer>
       </layer>`

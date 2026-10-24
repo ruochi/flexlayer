@@ -4,6 +4,12 @@
 
 The 3D gallery is six sheets: one still life, shading, draft against final, sixteen materials, four cameras, and a line drawing. The rules are in `docs/GALLERY-3D.md`. `npm run gallery:3d` rebuilds them.
 
+## 0.16.0
+
+`rotate`, `rotateX`, and `rotateY` in `style` need a unit. `rotate: 30` reports `invalid-attr` and does not rotate. `0` may still omit the unit. `rotate="30"` on a shape, a line, or a `layer` is still degrees.
+
+`<box>` and `<extrude>` are unknown tags. A box is `<rect depth>`. An extrusion is `<path depth>`. `<cylinder>` remains the upright cylinder: `cx`, `cy`, `r`, and `height`.
+
 ## 0.15.4
 
 Draft ground shadows are painted from the contact map. A contact line sits under the body, and the cast shadow hardens where the caster meets the ground. The pale penumbra is still smoothed. A contact ramp that is already dark is left alone, so the chassis does not lift it. A one-pixel cliff between ground pixels is still pulled into midtones.

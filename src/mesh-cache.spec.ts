@@ -50,7 +50,7 @@ const box = (rotateY = 0, depth = 24, fill = '#e23b2f', opacity = 1) => `
   <layer width="160" height="120" background="#111111" camera="500">
     <rect x="8" y="70" width="36" height="20" fill="#2244aa" />
     <layer x="48" y="24" width="64" height="64" rotateY="${rotateY}">
-      <box width="64" height="64" depth="${depth}" fill="${fill}" opacity="${opacity}" />
+      <rect width="64" height="64" depth="${depth}" fill="${fill}" opacity="${opacity}" />
     </layer>
   </layer>
 `

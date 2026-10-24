@@ -4,7 +4,7 @@ import { applyCanvasFont } from './fonts.js'
 import { applySymbolsClass, classAttr, rewriteIconLigatures, symbolsClassNotes, type SymbolsNote } from './icons.js'
 import { getMeasureCtx } from './measureCtx.js'
 import { applyToBox, aroundPivot, cssMotionMatrix, multiply, translated, type Matrix } from './matrix.js'
-import { parseAngle, parseCssTransform, parseFontWeight, parseLetterSpacing, parseNumber, parsePx, parseScale } from './style.js'
+import { parseCssTransform, parseFontWeight, parseLetterSpacing, parseNumber, parsePx, parseScale, styleAngle } from './style.js'
 import { emptyBox, translateBox, unionBoxes, type Box, type InlineOwner, type LaidTextSegment, type TextLayoutResult, type TextRunStyle, type TextSegment } from './types.js'
 
 const require = createRequire(import.meta.url)
@@ -113,7 +113,7 @@ function mergeStyle(base: TextRunStyle, styleMap: Record<string, string>, inline
       if (opacity != null) next.opacity = opacity
     }
     if (styleMap.rotate != null) {
-      const rotate = parseAngle(styleMap.rotate)
+      const rotate = styleAngle(styleMap.rotate)
       if (rotate) next.rotate = rotate.degrees
     }
     if (styleMap.scale != null) {
