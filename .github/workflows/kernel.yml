@@ -43,3 +43,42 @@ jobs:
       - name: load the platform addon
         shell: bash
         run: node scripts/addon-hash.mjs
+
+  gallery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # flexlayer-render is private, so the default GITHUB_TOKEN of this
+      # repository cannot read it. RENDER_REPO_TOKEN is a fine-grained PAT with
+      # read access to that repository only. Without the secret this job fails
+      # on checkout, which is the intent: a green sheet job that rendered with
+      # a stale addon would verify nothing.
+      - uses: actions/checkout@v4
+        with:
+          repository: ruochi/flexlayer-render
+          token: ${{ secrets.RENDER_REPO_TOKEN }}
+          path: vendor/flexlayer-render
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: dtolnay/rust-toolchain@1.88.0
+      - name: linux addon from the renderer
+        working-directory: vendor/flexlayer-render
+        run: |
+          npm ci
+          npx napi build --platform --release
+          cp flexlayer-render.linux-x64-gnu.node "$GITHUB_WORKSPACE/native/flexlayer-render/flexlayer-render.linux-x64-gnu.node"
+      - run: npm ci
+      - name: gallery metrics
+        run: npx tsx scripts/gallery-metrics.mjs --check
+      - name: gallery sheets
+        run: npm run gallery:3d
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gallery-3d
+          path: |
+            docs/gallery/3d-*.png
+            docs/gallery/3d/**/*.png
+          if-no-files-found: ignore
