@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url'
 import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { renderLayer } from '../src/render.ts'
 import { meanFlip } from './flip-diff.ts'
+import { GATES, checkGates, metalLumaDelta, platformSlack } from './metrics-gates.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const repo = dirname(root)
@@ -55,25 +56,6 @@ const GROUNDED = new Set(['plinth', 'red-box', 'white-box', 'metal-plate', 'gold
 const BENCH_METAL = new Set(['metal-plate', 'chrome'])
 const MATERIAL_METAL = /metal|mirror|brushed|anisotropy/
 const OBJECT_IDS = ['box', 'sphere', 'side']
-
-const GATES = {
-  overexposureMax: null,
-  draftFinalLumaDeltaMax: null,
-  draftFinalFlipMax: null,
-  metalDarkFractionMax: null,
-  metalLumaDeltaMax: null,
-  contactRatioMax: null,
-  floatGapMin: null,
-  materialFlipMin: null,
-  emissiveCoreYMin: null,
-  emissiveHaloRiseMax: null,
-  emissiveOutsideHotMax: null,
-  toonLevelsMax: null,
-  mangaPaperLumaMin: null,
-  mangaPaperChromaMax: null,
-  hatchFlipMax: null,
-  technicalChromaRatioMin: null,
-}
 
 function luma(data, i) {
   return 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]
@@ -637,20 +619,13 @@ function loadGates() {
   }
 }
 
-function metalLumaDelta(report) {
-  const draft = new Map()
-  for (const metal of report.metals) {
-    if (metal.cell === '3d-quality-draft') draft.set(metal.id, metal.meanY)
+/** Which platform the recorded numbers came from, or null when there is none. */
+function readBaselinePlatform() {
+  try {
+    return JSON.parse(readFileSync(goldenPath, 'utf8')).platform ?? null
+  } catch {
+    return null
   }
-  let worst = null
-  for (const metal of report.metals) {
-    if (metal.cell !== '3d-quality-final') continue
-    const base = draft.get(metal.id)
-    if (base == null || metal.meanY == null) continue
-    const rel = Math.abs(base - metal.meanY) / Math.max(base, metal.meanY)
-    if (worst == null || rel > worst) worst = rel
-  }
-  return worst
 }
 
 function fail(message) {
@@ -658,46 +633,8 @@ function fail(message) {
   process.exitCode = 1
 }
 
-function applyGates(gates, report) {
-  const errors = []
-  const maxOf = (limit, value, label) => {
-    if (limit == null || value == null) return
-    if (value > limit) errors.push(`${label} ${value} > ${limit}`)
-  }
-  const minOf = (limit, value, label) => {
-    if (limit == null || value == null) return
-    if (value < limit) errors.push(`${label} ${value} < ${limit}`)
-  }
-  for (const [name, cell] of Object.entries(report.cells)) {
-    maxOf(gates.overexposureMax, cell.overexposure, `${name} overexposure`)
-  }
-  maxOf(gates.draftFinalLumaDeltaMax, report.draftFinal?.lumaDelta, 'draft/final luma')
-  maxOf(gates.draftFinalFlipMax, report.draftFinal?.flip, 'draft/final flip')
-  for (const metal of report.metals) {
-    if (metal.cell === '3d-shade-toon' || metal.cell === '3d-shade-manga') continue
-    maxOf(gates.metalDarkFractionMax, metal.darkFraction, `${metal.cell} ${metal.id} dark`)
-  }
-  maxOf(gates.metalLumaDeltaMax, metalLumaDelta(report), 'draft/final metal luma')
-  for (const contact of report.contacts) {
-    if (contact.cell !== '3d-quality-draft') continue
-    maxOf(gates.contactRatioMax, contact.ratio, `${contact.cell} ${contact.id} contact`)
-  }
-  if (gates.materialFlipMin != null) {
-    for (const pair of report.materials) {
-      minOf(gates.materialFlipMin, pair.flip, `${pair.a} vs ${pair.b}`)
-    }
-  }
-  for (const item of report.toon ?? []) {
-    maxOf(gates.toonLevelsMax, item.levels, `toon ${item.id}`)
-  }
-  minOf(gates.mangaPaperLumaMin, report.manga?.meanY, 'manga paper Y')
-  maxOf(gates.mangaPaperChromaMax, report.manga?.chroma, 'manga paper chroma')
-  maxOf(gates.hatchFlipMax, report.manga?.hatchFlip, 'manga hatch flip')
-  minOf(gates.technicalChromaRatioMin, report.technical?.minRatio, 'technical/studio chroma')
-  minOf(gates.floatGapMin, report.floatGap, 'blue-float recovered px')
-  minOf(gates.emissiveCoreYMin, report.emissive?.coreY, 'emissive core Y')
-  maxOf(gates.emissiveHaloRiseMax, report.emissive?.haloRise, 'emissive halo rise')
-  maxOf(gates.emissiveOutsideHotMax, report.emissive?.outsideHot, 'emissive Y>250 outside core')
+function applyGates(gates, report, slack = { luma: 0, fraction: 0 }) {
+  const errors = checkGates(gates, report, slack)
   if (errors.length) fail(errors.join('\n'))
 }
 
@@ -919,6 +856,8 @@ const hatchFlip = await measureHatch(mangaCell)
 const report = {
   platform: `${process.platform}-${process.arch}`,
   engine: engineString(),
+  // Page size, so a cross-platform fraction tolerance can be counted in pixels.
+  pixels: draft ? draft.width * draft.height : null,
   gates: loadGates(),
   cells,
   draftFinal,
@@ -937,4 +876,10 @@ if (write) {
   writeFileSync(goldenPath, `${JSON.stringify(report, null, 2)}\n`)
   console.log(`wrote ${goldenPath}`)
 }
-if (check) applyGates(report.gates, report)
+if (check) {
+  const recorded = readBaselinePlatform()
+  if (recorded && recorded !== report.platform) {
+    console.log(`baseline recorded on ${recorded}; checking ${report.platform} with one-code-value slack`)
+  }
+  applyGates(report.gates, report, platformSlack(recorded, report.pixels))
+}
