@@ -6,14 +6,36 @@ on:
     branches: [main]
 
 jobs:
+  # Both Linux jobs build the renderer from source and drop the addon in place
+  # before anything loads it. The binaries committed under native/ are a
+  # release artifact for macOS and Windows, where no runner here builds them;
+  # on Linux the current renderer source is what the tests must exercise, not
+  # a binary someone committed weeks ago.
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # flexlayer-render is private, so this repository's default GITHUB_TOKEN
+      # cannot read it. RENDER_REPO_TOKEN is a fine-grained PAT with read access
+      # to that repository only. Without the secret the job fails at checkout,
+      # which is the intent: a green job that tested a stale committed binary
+      # would verify nothing.
+      - uses: actions/checkout@v4
+        with:
+          repository: ruochi/flexlayer-render
+          token: ${{ secrets.RENDER_REPO_TOKEN }}
+          path: vendor/flexlayer-render
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
+      - uses: dtolnay/rust-toolchain@1.88.0
+      - name: linux addon from the renderer
+        working-directory: vendor/flexlayer-render
+        run: |
+          npm ci
+          npx napi build --platform --release
+          cp flexlayer-render.linux-x64-gnu.node "$GITHUB_WORKSPACE/native/flexlayer-render/flexlayer-render.linux-x64-gnu.node"
       - run: npm ci
       - run: npm test
       - name: golden flip
@@ -48,11 +70,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # flexlayer-render is private, so the default GITHUB_TOKEN of this
-      # repository cannot read it. RENDER_REPO_TOKEN is a fine-grained PAT with
-      # read access to that repository only. Without the secret this job fails
-      # on checkout, which is the intent: a green sheet job that rendered with
-      # a stale addon would verify nothing.
       - uses: actions/checkout@v4
         with:
           repository: ruochi/flexlayer-render
