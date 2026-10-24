@@ -1,13 +1,13 @@
 <layer width="440" height="332" background="#241f1b" color="#f4efe6" font-family="ChillDuanSans" min-font="16" safe="0">
   <layer x="0" y="0" width="440" height="300" camera="fov 32, orbit 34 22, distance 860, at 220 160 0">
-    <ground y="220" rotateX="90" fill="#e7e0d4" shadow-blur="26" shadow-opacity="0.5" />
+    <ground id="ground" y="220" rotateX="90" fill="#e7e0d4" shadow-blur="26" shadow-opacity="0.5" />
     <layer x="28" y="220" width="400" height="190" origin="200 0" rotateX="90" preserve-3d>
-      <rect x="40" y="4" width="340" height="8" depth="110" fill="#f6f2ea" />
-      <rect x="28" y="30" width="120" height="86" depth="72" rx="12" material="finish plastic, color #d23b3b, roughness 0.42, clearcoat 1" />
+      <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" fill="#f6f2ea" />
+      <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" material="finish plastic, color #d23b3b, roughness 0.42, clearcoat 1" />
       
-      <sphere cx="204" cy="72" r="30" z="30" material="finish plastic, color #f4f1ea, roughness 0.42, clearcoat 1" />
-      <circle cx="330" cy="78" r="26" depth="100" material="finish plastic, color #e0a33a, roughness 0.42, clearcoat 1" />
+      <sphere id="sphere" cx="204" cy="72" r="30" z="30" material="finish plastic, color #f4f1ea, roughness 0.42, clearcoat 1" />
+      <circle id="side" cx="330" cy="78" r="26" depth="100" material="finish plastic, color #e0a33a, roughness 0.42, clearcoat 1" />
     </layer>
   </layer>
-  <layer x="12" y="304"><p style="font-size:16px">clearcoat 1</p></layer>
+  <layer x="12" y="304"><p style="font-size:18px">clearcoat 1</p></layer>
 </layer>

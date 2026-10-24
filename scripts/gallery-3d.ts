@@ -11,29 +11,29 @@ import { formatIssueLine } from '../src/report.js'
 const BENCH_W = 880
 const BENCH_H = 540
 /** 长边不能超过 1920，所以对照格用这一档。distance 把同一组几何收进这个取景。 */
-const BENCH_CAMERA = 'fov 30, orbit 28 18, distance 1280, at 550 400 0'
+const BENCH_CAMERA = 'fov 30, orbit 28 32, distance 1180, at 550 630 0'
 
 function bench(camera = BENCH_CAMERA, extra = ''): string {
   const attrs = extra ? ` ${extra}` : ''
   return `<layer width="${BENCH_W}" height="${BENCH_H}" camera="${camera}"${attrs}>
-    <ground y="530" rotateX="90" fill="#e7e0d4" shadow-blur="40" shadow-opacity="0.5" />
+    <ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="40" shadow-opacity="0.5" />
     <layer x="70" y="530" width="960" height="400" origin="480 0" rotateX="90" preserve-3d>
-      <rect x="90" y="8" width="740" height="12" depth="170" rx="3" fill="#f6f2ea" />
-      <rect x="70" y="48" width="190" height="130" depth="100" rx="18" fill="#d23b3b" material="plastic 0.28" />
-      <rect x="276" y="40" width="150" height="140" depth="180" rx="12" fill="#f4f1ea" />
-      <rect x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#c5c9ce" material="metal 0.18" />
-      <sphere cx="590" cy="140" r="36" z="49" fill="#e8eef3" material="metal 0.05" />
-      <sphere cx="160" cy="200" r="34" z="140" fill="#2a6fbe" material="plastic 0.42" />
-      <rect x="210" y="200" width="36" height="78" depth="160" fill="#e23b2f" />
-      <rect x="246" y="200" width="36" height="78" depth="160" fill="#f7f4ee" />
-      <rect x="282" y="200" width="36" height="78" depth="160" fill="#2a6fbe" />
-      <sphere cx="264" cy="268" r="46" z="46" fill="#f4fffbcc" material="glass 0.07" />
-      <circle cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />
+      <rect id="plinth" x="90" y="8" width="740" height="12" depth="170" rx="3" fill="#f6f2ea" />
+      <rect id="red-box" x="70" y="48" width="190" height="130" depth="100" rx="18" fill="#d23b3b" material="plastic 0.28" />
+      <rect id="white-box" x="276" y="40" width="150" height="140" depth="180" rx="12" fill="#f4f1ea" />
+      <rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#c5c9ce" material="metal 0.18" />
+      <sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#e8eef3" material="metal 0.05" />
+      <sphere id="blue-float" cx="160" cy="200" r="34" z="140" fill="#2a6fbe" material="plastic 0.42" />
+      <rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#e23b2f" />
+      <rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#f7f4ee" />
+      <rect id="stripe-blue" x="282" y="200" width="36" height="78" depth="160" fill="#2a6fbe" />
+      <sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f4fffbcc" material="glass 0.07" />
+      <circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />
       <layer x="400" y="230">
-        <path d="M0 0 H120 V84 H0 Z M28 18 V66 H92 V18 Z" depth="14" fill="#1f8a5b" material="plastic 0.3" />
+        <path id="hole" d="M0 0 H120 V84 H0 Z M28 18 V66 H92 V18 Z" depth="14" fill="#1f8a5b" material="plastic 0.3" />
       </layer>
-      <torus cx="180" cy="250" r="40" tube="10" z="12" fill="#3ad8ff" material="neon" rotateX="72" />
-      <sphere cx="860" cy="40" r="18" z="150" material="lamp" />
+      <torus id="neon" cx="180" cy="250" r="40" tube="10" z="12" fill="#3ad8ff" material="neon" rotateX="72" />
+      <sphere id="lamp" cx="860" cy="40" r="18" z="150" material="lamp" />
     </layer>
   </layer>`
 }
@@ -56,7 +56,7 @@ function page(options: {
   const color = options.color ?? '#f4efe6'
   const captionColor = options.captionColor ?? '#b7aea2'
   const caption = options.caption
-    ? `\n  <layer x="28" y="${options.height - 32}"><p style="font-size:16px; color:${captionColor}">${options.caption}</p></layer>`
+    ? `\n  <layer x="28" y="${options.height - 36}"><p style="font-size:18px; color:${captionColor}">${options.caption}</p></layer>`
     : ''
   return `<layer width="${options.width}" height="${options.height}" background="${background}" color="${color}" font-family="ChillDuanSans" min-font="16" safe="0">
   <layer x="28" y="16"><p style="font-size:28px">${options.title}</p></layer>${caption}
@@ -168,21 +168,21 @@ const FINISHES: Finish[] = [
 
 function cluster(finish: Finish): string {
   const stripes = finish.stripes
-    ? `<rect x="168" y="18" width="24" height="34" depth="120" fill="#e23b2f" />
-      <rect x="192" y="18" width="24" height="34" depth="120" fill="#f7f4ee" />
-      <rect x="216" y="18" width="24" height="34" depth="120" fill="#2a6fbe" />`
+    ? `      <rect id="stripe-red" x="168" y="18" width="24" height="34" depth="120" fill="#e23b2f" />
+      <rect id="stripe-white" x="192" y="18" width="24" height="34" depth="120" fill="#f7f4ee" />
+      <rect id="stripe-blue" x="216" y="18" width="24" height="34" depth="120" fill="#2a6fbe" />`
     : ''
   const sphere = finish.lamp
-    ? `<sphere cx="210" cy="78" r="16" z="120" ${finish.sphere} />`
-    : `<sphere cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
+    ? `<sphere id="sphere" cx="210" cy="78" r="16" z="120" ${finish.sphere} />`
+    : `<sphere id="sphere" cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
   const side = finish.neon
-    ? `<torus cx="330" cy="78" r="32" tube="8" z="14" ${finish.side} rotateX="70" />`
-    : `<circle cx="330" cy="78" r="26" depth="100" ${finish.side} />`
+    ? `<torus id="side" cx="330" cy="78" r="32" tube="8" z="14" ${finish.side} rotateX="70" />`
+    : `<circle id="side" cx="330" cy="78" r="26" depth="100" ${finish.side} />`
   return `<layer width="440" height="300" camera="fov 32, orbit 34 22, distance 860, at 220 160 0">
-    <ground y="220" rotateX="90" fill="#e7e0d4" shadow-blur="26" shadow-opacity="0.5" />
+    <ground id="ground" y="220" rotateX="90" fill="#e7e0d4" shadow-blur="26" shadow-opacity="0.5" />
     <layer x="28" y="220" width="400" height="190" origin="200 0" rotateX="90" preserve-3d>
-      <rect x="40" y="4" width="340" height="8" depth="110" fill="#f6f2ea" />
-      <rect x="28" y="30" width="120" height="86" depth="72" rx="12" ${finish.box} />
+      <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" fill="#f6f2ea" />
+      <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" ${finish.box} />
       ${stripes}
       ${sphere}
       ${side}
@@ -191,7 +191,7 @@ function cluster(finish: Finish): string {
 }
 
 function lines(): string {
-  return `<layer width="1180" height="680" camera="fov 36, orbit 32 22, distance 1500, at 560 360 0">
+  return `<layer width="1180" height="680" camera="fov 36, orbit 32 22, distance 1120, at 640 440 0">
     <layer x="70" y="30" width="1040" height="600" rotateX="56" preserve-3d>
       <rect x="40" y="70" width="260" height="190" depth="110" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
       <cylinder cx="170" cy="165" r="48" height="280" fill="#e7d3a8" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
@@ -211,7 +211,7 @@ type Plate = { name: string; source: string }
 function cell(label: string, body: string, w: number, h: number, background = '#241f1b', color = '#f4efe6'): string {
   return `<layer width="${w}" height="${h + 32}" background="${background}" color="${color}" font-family="ChillDuanSans" min-font="16" safe="0">
   ${place(body, 0, 0)}
-  <layer x="12" y="${h + 4}"><p style="font-size:16px">${label}</p></layer>
+  <layer x="12" y="${h + 4}"><p style="font-size:18px">${label}</p></layer>
 </layer>
 `
 }
@@ -240,9 +240,9 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
     source: cell(finish.label, cluster(finish), 440, 300),
   }))
   const cameras: { label: string; camera: string; file: string }[] = [
-    { label: 'orbit 28 18', camera: BENCH_CAMERA, file: 'orbit' },
-    { label: 'orbit 10 46', camera: 'fov 30, orbit 10 46, distance 1680, at 550 400 0', file: 'high' },
-    { label: 'orbit 62 14', camera: 'fov 30, orbit 62 14, distance 1700, at 550 400 0', file: 'side' },
+    { label: 'orbit 28 32', camera: BENCH_CAMERA, file: 'orbit' },
+    { label: 'orbit 10 46', camera: 'fov 30, orbit 10 46, distance 1200, at 550 560 0', file: 'high' },
+    { label: 'orbit 62 22', camera: 'fov 30, orbit 62 22, distance 1040, at 550 580 0', file: 'side' },
     { label: 'aperture 14', camera: `${BENCH_CAMERA}, aperture 14`, file: 'dof' },
   ]
   const cameraCells = cameras.map((item) => ({
@@ -254,7 +254,7 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
     source: page({
       title: '线稿',
       width: 1180,
-      height: 780,
+      height: 480,
       background: '#f3efe6',
       color: '#1c1915',
       caption: '交界线 · 隐藏线 · 圆角 · 洞 · halo',
@@ -265,7 +265,7 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
   return [
     { sheet: '3d-still', title: '', cols: 1, cells: [still], caption: '' },
     { sheet: '3d-shading', title: '画法', cols: 2, cells: shading, caption: '同一只静物。线来自 shading，物体上没有 stroke' },
-    { sheet: '3d-quality', title: '质量档', cols: 2, cells: quality, caption: 'final 才加宽半影、缝里的遮蔽、一次反弹、锐金属反射和玻璃着色' },
+    { sheet: '3d-quality', title: '质量档', cols: 2, cells: quality, caption: '两档共用阴影图。final 加一次反弹、粗糙度低于 0.12 的金属反射和玻璃着色' },
     { sheet: '3d-materials', title: '材质', cols: 4, cells: materials, caption: '每一格是同一组：墙、圆角盒、球、圆柱。变的只有材质' },
     { sheet: '3d-camera', title: '镜头', cols: 2, cells: cameraCells, caption: '俯视看顶面和接触。侧面把前后拉开。景深里中间清楚，前后糊开' },
     { sheet: '3d-lines', title: '', cols: 1, cells: [linesPlate], caption: '' },
@@ -322,10 +322,13 @@ async function composite(file: string, title: string, caption: string, cols: num
   writeFileSync(`docs/gallery/${file}.png`, canvas.toBuffer('image/png'))
 }
 
+const layersOnly = process.argv.includes('--layers-only')
 const cellDir = 'docs/gallery/3d'
 mkdirSync(cellDir, { recursive: true })
-for (const name of readdirSync('docs/gallery')) {
-  if (name.startsWith('3d-') && name.endsWith('.png')) unlinkSync(`docs/gallery/${name}`)
+if (!layersOnly) {
+  for (const name of readdirSync('docs/gallery')) {
+    if (name.startsWith('3d-') && name.endsWith('.png')) unlinkSync(`docs/gallery/${name}`)
+  }
 }
 for (const name of readdirSync(cellDir)) {
   if (name.endsWith('.layer')) unlinkSync(`${cellDir}/${name}`)
@@ -338,6 +341,7 @@ for (const plate of buildPlates()) {
   for (const item of plate.cells) {
     const file = `${cellDir}/${item.name}.layer`
     writeFileSync(file, item.source)
+    if (layersOnly) continue
     try {
       const png = await paint(item.source, file)
       pngs.push(png)
