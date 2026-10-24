@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module'
 import type { LayerChild, LayerNode } from './parse.js'
 import { applyCanvasFont } from './fonts.js'
-import { markStandIn } from './glyph.js'
+import { checkMarkMetrics, markStandIn } from './glyph.js'
 import { applySymbolsClass, classAttr, rewriteIconLigatures, symbolsClassNotes, type SymbolsNote } from './icons.js'
 import { getMeasureCtx } from './measureCtx.js'
 import { applyToBox, aroundPivot, cssMotionMatrix, multiply, translated, type Matrix } from './matrix.js'
@@ -349,13 +349,14 @@ function sameGlue(a: Unit, b: Unit): boolean {
   )
 }
 
-/** 缺的 en dash 改成同一套字的数字短横。细长得像根号的对勾改用 Inter。 */
-function shownChar(ch: string, style: TextRunStyle): { text: string; style: TextRunStyle } {
-  if (ch !== '\u2013' && ch !== '\u2713') return { text: ch, style }
+/** 缺的 en dash 改成同一套字的数字短横。细长得像根号的对勾改用固定路径，字体不变。 */
+function shownChar(ch: string, style: TextRunStyle): { text: string; style: TextRunStyle; check: boolean } {
+  if (ch !== '\u2013' && ch !== '\u2713') return { text: ch, style, check: false }
   const sub = markStandIn(ch, style.fontFamily, style.fontWeight)
-  if (!sub) return { text: ch, style }
-  if (!sub.font) return { text: sub.text, style }
-  return { text: sub.text, style: { ...style, fontFamily: sub.font } }
+  if (!sub) return { text: ch, style, check: false }
+  if (sub.check) return { text: sub.text, style, check: true }
+  if (!sub.font) return { text: sub.text, style, check: false }
+  return { text: sub.text, style: { ...style, fontFamily: sub.font }, check: false }
 }
 
 function measureTextWidth(text: string, style: TextRunStyle): number {
@@ -401,6 +402,10 @@ type InkMetrics = {
 }
 
 function measureInk(text: string, style: TextRunStyle): InkMetrics {
+  if (text === '\u2713' && markStandIn(text, style.fontFamily, style.fontWeight)?.check) {
+    const mark = checkMarkMetrics(style.fontSize)
+    return { width: mark.width, left: mark.left, right: mark.right, ascent: mark.ascent, descent: mark.descent }
+  }
   const ctx = getMeasureCtx()
   applyCanvasFont(ctx, style.fontFamily, style.fontWeight, style.fontSize, style.fontStyle)
   ctx.letterSpacing = `${style.letterSpacing}px`
@@ -670,7 +675,10 @@ function segmentsToUnits(segments: TextSegment[]): Unit[] {
         continue
       }
       const shown = shownChar(ch, seg.style)
-      push(shown.text, measureTextWidth(shown.text, shown.style), false, false, false, shown.style)
+      const width = shown.check
+        ? checkMarkMetrics(shown.style.fontSize).width + shown.style.letterSpacing
+        : measureTextWidth(shown.text, shown.style)
+      push(shown.text, width, false, false, false, shown.style)
       i += ch.length
     }
   }
@@ -725,7 +733,8 @@ function glueUnits(lineUnits: Unit[]): Unit[] {
         continue
       }
     }
-    const width = u.atom ? u.width : measureTextWidth(text, style)
+    const check = text === '\u2713' && markStandIn(text, style.fontFamily, style.fontWeight)?.check
+    const width = u.atom || check ? u.width : measureTextWidth(text, style)
     out.push({ ...u, text, width })
   }
   return out

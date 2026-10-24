@@ -6,7 +6,7 @@
 
 `finish-mix` and `finish-pairs` are gallery pictures. One table sets a matte box beside clay, plastic, glass, metal, brushed, and mirror. The pairs repeat one fill.
 
-`glyph('–')` is an en dash. When the face has no en dash, the outline is that face's figure dash, or half of its em dash, instead of the missing-glyph box. A check mark whose outline is a thin tall tick is drawn from Inter, on the same baseline, so `✓` does not read as a radical. Text uses the same stand-in. A non-default weight no longer drops a mark that sits entirely above the baseline.
+`glyph('–')` is an en dash. When the face has no en dash, the outline is that face's figure dash, or half of its em dash, instead of the missing-glyph box. A check mark whose outline is a thin tall tick, or whose font file has no U+2713, is a fixed path on the same baseline. It does not read as a radical, and it does not come from a system font. Text uses that same path. A non-default weight no longer drops a mark that sits entirely above the baseline.
 
 The 3D gallery is six sheets: one still life, shading, draft against final, sixteen materials, four cameras, and a line drawing. The rules are in `docs/GALLERY-3D.md`. `npm run gallery:3d` rebuilds them.
 
