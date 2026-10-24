@@ -152,17 +152,23 @@ function svgOutline(ch: string, face: OutlineFont, size: number): string {
   return out.match(/\sd="([^"]*)"/)?.[1] ?? ''
 }
 
-/** 非默认字重。画布导出会应用 wght 轴。锚点在基线上，和 svgOutline 同一个坐标系。 */
+/**
+ * 非默认字重。画布导出会应用 wght 轴。
+ * 锚点若贴在画布边上，整段都在基线上方的符号会被丢掉，路径变成空的。
+ * 先画在画布中间，再平移回基线，和 svgOutline 同一个坐标系。
+ */
 function variedOutline(ch: string, face: OutlineFont, size: number): string {
   const span = Math.max(1, Math.ceil(size * 4))
+  const origin = span / 2
   const canvas = createCanvas(span, span, SvgExportFlag.ConvertTextToPaths)
   const ctx = canvas.getContext('2d')
   applyCanvasFont(ctx, face.family, face.weight, size)
   ctx.fillStyle = '#000'
   ctx.textBaseline = 'alphabetic'
-  ctx.fillText(ch, 0, 0)
+  ctx.fillText(ch, origin, origin)
   const out = canvas.getContent().toString()
-  return [...out.matchAll(/\sd="([^"]*)"/g)].map((match) => match[1] ?? '').join(' ')
+  const raw = [...out.matchAll(/\sd="([^"]*)"/g)].map((match) => match[1] ?? '').join(' ')
+  return translateSvgPath(absoluteSvgPath(raw), -origin, -origin)
 }
 
 function outlineOf(ch: string, face: OutlineFont, size: number): string {
@@ -193,8 +199,83 @@ function expose(glyph: Glyph): Glyph {
   return { ...glyph, ink: glyph.ink ? { ...glyph.ink } : null }
 }
 
-function oneGlyph(ch: string, face: OutlineFont, size: number, box: FontBox): Glyph {
-  const key = `${face.canvasFamily}|${face.weight}|${size}|${ch}`
+/** 对勾画成一根又高又瘦的细线时，看起来像根号。楷体那种笔画多的勾留着。 */
+function radicalTick(glyph: Glyph): boolean {
+  if (glyph.missing || !glyph.ink) return false
+  if (!(glyph.ink.height > glyph.ink.width * 1.1)) return false
+  return parseSvgPath(glyph.d).length < 20
+}
+
+function scalePathX(d: string, factor: number): string {
+  const commands = parseSvgPath(absoluteSvgPath(d)).map((command) => {
+    const op = command.op.toUpperCase()
+    const args = command.args.slice()
+    if (op === 'H') args[0] = (args[0] ?? 0) * factor
+    else if (op === 'A') {
+      args[0] = (args[0] ?? 0) * factor
+      args[5] = (args[5] ?? 0) * factor
+    } else {
+      for (let i = 0; i + 1 < args.length; i += 2) args[i] = (args[i] ?? 0) * factor
+    }
+    return { op, args }
+  })
+  return serializeSvgPath(commands)
+}
+
+const CHECK_FONT = 'Inter'
+
+/**
+ * 正文和 `glyph()` 共用。
+ * 字体里没有 en dash 时，用同一套字的数字短横。
+ * 对勾是细长的根号形时，改用 Inter 的对勾。
+ */
+export function markStandIn(ch: string, font?: string, weight?: number): { text: string; font?: string } | null {
+  if (ch !== '\u2013' && ch !== '\u2713') return null
+  const face = resolveOutlineFont(font, weight)
+  if (ch === '\u2713' && (face.family === CHECK_FONT || face.canvasFamily === CHECK_FONT)) return null
+  const box = fontBox(face, 40)
+  const raw = oneGlyph(ch, face, 40, box, false)
+  if (ch === '\u2013') {
+    if (!raw.missing) return null
+    const figure = oneGlyph('\u2012', face, 40, box, false)
+    if (!figure.missing && figure.d) return { text: '\u2012' }
+    const em = oneGlyph('\u2014', face, 40, box, false)
+    if (!em.missing && em.d) return { text: '\u2014' }
+    return null
+  }
+  if (raw.missing || radicalTick(raw)) return { text: ch, font: CHECK_FONT }
+  return null
+}
+
+function borrowCheck(size: number, weight: number, host: FontBox): { d: string; width: number } | null {
+  const face = resolveOutlineFont(CHECK_FONT, weight)
+  const box = fontBox(face, size)
+  const glyph = oneGlyph('\u2713', face, size, box, false)
+  if (glyph.missing || !glyph.d) return null
+  return { d: translateSvgPath(glyph.d, 0, host.baseline - glyph.baseline), width: glyph.width }
+}
+
+function applyStandIn(raw: Glyph, face: OutlineFont, size: number, box: FontBox): Glyph {
+  const sub = markStandIn(raw.text, face.family, face.weight)
+  if (!sub) return raw
+  if (sub.font) {
+    const borrowed = borrowCheck(size, face.weight, box)
+    if (!borrowed) return raw
+    return { ...raw, d: borrowed.d, width: borrowed.width, ink: inkOf(borrowed.d), missing: false }
+  }
+  if (sub.text === '\u2012') {
+    const figure = oneGlyph(sub.text, face, size, box, false)
+    if (figure.missing || !figure.d) return raw
+    return { ...raw, d: figure.d, width: figure.width, ink: figure.ink ? { ...figure.ink } : null, missing: false }
+  }
+  const em = oneGlyph('\u2014', face, size, box, false)
+  if (em.missing || !em.d) return raw
+  const d = scalePathX(em.d, 0.5)
+  return { ...raw, d, width: round3(em.width * 0.5), ink: inkOf(d), missing: false }
+}
+
+function oneGlyph(ch: string, face: OutlineFont, size: number, box: FontBox, standIn = true): Glyph {
+  const key = `${face.canvasFamily}|${face.weight}|${size}|${ch}|${standIn ? 1 : 0}`
   const hit = glyphCache.get(key)
   if (hit) return expose(hit)
   const ctx = getMeasureCtx()
@@ -208,7 +289,7 @@ function oneGlyph(ch: string, face: OutlineFont, size: number, box: FontBox): Gl
     throw new Error(`没能取出「${ch}」的轮廓。字体 ${face.family} 里这个符号有墨，但转换结果是空的`)
   }
   const placed = translateSvgPath(absoluteSvgPath(raw), 0, box.baseline)
-  const glyph: Glyph = {
+  let glyph: Glyph = {
     text: ch,
     d: placed,
     font: face.family,
@@ -220,6 +301,7 @@ function oneGlyph(ch: string, face: OutlineFont, size: number, box: FontBox): Gl
     ink: inkOf(placed),
     missing,
   }
+  if (standIn) glyph = applyStandIn(glyph, face, size, box)
   glyphCache.set(key, glyph)
   return expose(glyph)
 }
@@ -228,6 +310,7 @@ function oneGlyph(ch: string, face: OutlineFont, size: number, box: FontBox): Gl
  * 从字体取出每个字的轮廓。按码位拆开，空字符串返回空数组。
  * 字宽和字身高度来自字体，不来自路径的外接框。
  * 同步返回。目录里的字体第一次用时会下载，下完直接给出数组，可以写在 `layer.create` 前面。
+ * 字体里没有 en dash 时用同一套字的数字短横。细长得像根号的对勾改用 Inter，仍放在这套字的基线上。
  */
 export function glyph(text: string, options: GlyphOptions = {}): Glyph[] {
   const size = options.size ?? 40

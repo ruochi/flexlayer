@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module'
 import type { LayerChild, LayerNode } from './parse.js'
 import { applyCanvasFont } from './fonts.js'
+import { markStandIn } from './glyph.js'
 import { applySymbolsClass, classAttr, rewriteIconLigatures, symbolsClassNotes, type SymbolsNote } from './icons.js'
 import { getMeasureCtx } from './measureCtx.js'
 import { applyToBox, aroundPivot, cssMotionMatrix, multiply, translated, type Matrix } from './matrix.js'
@@ -340,7 +341,21 @@ function sameRunPaint(a: TextRunStyle, b: TextRunStyle): boolean {
 
 /** 拼进同一段时，标点还要和相邻字的绘制变换相同。 */
 function sameGlue(a: Unit, b: Unit): boolean {
-  return sameOwner(a.owner, b.owner) && sameRunPaint(a.style, b.style)
+  return (
+    sameOwner(a.owner, b.owner) &&
+    a.style.fontFamily === b.style.fontFamily &&
+    a.style.fontWeight === b.style.fontWeight &&
+    sameRunPaint(a.style, b.style)
+  )
+}
+
+/** 缺的 en dash 改成同一套字的数字短横。细长得像根号的对勾改用 Inter。 */
+function shownChar(ch: string, style: TextRunStyle): { text: string; style: TextRunStyle } {
+  if (ch !== '\u2013' && ch !== '\u2713') return { text: ch, style }
+  const sub = markStandIn(ch, style.fontFamily, style.fontWeight)
+  if (!sub) return { text: ch, style }
+  if (!sub.font) return { text: sub.text, style }
+  return { text: sub.text, style: { ...style, fontFamily: sub.font } }
 }
 
 function measureTextWidth(text: string, style: TextRunStyle): number {
@@ -629,8 +644,8 @@ function segmentsToUnits(segments: TextSegment[]): Unit[] {
       })
       continue
     }
-    const push = (text: string, width: number, glueLeft: boolean, glueRight: boolean, isSpace: boolean) => {
-      units.push({ text, style: seg.style, width, glueLeft, glueRight, isSpace, owner: seg.owner, canBreakBefore: false })
+    const push = (text: string, width: number, glueLeft: boolean, glueRight: boolean, isSpace: boolean, style: TextRunStyle = seg.style) => {
+      units.push({ text, style, width, glueLeft, glueRight, isSpace, owner: seg.owner, canBreakBefore: false })
     }
     let i = 0
     const s = seg.text
@@ -654,7 +669,8 @@ function segmentsToUnits(segments: TextSegment[]): Unit[] {
         i = j
         continue
       }
-      push(ch, measureTextWidth(ch, seg.style), false, false, false)
+      const shown = shownChar(ch, seg.style)
+      push(shown.text, measureTextWidth(shown.text, shown.style), false, false, false, shown.style)
       i += ch.length
     }
   }
