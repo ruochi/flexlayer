@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+`examples/brushed.layer` shows baked `brushed` on a sphere, a cylinder, and a plate, and the same finish with `fill`.
+
 `finish-mix` and `finish-pairs` are gallery pictures. One table sets a matte box beside clay, plastic, glass, metal, brushed, and mirror. The pairs repeat one fill.
 
 `glyph('–')` is an en dash. When the face has no en dash, the outline is that face's figure dash, or half of its em dash, instead of the missing-glyph box. A check mark whose outline is a thin tall tick is drawn from Inter, on the same baseline, so `✓` does not read as a radical. Text uses the same stand-in. A non-default weight no longer drops a mark that sits entirely above the baseline.
