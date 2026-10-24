@@ -82,7 +82,7 @@ Combine two or three per picture. A cover usually needs one strong type treatmen
 
 ### Solids
 
-- A positive `depth` extrudes along z. `rect` is a box (`rx` rounds the edges). `circle` is a cylinder. Also `sphere`, `torus`, `tube`, and `model`. `tube` `d` is the centerline in layer coordinates, the same as `path`. `<model x y width height>` contain-fits in that box. `<model unit x y>` puts the model origin at `(x, y)`. Omitting both is an error. `<model object={mesh} />` reads a three.js mesh. `unit` is pixels per model unit. Model space keeps y pointing up.
+- A positive `depth` extrudes along z. `rect` is a box (`rx` rounds the edges). `circle` is a cylinder along z. `cylinder` stands upright (`cx` `cy` `r` `height`). Also `sphere`, `torus`, `tube`, and `model`. `<box>` and `<extrude>` are not tags. `tube` `d` is the centerline in layer coordinates, the same as `path`. `<model x y width height>` contain-fits in that box. `<model unit x y>` puts the model origin at `(x, y)`. Omitting both is an error. `<model object={mesh} />` reads a three.js mesh. `unit` is pixels per model unit. Model space keeps y pointing up.
 - Write `camera` on the layer that frames the shot. A number is the viewing distance, for example `camera="900"`. Omitting it leaves the picture in 2D and reports `flatten-3d`. Do not combine `camera` and `view` on the same layer.
 - `<ground>` receives shadows. With no `fill`, only the shadow is drawn. `shadows="none"` on the camera layer turns shadows off.
 - `shading` on that same layer is `studio` when omitted, or `toon`, `technical`, or `manga`. It covers every solid under the camera. An authored `stroke` still wins.
@@ -110,7 +110,7 @@ Combine two or three per picture. A cover usually needs one strong type treatmen
 | Gradients | Glyphs use `style="fill:linear-gradient(...)"`. `color` is a solid color only | `invalid-attr` |
 | Stroke | Write only `stroke`. Shapes may add `stroke-width`. A stroke along the ink is `stroke="6 #000 outside"`. A filled `path` writes `stroke="none"` | `invalid-attr` |
 | An effect on a whole subtree | `<layer grade="lomo" overlay="#00000066">` | `invalid-attr` |
-| Solids | A positive `depth` extrudes a shape along z. `rect` is a box (`rx` rounds the edges). `circle` is a cylinder. `path` keeps holes by `fill-rule`. There are also `sphere`, `torus`, `tube`, and `model`. `model` writes `x` `y` `width` `height`, or `unit` with `x` `y` | `flatten-3d` |
+| Solids | A positive `depth` extrudes a shape along z. `rect` is a box (`rx` rounds the edges). `circle` is a cylinder along z. `cylinder` stands upright. `path` keeps holes by `fill-rule`. There are also `sphere`, `torus`, `tube`, and `model`. `model` writes `x` `y` `width` `height`, or `unit` with `x` `y`. `<box>` and `<extrude>` are unknown tags | `flatten-3d` |
 | Ground | `<ground y="520" rotateX="70" />` receives shadows. `shadows="none"` turns them off. With no `fill`, only the shadow is drawn | `invalid-attr` |
 | Structured data | `data={{ values: [1, 2] }}`. In `.layer`, `data='{"values":[1,2]}'` | `invalid-attr` |
 | An issue you expect | `expect="overflow-canvas: full bleed"`. On the root it covers the whole subtree. A window is `text-overlap@800-846` or `@26.7s-28.2s`. If it never appears, the report is `unused-expect` | `unused-expect` |

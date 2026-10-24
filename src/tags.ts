@@ -34,11 +34,9 @@ const KNOWN_TAGS = new Set([
   'img',
   'image',
   'sphere',
-  'box',
   'cylinder',
   'torus',
   'tube',
-  'extrude',
   'model',
   'ground',
   'light',
@@ -65,8 +63,8 @@ const KNOWN_TAGS = new Set([
 export const ROOT_TAGS = new Set(['layer'])
 export const SHAPE_TAGS = new Set(['rect', 'circle', 'ellipse'])
 export const LINE_TAGS = new Set(['line', 'polyline', 'polygon', 'path', 'curve'])
-export const MESH_TAGS = new Set(['sphere', 'box', 'cylinder', 'torus', 'tube', 'extrude', 'model'])
-/** 写了正的 depth 就沿 z 挤出。box、cylinder、extrude 是这些标签的别名。 */
+export const MESH_TAGS = new Set(['sphere', 'cylinder', 'torus', 'tube', 'model'])
+/** 写了正的 depth 就沿 z 挤出。竖直圆柱是 cylinder。 */
 export const DEPTH_SOLID_TAGS = new Set(['rect', 'circle', 'ellipse', 'polygon', 'path'])
 export const GROUND_TAG = 'ground'
 export const FONT_TAG = 'font'
@@ -83,6 +81,8 @@ export function canonicalTag(tag: string): string {
 export function tagSpellingHint(tag: string): string | undefined {
   const lower = tag.toLowerCase()
   if (lower === 'fvg') return '改成 <layer>'
+  if (lower === 'box') return '改成 <rect width="…" height="…" depth="…" />'
+  if (lower === 'extrude') return '改成 <path d="…" depth="…" />'
   if (lower !== tag && KNOWN_TAGS.has(lower)) return `改成 <${lower}>`
   return undefined
 }

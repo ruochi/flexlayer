@@ -152,7 +152,7 @@ describe('lighting', () => {
   it('投在板上的影子比板面暗，没有被抹成黑楔', async () => {
     const { png } = await renderLayer(`
       <layer width="360" height="230" background="#cfc8bc" camera="490">
-        <box x="150" y="88" width="150" height="115" depth="9" fill="#f7f4ee" />
+        <rect x="150" y="88" width="150" height="115" depth="9" fill="#f7f4ee" />
         <sphere cx="125" cy="82" r="24" z="39" fill="#e23d3d" material="clay" />
       </layer>
     `)

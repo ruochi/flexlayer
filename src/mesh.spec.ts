@@ -64,11 +64,11 @@ describe('网格布局', () => {
     const report = await checkLayer(`
       <layer width="200" height="120" camera="400">
         <sphere cx="40" cy="50" r="10">
-        <box x="105" y="40" width="30" height="20" depth="80" />
+        <rect x="105" y="40" width="30" height="20" depth="80" />
       </layer>
     `)
     const sphere = report.elements.find((el) => el.tag === 'sphere')
-    const box = report.elements.find((el) => el.tag === 'box')
+    const box = report.elements.find((el) => el.tag === 'rect')
     expect(sphere).toMatchObject({ box: { x: 30, y: 40, width: 20, height: 20 } })
     expect(box).toMatchObject({ box: { x: 105, y: 40, width: 30, height: 20 } })
     expect(report.issues.some((issue) => issue.code === 'unknown-tag')).toBe(false)
@@ -121,9 +121,9 @@ describe('网格布局', () => {
 
   it('extrude 按路径包围盒居中', async () => {
     const report = await checkLayer(
-      `<layer width="640" height="800" camera="700"><extrude x="250" y="600" d="M0 0 H140 V36 H90 V80 H0 Z" depth="18" /></layer>`,
+      `<layer width="640" height="800" camera="700"><path x="250" y="600" d="M0 0 H140 V36 H90 V80 H0 Z" depth="18" /></layer>`,
     )
-    const extrude = report.elements.find((el) => el.tag === 'extrude')
+    const extrude = report.elements.find((el) => el.tag === 'path')
     expect(extrude).toMatchObject({ box: { x: 250, y: 600, width: 140, height: 80 } })
   })
 
@@ -143,13 +143,13 @@ describe('网格布局', () => {
     expect(generic?.hint).toContain('unit="40"')
   })
 
-  it('不是 glb、以及没写 depth，会警告', async () => {
+  it('不是 glb 会警告', async () => {
     const report = await checkLayer(
-      `<layer width="100" height="80" camera="300"><model src="hero.png" x="0" y="0" width="100" height="80" /><box x="30" y="35" width="20" height="10" /></layer>`,
+      `<layer width="100" height="80" camera="300"><model src="hero.png" x="0" y="0" width="100" height="80" /><rect x="30" y="35" width="20" height="10" depth="8" /></layer>`,
       { baseDir: dir },
     )
     expect(report.issues.some((issue) => issue.code === 'missing-model')).toBe(true)
-    expect(report.issues.some((issue) => issue.code === 'invalid-attr' && issue.message.includes('depth'))).toBe(true)
+    expect(report.issues.some((issue) => issue.message.includes('depth'))).toBe(false)
   })
 
   it('不写 camera 的网格报 flatten-3d，不再用层高当视距', async () => {
@@ -264,7 +264,7 @@ describe('网格绘制', () => {
   it('更近的球体挡住长方体和平面', async () => {
     const { png } = await renderLayer(`
       <layer width="200" height="200" background="#000000" camera="600">
-        <box x="40" y="60" width="120" height="80" depth="40" fill="#2244ff" />
+        <rect x="40" y="60" width="120" height="80" depth="40" fill="#2244ff" />
         <rect x="20" y="40" width="160" height="120" fill="#22cc44" z="-30" />
         <sphere cx="100" cy="100" r="26" z="50" fill="#ff2244" />
       </layer>
@@ -277,7 +277,7 @@ describe('网格绘制', () => {
 
   it('extrude 的剪影跟着路径走', async () => {
     const { png } = await renderLayer(
-      `<layer width="220" height="160" background="#101010" camera="800"><extrude x="40" y="40" d="M0 0 H140 V36 H90 V80 H0 Z" depth="16" fill="#f4f1ea" /></layer>`,
+      `<layer width="220" height="160" background="#101010" camera="800"><path x="40" y="40" d="M0 0 H140 V36 H90 V80 H0 Z" depth="16" fill="#f4f1ea" /></layer>`,
     )
     const inside = await pixelAt(png, 60, 60)
     const notch = await pixelAt(png, 160, 100)
@@ -351,7 +351,7 @@ describe('网格绘制', () => {
     const { png } = await renderLayer(`
       <layer width="220" height="140" background="#ffffff" camera="500">
         <rect x="15" y="50" width="70" height="40" fill="#222222" />
-        <box x="126" y="46" width="48" height="48" depth="48" fill="#ffffff" />
+        <rect x="126" y="46" width="48" height="48" depth="48" fill="#ffffff" />
       </layer>
     `)
     const ink = await pixelAt(png, 50, 70)
@@ -366,8 +366,8 @@ describe('网格绘制', () => {
   it('偏离光轴的浅色正面仍是写下的 fill', async () => {
     const { png } = await renderLayer(`
       <layer width="220" height="80" background="#ffffff" camera="500">
-        <box x="12" y="16" width="48" height="48" depth="12" fill="#d9ccff" />
-        <box x="160" y="16" width="48" height="48" depth="12" fill="#a9dcff" />
+        <rect x="12" y="16" width="48" height="48" depth="12" fill="#d9ccff" />
+        <rect x="160" y="16" width="48" height="48" depth="12" fill="#a9dcff" />
       </layer>
     `)
     const left = await pixelAt(png, 36, 40)
@@ -390,8 +390,8 @@ describe('网格绘制', () => {
   it('extrude 的并排形状都留下，洞仍然是洞', async () => {
     const { png } = await renderLayer(`
       <layer width="220" height="120" background="#101010" camera="800">
-        <extrude x="10" y="46" d="M0 0 H28 V28 H0 Z M52 0 H80 V28 H52 Z" depth="12" fill="#f2f2f2" />
-        <extrude x="128" y="28" d="M0 0 H64 V64 H0 Z M18 18 V46 H46 V18 Z" depth="12" fill="#f2f2f2" />
+        <path x="10" y="46" d="M0 0 H28 V28 H0 Z M52 0 H80 V28 H52 Z" depth="12" fill="#f2f2f2" />
+        <path x="128" y="28" d="M0 0 H64 V64 H0 Z M18 18 V46 H46 V18 Z" depth="12" fill="#f2f2f2" />
       </layer>
     `)
     const left = await pixelAt(png, 28, 60)
@@ -406,18 +406,23 @@ describe('网格绘制', () => {
     expect(hole[0]).toBeLessThan(40)
   }, 30000)
 
-  it('rect 加 depth 和 box 画出同一只盒子，box 报别名', async () => {
-    const source = (tag: string) =>
-      `<layer width="180" height="140" background="#010203" camera="500"><${tag} x="40" y="30" width="80" height="60" depth="36" fill="#ff2244" rotateY="-32" /></layer>`
-    const box = await renderLayer(source('box'))
-    const rect = await renderLayer(source('rect'))
-    const report = await checkLayer(source('box'))
-    expect(report.issues.some((issue) => issue.code === 'non-canonical' && issue.message.includes('box'))).toBe(true)
-    for (const [x, y] of [[70, 60], [50, 48], [110, 70]] as const) {
-      const a = await pixelAt(box.png, x, y)
-      const b = await pixelAt(rect.png, x, y)
-      expect([b[0], b[1], b[2], b[3]]).toEqual([a[0], a[1], a[2], a[3]])
-    }
+  it('rect 加 depth 挤出盒子，box 和 extrude 不再是标签', async () => {
+    const { png } = await renderLayer(
+      `<layer width="180" height="140" background="#010203" camera="500"><rect x="40" y="30" width="80" height="60" depth="36" fill="#ff2244" rotateY="-32" /></layer>`,
+    )
+    const face = await pixelAt(png, 70, 60)
+    expect(face[0]).toBeGreaterThan(80)
+    const report = await checkLayer(
+      `<layer width="180" height="140" camera="500"><box x="40" y="30" width="80" height="60" depth="36" fill="#ff2244" /><extrude d="M0 0 H40 V20 H0 Z" depth="8" /></layer>`,
+    )
+    const hits = report.issues.filter((issue) => issue.code === 'unknown-tag')
+    expect(hits.map((issue) => issue.message)).toEqual(
+      expect.arrayContaining([expect.stringContaining('box'), expect.stringContaining('extrude')]),
+    )
+    expect(hits.every((issue) => issue.level === 'error')).toBe(true)
+    expect(hits.find((issue) => issue.message.includes('box'))?.hint).toContain('rect')
+    expect(hits.find((issue) => issue.message.includes('extrude'))?.hint).toContain('path')
+    expect(report.elements.some((element) => element.tag === 'box' || element.tag === 'extrude')).toBe(false)
   }, 30000)
 
   it('circle 加 depth 是朝向镜头的圆柱', async () => {
@@ -454,7 +459,7 @@ describe('网格绘制', () => {
   it('搭在另一笔上的形状仍是实体，不会被挖成洞', async () => {
     const { png } = await renderLayer(`
       <layer width="200" height="140" background="#101010" camera="800">
-        <extrude d="M0 0 H60 V24 H0 Z M30 8 L50 8 L50 16 L80 36 L40 36 L30 16 Z" depth="12" x="60" y="52" fill="#f2f2f2" />
+        <path d="M0 0 H60 V24 H0 Z M30 8 L50 8 L50 16 L80 36 L40 36 L30 16 Z" depth="12" x="60" y="52" fill="#f2f2f2" />
       </layer>
     `)
     const bar = await pixelAt(png, 80, 64)
@@ -496,8 +501,8 @@ describe('网格绘制', () => {
   it('hidden 没和 stroke 一起写，以及写在平面上，会警告', async () => {
     const report = await checkLayer(`
       <layer width="180" height="140" camera="400">
-        <box x="20" y="30" width="40" height="30" depth="20" hidden="#ff00ff" />
-        <box x="80" y="30" width="40" height="30" depth="20" stroke-width="3" />
+        <rect x="20" y="30" width="40" height="30" depth="20" hidden="#ff00ff" />
+        <rect x="80" y="30" width="40" height="30" depth="20" stroke-width="3" />
         <rect x="10" y="10" width="20" height="20" fill="#fff" hidden="#ff00ff" />
       </layer>
     `)
@@ -863,7 +868,7 @@ describe('网格绘制', () => {
 
   it('网格上的渐变、shadow、glow 会警告', async () => {
     const report = await checkLayer(
-      `<layer width="160" height="120" camera="400"><box x="60" y="45" width="40" height="30" depth="20" fill="linear-gradient(#fff, #000)" shadow="0 8 12 #000" glow="10 #fff" /></layer>`,
+      `<layer width="160" height="120" camera="400"><rect x="60" y="45" width="40" height="30" depth="20" fill="linear-gradient(#fff, #000)" shadow="0 8 12 #000" glow="10 #fff" /></layer>`,
     )
     const messages = report.issues.filter((issue) => issue.code === 'invalid-attr').map((issue) => issue.message)
     expect(messages.some((message) => message.includes('渐变'))).toBe(true)
@@ -907,7 +912,7 @@ describe('网格绘制', () => {
 
   it('网格斜边有抗锯齿过渡', async () => {
     const { png } = await renderLayer(
-      `<layer width="200" height="200" background="#000000" camera="800"><box x="20" y="93" width="160" height="14" depth="2" rotate="24" fill="#ffffff" /></layer>`,
+      `<layer width="200" height="200" background="#000000" camera="800"><rect x="20" y="93" width="160" height="14" depth="2" rotate="24" fill="#ffffff" /></layer>`,
     )
     const img = await loadImage(png)
     const canvas = createCanvas(img.width, img.height)
@@ -946,13 +951,13 @@ describe('网格绘制', () => {
   it('box 的 rx 不改变布局，round 选棱，放不下就收小', async () => {
     const report = await checkLayer(`
       <layer width="240" height="160" camera="400">
-        <box x="20" y="30" width="80" height="60" depth="40" rx="12" round="front, top-left" />
-        <box x="120" y="30" width="80" height="40" depth="20" rx="40" />
-        <box x="20" y="110" width="40" height="30" depth="20" round="x" />
-        <box x="80" y="110" width="40" height="30" depth="20" rx="8" round="nope" />
+        <rect x="20" y="30" width="80" height="60" depth="40" rx="12" round="front, top-left" />
+        <rect x="120" y="30" width="80" height="40" depth="20" rx="40" />
+        <rect x="20" y="110" width="40" height="30" depth="20" round="x" />
+        <rect x="80" y="110" width="40" height="30" depth="20" rx="8" round="nope" />
       </layer>
     `)
-    const boxes = report.elements.filter((el) => el.tag === 'box')
+    const boxes = report.elements.filter((el) => el.tag === 'rect')
     expect(boxes[0]).toMatchObject({ box: { x: 20, y: 30, width: 80, height: 60 } })
     expect(boxes[1]).toMatchObject({ box: { x: 120, y: 30, width: 80, height: 40 } })
     const messages = report.issues.filter((issue) => issue.code === 'invalid-attr').map((issue) => issue.message)
@@ -1248,7 +1253,7 @@ describe('网格绘制', () => {
     const shot = async (round?: string) => {
       const attr = round ? ` round="${round}"` : ''
       const { png } = await renderLayer(
-        `<layer width="160" height="160" background="#010203" camera="4000"><box x="40" y="40" width="80" height="80" depth="40" rx="16"${attr} fill="#ff2244" /></layer>`,
+        `<layer width="160" height="160" background="#010203" camera="4000"><rect x="40" y="40" width="80" height="80" depth="40" rx="16"${attr} fill="#ff2244" /></layer>`,
       )
       return {
         corner: await pixelAt(png, 41, 41),

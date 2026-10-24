@@ -410,31 +410,7 @@ export namespace JSX {
         scale?: number | string
         opacity?: number | string
       }
-    box: LayerPositioned &
-      LayerEffects & {
-        width?: number | string
-        height?: number | string
-        depth?: number | string
-        /** 棱的圆角半径。不写 round 时 12 条棱都圆 */
-        rx?: number | string
-        /** 哪些棱。front、x、front-top；不写是全部 */
-        round?: string
-        fill?: string
-        stroke?: string
-        'stroke-width'?: number | string
-        /** 被挡住的棱。要和 stroke 一起写 */
-        hidden?: string
-        /** 可见线在交叉处把更远的线断开，屏幕像素 */
-        halo?: number | string
-        material?: MaterialValue
-        rotate?: number | string
-        rotateX?: number | string
-        rotateY?: number | string
-        z?: number | string
-        scale?: number | string
-        opacity?: number | string
-      }
-    /** 无限平面，只接影子。旋转和 box 一样。不写 fill 时地面透明。 */
+    /** 无限平面，只接影子。旋转和 rect 一样。不写 fill 时地面透明。 */
     ground: LayerPositioned & {
       fill?: string
       /** 影子模糊，像素。默认 0 */
@@ -450,24 +426,6 @@ export namespace JSX {
       scale?: number | string
       opacity?: number | string
     }
-    extrude: LayerPositioned &
-      LayerEffects & {
-        d?: string
-        depth?: number | string
-        fill?: string
-        stroke?: string
-        'stroke-width'?: number | string
-        hidden?: string
-        /** 可见线在交叉处把更远的线断开，屏幕像素 */
-        halo?: number | string
-        material?: MaterialValue
-        rotate?: number | string
-        rotateX?: number | string
-        rotateY?: number | string
-        z?: number | string
-        scale?: number | string
-        opacity?: number | string
-      }
     /** 外部网格。`src` 是 .glb；tsx 里 `object` 是 three.js 的 Object3D。`unit` 保留原始坐标。位置和宽高写在外包的 layer 上。 */
     model: LayerGraphic & {
       src?: string
