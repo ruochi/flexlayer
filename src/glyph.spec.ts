@@ -5,6 +5,7 @@ import { Path2D } from '@napi-rs/canvas'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { applyCanvasFont, ensureBuiltinFonts, ensureDefaultFont, getFontsCacheDir, registerFontPath } from './fonts.js'
 import { glyph } from './glyph.js'
+import { layoutText } from './text.js'
 import { layoutSource } from './layout.js'
 import { loadLayerFile } from './load-source.js'
 import { getMeasureCtx } from './measureCtx.js'
@@ -68,6 +69,76 @@ describe('glyph', () => {
     expect(comma!.width).toBeLessThan(chun!.width)
     expect(latin!.width).toBeLessThan(chun!.width)
     expect(comma!.ink!.height).toBeLessThan(chun!.ink!.height / 2)
+  })
+
+  it('没有 en dash 的默认字体用数字短横，不再是缺字方框', async () => {
+    if (!ready) return
+    const [en, em, figure, hyphen] = [
+      glyph('–', { size: 200 })[0]!,
+      glyph('—', { size: 200 })[0]!,
+      glyph('‒', { size: 200 })[0]!,
+      glyph('-', { size: 200 })[0]!,
+    ]
+    expect(en.missing).toBe(false)
+    expect(en.d).toBe(figure.d)
+    expect(en.width).toBe(figure.width)
+    expect(en.ink).not.toBeNull()
+    expect(Math.abs(en.ink!.height - em.ink!.height)).toBeLessThanOrEqual(1)
+    expect(en.ink!.width).toBeLessThan(em.ink!.width)
+    expect(en.ink!.width).toBeGreaterThan(hyphen.ink!.width)
+    expect(en.ink!.y + en.ink!.height).toBeLessThanOrEqual(en.baseline + 1)
+  })
+
+  it('细长的对勾改用 Inter，楷体自己的勾留着', async () => {
+    if (!ready) return
+    const [check, root, spring] = glyph('✓√春', { size: 200 })
+    const [inter] = glyph('✓', { font: 'Inter', size: 200 })
+    expect(check!.missing).toBe(false)
+    expect(check!.font).toBe('ChillDuanSans')
+    expect(check!.height).toBe(spring!.height)
+    expect(check!.baseline).toBe(spring!.baseline)
+    expect(check!.width).toBe(inter!.width)
+    expect(check!.ink!.width).toBeGreaterThan(check!.ink!.height)
+    expect(check!.d).not.toBe(root!.d)
+    expect(check!.ink!.y - check!.baseline).toBeCloseTo(inter!.ink!.y - inter!.baseline, 1)
+    expect(check!.ink!.height).toBeCloseTo(inter!.ink!.height, 1)
+
+    const [kai] = glyph('✓', { font: 'Kai', size: 160 })
+    expect(kai!.font).toBe('ChillKai')
+    expect(kai!.missing).toBe(false)
+    expect(kai!.ink!.height).toBeGreaterThan(kai!.ink!.width)
+  })
+
+  it('非默认字重也能取出整段都在基线上方的破折号', async () => {
+    if (!ready) return
+    const [em] = glyph('—', { size: 120, weight: 500 })
+    const [en] = glyph('–', { size: 120, weight: 500 })
+    expect(em!.missing).toBe(false)
+    expect(em!.ink!.width).toBeGreaterThan(em!.ink!.height * 4)
+    expect(en!.missing).toBe(false)
+    expect(en!.ink!.width).toBeGreaterThan(en!.ink!.height * 4)
+    expect(en!.ink!.width).toBeLessThan(em!.ink!.width)
+  })
+
+  it('正文里的 en dash 和对勾走同一套替身', async () => {
+    if (!ready) return
+    const laid = layoutText({
+      segments: [{ text: '10–20✓', style: { fontFamily: 'ChillDuanSans', fontSize: 40, fontWeight: 300, color: '#111', letterSpacing: 0 } }],
+      nowrap: true,
+      lineHeightRatio: 1.2,
+      fontSize: 40,
+    })
+    const segments = laid.lines[0]!.segments
+    expect(segments.map((seg) => seg.text)).toEqual(['10', '‒', '20', '✓'])
+    expect(segments.find((seg) => seg.text === '✓')!.style.fontFamily).toBe('Inter')
+    const kai = layoutText({
+      segments: [{ text: '–✓', style: { fontFamily: 'Kai', fontSize: 40, fontWeight: 400, color: '#111', letterSpacing: 0 } }],
+      nowrap: true,
+      lineHeightRatio: 1.2,
+      fontSize: 40,
+    })
+    expect(kai.lines[0]!.segments.map((seg) => seg.text)).toEqual(['–', '✓'])
+    expect(kai.lines[0]!.segments.every((seg) => seg.style.fontFamily === 'Kai')).toBe(true)
   })
 
   it('可变字体也能取出破折号、省略号和引号', async () => {
