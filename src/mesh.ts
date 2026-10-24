@@ -157,10 +157,9 @@ function gatherCustom(layer: LayerLayoutNode): {
     const peeled = stripMeshes(item.node)
     if (peeled && paintable(peeled)) planes.push({ node: item.node, peeled, toLayer: item.toLayer })
   }
-  // A camera that only holds planes still goes through the kernel. The Canvas2D
-  // homography remains for FLEXLAYER_3D=legacy, which never gathers those planes.
+  // A camera that only holds planes still goes through the kernel.
   const planesOnly = meshes.length === 0 && grounds.length === 0 && planes.length > 0
-  const kernelPlanes = planesOnly && process.env.FLEXLAYER_3D !== 'legacy'
+  const kernelPlanes = planesOnly
   if (meshes.length === 0 && grounds.length === 0 && layer.dof == null && !kernelPlanes) return null
   if (meshes.length === 0 && grounds.length === 0 && planes.length === 0) return null
   return { perspective, meshes, grounds, planes }

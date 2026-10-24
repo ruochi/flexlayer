@@ -160,6 +160,16 @@ describe('fromThree', () => {
     expect(faint[0]!.roughness).toBeCloseTo(0.4)
   })
 
+  it('作者写的 roughness 0 不会被默认值 0.65 顶掉', () => {
+    // The 0.65 fallback is for a bare object with no roughness at all. A
+    // written 0 is a real value and a sharp reflection, not "unset".
+    const sharp = fromThree(
+      new THREE.Mesh(triangleGeometry(), new THREE.MeshStandardMaterial({ color: '#888888', metalness: 0.8, roughness: 0 })),
+    )
+    expect(sharp[0]!.shade).toBe('metal')
+    expect(sharp[0]!.roughness).toBe(0)
+  })
+
   it('贴图、顶点色、自发光和着色器颜色进到底色', () => {
     const data = new Uint8Array([255, 0, 0, 255, 0, 0, 255, 255])
     const map = new THREE.DataTexture(data, 2, 1)

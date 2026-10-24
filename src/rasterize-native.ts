@@ -177,6 +177,8 @@ export function rasterizeNative(
       ...(layer.cameraView ? { view: layer.cameraView } : {}),
       ...(layer.lightSpace ? { lightSpace: layer.lightSpace } : {}),
       ...(layer.quality ? { quality: layer.quality } : {}),
+      tonemap: layer.tonemap ?? 'neutral',
+      environment: layer.environment ?? 'studio',
       ...(layer.lights?.length
         ? {
             lights: layer.lights.map((light) => ({
