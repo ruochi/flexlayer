@@ -86,7 +86,7 @@ Combine two or three per picture. A cover usually needs one strong type treatmen
 - Write `camera` on the layer that frames the shot. A number is the viewing distance, for example `camera="900"`. Omitting it leaves the picture in 2D and reports `flatten-3d`. Do not combine `camera` and `view` on the same layer.
 - `<ground>` receives shadows. With no `fill`, only the shadow is drawn. `shadows="none"` on the camera layer turns shadows off.
 - `shading` on that same layer is `studio` when omitted, or `toon`, `technical`, or `manga`. It covers every solid under the camera. An authored `stroke` still wins.
-- `quality` is `draft` when omitted. `quality="final"` widens the shadow-map penumbra and adds occlusion, one diffuse bounce, a sharp-metal reflection, and a glass tint. Baked finishes stay baked.
+- `quality` is `draft` when omitted. Draft and final use the same shadow map. `quality="final"` does not widen it. Where the map is already a penumbra it mixes a 4-tap ray, then adds one diffuse bounce, a reflection where metalness is above 0.5 and roughness is below 0.12, and a glass tint of up to three refraction steps. An open face is not darkened by a hemisphere occlusion. Baked finishes stay baked.
 - `flexlayer pick scene.tsx --at x,y` hits a layout box. The ray form `pick --positions --indices --from --dir` still returns a triangle index.
 
 ### Checks and programs
@@ -182,5 +182,6 @@ HTML and `display:flex` render as CSS. Defaults are not copied here.
 
 - Use font names from [docs/RESOURCES.md](docs/RESOURCES.md). Do not invent font-file URLs. A photo, a real object, or a material comes from the asset service, not from a URL you make up.
 - Implementation notes are in [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md). Picking and author lights are not built yet. See [docs/proposals/3D.md](docs/proposals/3D.md). three.js geometry goes through `<model object>`.
-- Automation: `npm test`, `npm run gallery`.
+- Automation: `npm test`, `npm run gallery`, `npm run gallery:3d`. The 3D gates are `npx tsx scripts/gallery-metrics.mjs --check`, `npx tsx scripts/check-golden.mjs`, and the budget pair `npx tsx scripts/bench-3d.mjs --out bench-3d.json` then `npx tsx scripts/check-budget.mjs bench-3d.json`. `bench-3d` refuses a scene whose report carries an error, so an unknown tag cannot pass for a rendered picture.
+- `node scripts/addon-hash.mjs` refuses a `native/flexlayer-render/BUILD.json` whose three binaries came from different commits, from a dirty tree, or whose `engine()` disagrees with the record. `flexlayer-render/scripts/build-manifest.mjs` writes one platform's record beside the build, and `scripts/merge-build-manifest.mjs` folds the three into `BUILD.json`.
 - When merging to `main`, bump the patch version in the root `package.json` and `package-lock.json`. If a still-working old syntax is removed, bump the minor version.
