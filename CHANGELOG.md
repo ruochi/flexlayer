@@ -4,6 +4,12 @@
 
 The 3D gallery is six sheets: one still life, shading, draft against final, sixteen materials, four cameras, and a line drawing. The rules are in `docs/GALLERY-3D.md`. `npm run gallery:3d` rebuilds them.
 
+## 0.15.4
+
+Draft ground shadows are painted from the contact map. A contact line sits under the body, and the cast shadow hardens where the caster meets the ground. The pale penumbra is still smoothed. A contact ramp that is already dark is left alone, so the chassis does not lift it. A one-pixel cliff between ground pixels is still pulled into midtones.
+
+`native/flexlayer-render` for linux-x64-gnu is rebuilt. darwin-arm64 and win32-x64-msvc stay the previous binaries until `npm run build:platforms` exports them.
+
 ## 0.15.3
 
 `material` takes the preset and the physical fields together: `finish metal, color #c6c9ce, roughness 0.28, metalness 1`. `color` replaces `fill`. In tsx the same fields are an object, `material={{ finish: "metal", color: "#c6c9ce", roughness: 0.28, metalness: 1 }}`. A bare name such as `material="metal"` still selects that baked finish.
