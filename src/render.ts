@@ -114,6 +114,7 @@ async function stampCustomFilters(canvas: Canvas, node: LayoutNode, prepared: Pr
         frame: options.frame ?? 0,
         baseDir: prepared.baseDir,
         meshSamples: options.meshSamples,
+        meshCache: options.meshCache,
         native,
       })
       const out = native.render(packed.json, packed.images, packed.rasters, false)
@@ -141,6 +142,7 @@ async function paintNative(prepared: Prepared, wantRgba: boolean): Promise<{ png
     frame: options.frame ?? 0,
     baseDir: prepared.baseDir,
     meshSamples: options.meshSamples,
+    meshCache: options.meshCache,
     native,
   })
   const out = native.render(packed.json, packed.images, packed.rasters, wantRgba)
@@ -186,6 +188,7 @@ export async function renderFrameBatch(
       frame: item.options.frame ?? 0,
       baseDir: item.baseDir,
       meshSamples: item.options.meshSamples,
+      meshCache: item.options.meshCache,
       native,
     }),
   )
@@ -259,6 +262,7 @@ export async function renderPreview(source: string | LayerNode, options: RenderO
     frame: options.frame ?? 0,
     baseDir,
     meshSamples: options.meshSamples,
+    meshCache: options.meshCache,
     native,
   })
   const tree = JSON.parse(packed.json) as { previews?: Array<{ of: string; show: string[] }> }

@@ -46,7 +46,8 @@
     "flexlayer": "tsx src/cli.ts",
     "docs:attrs": "tsx scripts/gen-attr-docs.ts",
     "gallery": "tsx scripts/render-gallery.ts",
-    "gallery:3d": "tsx scripts/gallery-3d.ts"
+    "gallery:3d": "tsx scripts/gallery-3d.ts",
+    "gallery:metrics": "tsx scripts/gallery-metrics.mjs"
   },
   "license": "MIT",
   "dependencies": {

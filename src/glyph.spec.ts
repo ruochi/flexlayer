@@ -18,7 +18,7 @@ let ready = false
 beforeAll(async () => {
   try {
     await ensureDefaultFont()
-    await ensureBuiltinFonts(['Kai'])
+    await ensureBuiltinFonts(['Kai', 'Inter'])
     ready = true
   } catch {
     ready = false
@@ -89,7 +89,7 @@ describe('glyph', () => {
     expect(en.ink!.y + en.ink!.height).toBeLessThanOrEqual(en.baseline + 1)
   })
 
-  it('细长的对勾改用 Inter，楷体自己的勾留着', async () => {
+  it('细长的对勾用固定路径，楷体自己的勾留着', async () => {
     if (!ready) return
     const [check, root, spring] = glyph('✓√春', { size: 200 })
     const [inter] = glyph('✓', { font: 'Inter', size: 200 })
@@ -97,16 +97,25 @@ describe('glyph', () => {
     expect(check!.font).toBe('ChillDuanSans')
     expect(check!.height).toBe(spring!.height)
     expect(check!.baseline).toBe(spring!.baseline)
-    expect(check!.width).toBe(inter!.width)
+    expect(check!.width).toBeCloseTo(200 * 1.02, 5)
     expect(check!.ink!.width).toBeGreaterThan(check!.ink!.height)
     expect(check!.d).not.toBe(root!.d)
-    expect(check!.ink!.y - check!.baseline).toBeCloseTo(inter!.ink!.y - inter!.baseline, 1)
-    expect(check!.ink!.height).toBeCloseTo(inter!.ink!.height, 1)
+    expect(check!.ink!.y + check!.ink!.height).toBeCloseTo(check!.baseline + 200 * 0.04, 0)
+    expect(inter!.missing).toBe(false)
+    expect(inter!.width).toBe(check!.width)
+    expect(inter!.ink!.width).toBeCloseTo(check!.ink!.width, 5)
+    expect(inter!.ink!.height).toBeCloseTo(check!.ink!.height, 5)
+    expect(translateSvgPath(check!.d, 0, inter!.baseline - check!.baseline)).toBe(inter!.d)
+    const [varied] = glyph('✓', { size: 200, weight: 500 })
+    expect(varied!.width).toBe(check!.width)
+    expect(varied!.ink!.width).toBeGreaterThan(varied!.ink!.height)
+    expect(translateSvgPath(check!.d, 0, varied!.baseline - check!.baseline)).toBe(varied!.d)
 
     const [kai] = glyph('✓', { font: 'Kai', size: 160 })
     expect(kai!.font).toBe('ChillKai')
     expect(kai!.missing).toBe(false)
     expect(kai!.ink!.height).toBeGreaterThan(kai!.ink!.width)
+    expect(kai!.d).not.toBe(translateSvgPath(check!.d, 0, kai!.baseline - check!.baseline))
   })
 
   it('非默认字重也能取出整段都在基线上方的破折号', async () => {
@@ -130,7 +139,9 @@ describe('glyph', () => {
     })
     const segments = laid.lines[0]!.segments
     expect(segments.map((seg) => seg.text)).toEqual(['10', '‒', '20', '✓'])
-    expect(segments.find((seg) => seg.text === '✓')!.style.fontFamily).toBe('Inter')
+    const tick = segments.find((seg) => seg.text === '✓')!
+    expect(tick.style.fontFamily).toBe('ChillDuanSans')
+    expect(tick.width).toBeCloseTo(40 * 1.02, 5)
     const kai = layoutText({
       segments: [{ text: '–✓', style: { fontFamily: 'Kai', fontSize: 40, fontWeight: 400, color: '#111', letterSpacing: 0 } }],
       nowrap: true,

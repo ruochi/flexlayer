@@ -554,7 +554,9 @@ function bevelDepth(node: MeshLayoutNode, positions: Float32Array): number {
 
 /** 窄圆角只进光栅。投影仍用原来的折点，避免圆角把正面的角标成挡住。 */
 function paintGeometry(node: MeshLayoutNode, positions: Float32Array, normals: Float32Array, indices: Uint32Array, shading?: string) {
-  if (node.stroke !== 'none' || (lookDrawsLines(shading) && !node.strokeOff)) return { positions, normals, indices }
+  // 卡通和漫画要硬边。技术图只加线，实体和 studio 用同一份倒角。
+  const flatLook = (shading === 'toon' || shading === 'manga') && !node.strokeOff
+  if (node.stroke !== 'none' || flatLook) return { positions, normals, indices }
   const mesh = node.mesh
   if (mesh.type === 'tube') return { positions, normals, indices }
   if ((mesh.type === 'box' || mesh.type === 'cylinder') && mesh.rx > 0) return { positions, normals, indices }
@@ -775,6 +777,12 @@ function paintNativeLines(
     hiColor = color
     canvas = pw >= outW && ph >= outH ? resolveColor(color, pw, ph, outW, outH) : resolveColor(color, pw, ph, pw, ph)
     paintMeshLines(canvas, batches, authored, depth, owners, pw, ph, layer, perspective, originX, originY, canvas.width / base, canvas.height / base)
+    if (layer.shading === 'toon') {
+      const ctx = canvas.getContext('2d')
+      const image = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      hardenBands(image.data, canvas.width, canvas.height)
+      ctx.putImageData(image, 0, 0)
+    }
   }
   const plain: MeshFrame = { canvas, x: originX, y: originY, width: canvas.width / base, height: canvas.height / base }
   const dof = layer.dof
@@ -880,6 +888,43 @@ function formOf(node: MeshLayoutNode): 'sphere' | 'cylinder' | 'flat' {
   if (node.mesh.type === 'sphere') return 'sphere'
   if (node.mesh.type === 'cylinder' && node.mesh.axis !== 'z') return 'cylinder'
   return 'flat'
+}
+
+/** A toon edge is a hard step. Stroke antialiasing leaves a ramp of one-off colors. */
+function hardenBands(data: Uint8ClampedArray, w: number, h: number) {
+  const src = new Uint8ClampedArray(data)
+  const keyAt = (i: number) => ((src[i] << 16) | (src[i + 1] << 8) | src[i + 2]) >>> 0
+  for (let y = 2; y < h - 2; y++) {
+    for (let x = 2; x < w - 2; x++) {
+      const i = (y * w + x) * 4
+      if (src[i + 3] < 200) continue
+      const counts = new Map<number, number>()
+      for (let dy = -2; dy <= 2; dy++) {
+        const row = (y + dy) * w
+        for (let dx = -2; dx <= 2; dx++) {
+          const j = (row + x + dx) * 4
+          if (src[j + 3] < 200) continue
+          const key = keyAt(j)
+          counts.set(key, (counts.get(key) ?? 0) + 1)
+        }
+      }
+      const mine = keyAt(i)
+      const mineN = counts.get(mine) ?? 0
+      let mode = mine
+      let modeN = 0
+      for (const [key, n] of counts) {
+        if (n > modeN) {
+          mode = key
+          modeN = n
+        }
+      }
+      if (mineN <= 4 && modeN >= 10 && mode !== mine) {
+        data[i] = (mode >>> 16) & 255
+        data[i + 1] = (mode >>> 8) & 255
+        data[i + 2] = mode & 255
+      }
+    }
+  }
 }
 
 function lineStyleOf(node: MeshLayoutNode, opacity: number, shading?: string): LineStyle | null {
