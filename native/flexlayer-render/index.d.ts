@@ -9,7 +9,7 @@ export declare function pickRay(positions: Float32Array, indices: Uint32Array, o
  * Kernel entry. The draw list is the same batches the studio raster receives.
  * Matte stays Lambert, so a camera-facing face is the written fill. Numbered
  * plastic and metal use the studio metal-roughness shader. Baked matcap names
- * stay on the baked finish. `FLEXLAYER_3D=legacy` keeps the previous raster.
+ * stay on the baked finish.
  */
 export declare function renderScene(config: FillConfig, batches: Array<FillBatch>, grounds: Array<FillGround>): FillFrame
 /**
@@ -32,6 +32,8 @@ export interface WebglDraw {
 export interface WebglFrame {
   pixels: Uint8ClampedArray
   covered: boolean
+  /** Set when the shader uses a construct the executor will not run. */
+  reason: string
 }
 export declare function webglDraw(draw: WebglDraw): WebglFrame
 export declare function distanceToSites(isSite: (index: number) => boolean, w: number, h: number, bias?: number): Float32Array
@@ -231,6 +233,10 @@ export interface FillConfig {
   lightSpace?: string
   /** `draft` or `final`. The studio raster already draws contact shadows. */
   quality?: string
+  /** `neutral` (default), `agx`, or `none`. `none` clamps light in bytes. */
+  tonemap?: string
+  /** `studio` (default) or `none`. */
+  environment?: string
   /** Author lights. The first directional replaces the key. Absent keeps the studio pair. */
   lights?: Array<FillLight>
 }
@@ -264,8 +270,6 @@ export interface FillFrame {
   viewW: number
   viewH: number
 }
-export declare function rasterizeFill(config: FillConfig, batches: Array<FillBatch>, grounds: Array<FillGround>): FillFrame
-export declare function debugShadeOf(nx: number, ny: number, nz: number, back: boolean, blocked: boolean): number
 export interface Vec3 {
   x: number
   y: number

@@ -403,6 +403,48 @@ describe('canvas 和 script', () => {
     }
   })
 
+  it('用符号链接路径启动 canvas 宿主仍会画', () => {
+    const root = mkdtempSync(join(tmpdir(), 'flexlayer-link-'))
+    try {
+      const realRoot = join(dirname(fileURLToPath(import.meta.url)), '..', 'node_modules', '@napi-rs')
+      const app = join(root, 'app')
+      mkdirSync(join(app, 'src'), { recursive: true })
+      mkdirSync(join(app, 'node_modules', '@napi-rs'), { recursive: true })
+      symlinkSync(join(realRoot, 'canvas'), join(app, 'node_modules', '@napi-rs', 'canvas'))
+      const realHost = join(app, 'src', 'canvas-dom.mjs')
+      writeFileSync(realHost, readFileSync(new URL('./canvas-dom.mjs', import.meta.url)))
+      writeFileSync(join(app, 'src', 'webgl-fake.mjs'), readFileSync(new URL('./webgl-fake.mjs', import.meta.url)))
+      writeFileSync(join(app, 'src', 'tri-raster.mjs'), readFileSync(new URL('./tri-raster.mjs', import.meta.url)))
+      writeFileSync(join(app, 'src', 'native-loader.mjs'), readFileSync(new URL('./native-loader.mjs', import.meta.url)))
+      const link = join(app, 'src', 'host.mjs')
+      symlinkSync(realHost, link)
+      const payload = JSON.stringify({
+        canvases: [{ path: 'layer/canvas[0]', id: 'bar', width: 4, height: 4, bitmapWidth: 4, bitmapHeight: 4, x: 0, y: 0, style: {}, computed: {}, text: '', attrs: {} }],
+        scripts: [{ path: 'layer/script[0]', body: 'const c=document.querySelector("#bar"); const x=c.getContext("2d"); x.fillStyle="#ff0000"; x.fillRect(0,0,4,4)' }],
+        timeMs: 0,
+        fps: 0,
+        frame: 0,
+        dpr: 1,
+        seed: 1,
+        sources: {},
+      })
+      const grants = scriptReadGrants(link)
+      const nativeFile = grants.find((grant) => grant.endsWith('.node') && existsSync(grant))
+      const result = spawnSync(process.execPath, scriptChildArgs(link), {
+        input: payload,
+        encoding: 'utf8',
+        env: { PATH: process.env.PATH ?? '', NAPI_RS_NATIVE_LIBRARY_PATH: nativeFile },
+      })
+      expect(result.stderr).not.toContain('Access to this API has been restricted')
+      expect(result.status).toBe(0)
+      const out = JSON.parse(result.stdout) as { issues: unknown[]; canvases: Array<{ rgba: string }> }
+      expect(out.issues).toEqual([])
+      expect(Buffer.from(out.canvases[0]!.rgba, 'base64')[0]).toBe(255)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('webgl 清屏画进画布位图', async () => {
     const { png, report } = await renderLayer(scene(
       `const gl = document.querySelector('#bar').getContext('webgl2')

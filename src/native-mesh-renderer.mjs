@@ -3,73 +3,9 @@ import { getNativeAddon } from './native-loader.mjs'
 
 const addon = await getNativeAddon()
 
-export function renderMeshNative(batches, width, height, camera, shadowMap = null, samples = 4) {
-  if (!addon || !addon.renderMeshNative) {
-    throw new Error('Native mesh renderer not available')
-  }
-  
-  // Convert batches to native format
-  const nativeBatches = batches.map(batch => ({
-    positions: batch.positions,
-    normals: batch.normals,
-    uvs: batch.uvs || undefined,
-    indices: batch.indices,
-    r: batch.r,
-    g: batch.g,
-    b: batch.b,
-    a: batch.a,
-    material: batch.material === 'plastic' ? 1 : batch.material === 'metal' ? 2 : batch.material === 'glass' ? 3 : 0,
-    roughness: batch.roughness,
-    shaded: batch.shaded,
-    doubleSided: batch.doubleSided,
-    depthWrite: batch.depthWrite,
-    castShadow: batch.castShadow,
-    receiveShadow: batch.receiveShadow,
-    toLayer: Array.from(batch.toLayer),
-    originX: batch.originX,
-    originY: batch.originY,
-    owner: batch.owner,
-    texture: batch.texture || undefined,
-    textureWidth: batch.tw || 0,
-    textureHeight: batch.th || 0,
-    emissiveR: batch.emissiveR || 0,
-    emissiveG: batch.emissiveG || 0,
-    emissiveB: batch.emissiveB || 0,
-  }))
-  
-  const input = {
-    batches: nativeBatches,
-    width,
-    height,
-    camera,
-    shadowMap: shadowMap ? {
-      depth: shadowMap.depth,
-      width: shadowMap.width,
-      height: shadowMap.height,
-      rightX: shadowMap.right.x,
-      rightY: shadowMap.right.y,
-      rightZ: shadowMap.right.z,
-      upX: shadowMap.up.x,
-      upY: shadowMap.up.y,
-      upZ: shadowMap.up.z,
-      towardX: shadowMap.toward.x,
-      towardY: shadowMap.toward.y,
-      towardZ: shadowMap.toward.z,
-      minU: shadowMap.minU,
-      minV: shadowMap.minV,
-      scaleU: shadowMap.scaleU,
-      scaleV: shadowMap.scaleV,
-      bias: shadowMap.bias,
-    } : undefined,
-    samples,
-  }
-  
-  return addon.renderMeshNative(input)
-}
-
 export function rasterizeFill(config, batches, grounds = []) {
-  if (!addon || !addon.rasterizeFill) {
-    throw new Error('Native rasterizeFill is not available')
+  if (!addon || !addon.renderScene) {
+    throw new Error('Native renderScene is not available')
   }
   const nativeBatches = batches.map((batch) => ({
     positions: batch.positions,
@@ -145,11 +81,7 @@ export function rasterizeFill(config, batches, grounds = []) {
     shadowBlur: ground.shadowBlur,
     receiveShadow: ground.receiveShadow,
   }))
-  // legacy keeps the single-threaded studio raster. kernel is the shared path.
-  // Unset means kernel once that path is the default. FLEXLAYER_3D=legacy opts out.
-  const mode = process.env.FLEXLAYER_3D || 'kernel'
-  const fn = mode !== 'legacy' && addon.renderScene ? addon.renderScene : addon.rasterizeFill
-  return fn(config, nativeBatches, nativeGrounds)
+  return addon.renderScene(config, nativeBatches, nativeGrounds)
 }
 
 export function meshStrokeRuns(batches, depth, owners, pw, ph, parallel, focal, camX, camY, vanishX, vanishY, originX, originY, scaleX, scaleY, scale, mapX, mapY, canvasW, canvasH) {

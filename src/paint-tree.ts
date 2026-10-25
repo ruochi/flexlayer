@@ -1,5 +1,6 @@
 import { createCanvas, type Canvas } from '@napi-rs/canvas'
 import { fontFileFor, registeredFontFiles } from './fonts.js'
+import { checkMarkPath, markStandIn } from './glyph.js'
 import { readImageBytes } from './image.js'
 import { absoluteNodeMatrix, isIdentity, originOffset } from './matrix.js'
 import { ownsMeshScene, renderMeshLayer, type MeshRaster } from './mesh.js'
@@ -24,6 +25,7 @@ type PackOptions = {
   frame: number
   baseDir: string
   meshSamples?: 1 | 2 | 4
+  meshCache?: number | false
   native: NativeRender
 }
 
@@ -225,7 +227,7 @@ export function packPaintTree(doc: LayerDocument, options: PackOptions): PackedP
         if (node.mask?.length) out.mask = node.mask.map((child) => packNode(child, true))
         if (!skipMesh && options.native.render && (ownsMeshScene(node) || node.dof)) {
           const clip = meshVisibleRect(doc.width, doc.height, doc.root, node)
-          const frame = renderMeshLayer(node, options.scale, rasterPlane, { samples: options.meshSamples, clip })
+          const frame = renderMeshLayer(node, options.scale, rasterPlane, { samples: options.meshSamples, clip, cacheBytes: options.meshCache })
           if (frame && frame.width > 0 && frame.height > 0) {
             out.meshFrame = {
               rasterId: takeRaster(frame.canvas),
@@ -284,6 +286,7 @@ function textDraws(node: TextLayoutNode) {
         const box = textPaintBox(node, color, glyphRun)
         draws.push({
           ...plainDraw(seg, contentX + offsetX + seg.x, contentY + line.baselineY, line.y, line.height, contentY),
+          ...glyphPathField(seg.text, seg.style),
           paintX: box.x,
           paintY: box.y,
           paintW: box.width,
@@ -305,6 +308,7 @@ function textDraws(node: TextLayoutNode) {
           const background = piece.style.background
           draws.push({
             text: piece.text,
+            ...glyphPathField(piece.text, piece.style),
             origin: [ox, contentY],
             matrix: group.moves ? [group.matrix.a, group.matrix.b, group.matrix.c, group.matrix.d, group.matrix.e, group.matrix.f] : undefined,
             x: piece.x,
@@ -370,6 +374,14 @@ function runSpan(
   const left = Number.isFinite(minX) ? minX : contentX + offsetX
   const right = Number.isFinite(maxX) ? maxX : left + 1
   return { x: left, y: lineTop, width: Math.max(right - left, 1), height: Math.max(lineHeight, 1) }
+}
+
+function glyphPathField(
+  text: string,
+  style: { fontFamily: string; fontWeight: number; fontSize: number },
+): { glyphPath?: string } {
+  if (text !== '\u2713' || !markStandIn(text, style.fontFamily, style.fontWeight)?.check) return {}
+  return { glyphPath: checkMarkPath(style.fontSize).d }
 }
 
 function plainDraw(

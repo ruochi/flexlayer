@@ -1,7 +1,7 @@
-<layer width="1180" height="780" background="#f3efe6" color="#1c1915" font-family="ChillDuanSans" min-font="16" safe="0">
+<layer width="1180" height="480" background="#f3efe6" color="#1c1915" font-family="ChillDuanSans" min-font="16" safe="0">
   <layer x="28" y="16"><p style="font-size:28px">线稿</p></layer>
-  <layer x="28" y="748"><p style="font-size:16px; color:#6a6158">交界线 · 隐藏线 · 圆角 · 洞 · halo</p></layer>
-  <layer x="0" y="52" width="1180" height="680" camera="fov 36, orbit 32 22, distance 1500, at 560 360 0">
+  <layer x="28" y="444"><p style="font-size:18px; color:#6a6158">交界线 · 隐藏线 · 圆角 · 洞 · halo</p></layer>
+  <layer x="0" y="52" width="1180" height="680" camera="fov 36, orbit 32 22, distance 1120, at 640 440 0">
     <layer x="70" y="30" width="1040" height="600" rotateX="56" preserve-3d>
       <rect x="40" y="70" width="260" height="190" depth="110" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
       <cylinder cx="170" cy="165" r="48" height="280" fill="#e7d3a8" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
