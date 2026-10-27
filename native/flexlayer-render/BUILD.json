@@ -1,7 +1,7 @@
 {
   "binaries": {
     "flexlayer-render.darwin-arm64.node": {
-      "commit": "f1075b772842e5c2c415bc387757019ea1375362",
+      "commit": "c2ac73f47886972843adaf4281e50dbd66bedd5a",
       "engine": "flexlayer-render/0.0.2+cap1080"
     },
     "flexlayer-render.linux-x64-gnu.node": {

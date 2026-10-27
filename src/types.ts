@@ -516,6 +516,11 @@ export type LayerLayoutNode = LayoutNodeBase & {
   /** 质量档。不写是 draft。final 走同一条光栅，接触阴影仍由地面接收。 */
   quality?: 'draft' | 'final'
   /**
+   * 阴影图边长的倍数，大于 1 时生效。默认按接收面在屏幕上的投影定尺寸；
+   * 4 是度量脚本拿来当参考图的「分辨率再乘四」，正常绘制不用写。
+   */
+  shadowScale?: number
+  /**
    * 蒙版内容，坐标系是这一层的局部像素。
    * 绘制时只取 alpha，不进入 children，不参与布局。
    */

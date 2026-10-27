@@ -10,1207 +10,1642 @@
     "metalLumaDeltaMax": 0.15,
     "contactRatioMax": 0.75,
     "floatGapMin": 8,
-    "materialFlipMin": 0.05,
+    "materialFlipMin": 0.15,
     "emissiveCoreYMin": 240,
     "emissiveHaloRiseMax": 2,
     "emissiveOutsideHotMax": 0,
     "toonLevelsMax": 4,
-    "mangaPaperLumaMin": 235,
+    "mangaPaperLumaMin": 238,
+    "mangaPaperShareMin": 0.7,
+    "mangaBackgroundGrayMax": 0.03,
+    "linesEmptyBelowMax": 0.25,
+    "linesInkGapMin": 16,
     "mangaPaperChromaMax": 0.02,
-    "hatchFlipMax": 0.15,
-    "technicalChromaRatioMin": 0.9
+    "hatchFlipMax": 0.18,
+    "technicalChromaRatioMin": 0.9,
+    "technicalHiddenRatioMin": 0.7,
+    "groundSeamsMax": 0,
+    "brightBlobsMax": 0,
+    "shadowStairMax": 0.85,
+    "shadowEdgeFlipMax": 0.06,
+    "stillPoolRiseMin": 15,
+    "stillPoolDipMax": 20,
+    "stillLampBloomMax": 0,
+    "stillNeonHollowMin": 20,
+    "stillNeonOccludedMax": 0.3,
+    "stillStripeShareMin": 0.2,
+    "stillStripeThroughGlassMin": 0.1,
+    "stillEmptyFloorMax": 0.25,
+    "stillBlueTopGapMin": 40
   },
   "cells": {
     "3d-cam-dof": {
-      "overexposure": 0.0003,
-      "meanY": 200.46
+      "overexposure": 0.0002,
+      "meanY": 201.78
     },
     "3d-cam-high": {
-      "overexposure": 0.0015,
-      "meanY": 193.89
+      "overexposure": 0.0013,
+      "meanY": 197.68
     },
     "3d-cam-orbit": {
-      "overexposure": 0.002,
-      "meanY": 199.56
+      "overexposure": 0.0021,
+      "meanY": 200.69
     },
     "3d-cam-side": {
-      "overexposure": 0.0025,
-      "meanY": 206.9
+      "overexposure": 0.0028,
+      "meanY": 213.17
     },
     "3d-lines": {
-      "overexposure": 0,
-      "meanY": 228.94
+      "overexposure": 0.0014,
+      "meanY": 233.74
     },
     "3d-mat-anisotropy-0-9": {
       "overexposure": 0.0002,
-      "meanY": 217.16
+      "meanY": 217.11
     },
     "3d-mat-brushed": {
       "overexposure": 0,
-      "meanY": 218.01
+      "meanY": 218.03
     },
     "3d-mat-clay-fill": {
       "overexposure": 0,
-      "meanY": 217.68
+      "meanY": 217.63
     },
     "3d-mat-clay": {
       "overexposure": 0.0001,
-      "meanY": 220.4
+      "meanY": 220.35
     },
     "3d-mat-clearcoat-1": {
       "overexposure": 0.0001,
-      "meanY": 217.33
+      "meanY": 217.29
     },
     "3d-mat-glass-0-06": {
       "overexposure": 0.0001,
-      "meanY": 216.19
+      "meanY": 216.11
     },
     "3d-mat-glass-0-72": {
       "overexposure": 0.0003,
-      "meanY": 216.57
+      "meanY": 216.49
     },
     "3d-mat-lamp": {
       "overexposure": 0,
-      "meanY": 222.4
+      "meanY": 225.11
     },
     "3d-mat-matte": {
       "overexposure": 0.0005,
-      "meanY": 218.3
+      "meanY": 218.26
     },
     "3d-mat-metal-0-08": {
       "overexposure": 0.0001,
-      "meanY": 217.13
+      "meanY": 217.09
     },
     "3d-mat-metal-0-8": {
       "overexposure": 0.0001,
-      "meanY": 218.38
+      "meanY": 218.33
     },
     "3d-mat-mirror": {
       "overexposure": 0,
-      "meanY": 215.98
+      "meanY": 215.94
     },
     "3d-mat-neon": {
       "overexposure": 0,
-      "meanY": 222.6
+      "meanY": 222.64
     },
     "3d-mat-plastic-0-12": {
       "overexposure": 0.0001,
-      "meanY": 217.36
+      "meanY": 217.31
     },
     "3d-mat-plastic-0-85": {
       "overexposure": 0.0001,
-      "meanY": 217.8
+      "meanY": 217.76
     },
     "3d-mat-sheen-0-85": {
       "overexposure": 0.0001,
-      "meanY": 217.99
+      "meanY": 217.95
     },
     "3d-quality-draft": {
-      "overexposure": 0.002,
-      "meanY": 199.55
+      "overexposure": 0.0021,
+      "meanY": 200.69
     },
     "3d-quality-final": {
-      "overexposure": 0.002,
-      "meanY": 200.29
+      "overexposure": 0.0021,
+      "meanY": 201.48
     },
     "3d-shade-manga": {
       "overexposure": 0,
-      "meanY": 220.15
+      "meanY": 218.65
     },
     "3d-shade-studio": {
-      "overexposure": 0.002,
-      "meanY": 199.55
+      "overexposure": 0.0021,
+      "meanY": 200.69
     },
     "3d-shade-technical": {
-      "overexposure": 0.0012,
-      "meanY": 196.96
+      "overexposure": 0.0014,
+      "meanY": 197.73
     },
     "3d-shade-toon": {
-      "overexposure": 0.0049,
-      "meanY": 207.85
+      "overexposure": 0,
+      "meanY": 209.38
     },
     "3d-still": {
-      "overexposure": 0.0018,
-      "meanY": 202.07
+      "overexposure": 0.0019,
+      "meanY": 203.09
     }
   },
   "draftFinal": {
-    "lumaDelta": 0.74,
-    "flip": 0.01147
+    "lumaDelta": 0.79,
+    "flip": 0.010789
   },
   "metals": [
     {
       "cell": "3d-cam-dof",
       "id": "metal-plate",
-      "meanY": 114.29,
-      "darkFraction": 0.0198
+      "meanY": 122.61,
+      "darkFraction": 0.0199
     },
     {
       "cell": "3d-cam-dof",
       "id": "chrome",
-      "meanY": 126.43,
-      "darkFraction": 0.0164
+      "meanY": 127.4,
+      "darkFraction": 0.0193
     },
     {
       "cell": "3d-cam-high",
       "id": "metal-plate",
-      "meanY": 82.08,
-      "darkFraction": 0.0479
+      "meanY": 92.51,
+      "darkFraction": 0.0396
     },
     {
       "cell": "3d-cam-high",
       "id": "chrome",
-      "meanY": 120.64,
-      "darkFraction": 0.041
+      "meanY": 122.87,
+      "darkFraction": 0.0368
     },
     {
       "cell": "3d-cam-orbit",
       "id": "metal-plate",
-      "meanY": 113.14,
-      "darkFraction": 0.0497
+      "meanY": 121.51,
+      "darkFraction": 0.0429
     },
     {
       "cell": "3d-cam-orbit",
       "id": "chrome",
-      "meanY": 125.31,
-      "darkFraction": 0.0531
+      "meanY": 126.27,
+      "darkFraction": 0.0571
     },
     {
       "cell": "3d-cam-side",
       "id": "metal-plate",
-      "meanY": 124.11,
-      "darkFraction": 0.0062
+      "meanY": 132.39,
+      "darkFraction": 0.0059
     },
     {
       "cell": "3d-cam-side",
       "id": "chrome",
-      "meanY": 128.64,
+      "meanY": 128.82,
       "darkFraction": 0.0081
     },
     {
       "cell": "3d-mat-anisotropy-0-9",
       "id": "box",
-      "meanY": 148.49,
+      "meanY": 148.78,
       "darkFraction": 0.0042
     },
     {
       "cell": "3d-mat-anisotropy-0-9",
       "id": "sphere",
-      "meanY": 131.25,
-      "darkFraction": 0.002
+      "meanY": 131.74,
+      "darkFraction": 0.0007
     },
     {
       "cell": "3d-mat-anisotropy-0-9",
       "id": "side",
-      "meanY": 158.1,
+      "meanY": 158.32,
       "darkFraction": 0.0061
     },
     {
       "cell": "3d-mat-brushed",
       "id": "box",
-      "meanY": 162.36,
+      "meanY": 164.04,
       "darkFraction": 0
     },
     {
       "cell": "3d-mat-brushed",
       "id": "sphere",
-      "meanY": 128.96,
-      "darkFraction": 0.0026
+      "meanY": 129.65,
+      "darkFraction": 0.0013
     },
     {
       "cell": "3d-mat-brushed",
       "id": "side",
-      "meanY": 166.03,
+      "meanY": 165.96,
       "darkFraction": 0
     },
     {
       "cell": "3d-mat-metal-0-08",
       "id": "box",
-      "meanY": 149.49,
+      "meanY": 149.77,
       "darkFraction": 0.0039
     },
     {
       "cell": "3d-mat-metal-0-08",
       "id": "sphere",
-      "meanY": 125.98,
-      "darkFraction": 0.002
+      "meanY": 126.45,
+      "darkFraction": 0.0007
     },
     {
       "cell": "3d-mat-metal-0-08",
       "id": "side",
-      "meanY": 158.5,
+      "meanY": 158.71,
       "darkFraction": 0.003
     },
     {
       "cell": "3d-mat-metal-0-8",
       "id": "box",
-      "meanY": 165.8,
+      "meanY": 166.07,
       "darkFraction": 0.0001
     },
     {
       "cell": "3d-mat-metal-0-8",
       "id": "sphere",
-      "meanY": 162.08,
-      "darkFraction": 0.002
+      "meanY": 162.55,
+      "darkFraction": 0.0007
     },
     {
       "cell": "3d-mat-metal-0-8",
       "id": "side",
-      "meanY": 164.37,
+      "meanY": 164.57,
       "darkFraction": 0
     },
     {
       "cell": "3d-mat-mirror",
       "id": "box",
-      "meanY": 134.2,
-      "darkFraction": 0.235
+      "meanY": 134.51,
+      "darkFraction": 0.2366
     },
     {
       "cell": "3d-mat-mirror",
       "id": "sphere",
-      "meanY": 97.93,
-      "darkFraction": 0.211
+      "meanY": 98.41,
+      "darkFraction": 0.2097
     },
     {
       "cell": "3d-mat-mirror",
       "id": "side",
-      "meanY": 153.76,
+      "meanY": 154.05,
       "darkFraction": 0.0612
     },
     {
       "cell": "3d-quality-draft",
       "id": "metal-plate",
-      "meanY": 113.14,
-      "darkFraction": 0.0497
+      "meanY": 121.51,
+      "darkFraction": 0.0429
     },
     {
       "cell": "3d-quality-draft",
       "id": "chrome",
-      "meanY": 125.31,
-      "darkFraction": 0.0531
+      "meanY": 126.27,
+      "darkFraction": 0.0571
     },
     {
       "cell": "3d-quality-final",
       "id": "metal-plate",
-      "meanY": 115.94,
-      "darkFraction": 0.0077
+      "meanY": 124.36,
+      "darkFraction": 0.004
     },
     {
       "cell": "3d-quality-final",
       "id": "chrome",
-      "meanY": 144.66,
-      "darkFraction": 0.012
+      "meanY": 145.13,
+      "darkFraction": 0.0144
     },
     {
       "cell": "3d-shade-manga",
       "id": "metal-plate",
-      "meanY": 191.34,
-      "darkFraction": 0.0608
+      "meanY": 194.93,
+      "darkFraction": 0.0574
     },
     {
       "cell": "3d-shade-manga",
       "id": "chrome",
-      "meanY": 196.44,
-      "darkFraction": 0.1024
+      "meanY": 196.66,
+      "darkFraction": 0.104
     },
     {
       "cell": "3d-shade-studio",
       "id": "metal-plate",
-      "meanY": 113.14,
-      "darkFraction": 0.0497
+      "meanY": 121.51,
+      "darkFraction": 0.0429
     },
     {
       "cell": "3d-shade-studio",
       "id": "chrome",
-      "meanY": 125.31,
-      "darkFraction": 0.0531
+      "meanY": 126.27,
+      "darkFraction": 0.0571
     },
     {
       "cell": "3d-shade-technical",
       "id": "metal-plate",
-      "meanY": 111.11,
-      "darkFraction": 0.0773
+      "meanY": 119.21,
+      "darkFraction": 0.069
     },
     {
       "cell": "3d-shade-technical",
       "id": "chrome",
-      "meanY": 115.95,
-      "darkFraction": 0.1122
+      "meanY": 116.73,
+      "darkFraction": 0.1141
     },
     {
       "cell": "3d-shade-toon",
       "id": "metal-plate",
-      "meanY": 167.24,
-      "darkFraction": 0.0377
+      "meanY": 175.94,
+      "darkFraction": 0.0334
     },
     {
       "cell": "3d-shade-toon",
       "id": "chrome",
-      "meanY": 178.98,
-      "darkFraction": 0.0703
+      "meanY": 179.84,
+      "darkFraction": 0.0732
     },
     {
       "cell": "3d-still",
       "id": "metal-plate",
-      "meanY": 113.14,
-      "darkFraction": 0.0497
+      "meanY": 121.51,
+      "darkFraction": 0.0429
     },
     {
       "cell": "3d-still",
       "id": "chrome",
-      "meanY": 125.31,
-      "darkFraction": 0.0532
+      "meanY": 126.27,
+      "darkFraction": 0.0571
     }
   ],
   "contacts": [
     {
       "cell": "3d-cam-dof",
       "id": "plinth",
-      "stripY": 89.25,
+      "stripY": 148.61,
       "groundY": 224.62,
-      "ratio": 0.3974
+      "ratio": 0.6616
     },
     {
       "cell": "3d-cam-dof",
       "id": "red-box",
-      "stripY": 157.57,
+      "stripY": 210.15,
       "groundY": 224.62,
-      "ratio": 0.7015
+      "ratio": 0.9356
     },
     {
       "cell": "3d-cam-dof",
       "id": "white-box",
-      "stripY": 155.35,
+      "stripY": 144.2,
       "groundY": 224.62,
-      "ratio": 0.6916
+      "ratio": 0.642
     },
     {
       "cell": "3d-cam-dof",
       "id": "metal-plate",
-      "stripY": 72.79,
+      "stripY": 146.21,
       "groundY": 224.62,
-      "ratio": 0.3241
+      "ratio": 0.6509
     },
     {
       "cell": "3d-cam-dof",
       "id": "gold",
-      "stripY": 144.18,
+      "stripY": 193.99,
       "groundY": 224.62,
-      "ratio": 0.6419
+      "ratio": 0.8636
     },
     {
       "cell": "3d-cam-high",
       "id": "plinth",
-      "stripY": 125.44,
+      "stripY": 137.4,
       "groundY": 224.62,
-      "ratio": 0.5585
+      "ratio": 0.6117
     },
     {
       "cell": "3d-cam-high",
       "id": "red-box",
-      "stripY": 132.37,
+      "stripY": 142.07,
       "groundY": 224.62,
-      "ratio": 0.5893
+      "ratio": 0.6325
     },
     {
       "cell": "3d-cam-high",
       "id": "white-box",
-      "stripY": 112.11,
+      "stripY": 120.24,
       "groundY": 224.62,
-      "ratio": 0.4991
+      "ratio": 0.5353
     },
     {
       "cell": "3d-cam-high",
       "id": "metal-plate",
-      "stripY": 134.76,
+      "stripY": 135.95,
       "groundY": 224.62,
-      "ratio": 0.5999
+      "ratio": 0.6052
     },
     {
       "cell": "3d-cam-high",
       "id": "gold",
-      "stripY": 126.93,
+      "stripY": 140.47,
       "groundY": 224.62,
-      "ratio": 0.5651
+      "ratio": 0.6253
     },
     {
       "cell": "3d-cam-orbit",
       "id": "plinth",
-      "stripY": 80.62,
+      "stripY": 107.16,
       "groundY": 224.62,
-      "ratio": 0.3589
+      "ratio": 0.477
     },
     {
       "cell": "3d-cam-orbit",
       "id": "red-box",
-      "stripY": 123.47,
+      "stripY": 117.95,
       "groundY": 224.62,
-      "ratio": 0.5497
+      "ratio": 0.5251
     },
     {
       "cell": "3d-cam-orbit",
       "id": "white-box",
-      "stripY": 111.42,
+      "stripY": 113.71,
       "groundY": 224.62,
-      "ratio": 0.496
+      "ratio": 0.5062
     },
     {
       "cell": "3d-cam-orbit",
       "id": "metal-plate",
-      "stripY": 54.93,
+      "stripY": 103.89,
       "groundY": 224.62,
-      "ratio": 0.2445
+      "ratio": 0.4625
     },
     {
       "cell": "3d-cam-orbit",
       "id": "gold",
-      "stripY": 130.25,
+      "stripY": 137.73,
       "groundY": 224.62,
-      "ratio": 0.5799
+      "ratio": 0.6132
     },
     {
       "cell": "3d-cam-side",
       "id": "plinth",
-      "stripY": 132.5,
+      "stripY": 137.83,
       "groundY": 224.62,
-      "ratio": 0.5899
+      "ratio": 0.6136
     },
     {
       "cell": "3d-cam-side",
       "id": "red-box",
-      "stripY": 112.43,
+      "stripY": 116.4,
       "groundY": 224.62,
-      "ratio": 0.5005
+      "ratio": 0.5182
     },
     {
       "cell": "3d-cam-side",
       "id": "white-box",
-      "stripY": 83.63,
+      "stripY": 88.55,
       "groundY": 224.62,
-      "ratio": 0.3723
+      "ratio": 0.3942
     },
     {
       "cell": "3d-cam-side",
       "id": "metal-plate",
-      "stripY": 132.5,
+      "stripY": 137.83,
       "groundY": 224.62,
-      "ratio": 0.5899
+      "ratio": 0.6136
     },
     {
       "cell": "3d-cam-side",
       "id": "gold",
-      "stripY": 132.5,
+      "stripY": 137.83,
       "groundY": 224.62,
-      "ratio": 0.5899
+      "ratio": 0.6136
     },
     {
       "cell": "3d-mat-anisotropy-0-9",
       "id": "plinth",
-      "stripY": 120.55,
+      "stripY": 119.25,
       "groundY": 224.62,
-      "ratio": 0.5367
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-anisotropy-0-9",
       "id": "box",
-      "stripY": 124.93,
+      "stripY": 127.45,
       "groundY": 224.62,
-      "ratio": 0.5562
+      "ratio": 0.5674
     },
     {
       "cell": "3d-mat-anisotropy-0-9",
       "id": "side",
-      "stripY": 120.55,
+      "stripY": 119.25,
       "groundY": 224.62,
-      "ratio": 0.5367
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-brushed",
       "id": "plinth",
-      "stripY": 120.54,
+      "stripY": 119.25,
       "groundY": 224.62,
-      "ratio": 0.5366
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-brushed",
       "id": "box",
-      "stripY": 124.53,
+      "stripY": 127.14,
       "groundY": 224.62,
-      "ratio": 0.5544
+      "ratio": 0.566
     },
     {
       "cell": "3d-mat-brushed",
       "id": "side",
-      "stripY": 120.54,
+      "stripY": 119.25,
       "groundY": 224.62,
-      "ratio": 0.5366
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-clay-fill",
       "id": "plinth",
-      "stripY": 120.55,
+      "stripY": 119.25,
       "groundY": 224.62,
-      "ratio": 0.5367
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-clay-fill",
       "id": "box",
-      "stripY": 124.51,
+      "stripY": 127.12,
       "groundY": 224.62,
-      "ratio": 0.5543
+      "ratio": 0.5659
     },
     {
       "cell": "3d-mat-clay-fill",
       "id": "side",
-      "stripY": 120.55,
+      "stripY": 119.25,
       "groundY": 224.62,
-      "ratio": 0.5367
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-clay",
       "id": "plinth",
-      "stripY": 120.55,
+      "stripY": 119.25,
       "groundY": 224.62,
-      "ratio": 0.5367
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-clay",
       "id": "box",
-      "stripY": 124.82,
+      "stripY": 127.37,
       "groundY": 224.62,
-      "ratio": 0.5557
+      "ratio": 0.5671
     },
     {
       "cell": "3d-mat-clay",
       "id": "side",
-      "stripY": 120.55,
+      "stripY": 119.25,
       "groundY": 224.62,
-      "ratio": 0.5367
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-clearcoat-1",
       "id": "plinth",
-      "stripY": 120.55,
+      "stripY": 119.24,
       "groundY": 224.62,
-      "ratio": 0.5367
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-clearcoat-1",
       "id": "box",
-      "stripY": 124.92,
+      "stripY": 127.44,
       "groundY": 224.62,
-      "ratio": 0.5561
+      "ratio": 0.5673
     },
     {
       "cell": "3d-mat-clearcoat-1",
       "id": "side",
-      "stripY": 120.55,
+      "stripY": 119.24,
       "groundY": 224.62,
-      "ratio": 0.5367
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-glass-0-06",
       "id": "plinth",
-      "stripY": 120.38,
+      "stripY": 119.14,
       "groundY": 224.62,
-      "ratio": 0.5359
+      "ratio": 0.5304
     },
     {
       "cell": "3d-mat-glass-0-06",
       "id": "box",
-      "stripY": 128.19,
+      "stripY": 129.78,
       "groundY": 224.62,
-      "ratio": 0.5707
+      "ratio": 0.5778
     },
     {
       "cell": "3d-mat-glass-0-06",
       "id": "side",
-      "stripY": 120.38,
+      "stripY": 119.14,
       "groundY": 224.62,
-      "ratio": 0.5359
+      "ratio": 0.5304
     },
     {
       "cell": "3d-mat-glass-0-72",
       "id": "plinth",
-      "stripY": 120.38,
+      "stripY": 119.14,
       "groundY": 224.62,
-      "ratio": 0.5359
+      "ratio": 0.5304
     },
     {
       "cell": "3d-mat-glass-0-72",
       "id": "box",
-      "stripY": 128.19,
+      "stripY": 129.78,
       "groundY": 224.62,
-      "ratio": 0.5707
+      "ratio": 0.5778
     },
     {
       "cell": "3d-mat-glass-0-72",
       "id": "side",
-      "stripY": 120.38,
+      "stripY": 119.14,
       "groundY": 224.62,
-      "ratio": 0.5359
+      "ratio": 0.5304
     },
     {
       "cell": "3d-mat-lamp",
       "id": "plinth",
-      "stripY": 134.12,
+      "stripY": 124.15,
       "groundY": 224.62,
-      "ratio": 0.5971
+      "ratio": 0.5527
     },
     {
       "cell": "3d-mat-lamp",
       "id": "box",
-      "stripY": 148.38,
+      "stripY": 152.82,
       "groundY": 224.62,
-      "ratio": 0.6606
+      "ratio": 0.6804
     },
     {
       "cell": "3d-mat-lamp",
       "id": "side",
-      "stripY": 134.12,
+      "stripY": 124.15,
       "groundY": 224.62,
-      "ratio": 0.5971
+      "ratio": 0.5527
     },
     {
       "cell": "3d-mat-matte",
       "id": "plinth",
-      "stripY": 120.55,
+      "stripY": 119.25,
       "groundY": 224.62,
-      "ratio": 0.5367
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-matte",
       "id": "box",
-      "stripY": 124.92,
+      "stripY": 127.44,
       "groundY": 224.62,
-      "ratio": 0.5561
+      "ratio": 0.5673
     },
     {
       "cell": "3d-mat-matte",
       "id": "side",
-      "stripY": 120.55,
+      "stripY": 119.25,
       "groundY": 224.62,
-      "ratio": 0.5367
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-metal-0-08",
       "id": "plinth",
-      "stripY": 120.55,
+      "stripY": 119.24,
       "groundY": 224.62,
-      "ratio": 0.5367
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-metal-0-08",
       "id": "box",
-      "stripY": 124.92,
+      "stripY": 127.44,
       "groundY": 224.62,
-      "ratio": 0.5561
+      "ratio": 0.5674
     },
     {
       "cell": "3d-mat-metal-0-08",
       "id": "side",
-      "stripY": 120.55,
+      "stripY": 119.24,
       "groundY": 224.62,
-      "ratio": 0.5367
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-metal-0-8",
       "id": "plinth",
-      "stripY": 120.55,
+      "stripY": 119.24,
       "groundY": 224.62,
-      "ratio": 0.5367
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-metal-0-8",
       "id": "box",
-      "stripY": 124.91,
+      "stripY": 127.44,
       "groundY": 224.62,
-      "ratio": 0.5561
+      "ratio": 0.5673
     },
     {
       "cell": "3d-mat-metal-0-8",
       "id": "side",
-      "stripY": 120.55,
+      "stripY": 119.24,
       "groundY": 224.62,
-      "ratio": 0.5367
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-mirror",
       "id": "plinth",
-      "stripY": 120.54,
+      "stripY": 119.24,
       "groundY": 224.62,
-      "ratio": 0.5366
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-mirror",
       "id": "box",
-      "stripY": 124.76,
+      "stripY": 127.31,
       "groundY": 224.62,
-      "ratio": 0.5554
+      "ratio": 0.5668
     },
     {
       "cell": "3d-mat-mirror",
       "id": "side",
-      "stripY": 120.54,
+      "stripY": 119.24,
       "groundY": 224.62,
-      "ratio": 0.5366
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-neon",
       "id": "plinth",
-      "stripY": 135.27,
+      "stripY": 138.76,
       "groundY": 224.62,
-      "ratio": 0.6022
+      "ratio": 0.6178
     },
     {
       "cell": "3d-mat-neon",
       "id": "box",
-      "stripY": 124.68,
+      "stripY": 127.63,
       "groundY": 224.62,
-      "ratio": 0.5551
+      "ratio": 0.5682
     },
     {
       "cell": "3d-mat-neon",
       "id": "side",
-      "stripY": 135.27,
+      "stripY": 138.76,
       "groundY": 224.62,
-      "ratio": 0.6022
+      "ratio": 0.6178
     },
     {
       "cell": "3d-mat-plastic-0-12",
       "id": "plinth",
-      "stripY": 120.54,
+      "stripY": 119.24,
       "groundY": 224.62,
-      "ratio": 0.5366
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-plastic-0-12",
       "id": "box",
-      "stripY": 124.92,
+      "stripY": 127.44,
       "groundY": 224.62,
-      "ratio": 0.5561
+      "ratio": 0.5673
     },
     {
       "cell": "3d-mat-plastic-0-12",
       "id": "side",
-      "stripY": 120.54,
+      "stripY": 119.24,
       "groundY": 224.62,
-      "ratio": 0.5366
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-plastic-0-85",
       "id": "plinth",
-      "stripY": 120.55,
+      "stripY": 119.25,
       "groundY": 224.62,
-      "ratio": 0.5367
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-plastic-0-85",
       "id": "box",
-      "stripY": 124.92,
+      "stripY": 127.43,
       "groundY": 224.62,
-      "ratio": 0.5562
+      "ratio": 0.5673
     },
     {
       "cell": "3d-mat-plastic-0-85",
       "id": "side",
-      "stripY": 120.55,
+      "stripY": 119.25,
       "groundY": 224.62,
-      "ratio": 0.5367
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-sheen-0-85",
       "id": "plinth",
-      "stripY": 120.55,
+      "stripY": 119.24,
       "groundY": 224.62,
-      "ratio": 0.5367
+      "ratio": 0.5309
     },
     {
       "cell": "3d-mat-sheen-0-85",
       "id": "box",
-      "stripY": 124.92,
+      "stripY": 127.44,
       "groundY": 224.62,
-      "ratio": 0.5561
+      "ratio": 0.5673
     },
     {
       "cell": "3d-mat-sheen-0-85",
       "id": "side",
-      "stripY": 120.55,
+      "stripY": 119.24,
       "groundY": 224.62,
-      "ratio": 0.5367
+      "ratio": 0.5309
     },
     {
       "cell": "3d-quality-draft",
       "id": "plinth",
-      "stripY": 80.62,
+      "stripY": 107.16,
       "groundY": 224.62,
-      "ratio": 0.3589
+      "ratio": 0.477
     },
     {
       "cell": "3d-quality-draft",
       "id": "red-box",
-      "stripY": 123.47,
+      "stripY": 117.95,
       "groundY": 224.62,
-      "ratio": 0.5497
+      "ratio": 0.5251
     },
     {
       "cell": "3d-quality-draft",
       "id": "white-box",
-      "stripY": 111.42,
+      "stripY": 113.71,
       "groundY": 224.62,
-      "ratio": 0.496
+      "ratio": 0.5062
     },
     {
       "cell": "3d-quality-draft",
       "id": "metal-plate",
-      "stripY": 54.93,
+      "stripY": 103.89,
       "groundY": 224.62,
-      "ratio": 0.2445
+      "ratio": 0.4625
     },
     {
       "cell": "3d-quality-draft",
       "id": "gold",
-      "stripY": 130.25,
+      "stripY": 137.73,
       "groundY": 224.62,
-      "ratio": 0.5799
+      "ratio": 0.6132
     },
     {
       "cell": "3d-quality-final",
       "id": "plinth",
-      "stripY": 80.62,
+      "stripY": 107.16,
       "groundY": 224.62,
-      "ratio": 0.3589
+      "ratio": 0.477
     },
     {
       "cell": "3d-quality-final",
       "id": "red-box",
-      "stripY": 123.47,
+      "stripY": 117.95,
       "groundY": 224.62,
-      "ratio": 0.5497
+      "ratio": 0.5251
     },
     {
       "cell": "3d-quality-final",
       "id": "white-box",
-      "stripY": 111.42,
+      "stripY": 113.71,
       "groundY": 224.62,
-      "ratio": 0.496
+      "ratio": 0.5062
     },
     {
       "cell": "3d-quality-final",
       "id": "metal-plate",
-      "stripY": 54.93,
+      "stripY": 103.89,
       "groundY": 224.62,
-      "ratio": 0.2445
+      "ratio": 0.4625
     },
     {
       "cell": "3d-quality-final",
       "id": "gold",
-      "stripY": 130.25,
+      "stripY": 137.73,
       "groundY": 224.62,
-      "ratio": 0.5799
+      "ratio": 0.6132
     },
     {
       "cell": "3d-shade-manga",
       "id": "plinth",
-      "stripY": 111.02,
+      "stripY": 123.59,
       "groundY": 239.2,
-      "ratio": 0.4641
+      "ratio": 0.5167
     },
     {
       "cell": "3d-shade-manga",
       "id": "red-box",
-      "stripY": 165.38,
+      "stripY": 82.19,
       "groundY": 239.2,
-      "ratio": 0.6914
+      "ratio": 0.3436
     },
     {
       "cell": "3d-shade-manga",
       "id": "white-box",
-      "stripY": 169.42,
+      "stripY": 173.17,
       "groundY": 239.2,
-      "ratio": 0.7083
+      "ratio": 0.724
     },
     {
       "cell": "3d-shade-manga",
       "id": "metal-plate",
-      "stripY": 96.76,
+      "stripY": 118.03,
       "groundY": 239.2,
-      "ratio": 0.4045
+      "ratio": 0.4934
     },
     {
       "cell": "3d-shade-manga",
       "id": "gold",
-      "stripY": 67.36,
+      "stripY": 86.92,
       "groundY": 239.2,
-      "ratio": 0.2816
+      "ratio": 0.3634
     },
     {
       "cell": "3d-shade-studio",
       "id": "plinth",
-      "stripY": 80.62,
+      "stripY": 107.16,
       "groundY": 224.62,
-      "ratio": 0.3589
+      "ratio": 0.477
     },
     {
       "cell": "3d-shade-studio",
       "id": "red-box",
-      "stripY": 123.47,
+      "stripY": 117.95,
       "groundY": 224.62,
-      "ratio": 0.5497
+      "ratio": 0.5251
     },
     {
       "cell": "3d-shade-studio",
       "id": "white-box",
-      "stripY": 111.42,
+      "stripY": 113.71,
       "groundY": 224.62,
-      "ratio": 0.496
+      "ratio": 0.5062
     },
     {
       "cell": "3d-shade-studio",
       "id": "metal-plate",
-      "stripY": 54.93,
+      "stripY": 103.89,
       "groundY": 224.62,
-      "ratio": 0.2445
+      "ratio": 0.4625
     },
     {
       "cell": "3d-shade-studio",
       "id": "gold",
-      "stripY": 130.25,
+      "stripY": 137.73,
       "groundY": 224.62,
-      "ratio": 0.5799
+      "ratio": 0.6132
     },
     {
       "cell": "3d-shade-technical",
       "id": "plinth",
-      "stripY": 78.3,
+      "stripY": 102.95,
       "groundY": 224.62,
-      "ratio": 0.3486
+      "ratio": 0.4583
     },
     {
       "cell": "3d-shade-technical",
       "id": "red-box",
-      "stripY": 120.19,
+      "stripY": 71.5,
       "groundY": 224.62,
-      "ratio": 0.5351
+      "ratio": 0.3183
     },
     {
       "cell": "3d-shade-technical",
       "id": "white-box",
-      "stripY": 104.67,
+      "stripY": 103.21,
       "groundY": 224.62,
-      "ratio": 0.466
+      "ratio": 0.4595
     },
     {
       "cell": "3d-shade-technical",
       "id": "metal-plate",
-      "stripY": 55.27,
+      "stripY": 101.94,
       "groundY": 224.62,
-      "ratio": 0.2461
+      "ratio": 0.4538
     },
     {
       "cell": "3d-shade-technical",
       "id": "gold",
-      "stripY": 73.88,
+      "stripY": 109.68,
       "groundY": 224.62,
-      "ratio": 0.3289
+      "ratio": 0.4883
     },
     {
       "cell": "3d-shade-toon",
       "id": "plinth",
-      "stripY": 77.64,
+      "stripY": 103.36,
       "groundY": 224.62,
-      "ratio": 0.3456
+      "ratio": 0.4602
     },
     {
       "cell": "3d-shade-toon",
       "id": "red-box",
-      "stripY": 127.19,
+      "stripY": 69.22,
       "groundY": 224.62,
-      "ratio": 0.5662
+      "ratio": 0.3082
     },
     {
       "cell": "3d-shade-toon",
       "id": "white-box",
-      "stripY": 111.13,
+      "stripY": 112.47,
       "groundY": 224.62,
-      "ratio": 0.4947
+      "ratio": 0.5007
     },
     {
       "cell": "3d-shade-toon",
       "id": "metal-plate",
-      "stripY": 54.49,
+      "stripY": 100.66,
       "groundY": 224.62,
-      "ratio": 0.2426
+      "ratio": 0.4481
     },
     {
       "cell": "3d-shade-toon",
       "id": "gold",
-      "stripY": 79,
+      "stripY": 66.83,
       "groundY": 224.62,
-      "ratio": 0.3517
+      "ratio": 0.2975
     },
     {
       "cell": "3d-still",
       "id": "plinth",
-      "stripY": 69.06,
+      "stripY": 79.96,
       "groundY": 224.62,
-      "ratio": 0.3075
+      "ratio": 0.356
     },
     {
       "cell": "3d-still",
       "id": "red-box",
-      "stripY": 207.06,
+      "stripY": 223.49,
       "groundY": 224.62,
-      "ratio": 0.9218
+      "ratio": 0.995
     },
     {
       "cell": "3d-still",
       "id": "white-box",
-      "stripY": 104.34,
+      "stripY": 132.8,
       "groundY": 224.62,
-      "ratio": 0.4645
+      "ratio": 0.5912
     },
     {
       "cell": "3d-still",
       "id": "metal-plate",
-      "stripY": 46,
+      "stripY": 45.99,
       "groundY": 224.62,
       "ratio": 0.2048
     },
     {
       "cell": "3d-still",
       "id": "gold",
-      "stripY": 42.22,
+      "stripY": 47.4,
       "groundY": 224.62,
-      "ratio": 0.188
+      "ratio": 0.211
     }
   ],
   "floatGap": 143,
+  "lines": {
+    "emptyBelow": 0.0267,
+    "inkGap": 24,
+    "inkGapPair": "132:658~102:682",
+    "topGap": 0.1111,
+    "solids": 7
+  },
+  "groundDefects": [
+    {
+      "cell": "3d-cam-dof",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.5102,
+      "stairGap": 0.875,
+      "edgeFlip": 0.019223
+    },
+    {
+      "cell": "3d-cam-high",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.6298,
+      "stairGap": 0.9375,
+      "edgeFlip": 0.027672
+    },
+    {
+      "cell": "3d-cam-orbit",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.5088,
+      "stairGap": 0.8438,
+      "edgeFlip": 0.01461
+    },
+    {
+      "cell": "3d-cam-side",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.5833,
+      "stairGap": 0.9688,
+      "edgeFlip": 0.0062
+    },
+    {
+      "cell": "3d-mat-anisotropy-0-9",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.6909,
+      "stairGap": 0.7813,
+      "edgeFlip": 0.015033
+    },
+    {
+      "cell": "3d-mat-brushed",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.6909,
+      "stairGap": 0.875,
+      "edgeFlip": 0.015033
+    },
+    {
+      "cell": "3d-mat-clay-fill",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.6909,
+      "stairGap": 0.7813,
+      "edgeFlip": 0.015033
+    },
+    {
+      "cell": "3d-mat-clay",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.6909,
+      "stairGap": 0.8125,
+      "edgeFlip": 0.015033
+    },
+    {
+      "cell": "3d-mat-clearcoat-1",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.6909,
+      "stairGap": 0.875,
+      "edgeFlip": 0.015033
+    },
+    {
+      "cell": "3d-mat-glass-0-06",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.6744,
+      "stairGap": 0.7813,
+      "edgeFlip": 0.018665
+    },
+    {
+      "cell": "3d-mat-glass-0-72",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.6744,
+      "stairGap": 0.7813,
+      "edgeFlip": 0.018665
+    },
+    {
+      "cell": "3d-mat-lamp",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.6789,
+      "stairGap": 0.9063,
+      "edgeFlip": 0.034127
+    },
+    {
+      "cell": "3d-mat-matte",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.6909,
+      "stairGap": 0.8438,
+      "edgeFlip": 0.015033
+    },
+    {
+      "cell": "3d-mat-metal-0-08",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.6909,
+      "stairGap": 0.8438,
+      "edgeFlip": 0.015033
+    },
+    {
+      "cell": "3d-mat-metal-0-8",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.6909,
+      "stairGap": 0.8438,
+      "edgeFlip": 0.015033
+    },
+    {
+      "cell": "3d-mat-mirror",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.6909,
+      "stairGap": 0.9063,
+      "edgeFlip": 0.015033
+    },
+    {
+      "cell": "3d-mat-neon",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.7508,
+      "stairGap": 0.9688,
+      "edgeFlip": 0.037282
+    },
+    {
+      "cell": "3d-mat-plastic-0-12",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.6909,
+      "stairGap": 0.7813,
+      "edgeFlip": 0.015033
+    },
+    {
+      "cell": "3d-mat-plastic-0-85",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.6909,
+      "stairGap": 0.7813,
+      "edgeFlip": 0.015033
+    },
+    {
+      "cell": "3d-mat-sheen-0-85",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.6909,
+      "stairGap": 0.8438,
+      "edgeFlip": 0.015033
+    },
+    {
+      "cell": "3d-quality-draft",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.5088,
+      "stairGap": 0.8438,
+      "edgeFlip": 0.01461
+    },
+    {
+      "cell": "3d-quality-final",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.5088,
+      "stairGap": 0.8438,
+      "edgeFlip": 0.01461
+    },
+    {
+      "cell": "3d-shade-manga",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.5156,
+      "stairGap": 0.9688,
+      "edgeFlip": 0.004508
+    },
+    {
+      "cell": "3d-shade-studio",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.5088,
+      "stairGap": 0.8438,
+      "edgeFlip": 0.01461
+    },
+    {
+      "cell": "3d-shade-technical",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.5088,
+      "stairGap": 0.9063,
+      "edgeFlip": 0.013351
+    },
+    {
+      "cell": "3d-shade-toon",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.509,
+      "stairGap": 0.9688,
+      "edgeFlip": 0.016711
+    },
+    {
+      "cell": "3d-still",
+      "seams": 0,
+      "seamHits": 0,
+      "listed": [],
+      "blobs": 0,
+      "blobPeak": null,
+      "stair": 0.5088,
+      "stairGap": 0.9688,
+      "edgeFlip": 0.015263
+    }
+  ],
   "emissive": {
     "coreY": 245.18,
     "haloRise": 0,
     "outsideHot": 0
   },
+  "still": {
+    "openMedian": 224.6,
+    "openPeak": 244.7,
+    "poolRise": 20.1,
+    "lampPoolRise": 20.1,
+    "poolDip": 12.6,
+    "objectBlobs": {
+      "lampBloom": 0
+    },
+    "neon": {
+      "ring": 245,
+      "core": 205.8,
+      "hollow": 39.1,
+      "occluded": 0.098
+    },
+    "glassBase": 119.1,
+    "stripes": {
+      "stripe-red": {
+        "peak": 255,
+        "share": 0.5771
+      },
+      "stripe-white": {
+        "peak": 255,
+        "share": 0.5732
+      },
+      "stripe-blue": {
+        "peak": 255,
+        "share": 0.605
+      },
+      "throughGlass": {
+        "red": 0.2213,
+        "white": 0.3065,
+        "blue": 0.1091,
+        "total": 15246
+      }
+    },
+    "emptyFloor": 0.2109,
+    "blueTopGap": 50
+  },
   "materials": [
     {
       "a": "3d-mat-matte",
       "b": "3d-mat-clay",
-      "flip": 0.392838
+      "flip": 0.392062,
+      "weakest": "side",
+      "weakestFlip": 0.234323,
+      "sphereFlip": 0.467523
     },
     {
       "a": "3d-mat-matte",
       "b": "3d-mat-plastic-0-85",
-      "flip": 0.18748
+      "flip": 0.18666,
+      "weakest": "side",
+      "weakestFlip": 0.090616,
+      "sphereFlip": 0.34183
     },
     {
       "a": "3d-mat-clay",
       "b": "3d-mat-clay-fill",
-      "flip": 0.427554
+      "flip": 0.426456,
+      "weakest": "side",
+      "weakestFlip": 0.201106,
+      "sphereFlip": 0.821735
     },
     {
       "a": "3d-mat-clay",
       "b": "3d-mat-metal-0-08",
-      "flip": 0.356699
+      "flip": 0.356556,
+      "weakest": "side",
+      "weakestFlip": 0.199079,
+      "sphereFlip": 0.645838
     },
     {
       "a": "3d-mat-clay-fill",
       "b": "3d-mat-plastic-0-12",
-      "flip": 0.289914
+      "flip": 0.288872,
+      "weakest": "side",
+      "weakestFlip": 0.177936,
+      "sphereFlip": 0.736126
     },
     {
       "a": "3d-mat-clay-fill",
       "b": "3d-mat-metal-0-8",
-      "flip": 0.39225
+      "flip": 0.391225,
+      "weakest": "side",
+      "weakestFlip": 0.24624,
+      "sphereFlip": 0.767247
     },
     {
       "a": "3d-mat-plastic-0-12",
       "b": "3d-mat-mirror",
-      "flip": 0.357696
+      "flip": 0.356559,
+      "weakest": "side",
+      "weakestFlip": 0.153002,
+      "sphereFlip": 0.775707
     },
     {
       "a": "3d-mat-plastic-0-85",
       "b": "3d-mat-metal-0-08",
-      "flip": 0.37478
+      "flip": 0.374214,
+      "weakest": "side",
+      "weakestFlip": 0.212826,
+      "sphereFlip": 0.62
     },
     {
       "a": "3d-mat-plastic-0-85",
       "b": "3d-mat-brushed",
-      "flip": 0.337501
+      "flip": 0.341055,
+      "weakest": "side",
+      "weakestFlip": 0.183795,
+      "sphereFlip": 0.801537
     },
     {
       "a": "3d-mat-metal-0-08",
       "b": "3d-mat-metal-0-8",
-      "flip": 0.211079
+      "flip": 0.211158,
+      "weakest": "side",
+      "weakestFlip": 0.107114,
+      "sphereFlip": 0.468028
     },
     {
       "a": "3d-mat-metal-0-08",
       "b": "3d-mat-glass-0-06",
-      "flip": 0.294425
+      "flip": 0.293063,
+      "weakest": "box",
+      "weakestFlip": 0.236163,
+      "sphereFlip": 0.70399
     },
     {
       "a": "3d-mat-metal-0-8",
       "b": "3d-mat-mirror",
-      "flip": 0.363366
+      "flip": 0.362556,
+      "weakest": "side",
+      "weakestFlip": 0.205742,
+      "sphereFlip": 0.786387
     },
     {
       "a": "3d-mat-metal-0-8",
       "b": "3d-mat-glass-0-72",
-      "flip": 0.333261
+      "flip": 0.332016,
+      "weakest": "side",
+      "weakestFlip": 0.236295,
+      "sphereFlip": 0.671619
     },
     {
       "a": "3d-mat-mirror",
       "b": "3d-mat-clearcoat-1",
-      "flip": 0.34948
+      "flip": 0.34838,
+      "weakest": "side",
+      "weakestFlip": 0.150551,
+      "sphereFlip": 0.769408
     },
     {
       "a": "3d-mat-brushed",
       "b": "3d-mat-glass-0-06",
-      "flip": 0.45007
+      "flip": 0.455369,
+      "weakest": "side",
+      "weakestFlip": 0.210116,
+      "sphereFlip": 0.904204
     },
     {
       "a": "3d-mat-brushed",
       "b": "3d-mat-anisotropy-0-9",
-      "flip": 0.434693
+      "flip": 0.441438,
+      "weakest": "side",
+      "weakestFlip": 0.270981,
+      "sphereFlip": 0.811199
     },
     {
       "a": "3d-mat-glass-0-06",
       "b": "3d-mat-glass-0-72",
-      "flip": 0.058737
+      "flip": 0.05873,
+      "weakest": "side",
+      "weakestFlip": 0,
+      "sphereFlip": 0.425231
     },
     {
       "a": "3d-mat-glass-0-06",
       "b": "3d-mat-sheen-0-85",
-      "flip": 0.34498
+      "flip": 0.343914,
+      "weakest": "side",
+      "weakestFlip": 0.122827,
+      "sphereFlip": 0.719768
     },
     {
       "a": "3d-mat-glass-0-72",
       "b": "3d-mat-clearcoat-1",
-      "flip": 0.353638
+      "flip": 0.352052,
+      "weakest": "side",
+      "weakestFlip": 0.147567,
+      "sphereFlip": 0.649203
     },
     {
       "a": "3d-mat-glass-0-72",
       "b": "3d-mat-lamp",
-      "flip": 0.460809
+      "flip": 0.468155,
+      "weakest": "side",
+      "weakestFlip": 0.264246,
+      "sphereFlip": 0.710007
     },
     {
       "a": "3d-mat-clearcoat-1",
       "b": "3d-mat-neon",
-      "flip": 0.499952
+      "flip": 0.49921,
+      "weakest": "box",
+      "weakestFlip": 0.470509,
+      "sphereFlip": 0.511658
     },
     {
       "a": "3d-mat-anisotropy-0-9",
       "b": "3d-mat-sheen-0-85",
-      "flip": 0.343941
+      "flip": 0.34344,
+      "weakest": "side",
+      "weakestFlip": 0.222247,
+      "sphereFlip": 0.613369
     },
     {
       "a": "3d-mat-sheen-0-85",
       "b": "3d-mat-lamp",
-      "flip": 0.496811
+      "flip": 0.501194,
+      "weakest": "side",
+      "weakestFlip": 0.347901,
+      "sphereFlip": 0.641448
     },
     {
       "a": "3d-mat-lamp",
       "b": "3d-mat-neon",
-      "flip": 0.312122
+      "flip": 0.319503,
+      "weakest": "box",
+      "weakestFlip": 0.162655,
+      "sphereFlip": 0.537282
     }
   ],
   "toon": [
@@ -1264,7 +1699,7 @@
     },
     {
       "id": "neon",
-      "levels": 1
+      "levels": null
     },
     {
       "id": "lamp",
@@ -1272,28 +1707,31 @@
     }
   ],
   "manga": {
-    "meanY": 235,
+    "meanY": 234.49,
     "chroma": 0.0136,
-    "hatchFlip": 0.124981
+    "paperY": 239,
+    "share": 0.7428,
+    "grayShare": 0.0208,
+    "hatchFlip": 0.144168
   },
   "technical": {
-    "minRatio": 0.9889,
+    "minRatio": 0.9858,
     "objects": [
       {
         "id": "plinth",
-        "ratio": 0.9998
+        "ratio": 0.9995
       },
       {
         "id": "red-box",
-        "ratio": 0.9987
+        "ratio": 0.9994
       },
       {
         "id": "white-box",
-        "ratio": 1
+        "ratio": 0.9996
       },
       {
         "id": "metal-plate",
-        "ratio": 0.9999
+        "ratio": 0.9998
       },
       {
         "id": "chrome",
@@ -1305,19 +1743,19 @@
       },
       {
         "id": "stripe-red",
-        "ratio": 0.9971
+        "ratio": 0.9992
       },
       {
         "id": "stripe-white",
-        "ratio": 0.9986
+        "ratio": 0.998
       },
       {
         "id": "stripe-blue",
-        "ratio": 0.9991
+        "ratio": 0.9981
       },
       {
         "id": "glass",
-        "ratio": 0.9955
+        "ratio": 0.9977
       },
       {
         "id": "gold",
@@ -1325,16 +1763,21 @@
       },
       {
         "id": "hole",
-        "ratio": 1
+        "ratio": 0.9998
       },
       {
         "id": "neon",
-        "ratio": 0.9889
+        "ratio": 0.9971
       },
       {
         "id": "lamp",
-        "ratio": 0.9931
+        "ratio": 0.9858
       }
     ]
+  },
+  "technicalHidden": {
+    "count": 2440,
+    "legacy": 3406,
+    "ratio": 0.7164
   }
 }

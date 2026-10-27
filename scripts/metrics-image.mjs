@@ -1,0 +1,306 @@
+/**
+ * Image measurements that answer "does the picture have a visible seam" rather
+ * than "did a number move". Kept free of rendering: every function takes pixels
+ * plus a coverage predicate, so `src/metrics-image.spec.ts` can drive the exact
+ * cases that used to slip past the gates.
+ *
+ * The three detectors exist because the first round of gates all passed while
+ * the sheets plainly looked wrong:
+ *
+ * - `straightSeams` finds screen-aligned cliffs in the ground shading. The
+ *   tone-mapped light pool ended in a rectangle, so its four edges read as
+ *   hundreds of identical one-pixel steps along a fixed x or y.
+ * - `stairStepShare` measures how much of a shadow ramp is drawn along the
+ *   pixel grid, which is what a nearest-neighbour shadow lookup produces.
+ * - `brightBlobs` finds bright lumps that sit well above their surroundings,
+ *   which is how the refraction bug showed up beside the glass sphere.
+ */
+export function luma(rgba, i) {
+  return 0.2126 * rgba[i] + 0.7152 * rgba[i + 1] + 0.0722 * rgba[i + 2]
+}
+
+/**
+ * Screen-aligned seams in a shaded surface.
+ *
+ * A seam is a narrow ramp — at most `maxRun` pixels, at least `minTotal` code
+ * values in total — with flat shoulders on both sides. One seam is not enough
+ * to say anything: a soft shadow edge can produce one as well. A *straight*
+ * seam can: when hundreds of rows at one x each carry the same step, the cause
+ * is a screen-aligned rectangle rather than a shadow, whose contour is a curve.
+ * So hits are grouped by line and only lines with at least `minRun` hits count.
+ */
+export function straightSeams(rgba, width, height, accept = () => true, options = {}) {
+  const { minRun = 24, flatTol = 1, stepMin = 1.5, maxRun = 3, minTotal = 4, shoulder = 3 } = options
+  const at = (x, y) => luma(rgba, (y * width + x) * 4)
+  const hitsH = new Map()
+  const hitsV = new Map()
+  // A vertical seam: the step is across x, so the line is `x` and it is counted
+  // once per row it appears in. Both shoulders have to be the same kind of
+  // surface as the seam pixel: the horizon where the floor meets the wall is a
+  // straight step too, and it is not a seam in a shading ramp.
+  for (let y = 4; y < height - 4; y++) {
+    for (let x = 4; x < width - 4; x++) {
+      if (!sameSurface(x, y, 'v')) continue
+      if (!seamAcross((d) => at(x + d, y))) continue
+      hitsV.set(x, (hitsV.get(x) ?? 0) + 1)
+    }
+  }
+  for (let x = 4; x < width - 4; x++) {
+    for (let y = 4; y < height - 4; y++) {
+      if (!sameSurface(x, y, 'h')) continue
+      if (!seamAcross((d) => at(x, y + d))) continue
+      hitsH.set(y, (hitsH.get(y) ?? 0) + 1)
+    }
+  }
+  function sameSurface(x, y, axis) {
+    const step = (d) => (axis === 'v' ? accept(x + d, y) : accept(x, y + d))
+    for (let d = -shoulder; d <= shoulder + maxRun; d++) {
+      if (!step(d)) return false
+    }
+    return true
+  }
+  function seamAcross(get) {
+    const diff = (d) => get(d + 1) - get(d)
+    let run = 0
+    let total = 0
+    for (let d = 0; d < maxRun; d++) {
+      const value = Math.abs(diff(d))
+      if (value < stepMin) break
+      run += 1
+      total += value
+    }
+    if (run === 0 || total < minTotal) return false
+    if (Math.abs(diff(-1)) > flatTol || Math.abs(diff(-2)) > flatTol) return false
+    if (Math.abs(diff(run)) > flatTol || Math.abs(diff(run + 1)) > flatTol) return false
+    return true
+  }
+  const found = []
+  for (const [position, hits] of hitsV) if (hits >= minRun) found.push({ axis: 'v', position, hits })
+  for (const [position, hits] of hitsH) if (hits >= minRun) found.push({ axis: 'h', position, hits })
+  return found.sort((a, b) => b.hits - a.hits)
+}
+
+/**
+ * How much of the shadow ramp is drawn along the pixel grid.
+ *
+ * Each `level` traces one contour of the ramp. For a contour pixel the local
+ * gradient says which way the ramp runs: a soft penumbra follows the caster's
+ * shape, so the gradient points anywhere, while a nearest-neighbour shadow
+ * lookup lays the same ramp down in axis-aligned steps and the gradient snaps
+ * to 0 or 90 degrees. The result is the share of contour pixels whose gradient
+ * is within `tolerance` degrees of an axis, over contour pixels that carry a
+ * real gradient.
+ */
+export function stairStepShare(rgba, width, height, levels, accept = () => true, tolerance = 20) {
+  const at = (x, y) => luma(rgba, (y * width + x) * 4)
+  const limit = Math.tan((tolerance * Math.PI) / 180)
+  let total = 0
+  let aligned = 0
+  for (let y = 2; y < height - 2; y++) {
+    for (let x = 2; x < width - 2; x++) {
+      if (!accept(x, y)) continue
+      const here = at(x, y)
+      if (!levels.some((level) => Math.abs(here - level) <= 1.5)) continue
+      const gx = at(x + 1, y) - at(x - 1, y)
+      const gy = at(x, y + 1) - at(x, y - 1)
+      const ax = Math.abs(gx)
+      const ay = Math.abs(gy)
+      if (Math.max(ax, ay) < 1) continue
+      total += 1
+      if (Math.min(ax, ay) <= limit * Math.max(ax, ay)) aligned += 1
+    }
+  }
+  return total < 20 ? null : aligned / total
+}
+
+/**
+ * How much of a shading ramp is drawn as visible steps rather than a smooth
+ * gradient.
+ *
+ * A ramp that a nearest-neighbour lookup lays down in cells jumps by several
+ * code values between two pixels and then sits flat, repeatedly: the edge is a
+ * staircase. A bilinear read spreads the same range over neighbouring pixels,
+ * so each step is under a code value or two. Only pixels already on the ramp
+ * count, which keeps flat floor and flat shadow out of the number; the result
+ * is the share of ramp pixels whose neighbour moves by more than `jump`.
+ */
+export function steppedShare(rgba, width, height, accept = () => true, jump = 2.5) {
+  const at = (x, y) => luma(rgba, (y * width + x) * 4)
+  let total = 0
+  let stepped = 0
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      if (!accept(x, y)) continue
+      const here = at(x, y)
+      const dx = at(x + 1, y) - here
+      const dy = at(x, y + 1) - here
+      // Two flat neighbours mean this pixel sits inside a band, not on its edge.
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) continue
+      total += 1
+      // The step along the ramp's own direction. A row that is flat here but
+      // one code quieter than the row below is the slope, not a step, so only
+      // the steeper neighbour counts and it must beat `jump` on its own.
+      const step = Math.abs(dx) >= Math.abs(dy) ? Math.abs(dx) : Math.abs(dy)
+      if (step > jump) stepped += 1
+    }
+  }
+  return total < 20 ? null : stepped / total
+}
+
+/**
+ * How an edge is laid down row by row.
+ *
+ * `edgeAt(y)` returns the sub-pixel `x` where a straight edge crosses row `y`,
+ * or `null` when that row has no transition at all. Two things spoil an edge: a
+ * nearest-neighbour lookup moves it in cells, so `x` holds for several rows and
+ * then jumps (`hold`), and a lookup that fails on a row leaves a hard cut with
+ * nothing to interpolate (`gap`). A bilinear read fails neither: every row has a
+ * crossing and each one moves by the same fraction.
+ *
+ * `hold` is the share of adjacent defined rows where the edge did not move.
+ * `gap` is the share of rows that had no crossing at all. A region where the
+ * edge is defined on fewer than half its rows has no penumbra to grade.
+ */
+export function edgeStairShare(edgeAt, y0, y1) {
+  const xs = []
+  for (let y = y0; y <= y1; y++) {
+    const x = edgeAt(y)
+    xs.push(x != null && Number.isFinite(x) ? x : null)
+  }
+  const rows = xs.length
+  if (rows < 8) return null
+  const defined = xs.filter((x) => x != null)
+  const gap = 1 - defined.length / rows
+  if (defined.length < rows / 2) {
+    // No penumbra on this edge: it is a hard step, which is the worst case, and
+    // reporting null would let the worst case pass. `hold` 0 says the edge did
+    // not move smoothly; `gap` is what actually went wrong.
+    return { hold: 0, gap, defined: defined.length }
+  }
+  let held = 0
+  let pairs = 0
+  for (let i = 1; i < xs.length; i++) {
+    const a = xs[i - 1]
+    const b = xs[i]
+    if (a == null || b == null) continue
+    pairs += 1
+    if (Math.abs(b - a) < 0.4) held += 1
+  }
+  return { hold: pairs === 0 ? 0 : held / pairs, gap, defined: defined.length }
+}
+
+/** 4-connected components of a byte mask, each with its pixel count and bbox. */
+export function components(mask, width, height) {
+  const seen = new Uint8Array(width * height)
+  const out = []
+  for (let start = 0; start < mask.length; start++) {
+    if (!mask[start] || seen[start]) continue
+    const stack = [start]
+    seen[start] = 1
+    let count = 0
+    let x0 = width
+    let y0 = height
+    let x1 = -1
+    let y1 = -1
+    while (stack.length) {
+      const index = stack.pop()
+      const x = index % width
+      const y = (index - x) / width
+      count += 1
+      if (x < x0) x0 = x
+      if (y < y0) y0 = y
+      if (x > x1) x1 = x
+      if (y > y1) y1 = y
+      for (const [nx, ny] of [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]]) {
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue
+        const next = ny * width + nx
+        if (!mask[next] || seen[next]) continue
+        seen[next] = 1
+        stack.push(next)
+      }
+    }
+    out.push({ count, x0, y0, x1, y1 })
+  }
+  return out
+}
+
+/**
+ * Bright blobs in a region: pixels that sit `riseMin` levels above a local
+ * background, grouped into blobs of at least `minArea` pixels.
+ *
+ * The background is the *median* of a box wide enough to swallow the body the
+ * blob sits on. A mean would read every gap between two hatch strokes as a
+ * bright lump, because the strokes drag the average down; the median of a paper
+ * field stays at the paper's own value. A white bump on a dark blue box has
+ * nothing bright around it and does count.
+ */
+export function brightBlobs(rgba, width, height, area, options = {}) {
+  const { riseMin = 40, minArea = 30, blur = 15, floorMin = 140, require: requirePixel = null } = options
+  const x0 = Math.max(0, Math.floor(area.x0))
+  const y0 = Math.max(0, Math.floor(area.y0))
+  const x1 = Math.min(width, Math.ceil(area.x1))
+  const y1 = Math.min(height, Math.ceil(area.y1))
+  const at = (x, y) => luma(rgba, (y * width + x) * 4)
+  const half = Math.max(1, Math.round(blur / 2))
+  const mask = new Uint8Array(width * height)
+  const window = []
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      if (requirePixel && !requirePixel(x, y)) continue
+      const here = at(x, y)
+      // Below this a pixel cannot be a white lump, and the median is the
+      // expensive part of the walk.
+      if (here < floorMin) continue
+      let n = 0
+      let clean = true
+      let dark = 0
+      window.length = 0
+      for (let dy = -half; dy <= half && clean; dy++) {
+        const yy = y + dy
+        if (yy < 0 || yy >= height) continue
+        for (let dx = -half; dx <= half; dx++) {
+          const xx = x + dx
+          if (xx < 0 || xx >= width) continue
+          // A blob only counts when its whole neighbourhood is the same kind of
+          // surface. Otherwise the bright side of every silhouette against the
+          // dark wall would read as an artifact.
+          if (requirePixel && !requirePixel(xx, yy)) {
+            clean = false
+            break
+          }
+          const value = at(xx, yy)
+          if (value < 60) dark += 1
+          window.push(value)
+          n += 1
+        }
+      }
+      if (!clean || !n) continue
+      // A line drawing puts ink through the window; that is a different
+      // structure, and the hatch comparison already covers it.
+      if (dark * 8 > n) continue
+      window.sort((a, b) => a - b)
+      const median = window[n >> 1]
+      if (here - median < riseMin) continue
+      mask[y * width + x] = 1
+    }
+  }
+  const blobs = []
+  for (const blob of components(mask, width, height)) {
+    if (blob.count < minArea) continue
+    let peak = 0
+    for (let y = blob.y0; y <= blob.y1; y++) {
+      for (let x = blob.x0; x <= blob.x1; x++) {
+        if (mask[y * width + x]) peak = Math.max(peak, at(x, y))
+      }
+    }
+    blobs.push({ count: blob.count, x0: blob.x0, y0: blob.y0, x1: blob.x1, y1: blob.y1, peak: Number(peak.toFixed(1)) })
+  }
+  return blobs
+}
+
+/** Value at a percentile of an ascending array, 0–1. */
+export function percentile(sorted, p) {
+  if (!sorted.length) return null
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.round((sorted.length - 1) * p)))
+  return sorted[index]
+}

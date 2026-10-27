@@ -96,6 +96,10 @@ jobs:
       - run: npm ci
       - name: gallery metrics
         run: npx tsx scripts/gallery-metrics.mjs --check
+        env:
+          # The manga hatch is compared against the legacy raster, which stays in
+          # the private renderer repo so no retired output is published here.
+          FLEXLAYER_LEGACY_REFERENCE: ${{ github.workspace }}/vendor/flexlayer-render/docs/quality/legacy-reference
       - name: gallery sheets
         run: npm run gallery:3d
       - uses: actions/upload-artifact@v4

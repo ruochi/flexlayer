@@ -1,5 +1,5 @@
 <layer width="880" height="572" background="#241f1b" color="#f4efe6" font-family="ChillDuanSans" min-font="16" safe="0">
-  <layer x="0" y="0" width="880" height="540" camera="fov 30, orbit 28 32, distance 1180, at 550 630 0" quality="draft">
+  <layer x="0" y="0" width="880" height="540" camera="fov 30, orbit 28 34, distance 1180, at 520 640 0" quality="draft">
     <ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="40" shadow-opacity="0.5" />
     <layer x="70" y="530" width="960" height="400" origin="480 0" rotateX="90" preserve-3d>
       <rect id="plinth" x="90" y="8" width="740" height="12" depth="170" rx="3" fill="#f6f2ea" />
@@ -16,7 +16,7 @@
       <layer x="400" y="230">
         <path id="hole" d="M0 0 H120 V84 H0 Z M28 18 V66 H92 V18 Z" depth="14" fill="#1f8a5b" material="plastic 0.3" />
       </layer>
-      <torus id="neon" cx="180" cy="250" r="40" tube="10" z="12" fill="#3ad8ff" material="neon" rotateX="72" />
+      <torus id="neon" cx="352" cy="300" r="40" tube="10" z="12" fill="#3ad8ff" material="neon" rotateX="0" />
       <sphere id="lamp" cx="860" cy="40" r="18" z="150" material="lamp" />
     </layer>
   </layer>

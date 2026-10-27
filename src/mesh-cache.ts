@@ -274,6 +274,9 @@ export function meshSceneCacheKey(scene: MeshCacheScene): string | null {
     scene.layer.environment ?? 'studio',
     scene.layer.tonemap ?? 'neutral',
     scene.layer.quality ?? 'draft',
+    // A wider shadow map changes the pixels even though the geometry is the
+    // same, so it belongs in the key next to the other render settings.
+    String(qnum(scene.layer.shadowScale ?? 1)),
     scene.layer.lights ? JSON.stringify(scene.layer.lights) : '',
     scene.layer.dof ? `dof ${qnum(scene.layer.dof.aperture)} ${qnum(scene.layer.dof.focus)} ${qnum(scene.layer.dof.maxBlur)}` : 'dof',
     String(qnum(scene.layer.width)),

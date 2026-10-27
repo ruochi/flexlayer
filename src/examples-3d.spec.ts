@@ -106,3 +106,78 @@ describe('带 camera 的 examples', () => {
     }
   }, 60000)
 })
+
+describe('材质粗糙度', () => {
+  /**
+   * Bright-highlight area on the finish cell's sphere, at a fixed luma cut. The
+   * cell is the gallery one because the finish only reads under the lamp there:
+   * a bare sphere on paper is flat at every roughness, so the comparison has to
+   * run on the lit scene.
+   */
+  async function highlight(cell: string): Promise<number> {
+    const source = readFileSync(join(root, 'docs', 'gallery', '3d', `${cell}.layer`), 'utf8')
+    const painted = await renderLayer(source, { baseDir: join(root, 'docs', 'gallery', '3d'), format: 'rgba', meshCache: false })
+    const ink = painted.report?.elements?.find((el) => el.tag === 'sphere')?.ink
+    if (!ink) return 0
+    let area = 0
+    for (let y = Math.ceil(ink.y); y < Math.floor(ink.y + ink.height); y++) {
+      for (let x = Math.ceil(ink.x); x < Math.floor(ink.x + ink.width); x++) {
+        const i = (y * painted.width + x) * 4
+        const luma = 0.2126 * painted.rgba[i]! + 0.7152 * painted.rgba[i + 1]! + 0.0722 * painted.rgba[i + 2]!
+        if (luma >= 200) area += 1
+      }
+    }
+    return area
+  }
+
+  // A rougher finish spreads its highlight over more pixels: the specular lobe
+  // widens and dims, so a fixed cut sees a bigger patch. If roughness only moved
+  // the peak brightness the pairs would be indistinguishable at a glance, which
+  // is what the gallery review reported.
+  it('plastic 的高光面积随粗糙度增大', async () => {
+    expect(await highlight('3d-mat-plastic-0-85')).toBeGreaterThan(await highlight('3d-mat-plastic-0-12'))
+  }, 60000)
+
+  it('metal 的高光面积随粗糙度增大', async () => {
+    expect(await highlight('3d-mat-metal-0-8')).toBeGreaterThan(await highlight('3d-mat-metal-0-08'))
+  }, 60000)
+
+  it('glass 的高光面积随粗糙度增大', async () => {
+    expect(await highlight('3d-mat-glass-0-72')).toBeGreaterThan(await highlight('3d-mat-glass-0-06'))
+  }, 60000)
+})
+
+describe('brushed 的条纹', () => {
+  it('盒面上有一组密集的平行细纹', async () => {
+    // Q5: stripes used to be sampled along the sphere's local y at frequency
+    // 0.12, which on a sphere is latitude: the finish came out as a few broad
+    // concentric rings and read as wood grain. Sampling across the brush
+    // direction at 0.55 gives many narrow bands, so a scan across a box face
+    // crosses far more light/dark alternations than the old finish did.
+    const source = readFileSync(join(root, 'docs', 'gallery', '3d', '3d-mat-brushed.layer'), 'utf8')
+    const painted = await renderLayer(source, { baseDir: join(root, 'docs', 'gallery', '3d'), format: 'rgba', meshCache: false })
+    const ink = painted.report?.elements?.find((el) => el.id === 'box')?.ink
+    expect(ink).toBeTruthy()
+    const luma = (x: number, y: number) => {
+      const i = (y * painted.width + x) * 4
+      return 0.2126 * painted.rgba[i]! + 0.7152 * painted.rgba[i + 1]! + 0.0722 * painted.rgba[i + 2]!
+    }
+    // The box has several faces, so the scan is taken on whichever axis carries
+    // the bands; both are counted and the stronger one is graded.
+    const bands = (dx: number, dy: number) => {
+      const cx = Math.round(ink!.x + ink!.width / 2)
+      const cy = Math.round(ink!.y + ink!.height / 2)
+      const r = Math.floor(Math.min(ink!.width, ink!.height) / 3)
+      let n = 0
+      let prev = 0
+      for (let t = -r; t <= r; t++) {
+        const d = luma(cx + dx * t, cy + dy * t) - luma(cx + dx * (t - 1), cy + dy * (t - 1))
+        const sign = d > 0.5 ? 1 : d < -0.5 ? -1 : 0
+        if (sign !== 0 && prev !== 0 && sign !== prev) n += 1
+        if (sign !== 0) prev = sign
+      }
+      return n
+    }
+    expect(Math.max(bands(1, 0), bands(0, 1))).toBeGreaterThan(18)
+  }, 60000)
+})

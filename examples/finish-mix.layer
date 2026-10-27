@@ -1,15 +1,15 @@
 <layer width="1760" height="820" background="#12141a" color="#f4efe6" font-family="ChillDuanSans" safe="0">
   <layer camera="1600" width="1760" height="820">
-    <ground y="620" rotateX="74" fill="#22252e" />
+    <ground y="620" rotateX="74" fill="#22252e" shadow-blur="42" shadow-opacity="0.55" />
 
-    <rect x="72" y="340" width="200" height="160" depth="160" rx="8" fill="#d9d3c7" rotateY="-18" />
-    <sphere cx="430" cy="434" r="86" fill="#c45a3a" material="clay" />
-    <sphere cx="640" cy="476" r="44" fill="#f3f1ec" material="plastic 0.22" />
-    <circle cx="820" cy="400" r="46" depth="240" fill="#eef3f8" material="glass 0.1" rotateX="90" />
-    <rect x="940" y="390" width="190" height="120" depth="100" rx="24" fill="#2a6fbe" material="plastic" rotateY="24" rotateX="-8" />
-    <sphere cx="1260" cy="464" r="56" fill="#8b939c" material="metal 0.72" />
-    <circle cx="1450" cy="390" r="50" depth="260" fill="#c86a3e" material="brushed" rotateX="90" />
-    <sphere cx="1640" cy="442" r="78" fill="#e4b33a" material="mirror" />
+    <rect x="72" y="450" width="200" height="160" depth="160" rx="8" fill="#d9d3c7" rotateY="-18" />
+    <sphere cx="430" cy="536" r="86" fill="#c45a3a" material="clay" />
+    <sphere cx="640" cy="574" r="44" fill="#f3f1ec" material="plastic 0.22" />
+    <circle cx="820" cy="560" r="46" depth="240" fill="#eef3f8" material="glass 0.1" rotateX="90" />
+    <rect x="940" y="500" width="190" height="120" depth="100" rx="24" fill="#2a6fbe" material="plastic" rotateY="24" rotateX="-8" />
+    <sphere cx="1260" cy="562" r="56" fill="#8b939c" material="metal 0.72" />
+    <circle cx="1450" cy="566" r="50" depth="260" fill="#c86a3e" material="brushed" rotateX="90" />
+    <sphere cx="1640" cy="540" r="78" fill="#e4b33a" material="mirror" />
   </layer>
 
   <layer x="64" y="32" anchor-box="ink">

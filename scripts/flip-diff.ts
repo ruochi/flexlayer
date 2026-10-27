@@ -26,20 +26,23 @@ function linearToLab(r: number, g: number, b: number): number[] {
   return [116 * fy - 16, 500 * (f(x / 0.95047) - fy), 200 * (fy - f(z / 1.08883))]
 }
 
-/** 两张同尺寸图的平均 FLIP。`accept` 为假的像素不计入。 */
-export function meanFlip(
+/** 两张同尺寸图的逐像素 FLIP，`accept` 为假的像素记 NaN。热图直接用它上色。 */
+export function flipValues(
   a: Uint8Array,
   b: Uint8Array,
   w: number,
   h: number,
   accept?: (x: number, y: number) => boolean,
-): number | null {
-  let sum = 0
-  let n = 0
+): Float32Array {
+  const out = new Float32Array(w * h)
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      if (accept && !accept(x, y)) continue
-      const i = (y * w + x) * 4
+      const index = y * w + x
+      if (accept && !accept(x, y)) {
+        out[index] = Number.NaN
+        continue
+      }
+      const i = index * 4
       const labA = linearToLab(srgbToLinear(a[i]!), srgbToLinear(a[i + 1]!), srgbToLinear(a[i + 2]!))
       const labB = linearToLab(srgbToLinear(b[i]!), srgbToLinear(b[i + 1]!), srgbToLinear(b[i + 2]!))
       let color = hyab(labA, labB) / 100
@@ -62,9 +65,27 @@ export function meanFlip(
         feature = Math.min(1, Math.abs(ga - gb) / (255 * 4))
       }
       const value = color ** 0.7 * (1 - feature) + feature ** 0.4
-      sum += Math.min(1, value)
-      n += 1
+      out[index] = Math.min(1, value)
     }
+  }
+  return out
+}
+
+/** 两张同尺寸图的平均 FLIP。`accept` 为假的像素不计入。 */
+export function meanFlip(
+  a: Uint8Array,
+  b: Uint8Array,
+  w: number,
+  h: number,
+  accept?: (x: number, y: number) => boolean,
+): number | null {
+  const values = flipValues(a, b, w, h, accept)
+  let sum = 0
+  let n = 0
+  for (const value of values) {
+    if (Number.isNaN(value)) continue
+    sum += value
+    n += 1
   }
   return n > 0 ? sum / n : null
 }
