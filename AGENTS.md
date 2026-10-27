@@ -22,7 +22,7 @@ Three differences from a web page:
 - HTML writes `style`. `layer` and shapes write attributes.
 - Tags are lowercase. Layout lengths are pixels. The y axis points down.
 
-HTML, flex, and SVG geometry follow their own standards. Below, only the deviations. Full prose is in [SPEC.md](SPEC.md). One page of syntax is [docs/CHEATSHEET.md](docs/CHEATSHEET.md). Fonts and palettes are in [docs/RESOURCES.md](docs/RESOURCES.md). Sample pictures are in [docs/GALLERY.md](docs/GALLERY.md). The 3D plates are in [docs/GALLERY-3D.md](docs/GALLERY-3D.md). Attribute syntax, one name at a time, is [docs/attrs.json](docs/attrs.json).
+HTML, flex, and SVG geometry follow their own standards. Below, only the deviations. Full prose is in [SPEC.md](SPEC.md). One page of syntax is [docs/CHEATSHEET.md](docs/CHEATSHEET.md). Fonts and palettes are in [docs/RESOURCES.md](docs/RESOURCES.md). Sample pictures are in [docs/GALLERY.md](docs/GALLERY.md). The 3D plates are in [docs/GALLERY-3D.md](docs/GALLERY-3D.md). Attribute syntax, one name at a time, is [docs/attrs.json](docs/attrs.json). How a 3D change is accepted is [docs/PROPOSALS.md](docs/PROPOSALS.md).
 
 ## What it can do beyond a web page
 
@@ -180,6 +180,9 @@ HTML and `display:flex` render as CSS. Defaults are not copied here.
 
 ## Repository
 
+- This repo is public. It carries the standard, the prose, and the built binaries. Work in progress does not go here: quality proposals, cell-by-cell scoring, defect lists, reference renders, and the working scripts behind them live in `flexlayer-render` under `docs/quality/`. Commit there first, and keep a measured change out of this repo until it is one.
+- A script belongs here only when it is the check itself: what it measures and the gate it enforces at most. Keep its tuning notes, threshold calibration, and before/after evidence in `flexlayer-render/docs/quality/`.
+- `test/golden/manga-hatch.png` is gone. The manga hatch is compared against the legacy raster in `flexlayer-render/docs/quality/legacy-reference/`, resolved at run time through `FLEXLAYER_LEGACY_REFERENCE`; CI points that variable at the vendored renderer checkout. A missing reference fails `--check` instead of passing quietly, so no copy of a retired renderer's output is committed here.
 - Use font names from [docs/RESOURCES.md](docs/RESOURCES.md). Do not invent font-file URLs. A photo, a real object, or a material comes from the asset service, not from a URL you make up.
 - Implementation notes are in [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md). Picking and author lights are not built yet. See [docs/proposals/3D.md](docs/proposals/3D.md). three.js geometry goes through `<model object>`.
 - Automation: `npm test`, `npm run gallery`, `npm run gallery:3d`. The 3D gates are `npx tsx scripts/gallery-metrics.mjs --check`, `npx tsx scripts/check-golden.mjs`, and the budget pair `npx tsx scripts/bench-3d.mjs --out bench-3d.json` then `npx tsx scripts/check-budget.mjs bench-3d.json`. `bench-3d` refuses a scene whose report carries an error, so an unknown tag cannot pass for a rendered picture.

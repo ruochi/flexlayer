@@ -4398,6 +4398,10 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
     })
   }
   const chosenQuality = layerQuality(quality, hostsCamera || perspective != null, ctx)
+  // Only the grader sets this, to hold a reference shadow at four times the
+  // resolution. Anything below 1 is the same as absent.
+  const shadowScaleRaw = node.attrs['shadow-scale']
+  const shadowScale = shadowScaleRaw != null && Number(shadowScaleRaw) > 1 ? Number(shadowScaleRaw) : undefined
   const laid: LayerLayoutNode = {
     kind: 'layer',
     path: ctx.pathPrefix,
@@ -4427,6 +4431,7 @@ function layoutLayer(node: LayerNode, ctx: LayoutContext): LayerLayoutNode {
     ...(tonemap && tonemap !== 'neutral' ? { tonemap: tonemap as 'agx' | 'none' } : {}),
     ...(lightSpace ? { lightSpace: lightSpace as 'world' | 'camera' } : {}),
     ...(chosenQuality ? { quality: chosenQuality } : {}),
+    ...(shadowScale ? { shadowScale } : {}),
     ...sharpOf(node.attrs, ctx),
     ...(preserve.value ? { preserve3d: true } : {}),
     ...(mask ? { mask } : {}),

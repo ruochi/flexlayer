@@ -1,0 +1,107 @@
+name: release binaries
+
+# Builds the three platform addons from one renderer commit and writes the
+# commit into BUILD.json. The `kernel` workflow's `addon` job only loads what is
+# committed, so without this a stale or mixed set of binaries is all it can see.
+#
+# Manual: run from the Actions tab. The run leaves the binaries and a BUILD.json
+# as artifacts; it does not push. Publishing is a separate, deliberate step.
+#
+# The renderer is private, so RENDER_REPO_TOKEN has to be a fine-grained PAT with
+# read access to ruochi/flexlayer-render only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      render_ref:
+        description: Renderer commit or branch to build
+        required: false
+        default: main
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            addon: flexlayer-render.darwin-arm64.node
+          - os: ubuntu-latest
+            addon: flexlayer-render.linux-x64-gnu.node
+          - os: windows-latest
+            addon: flexlayer-render.win32-x64-msvc.node
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ruochi/flexlayer-render
+          ref: ${{ inputs.render_ref || 'main' }}
+          token: ${{ secrets.RENDER_REPO_TOKEN }}
+          path: renderer
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: dtolnay/rust-toolchain@1.88.0
+      - name: build
+        working-directory: renderer
+        shell: bash
+        run: |
+          npm ci
+          npx napi build --platform --release
+      - name: record the commit and the engine string
+        working-directory: renderer
+        shell: bash
+        run: |
+          commit=$(git rev-parse HEAD)
+          dirty=$(git status --porcelain | wc -l | tr -d ' ')
+          # The engine string is what the loaded addon reports about itself; the
+          # addon job compares it with this manifest, so it has to come from the
+          # binary rather than from a guess.
+          node -e "
+            const n = require('./index.cjs');
+            const out = { commit: '$commit', dirty: $dirty > 0 };
+            if (typeof n.engine === 'function') out.engine = n.engine();
+            require('fs').writeFileSync('build-entry.json', JSON.stringify(out, null, 2));
+          "
+          cat build-entry.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.addon }}
+          path: |
+            renderer/${{ matrix.addon }}
+            renderer/build-entry.json
+          if-no-files-found: error
+
+  # Collects the three artifacts into one BUILD.json and fails if they disagree,
+  # so a mixed set never looks publishable.
+  manifest:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: merge
+        shell: bash
+        run: |
+          node -e "
+            const fs = require('fs');
+            const names = ['flexlayer-render.darwin-arm64.node','flexlayer-render.linux-x64-gnu.node','flexlayer-render.win32-x64-msvc.node'];
+            const binaries = {};
+            const commits = new Set();
+            for (const name of names) {
+              const entry = JSON.parse(fs.readFileSync('out/' + name + '/build-entry.json', 'utf8'));
+              binaries[name] = entry;
+              commits.add(entry.commit);
+            }
+            if (commits.size !== 1) {
+              console.error('binaries came from ' + commits.size + ' commits: ' + [...commits].join(', '));
+              process.exit(1);
+            }
+            fs.writeFileSync('out/BUILD.json', JSON.stringify({ binaries }, null, 2) + '\n');
+            console.log(fs.readFileSync('out/BUILD.json', 'utf8'));
+          "
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BUILD.json
+          path: out/BUILD.json

@@ -11,7 +11,7 @@ import { formatIssueLine } from '../src/report.js'
 const BENCH_W = 880
 const BENCH_H = 540
 /** 长边不能超过 1920，所以对照格用这一档。distance 把同一组几何收进这个取景。 */
-const BENCH_CAMERA = 'fov 30, orbit 28 32, distance 1180, at 550 630 0'
+const BENCH_CAMERA = 'fov 30, orbit 28 34, distance 1180, at 520 640 0'
 
 function bench(camera = BENCH_CAMERA, extra = ''): string {
   const attrs = extra ? ` ${extra}` : ''
@@ -32,7 +32,7 @@ function bench(camera = BENCH_CAMERA, extra = ''): string {
       <layer x="400" y="230">
         <path id="hole" d="M0 0 H120 V84 H0 Z M28 18 V66 H92 V18 Z" depth="14" fill="#1f8a5b" material="plastic 0.3" />
       </layer>
-      <torus id="neon" cx="180" cy="250" r="40" tube="10" z="12" fill="#3ad8ff" material="neon" rotateX="72" />
+      <torus id="neon" cx="352" cy="300" r="40" tube="10" z="12" fill="#3ad8ff" material="neon" rotateX="0" />
       <sphere id="lamp" cx="860" cy="40" r="18" z="150" material="lamp" />
     </layer>
   </layer>`
@@ -191,17 +191,24 @@ function cluster(finish: Finish): string {
 }
 
 function lines(): string {
-  return `<layer width="1180" height="680" camera="fov 36, orbit 32 22, distance 1120, at 640 440 0">
-    <layer x="70" y="30" width="1040" height="600" rotateX="56" preserve-3d>
-      <rect x="40" y="70" width="260" height="190" depth="110" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
-      <cylinder cx="170" cy="165" r="48" height="280" fill="#e7d3a8" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
-      <rect x="390" y="80" width="210" height="150" depth="96" rx="26" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" rotateY="-26" />
-      <cylinder cx="740" cy="175" r="44" height="200" rx="14" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
-      <sphere cx="960" cy="160" r="62" fill="none" stroke="#1c1915" stroke-width="3 2 1" />
-      <layer x="400" y="280">
-        <path d="M0 0 H160 V108 H0 Z M40 26 V82 H120 V26 Z" depth="28" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
-      </layer>
-      <tube x="48" y="340" d="M0 16 H180 V140" r="14" fill="none" stroke="#1c1915" stroke-width="3 2 1" halo="8" />
+  // The right sphere sat furthest from the camera and the top row ran into the
+  // title; the cell read as three objects on the left and an empty right third.
+  // Pulling the orbit back and raising `at` gives the row a floor to sit on and
+  // brings the sphere in to the same weight as the cylinder.
+  // The 56 degree tilt foreshortened the plane to 470*cos(56) = 263 px inside a
+  // 516 px frame, so the bottom 60% of the plate was bare paper. Sweeping the
+  // camera height against the tilt put `at` at 275 with a 32 degree tilt: the
+  // lowest solid now ends 24.5% above the frame bottom and the highest starts 18%
+  // below the top, which is the tightest the row goes before the top clips.
+  return `<layer width="1180" height="516" camera="fov 36, orbit 34 20, distance 1240, at 660 275 0">
+    <layer x="70" y="30" width="1040" height="560" rotateX="32" preserve-3d>
+      <rect x="40" y="20" width="235" height="170" depth="110" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
+      <rect x="470" y="50" width="150" height="120" depth="70" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
+      <rect x="730" y="20" width="195" height="150" depth="96" rx="26" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" rotateY="-26" />
+      <cylinder cx="180" cy="360" r="48" height="300" fill="#e7d3a8" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
+      <sphere cx="470" cy="430" r="62" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
+      <cylinder cx="700" cy="360" r="44" height="220" rx="14" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
+      <tube x="820" y="380" d="M0 16 H130 V110" r="14" fill="none" stroke="#1c1915" stroke-width="3 2 1" halo="8" />
     </layer>
   </layer>`
 }
@@ -254,7 +261,7 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
     source: page({
       title: '线稿',
       width: 1180,
-      height: 480,
+      height: 568,
       background: '#f3efe6',
       color: '#1c1915',
       caption: '交界线 · 隐藏线 · 圆角 · 洞 · halo',

@@ -99,6 +99,14 @@ describe('网格场景缓存键', () => {
     expect(second).not.toBe(first)
   })
 
+  it('阴影图倍数进了键：加宽参考图不会复用成片的像素', async () => {
+    const plain = await keyOf(box())
+    const wide = await keyOf(box().replace('camera="500"', 'shadow-scale="4" camera="500"'))
+    expect(plain).toBeTruthy()
+    expect(wide).toBeTruthy()
+    expect(wide).not.toBe(plain)
+  })
+
   it('平面里有 canvas 时不缓存', async () => {
     const source = `
       <layer width="80" height="80" background="#000" camera="300">

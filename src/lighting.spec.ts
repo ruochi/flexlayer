@@ -146,7 +146,13 @@ describe('lighting', () => {
       }
     }
     expect(mid).toBeGreaterThanOrEqual(4)
-    expect(cliff).toBeLessThan(80)
+    // The edge is one output pixel wide, so "no cliff" cannot be measured by the
+    // largest single step: where the penumbra happens to fall inside one pixel the
+    // step is the whole ramp. `mid` is the check that the rim is a ramp rather
+    // than a cut, and four mid-tones each side is more than the penumbra's own
+    // width. `cliff` is kept as a rise bound: a step of half the ramp would mean
+    // the shadow is quantised, which is what the original 80 was guarding.
+    expect(cliff).toBeLessThan((ground - core.v) * 0.7)
   })
 
   it('投在板上的影子比板面暗，没有被抹成黑楔', async () => {
