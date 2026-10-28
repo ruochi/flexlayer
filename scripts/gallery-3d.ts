@@ -33,7 +33,7 @@ function bench(camera = BENCH_CAMERA, extra = ''): string {
         <path id="hole" d="M0 0 H120 V84 H0 Z M28 18 V66 H92 V18 Z" depth="14" fill="#1f8a5b" material="plastic 0.3" />
       </layer>
       <torus id="neon" cx="352" cy="300" r="40" tube="10" z="12" fill="#3ad8ff" material="neon" rotateX="0" />
-      <sphere id="lamp" cx="860" cy="40" r="18" z="150" material="lamp" />
+      <sphere id="lamp" cx="820" cy="50" r="18" z="150" material="lamp" />
     </layer>
   </layer>`
 }
