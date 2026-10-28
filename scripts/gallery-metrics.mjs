@@ -18,7 +18,7 @@ import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { renderLayer } from '../src/render.ts'
 import { meanFlip } from './flip-diff.ts'
 import { GATES, checkGates, metalLumaDelta, platformSlack } from './metrics-gates.mjs'
-import { brightBlobs, edgeStairShare, luma, percentile, steppedShare, straightSeams } from './metrics-image.mjs'
+import { brightBlobs, edgeStairShare, facetStripe, luma, materialFeatures, moireEnergy, percentile, steppedShare, straightSeams } from './metrics-image.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const repo = dirname(root)
@@ -1060,6 +1060,25 @@ for (let i = 0; i < MATERIAL_GRID.length; i++) {
   }
 }
 
+/** Per-cell material features on the sphere (QUALITY-4 §4.4). */
+const materialTraits = []
+for (const name of MATERIAL_GRID) {
+  const cell = rendered.get(name)
+  if (!cell) continue
+  const rect = bounds(cell.ids.get('sphere')?.ink, cell.width, cell.height)
+  if (!rect) continue
+  const accept = (x, y) => hit(rect, x, y)
+  const features = materialFeatures(cell.rgba, cell.width, cell.height, accept)
+  if (!features) continue
+  materialTraits.push({
+    cell: name,
+    highlightArea: round(features.highlightArea, 4),
+    highlightSharpness: round(features.highlightSharpness, 2),
+    darkFloor: round(features.darkFloor, 1),
+    anisotropy: round(features.anisotropy, 3),
+  })
+}
+
 const studio = rendered.get('3d-shade-studio')
 const technical = rendered.get('3d-shade-technical')
 const ratios = []
@@ -1460,6 +1479,10 @@ if (stillCell) {
     }
     objectBlobs.lampBloom = outside
   }
+  const goldRect = bounds(ids.get('gold')?.ink, stillCell.width, stillCell.height)
+  const goldStripe = goldRect
+    ? facetStripe(stillCell.rgba, stillCell.width, stillCell.height, (x, y) => hit(goldRect, x, y))
+    : null
   stillReport = {
     ...(floorStats(stillCell.rgba, stillCell.width, stillCell.height, ids) ?? {}),
     objectBlobs,
@@ -1470,6 +1493,7 @@ if (stillCell) {
     },
     ...(stripeVisible(stillCell.rgba, stillCell.width, stillCell.height, ids, glassRect) ?? {}),
     ...(stillFrame(ids, cameraRect, cameraRect?.y0, stillCell.height) ?? {}),
+    goldFacetStripe: goldStripe == null ? null : round(goldStripe, 2),
   }
 }
 const mangaCell = rendered.get('3d-shade-manga')
@@ -1576,6 +1600,7 @@ const report = {
   emissive,
   still: stillReport,
   materials,
+  materialTraits,
   toon: rendered.get('3d-shade-toon')?.toon ?? null,
   manga: mangaCell?.paper ? { ...mangaCell.paper, hatchFlip } : null,
   technical: technicalReport,

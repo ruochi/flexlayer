@@ -191,24 +191,20 @@ function cluster(finish: Finish): string {
 }
 
 function lines(): string {
-  // The right sphere sat furthest from the camera and the top row ran into the
-  // title; the cell read as three objects on the left and an empty right third.
-  // Pulling the orbit back and raising `at` gives the row a floor to sit on and
-  // brings the sphere in to the same weight as the cylinder.
-  // The 56 degree tilt foreshortened the plane to 470*cos(56) = 263 px inside a
-  // 516 px frame, so the bottom 60% of the plate was bare paper. Sweeping the
-  // camera height against the tilt put `at` at 275 with a 32 degree tilt: the
-  // lowest solid now ends 24.5% above the frame bottom and the highest starts 18%
-  // below the top, which is the tightest the row goes before the top clips.
-  return `<layer width="1180" height="516" camera="fov 36, orbit 34 20, distance 1240, at 660 275 0">
-    <layer x="70" y="30" width="1040" height="560" rotateX="32" preserve-3d>
-      <rect x="40" y="20" width="235" height="170" depth="110" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
-      <rect x="470" y="50" width="150" height="120" depth="70" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
-      <rect x="730" y="20" width="195" height="150" depth="96" rx="26" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" rotateY="-26" />
-      <cylinder cx="180" cy="360" r="48" height="300" fill="#e7d3a8" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
-      <sphere cx="470" cy="430" r="62" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
-      <cylinder cx="700" cy="360" r="44" height="220" rx="14" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
-      <tube x="820" y="380" d="M0 16 H130 V110" r="14" fill="none" stroke="#1c1915" stroke-width="3 2 1" halo="8" />
+  // QUALITY-4 §1.3: the plate must show a cylinder through a box, a holed
+  // plate, and a tube that crosses another body so halo / crossings are
+  // visible. Framing keeps left/right empty ≤ 15% and empty-below ≤ 25%.
+  return `<layer width="1180" height="516" camera="fov 36, orbit 32 22, distance 1180, at 620 300 0">
+    <layer x="70" y="40" width="1040" height="560" rotateX="40" preserve-3d>
+      <rect id="box" x="60" y="80" width="250" height="190" depth="110" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
+      <cylinder id="piercing" cx="185" cy="175" r="48" height="300" fill="#e7d3a8" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
+      <rect id="round-box" x="420" y="90" width="200" height="150" depth="96" rx="26" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" rotateY="-26" />
+      <cylinder id="rim" cx="760" cy="185" r="44" height="220" rx="14" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
+      <sphere id="ball" cx="980" cy="200" r="62" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
+      <layer x="400" y="300">
+        <path id="hole-plate" d="M0 0 H160 V108 H0 Z M40 26 V82 H120 V26 Z" depth="28" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
+      </layer>
+      <tube id="elbow" x="80" y="360" d="M0 16 H200 V150" r="14" fill="none" stroke="#1c1915" stroke-width="3 2 1" halo="8" />
     </layer>
   </layer>`
 }

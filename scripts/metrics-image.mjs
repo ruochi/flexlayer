@@ -304,3 +304,210 @@ export function percentile(sorted, p) {
   const index = Math.min(sorted.length - 1, Math.max(0, Math.round((sorted.length - 1) * p)))
   return sorted[index]
 }
+
+/**
+ * Continuity of a 1px bevel / highlight row along an edge.
+ *
+ * `samples` is the luma sequence taken every pixel along the edge. A broken
+ * sub-pixel bevel reads as a large standard deviation and a periodic FFT peak
+ * (the macbook base front edge used to beat at 10 px). Returns `{ mean, sd, cv,
+ * peakShare }` where `peakShare` is the strongest 2–20 px period as a share of
+ * the mean. Null when the row is too short.
+ */
+export function edgeLineCv(samples) {
+  if (!samples || samples.length < 16) return null
+  const n = samples.length
+  let sum = 0
+  for (const v of samples) sum += v
+  const mean = sum / n
+  if (!(mean > 1e-6)) return null
+  let varSum = 0
+  for (const v of samples) varSum += (v - mean) ** 2
+  const sd = Math.sqrt(varSum / n)
+  let peak = 0
+  for (let period = 2; period <= 20; period++) {
+    let re = 0
+    let im = 0
+    const omega = (2 * Math.PI) / period
+    for (let i = 0; i < n; i++) {
+      const d = samples[i] - mean
+      re += d * Math.cos(omega * i)
+      im += d * Math.sin(omega * i)
+    }
+    peak = Math.max(peak, Math.hypot(re, im) / n)
+  }
+  return {
+    mean,
+    sd,
+    cv: sd / mean,
+    peakShare: peak / mean,
+  }
+}
+
+/**
+ * Share of energy above `cutoff` cycles per pixel inside a region.
+ *
+ * Built for speaker mesh, brushed grain, and clay speckles: when the texture
+ * period sits under two pixels the DFT dump above 0.35 cycle/px lights up.
+ * `accept(x, y)` selects the region. Returns null when fewer than 64 samples.
+ */
+export function moireEnergy(rgba, width, height, accept = () => true, cutoff = 0.35) {
+  const rows = []
+  for (let y = 1; y < height - 1; y++) {
+    const row = []
+    for (let x = 1; x < width - 1; x++) {
+      if (!accept(x, y)) continue
+      row.push({ x, y: luma(rgba, (y * width + x) * 4) })
+    }
+    if (row.length >= 32) rows.push(row)
+  }
+  if (rows.length < 8) return null
+  let total = 0
+  let high = 0
+  for (const row of rows) {
+    const n = row.length
+    let mean = 0
+    for (const p of row) mean += p.y
+    mean /= n
+    // One-dimensional DFT along the row; periods shorter than 1/cutoff px.
+    for (let k = 1; k < n / 2; k++) {
+      const freq = k / n
+      let re = 0
+      let im = 0
+      for (let i = 0; i < n; i++) {
+        const d = row[i].y - mean
+        const ang = (2 * Math.PI * k * i) / n
+        re += d * Math.cos(ang)
+        im += d * Math.sin(ang)
+      }
+      const power = (re * re + im * im) / (n * n)
+      total += power
+      if (freq >= cutoff) high += power
+    }
+  }
+  if (total < 1e-9) return 0
+  return high / total
+}
+
+/**
+ * Largest adjacent-pixel luma jump along a circumferential scan of a cylinder
+ * or sphere side. Faceted extrude walls light up as jumps of several code
+ * values; a smooth cylinder stays under 3. `accept` selects the body; the scan
+ * walks each row's accepted run and keeps the worst neighbour step.
+ */
+export function facetStripe(rgba, width, height, accept = () => true) {
+  let worst = 0
+  let samples = 0
+  for (let y = 1; y < height - 1; y++) {
+    let prev = null
+    for (let x = 1; x < width - 1; x++) {
+      if (!accept(x, y)) {
+        prev = null
+        continue
+      }
+      const here = luma(rgba, (y * width + x) * 4)
+      if (prev != null) {
+        worst = Math.max(worst, Math.abs(here - prev))
+        samples += 1
+      }
+      prev = here
+    }
+  }
+  return samples < 32 ? null : worst
+}
+
+/**
+ * Material-feature probes on a sphere (or any accept mask). Used to tell
+ * finishes apart when whole-cell FLIP only sees colour.
+ *
+ * - `highlightArea`: share of pixels at or above the 98th percentile
+ * - `highlightSharpness`: mean gradient on the highlight rim
+ * - `darkFloor`: 5th percentile luma
+ * - `anisotropy`: highlight bbox aspect (width / height), 1 when round
+ */
+export function materialFeatures(rgba, width, height, accept = () => true) {
+  const values = []
+  const coords = []
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (!accept(x, y)) continue
+      const yL = luma(rgba, (y * width + x) * 4)
+      values.push(yL)
+      coords.push(x, y)
+    }
+  }
+  if (values.length < 40) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const p98 = percentile(sorted, 0.98)
+  const darkFloor = percentile(sorted, 0.05)
+  let highlight = 0
+  let hx0 = width
+  let hy0 = height
+  let hx1 = -1
+  let hy1 = -1
+  for (let i = 0; i < values.length; i++) {
+    if (values[i] < p98) continue
+    highlight += 1
+    const x = coords[i * 2]
+    const y = coords[i * 2 + 1]
+    if (x < hx0) hx0 = x
+    if (y < hy0) hy0 = y
+    if (x > hx1) hx1 = x
+    if (y > hy1) hy1 = y
+  }
+  const highlightArea = highlight / values.length
+  let sharpSum = 0
+  let sharpN = 0
+  for (let i = 0; i < values.length; i++) {
+    if (values[i] < p98) continue
+    const x = coords[i * 2]
+    const y = coords[i * 2 + 1]
+    if (x < 1 || y < 1 || x >= width - 1 || y >= height - 1) continue
+    const gx = luma(rgba, (y * width + x + 1) * 4) - luma(rgba, (y * width + x - 1) * 4)
+    const gy = luma(rgba, ((y + 1) * width + x) * 4) - luma(rgba, ((y - 1) * width + x) * 4)
+    sharpSum += Math.hypot(gx, gy)
+    sharpN += 1
+  }
+  const bw = Math.max(1, hx1 - hx0 + 1)
+  const bh = Math.max(1, hy1 - hy0 + 1)
+  return {
+    highlightArea,
+    highlightSharpness: sharpN ? sharpSum / sharpN : 0,
+    darkFloor,
+    anisotropy: Math.max(bw, bh) / Math.min(bw, bh),
+  }
+}
+
+/**
+ * Structural similarity between two luma patches of equal size. Used for glass
+ * transmittance: clear glass keeps the stripes behind it (SSIM high), frosted
+ * glass washes them out (SSIM low).
+ */
+export function ssimLuma(a, b) {
+  if (!a || !b || a.length !== b.length || a.length < 16) return null
+  const n = a.length
+  let ma = 0
+  let mb = 0
+  for (let i = 0; i < n; i++) {
+    ma += a[i]
+    mb += b[i]
+  }
+  ma /= n
+  mb /= n
+  let va = 0
+  let vb = 0
+  let cov = 0
+  for (let i = 0; i < n; i++) {
+    const da = a[i] - ma
+    const db = b[i] - mb
+    va += da * da
+    vb += db * db
+    cov += da * db
+  }
+  va /= n
+  vb /= n
+  cov /= n
+  const c1 = (0.01 * 255) ** 2
+  const c2 = (0.03 * 255) ** 2
+  return ((2 * ma * mb + c1) * (2 * cov + c2)) / ((ma * ma + mb * mb + c1) * (va + vb + c2))
+}
