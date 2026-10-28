@@ -31,6 +31,14 @@ const goldenPath = join(repo, 'test/golden/gallery-metrics.json')
 // When it is unset the comparison is skipped and `hatchFlip` reads n/a.
 const legacyDir = process.env.FLEXLAYER_LEGACY_REFERENCE ?? null
 const legacyReference = legacyDir ? join(legacyDir, '3d-shade-manga.png') : null
+// Engine-local manga baseline (sibling of legacy-reference, or FLEXLAYER_ENGINE_BASELINE).
+// QUALITY-4 §1.2: FLIP vs the foreign f9628c0 legacy page is not a stable absolute
+// gate after framing changes and when the 0.144 calibration used a darwin addon
+// that did not match the published linux binary. Gate regressions against a PNG
+// rendered from this engine instead; still report the legacy FLIP for history.
+const engineBaselineDir = process.env.FLEXLAYER_ENGINE_BASELINE
+  ?? (legacyDir ? join(dirname(legacyDir), 'engine-baseline') : null)
+const engineMangaReference = engineBaselineDir ? join(engineBaselineDir, '3d-shade-manga.png') : null
 
 const args = new Set(process.argv.slice(2))
 const write = args.has('--write')
@@ -908,7 +916,7 @@ function printTable(report) {
   const df = report.draftFinal
   console.log(`draft/final luma delta ${df?.lumaDelta ?? 'n/a'}  flip ${df?.flip ?? 'n/a'}`)
   console.log(`blue-float recovered px ${report.floatGap ?? 'n/a'}`)
-  console.log(`manga paper Y ${report.manga?.paperY ?? 'n/a'} (page mean ${report.manga?.meanY ?? 'n/a'}, ${report.manga?.share ?? 'n/a'} of page)  grey ${report.manga?.grayShare ?? 'n/a'}  chroma ${report.manga?.chroma ?? 'n/a'}  hatch flip ${report.manga?.hatchFlip ?? 'n/a'}`)
+  console.log(`manga paper Y ${report.manga?.paperY ?? 'n/a'} (page mean ${report.manga?.meanY ?? 'n/a'}, ${report.manga?.share ?? 'n/a'} of page)  grey ${report.manga?.grayShare ?? 'n/a'}  chroma ${report.manga?.chroma ?? 'n/a'}  hatch flip legacy ${report.manga?.hatchFlip ?? 'n/a'} engine ${report.manga?.hatchFlipEngine ?? 'n/a'}`)
   if (report.lines) {
     console.log(`lines empty below ${report.lines.emptyBelow}  ink gap ${report.lines.inkGap}px ${report.lines.inkGapPair}  top gap ${report.lines.topGap}  solids ${report.lines.solids}`)
   }
@@ -1542,10 +1550,10 @@ async function readRgba(path) {
   return { rgba: ctx.getImageData(0, 0, image.width, image.height).data, width: image.width, height: image.height }
 }
 
-/** Object ink against the legacy manga page. */
-async function measureHatch(manga) {
-  if (!manga || !legacyReference || !existsSync(legacyReference)) return null
-  const frozen = await readRgba(legacyReference)
+/** Object-ink FLIP against a reference manga PNG (legacy or engine baseline). */
+async function measureHatchAgainst(manga, referencePath) {
+  if (!manga || !referencePath || !existsSync(referencePath)) return null
+  const frozen = await readRgba(referencePath)
   if (frozen.width !== manga.width || frozen.height !== manga.height) return null
   return round(meanFlip(manga.rgba, frozen.rgba, manga.width, manga.height, inkMask(manga)), 6)
 }
@@ -1629,7 +1637,8 @@ if (stillCell) {
   }
 }
 const mangaCell = rendered.get('3d-shade-manga')
-const hatchFlip = await measureHatch(mangaCell)
+const hatchFlip = await measureHatchAgainst(mangaCell, legacyReference)
+const hatchFlipEngine = await measureHatchAgainst(mangaCell, engineMangaReference)
 
 /**
  * `3d-lines` composition. The plate is a line-art sheet: the objects have to
@@ -1739,7 +1748,7 @@ const report = {
   glassSsim,
   materialPairDeltas,
   toon: rendered.get('3d-shade-toon')?.toon ?? null,
-  manga: mangaCell?.paper ? { ...mangaCell.paper, hatchFlip } : null,
+  manga: mangaCell?.paper ? { ...mangaCell.paper, hatchFlip, hatchFlipEngine } : null,
   technical: technicalReport,
   technicalHidden: technicalHiddenReport,
 }
