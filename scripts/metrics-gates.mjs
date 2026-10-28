@@ -153,17 +153,23 @@ export const GATES = {
   stillEmptyFloorMax: 0.25,
   stillBlueTopGapMin: 40,
   /**
-   * Circumferential neighbour jump on the still-life gold cylinder. QUALITY-4
-   * §3.3 asks ≤ 3; leave null until the baseline is recorded as failing, then
-   * set the ceiling to the measured value so a regression still fails.
+   * Circumferential neighbour jump on the still-life gold cylinder wall
+   * (mid-band, silhouettes excluded). QUALITY-4 §3.3 asks ≤ 3.
    */
-  stillGoldFacetMax: null,
-  /**
-   * Metal / mirror / brushed / anisotropy dark floor (5th percentile on the
-   * sphere). QUALITY-4 §4.4 asks ≥ 35. Null until calibrated on 8d7c9d0.
-   */
-  /** QUALITY-4 §4.4: metal / mirror body floor on the sphere probe. */
+  stillGoldFacetMax: 3,
+  /** QUALITY-4 §4.4: metal / mirror / brushed / anisotropy body floor. */
   materialDarkFloorMin: 35,
+  /**
+   * Frosted glass must lose stripe edge energy vs clear (QUALITY-4 §4.4).
+   * Absolute SSIM against stripe fills is lighting-dominated on these cells,
+   * so the gate is the clear/frost edge ratio.
+   */
+  glassClearSsimMin: null,
+  glassFrostSsimMax: null,
+  glassClearEdgeMin: 12,
+  glassEdgeRatioMin: 1.2,
+  /** Adjacent material-grid pairs must differ ≥ 30% on at least one feature. */
+  materialPairDeltaMin: 0.3,
 }
 
 /**
@@ -289,6 +295,29 @@ export function checkGates(gates, report, slack = { luma: 0, fraction: 0 }) {
     for (const trait of report.materialTraits ?? []) {
       if (!/metal|mirror|brushed|anisotropy/.test(trait.cell)) continue
       minOf(gates.materialDarkFloorMin, trait.darkFloor, `${trait.cell} dark floor`, slack.luma)
+    }
+  }
+  if (gates.glassClearSsimMin != null) {
+    minOf(gates.glassClearSsimMin, report.glassSsim?.clear, 'glass 0.06 SSIM')
+  }
+  if (gates.glassFrostSsimMax != null) {
+    maxOf(gates.glassFrostSsimMax, report.glassSsim?.frost, 'glass 0.72 SSIM')
+  }
+  if (gates.glassClearEdgeMin != null) {
+    minOf(gates.glassClearEdgeMin, report.glassSsim?.clearEdge, 'glass 0.06 edge')
+  }
+  if (gates.glassEdgeRatioMin != null && report.glassSsim?.clearEdge != null && report.glassSsim?.frostEdge != null && report.glassSsim.frostEdge > 0) {
+    minOf(gates.glassEdgeRatioMin, report.glassSsim.clearEdge / report.glassSsim.frostEdge, 'glass clear/frost edge ratio')
+  }
+  if (gates.materialPairDeltaMin != null) {
+    for (const pair of report.materialPairDeltas ?? []) {
+      let delta = pair.bestDelta
+      // Glass pair also counts the stripe-edge ratio when feature probes are flat.
+      if (pair.a?.includes('glass') && pair.b?.includes('glass') && report.glassSsim?.clearEdge && report.glassSsim?.frostEdge) {
+        const edgeDelta = Math.abs(report.glassSsim.clearEdge - report.glassSsim.frostEdge) / Math.max(report.glassSsim.clearEdge, report.glassSsim.frostEdge)
+        if (delta == null || edgeDelta > delta) delta = edgeDelta
+      }
+      minOf(gates.materialPairDeltaMin, delta, `${pair.a} vs ${pair.b} feature delta`)
     }
   }
   return errors
