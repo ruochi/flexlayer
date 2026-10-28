@@ -5,12 +5,14 @@
       "engine": "flexlayer-render/0.0.2+cap1080"
     },
     "flexlayer-render.linux-x64-gnu.node": {
-      "commit": "a33bf8f36f5540a51444bc831f903d3a76f2958a",
-      "engine": null
+      "commit": "874073655127d0d664a69107d3be948394997f5e",
+      "engine": "flexlayer-render/0.0.2+cap1080",
+      "dirty": false
     },
     "flexlayer-render.win32-x64-msvc.node": {
-      "commit": "f1075b772842e5c2c415bc387757019ea1375362",
-      "engine": null
+      "commit": "874073655127d0d664a69107d3be948394997f5e",
+      "engine": "flexlayer-render/0.0.2+cap1080",
+      "dirty": false
     }
   }
 }
