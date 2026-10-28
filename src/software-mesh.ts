@@ -602,8 +602,11 @@ function meshCentroid(positions: Float32Array): { x: number; y: number; z: numbe
  */
 export function bevelRadiusFromScale(scale: number, depth: number): number | null {
   if (!(scale > 1e-6)) return null
-  let r = 1 / scale
-  r = Math.min(r, Math.max(depth, 0) * 0.08)
+  // Target ~1.75 screen px so a long laptop lip stays continuous under
+  // perspective (1.0–1.5 still dashed on the base-front chord). Thin lids
+  // (depth 10) need up to ~0.12·depth to realise that on screen.
+  let r = 1.75 / scale
+  r = Math.min(r, Math.max(depth, 0) * 0.12)
   if (r * scale < 0.75 || r < 0.05) return null
   return r
 }
@@ -622,7 +625,10 @@ function paintGeometry(
   if (node.stroke !== 'none' || flatLook) return { positions, normals, indices }
   const mesh = node.mesh
   if (mesh.type === 'tube') return { positions, normals, indices }
-  if ((mesh.type === 'box' || mesh.type === 'cylinder') && mesh.rx > 0) return { positions, normals, indices }
+  // A box `rx` only rounds the vertical corners. The top/front crease of a
+  // laptop shell is still a hard 90° and needs the screen-scaled bevel
+  // (QUALITY-4 §2). Bevel on an already-rounded mesh is a no-op when no
+  // sharp crease remains.
   const depth = bevelDepth(node, positions)
   let radius = bevelRadius(depth)
   if (camera) {
