@@ -309,6 +309,30 @@ describe('glyph', () => {
     expect(bare[1]!.y - 12).toBeCloseTo(dot.ink!.y, 3)
   })
 
+  it('胶囊字按 g.ink.y 贴 pad，不按 HTML line-height 基线去减', async () => {
+    // Issue #27: inkOf used line.baseline (includes leading) + g.ink.y, then
+    // placed at inkTop - m.top. That sits the outlines high. Place by ink only.
+    if (!ready) return
+    const size = 40
+    const weight = 500
+    const pad = 10
+    const text = '杭州西湖'
+    const gs = glyph(text, { size, weight })
+    const inkTop = pad
+    let cursor = 0
+    const parts = gs.map((g) => {
+      const y = inkTop - g.ink!.y
+      const part = `<layer x="${cursor}" y="${y}"><path d="${g.d}" fill="#111111" stroke="none" /></layer>`
+      cursor += g.width
+      return part
+    })
+    const { report } = await renderLayer(`<layer width="400" height="120">${parts.join('')}</layer>`)
+    const paths = report.elements.filter((el) => el.tag === 'path')
+    expect(paths.length).toBe(gs.length)
+    const top = Math.min(...paths.map((el) => el.ink.y))
+    expect(top).toBeCloseTo(inkTop, 1)
+  })
+
   it('取出来的路径可以画进 layer', async () => {
     if (!ready) return
     const [chun] = glyph('春', { font: 'Kai', size: 120 })
