@@ -18,7 +18,7 @@ import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { renderLayer } from '../src/render.ts'
 import { meanFlip } from './flip-diff.ts'
 import { GATES, checkGates, metalLumaDelta, platformSlack } from './metrics-gates.mjs'
-import { brightBlobs, edgeStairShare, facetStripe, luma, materialFeatures, moireEnergy, percentile, steppedShare, straightSeams } from './metrics-image.mjs'
+import { brightBlobs, edgeStairShare, facetStripe, luma, materialFeatures, moireEnergy, percentile, ssimLuma, steppedShare, straightSeams } from './metrics-image.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const repo = dirname(root)
@@ -937,6 +937,14 @@ function printTable(report) {
   console.log(`technical/studio min chroma ratio ${report.technical?.minRatio ?? 'n/a'}  hidden ${report.technicalHidden?.count ?? 'n/a'} vs legacy ${report.technicalHidden?.legacy ?? 'n/a'} (${report.technicalHidden?.ratio ?? 'n/a'})`)
   const flips = report.materials.map((pair) => pair.flip).filter((value) => value != null)
   console.log(`material adjacent flip min ${flips.length ? Math.min(...flips) : 'n/a'}  n ${flips.length}`)
+  if (report.glassSsim) {
+    console.log(`glass SSIM clear ${report.glassSsim.clear ?? 'n/a'} frost ${report.glassSsim.frost ?? 'n/a'}`)
+  }
+  if (report.materialPairDeltas?.length) {
+    console.log(
+      `material pair deltas ${report.materialPairDeltas.map((p) => `${p.a.split('3d-mat-')[1]}/${p.b.split('3d-mat-')[1]}:${p.bestDelta}`).join(' ')}`,
+    )
+  }
   const weakest = report.materials
     .filter((pair) => pair.sphereFlip != null)
     .sort((a, b) => a.sphereFlip - b.sphereFlip)
@@ -1078,6 +1086,101 @@ for (const name of MATERIAL_GRID) {
     anisotropy: round(features.anisotropy, 3),
   })
 }
+
+/**
+ * Glass transmittance (QUALITY-4 §4.4): mean-matched SSIM of the sphere
+ * interior against the white-stripe vertical profile outside the sphere, plus
+ * horizontal edge energy (clear keeps stripe edges; frost washes them out).
+ */
+function glassTransmit(cell) {
+  const sphere = bounds(cell.ids.get('sphere')?.ink, cell.width, cell.height)
+  const white = bounds(cell.ids.get('stripe-white')?.ink, cell.width, cell.height)
+  if (!sphere || !white) return null
+  const cx = (sphere.x0 + sphere.x1) / 2
+  const cy = (sphere.y0 + sphere.y1) / 2
+  const r = Math.min(sphere.x1 - sphere.x0, sphere.y1 - sphere.y0) / 2
+  const x0 = Math.max(sphere.x0, white.x0)
+  const x1 = Math.min(sphere.x1, white.x1)
+  if (x1 - x0 < 3) return null
+  const profile = []
+  for (let y = sphere.y0; y < sphere.y1; y++) {
+    let sum = 0
+    let n = 0
+    for (let x = white.x0; x < white.x1; x++) {
+      if ((x - cx) ** 2 + (y - cy) ** 2 < r * r) continue
+      sum += luma(cell.rgba, (y * cell.width + x) * 4)
+      n += 1
+    }
+    profile.push(n ? sum / n : null)
+  }
+  const actual = []
+  const expected = []
+  let edge = 0
+  let edgeN = 0
+  for (let y = sphere.y0; y < sphere.y1; y++) {
+    const py = profile[y - sphere.y0]
+    if (py == null) continue
+    for (let x = x0; x < x1; x++) {
+      if ((x - cx) ** 2 + (y - cy) ** 2 > (r * 0.8) ** 2) continue
+      const yL = luma(cell.rgba, (y * cell.width + x) * 4)
+      actual.push(yL)
+      expected.push(py)
+      if (x > 0 && x < cell.width - 1) {
+        edge += Math.abs(luma(cell.rgba, (y * cell.width + x + 1) * 4) - luma(cell.rgba, (y * cell.width + x - 1) * 4))
+        edgeN += 1
+      }
+    }
+  }
+  if (actual.length < 24) return null
+  const mean = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length
+  const ma = mean(actual)
+  const mb = mean(expected)
+  const matched = actual.map((v) => v - ma + mb)
+  return {
+    ssim: ssimLuma(matched, expected),
+    edge: edgeN ? edge / edgeN : null,
+  }
+}
+
+const glassClear = rendered.get('3d-mat-glass-0-06')
+const glassFrost = rendered.get('3d-mat-glass-0-72')
+const glassClearT = glassClear ? glassTransmit(glassClear) : null
+const glassFrostT = glassFrost ? glassTransmit(glassFrost) : null
+const glassSsim = {
+  clear: glassClearT?.ssim != null ? round(glassClearT.ssim, 4) : null,
+  frost: glassFrostT?.ssim != null ? round(glassFrostT.ssim, 4) : null,
+  clearEdge: glassClearT?.edge != null ? round(glassClearT.edge, 2) : null,
+  frostEdge: glassFrostT?.edge != null ? round(glassFrostT.edge, 2) : null,
+}
+
+/** Adjacent material-grid pairs: at least one feature must move ≥ 30%. */
+const MATERIAL_PAIRS = [
+  ['3d-mat-plastic-0-12', '3d-mat-plastic-0-85'],
+  ['3d-mat-glass-0-06', '3d-mat-glass-0-72'],
+  ['3d-mat-metal-0-08', '3d-mat-metal-0-8'],
+  ['3d-mat-plastic-0-12', '3d-mat-clearcoat-1'],
+  ['3d-mat-metal-0-08', '3d-mat-anisotropy-0-9'],
+]
+function traitDelta(a, b) {
+  const keys = ['highlightArea', 'highlightSharpness', 'darkFloor', 'anisotropy']
+  let best = 0
+  for (const key of keys) {
+    if (a[key] == null || b[key] == null) continue
+    const d = Math.abs(a[key] - b[key]) / Math.max(Math.abs(a[key]), Math.abs(b[key]), 1e-6)
+    if (d > best) best = d
+  }
+  return best
+}
+const byCell = new Map(materialTraits.map((t) => [t.cell, t]))
+const materialPairDeltas = MATERIAL_PAIRS.map(([a, b]) => {
+  const A = byCell.get(a)
+  const B = byCell.get(b)
+  return {
+    a,
+    b,
+    bestDelta: A && B ? round(traitDelta(A, B), 4) : null,
+  }
+})
 
 const studio = rendered.get('3d-shade-studio')
 const technical = rendered.get('3d-shade-technical')
@@ -1480,8 +1583,33 @@ if (stillCell) {
     objectBlobs.lampBloom = outside
   }
   const goldRect = bounds(ids.get('gold')?.ink, stillCell.width, stillCell.height)
+  // Mid-band of the cylinder wall only — silhouettes jump 100+ and are not facets.
   const goldStripe = goldRect
-    ? facetStripe(stillCell.rgba, stillCell.width, stillCell.height, (x, y) => hit(goldRect, x, y))
+    ? facetStripe(
+        stillCell.rgba,
+        stillCell.width,
+        stillCell.height,
+        (x, y) => {
+          const cx = (goldRect.x0 + goldRect.x1) / 2
+          const cy = (goldRect.y0 + goldRect.y1) / 2
+          const r = Math.min(goldRect.x1 - goldRect.x0, goldRect.y1 - goldRect.y0) / 2
+          const d = Math.hypot(x - cx, y - cy)
+          if (d < r * 0.45 || d > r * 0.82) return false
+          const yL = luma(stillCell.rgba, (y * stillCell.width + x) * 4)
+          if (yL < 40 || yL > 230) return false
+          for (const [dx, dy] of [
+            [1, 0],
+            [-1, 0],
+            [0, 1],
+            [0, -1],
+          ]) {
+            const nY = luma(stillCell.rgba, ((y + dy) * stillCell.width + (x + dx)) * 4)
+            if (Math.abs(nY - yL) > 25) return false
+          }
+          return true
+        },
+        0.95,
+      )
     : null
   stillReport = {
     ...(floorStats(stillCell.rgba, stillCell.width, stillCell.height, ids) ?? {}),
@@ -1601,6 +1729,8 @@ const report = {
   still: stillReport,
   materials,
   materialTraits,
+  glassSsim,
+  materialPairDeltas,
   toon: rendered.get('3d-shade-toon')?.toon ?? null,
   manga: mangaCell?.paper ? { ...mangaCell.paper, hatchFlip } : null,
   technical: technicalReport,

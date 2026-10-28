@@ -395,9 +395,8 @@ export function moireEnergy(rgba, width, height, accept = () => true, cutoff = 0
  * values; a smooth cylinder stays under 3. `accept` selects the body; the scan
  * walks each row's accepted run and keeps the worst neighbour step.
  */
-export function facetStripe(rgba, width, height, accept = () => true) {
-  let worst = 0
-  let samples = 0
+export function facetStripe(rgba, width, height, accept = () => true, quantile = 1) {
+  const jumps = []
   for (let y = 1; y < height - 1; y++) {
     let prev = null
     for (let x = 1; x < width - 1; x++) {
@@ -406,14 +405,14 @@ export function facetStripe(rgba, width, height, accept = () => true) {
         continue
       }
       const here = luma(rgba, (y * width + x) * 4)
-      if (prev != null) {
-        worst = Math.max(worst, Math.abs(here - prev))
-        samples += 1
-      }
+      if (prev != null) jumps.push(Math.abs(here - prev))
       prev = here
     }
   }
-  return samples < 32 ? null : worst
+  if (jumps.length < 32) return null
+  if (!(quantile < 1)) return Math.max(...jumps)
+  const sorted = [...jumps].sort((a, b) => a - b)
+  return percentile(sorted, quantile)
 }
 
 /**
