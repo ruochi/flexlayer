@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.17.1
+
+`native/flexlayer-render` for linux-x64-gnu, darwin-arm64, and win32-x64-msvc is rebuilt from one `flexlayer-render` commit (`05cb34f`). All three report `flexlayer-render/0.0.2+cap1080`. `BUILD.json` names that same commit for each binary, so `addon-hash` passes again.
+
+Capsule cards that place `glyph().d` paths by HTML `line.baseline` plus `g.ink.y` (the Zhejiang `inkOf` helper) still sit high when `line-height` is above 1: the line baseline includes leading, so `inkTop - m.top` is too small. Place each outline so its own ink top meets the pad: `y = inkTop - g.ink.y`. Or follow SPEC and set `y` to `line.baseline - glyph.baseline` when matching an HTML line. See issue #27.
+
 ## 0.17.0
 
 A camera's `tonemap` and `environment` reach the 3D kernel. The default tonemap is neutral: a lamp pool is added in linear light and compressed instead of being clamped at 255. `tonemap="none"` keeps that byte clamp. `environment="none"` leaves the shaded color without the studio panels. Contact darkening on final no longer treats a sloped floor as an occluder, so draft and final share the open ground. A sharp ray reflection is kept for roughness under 0.12. Final no longer darkens open faces with a hemisphere occlusion; the shadow map still covers the seam. Draft and final both shade one sample per pixel and use the same shadow kernel. An authored roughness of 0 stays 0. A sitting body's contact is spread across the ground in front of it, and the first six ground pixels under a near silhouette stay dark instead of climbing straight back to the open floor. Pixels that are already a shadow well are left alone. Directional lights add a capped specular lobe on metal, and a dark metal body is lifted so it is not multiplied down to black. Rough glass turns milky; smooth glass keeps the sharp reflection. A lamp or neon core is lifted to luma 245, and a soft halo falls off around it. Pixels outside that core stay at or under 249. Toon and manga take the flat light split from the key light and the shadow map. Manga paper is the warm sheet, and technical keeps the studio color instead of being washed gray.
