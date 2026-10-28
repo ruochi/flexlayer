@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.17.2
+
+`native/flexlayer-render` is rebuilt from `flexlayer-render` commit `e72b234` (`0.0.2+cap1080`). `paint_ink` now follows `path` / `polygon` geometry for `kind: line` nodes instead of filling the axis-aligned box. A sized `<layer filter="drop-shadow(...)">` that groups white capsule paths no longer paints a rectangular semi-transparent veil over the layer box; the shadow follows content alpha again (same as 0.13.3 canvas filter behavior). The unlimited private build under `flexlayer-render/dist/unlimited` is rebuilt from the same commit.
+
 ## 0.17.1
 
 `native/flexlayer-render` for linux-x64-gnu, darwin-arm64, and win32-x64-msvc is rebuilt from one `flexlayer-render` commit (`05cb34f`). All three report `flexlayer-render/0.0.2+cap1080`. `BUILD.json` names that same commit for each binary, so `addon-hash` passes again.
