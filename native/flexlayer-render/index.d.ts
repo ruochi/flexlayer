@@ -239,6 +239,11 @@ export interface FillConfig {
   environment?: string
   /** Author lights. The first directional replaces the key. Absent keeps the studio pair. */
   lights?: Array<FillLight>
+  /**
+   * Multiplies the shadow map's edge before the memory cap. The grader uses
+   * 4 to hold a reference as smooth as the geometry allows; absent is 1.
+   */
+  shadowScale?: number
 }
 export interface FillLight {
   kind: string
