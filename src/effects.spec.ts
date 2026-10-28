@@ -268,6 +268,26 @@ describe('绘制', () => {
     expect(bad.issues.some((issue) => issue.message.includes('filter'))).toBe(true)
   })
 
+  it('layer 上的 drop-shadow 按 path 外形投影，不罩包围盒角', async () => {
+    // path 打成 kind:line；剪影若退成 AABB，圆角外的盒子角会被 drop-shadow 涂上。
+    const { png } = await renderLayer(
+      `<layer width="240" height="140" background="#f0ebe3" min-font="none">
+        <layer x="20" y="20" width="200" height="100" filter="drop-shadow(0 0 0 #ff0000cc)">
+          <path d="M 40 40 h 100 a 20 20 0 0 1 0 40 h -100 a 20 20 0 0 1 0 -40 z" fill="#ffffff" stroke="none" />
+        </layer>
+      </layer>`,
+    )
+    const { at } = await pixels(png)
+    const corner = at(40, 60)
+    const card = at(90, 80)
+    const bg = at(5, 5)
+    expect(card[0]).toBeGreaterThan(250)
+    expect(Math.abs(corner[0]! - bg[0]!)).toBeLessThan(8)
+    expect(Math.abs(corner[1]! - bg[1]!)).toBeLessThan(8)
+    expect(corner[0]!).toBeLessThan(250)
+    expect(corner[1]!).toBeGreaterThan(150)
+  })
+
   it('noise 与 blend 进入报告', async () => {
     const { report } = await renderLayer(
       `<layer width="60" height="60" background="#112233"><rect x="10" y="10" width="40" height="40" fill="#3ecfc4" noise="0.2" blend="multiply" inner-glow="10 #ffffff" /></layer>`,
