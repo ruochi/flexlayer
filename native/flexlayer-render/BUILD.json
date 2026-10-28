@@ -5,7 +5,7 @@
       "engine": "flexlayer-render/0.0.2+cap1080"
     },
     "flexlayer-render.linux-x64-gnu.node": {
-      "commit": "874073655127d0d664a69107d3be948394997f5e",
+      "commit": "47dcabbed23aad210bd8eadc4a2bc2eae7a3989b",
       "engine": "flexlayer-render/0.0.2+cap1080",
       "dirty": false
     },
