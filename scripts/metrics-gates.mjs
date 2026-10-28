@@ -75,14 +75,19 @@ export const GATES = {
    * still clears with a few percent of headroom and the gate only tightens.
    */
   /**
-   * FLIP of manga object ink against the frozen legacy page. Calibrated at
-   * 0.144 on a darwin binary that was not the same commit as the linux addon
-   * (addon-hash already red on 8d7c9d0). Source-built linux on this branch
-   * measures ~0.475 against the same legacy; tightening to 0.15 cannot be
-   * proven here until three-platform binaries match. Keep the metric in the
-   * report; do not gate on it until then (QUALITY-4 §1.2).
+   * FLIP vs f9628c0 legacy manga. Not gated: the 0.144 / 0.15 calibration was
+   * on a darwin addon that did not match the published linux binary
+   * (addon-hash red on 8d7c9d0), and the still-life framing has since moved.
+   * Source-built linux reads ~0.475. Reported as `manga.hatchFlip` only.
+   * QUALITY-4 §1.2 option 2: old absolute method does not hold.
    */
   hatchFlipMax: null,
+  /**
+   * FLIP vs `docs/quality/engine-baseline/3d-shade-manga.png` in the private
+   * renderer repo (same engine, accepted look). Catches hatch regressions
+   * without depending on a foreign-engine legacy page.
+   */
+  hatchFlipEngineMax: 0.02,
   technicalChromaRatioMin: null,
   /**
    * Technical hidden-line ink against the legacy raster; the style exists to
@@ -264,6 +269,13 @@ export function checkGates(gates, report, slack = { luma: 0, fraction: 0 }) {
   if (gates.hatchFlipMax != null) {
     if (report.manga?.hatchFlip == null) errors.push('manga hatch flip missing: set FLEXLAYER_LEGACY_REFERENCE to the renderer repo legacy-reference directory')
     else maxOf(gates.hatchFlipMax, report.manga.hatchFlip, 'manga hatch flip')
+  }
+  if (gates.hatchFlipEngineMax != null) {
+    if (report.manga?.hatchFlipEngine == null) {
+      errors.push('manga engine hatch flip missing: set FLEXLAYER_LEGACY_REFERENCE (sibling engine-baseline) or FLEXLAYER_ENGINE_BASELINE')
+    } else {
+      maxOf(gates.hatchFlipEngineMax, report.manga.hatchFlipEngine, 'manga engine hatch flip')
+    }
   }
   minOf(gates.technicalChromaRatioMin, report.technical?.minRatio, 'technical/studio chroma', slack.fraction)
   if (gates.technicalHiddenRatioMin != null) {
