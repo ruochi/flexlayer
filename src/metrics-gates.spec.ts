@@ -19,7 +19,7 @@ const gates = {
   mangaPaperLumaMin: 238,
   mangaPaperShareMin: 0.7,
   mangaPaperChromaMax: 0.02,
-  hatchFlipMax: 0.18,
+  hatchFlipMax: 0.15,
   technicalChromaRatioMin: 0.9,
   technicalHiddenRatioMin: 0.7,
   stillPoolRiseMin: 15,

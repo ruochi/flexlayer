@@ -70,12 +70,11 @@ export const GATES = {
    * so the gate is only enforced when FLEXLAYER_LEGACY_REFERENCE resolves; a
    * missing reference must not silently pass as a number.
    *
-   * Raised from 0.15 after hidden lines started crossing occluding bodies: the
-   * hatch now sits under the extra hidden edges, which moved the object-ink
-   * flip to 0.169 over the whole page rather than at one seam. The ceiling is
-   * 0.18, about 6% of headroom, so a real hatch regression still fails.
+   * Restored to 0.15 (QUALITY-4 §1.2). The previous 0.18 widen was not justified
+   * by a broken old measurement: current hatch flip sits at ~0.144, so 0.15
+   * still clears with a few percent of headroom and the gate only tightens.
    */
-  hatchFlipMax: 0.18,
+  hatchFlipMax: 0.15,
   technicalChromaRatioMin: null,
   /**
    * Technical hidden-line ink against the legacy raster; the style exists to
@@ -153,6 +152,17 @@ export const GATES = {
   stillStripeThroughGlassMin: 0.1,
   stillEmptyFloorMax: 0.25,
   stillBlueTopGapMin: 40,
+  /**
+   * Circumferential neighbour jump on the still-life gold cylinder. QUALITY-4
+   * §3.3 asks ≤ 3; leave null until the baseline is recorded as failing, then
+   * set the ceiling to the measured value so a regression still fails.
+   */
+  stillGoldFacetMax: null,
+  /**
+   * Metal / mirror / brushed / anisotropy dark floor (5th percentile on the
+   * sphere). QUALITY-4 §4.4 asks ≥ 35. Null until calibrated on 8d7c9d0.
+   */
+  materialDarkFloorMin: null,
 }
 
 /**
@@ -272,6 +282,13 @@ export function checkGates(gates, report, slack = { luma: 0, fraction: 0 }) {
     }
     maxOf(gates.stillEmptyFloorMax, still.emptyFloor, 'still empty floor', slack.fraction)
     minOf(gates.stillBlueTopGapMin, still.blueTopGap, 'still blue-float top gap', 1)
+    maxOf(gates.stillGoldFacetMax, still.goldFacetStripe, 'still gold facetStripe')
+  }
+  if (gates.materialDarkFloorMin != null) {
+    for (const trait of report.materialTraits ?? []) {
+      if (!/metal|mirror|brushed|anisotropy/.test(trait.cell)) continue
+      minOf(gates.materialDarkFloorMin, trait.darkFloor, `${trait.cell} dark floor`, slack.luma)
+    }
   }
   return errors
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { edgeStairShare, steppedShare } from '../scripts/metrics-image.mjs'
+import { edgeLineCv, edgeStairShare, facetStripe, materialFeatures, moireEnergy, steppedShare } from '../scripts/metrics-image.mjs'
 
 /** A tall image whose every row is `values`. */
 function rows(values, height = values.length) {
@@ -79,5 +79,93 @@ describe('边缘阶梯检测', () => {
 
   it('太短的一段不判', () => {
     expect(edgeStairShare(() => 100, 200, 204)).toBe(null)
+  })
+})
+
+describe('倒角连续性', () => {
+  it('均匀的一行通过', () => {
+    const samples = Array.from({ length: 80 }, () => 160)
+    const result = edgeLineCv(samples)
+    expect(result.sd).toBe(0)
+    expect(result.peakShare).toBe(0)
+  })
+
+  it('10 像素周期的虚线倒角会被算出来', () => {
+    // Matches the macbook base-front row recorded in QUALITY-4 §2.2.
+    const pattern = [162, 135, 144, 144, 152, 160, 160, 187, 187, 187]
+    const samples = Array.from({ length: 120 }, (_, i) => pattern[i % pattern.length])
+    const result = edgeLineCv(samples)
+    expect(result.sd).toBeGreaterThan(4)
+    expect(result.peakShare).toBeGreaterThan(0.02)
+  })
+})
+
+describe('圆柱分段条纹', () => {
+  it('平滑渐变没有大跳', () => {
+    const width = 64
+    const height = 32
+    const rgba = new Uint8Array(width * height * 4)
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const v = 100 + Math.round((x / width) * 40)
+        const i = (y * width + x) * 4
+        rgba[i] = rgba[i + 1] = rgba[i + 2] = v
+        rgba[i + 3] = 255
+      }
+    }
+    expect(facetStripe(rgba, width, height)).toBeLessThanOrEqual(3)
+  })
+
+  it('平面分段亮度跳变会被抓到', () => {
+    const width = 64
+    const height = 32
+    const rgba = new Uint8Array(width * height * 4)
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const v = 80 + Math.floor(x / 4) * 12
+        const i = (y * width + x) * 4
+        rgba[i] = rgba[i + 1] = rgba[i + 2] = v
+        rgba[i + 3] = 255
+      }
+    }
+    expect(facetStripe(rgba, width, height)).toBeGreaterThan(3)
+  })
+})
+
+describe('材质特征', () => {
+  it('亮斑面积和暗部底限能读出来', () => {
+    const width = 40
+    const height = 40
+    const rgba = new Uint8Array(width * height * 4)
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const dx = x - 20
+        const dy = y - 20
+        const v = Math.hypot(dx, dy) < 6 ? 240 : 50
+        const i = (y * width + x) * 4
+        rgba[i] = rgba[i + 1] = rgba[i + 2] = v
+        rgba[i + 3] = 255
+      }
+    }
+    const features = materialFeatures(rgba, width, height)
+    expect(features.darkFloor).toBeLessThan(60)
+    expect(features.highlightArea).toBeGreaterThan(0.01)
+  })
+})
+
+describe('莫尔能量', () => {
+  it('低频平滑区域接近 0', () => {
+    const width = 64
+    const height = 32
+    const rgba = new Uint8Array(width * height * 4)
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const v = 120 + Math.round(20 * Math.sin((x / width) * Math.PI))
+        const i = (y * width + x) * 4
+        rgba[i] = rgba[i + 1] = rgba[i + 2] = v
+        rgba[i + 3] = 255
+      }
+    }
+    expect(moireEnergy(rgba, width, height)).toBeLessThan(0.2)
   })
 })

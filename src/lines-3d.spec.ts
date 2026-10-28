@@ -70,6 +70,44 @@ describe('3d-lines 线稿', () => {
   }, 60000)
 })
 
+describe('3d-lines 样张验收', () => {
+  it('圆柱 ink 与盒子 ink 相交，带孔平板存在，弯管与另一实体相交', async () => {
+    const painted = await renderLayer(read('3d-lines'), { baseDir: gallery, format: 'rgba', meshCache: false })
+    const byId = new Map(
+      (painted.report?.elements ?? [])
+        .filter((el: any) => el.id && el.ink)
+        .map((el: any) => [el.id, el]),
+    )
+    const box = byId.get('box')
+    const piercing = byId.get('piercing')
+    const hole = byId.get('hole-plate')
+    const elbow = byId.get('elbow')
+    expect(box).toBeTruthy()
+    expect(piercing).toBeTruthy()
+    expect(hole).toBeTruthy()
+    expect(elbow).toBeTruthy()
+    const overlap = (a: any, b: any) => {
+      const ax0 = a.ink.x
+      const ay0 = a.ink.y
+      const ax1 = a.ink.x + a.ink.width
+      const ay1 = a.ink.y + a.ink.height
+      const bx0 = b.ink.x
+      const by0 = b.ink.y
+      const bx1 = b.ink.x + b.ink.width
+      const by1 = b.ink.y + b.ink.height
+      return ax0 < bx1 && ax1 > bx0 && ay0 < by1 && ay1 > by0
+    }
+    expect(overlap(box, piercing)).toBe(true)
+    // Hole interior should show paper (not the plate fill) near the path centre.
+    const hx = Math.round(hole.ink.x + hole.ink.width / 2)
+    const hy = Math.round(hole.ink.y + hole.ink.height / 2)
+    const i = (hy * painted.width + hx) * 4
+    expect(near(painted.rgba, i, [243, 239, 230], 30)).toBe(true)
+    const others = [...byId.values()].filter((el: any) => el.id !== 'elbow' && el.id !== 'ground')
+    expect(others.some((el: any) => overlap(elbow, el))).toBe(true)
+  }, 60000)
+})
+
 describe('3d-lines 隐藏线遮罩', () => {
   it('隐藏线落在实体遮罩内', async () => {
     // Q4: counting pale pixels only proves some were drawn, not that they are

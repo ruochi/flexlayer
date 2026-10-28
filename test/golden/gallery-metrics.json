@@ -21,7 +21,7 @@
     "linesEmptyBelowMax": 0.25,
     "linesInkGapMin": 16,
     "mangaPaperChromaMax": 0.02,
-    "hatchFlipMax": 0.18,
+    "hatchFlipMax": 0.15,
     "technicalChromaRatioMin": 0.9,
     "technicalHiddenRatioMin": 0.7,
     "groundSeamsMax": 0,
