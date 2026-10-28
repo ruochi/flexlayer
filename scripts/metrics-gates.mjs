@@ -175,12 +175,12 @@ export const GATES = {
   /** QUALITY-4 §4.4: metal / mirror / brushed / anisotropy body floor. */
   materialDarkFloorMin: 35,
   /**
-   * Frosted glass must lose stripe edge energy vs clear (QUALITY-4 §4.4).
-   * Absolute SSIM against stripe fills is lighting-dominated on these cells,
-   * so the gate is the clear/frost edge ratio.
+   * QUALITY-4 §4.4: clear glass keeps stripe structure (SSIM ≥ 0.6 against the
+   * above-sphere column profile); frost washes it (SSIM ≤ 0.3). Edge energy
+   * still has to drop from clear to frost so a flat copy cannot pass.
    */
-  glassClearSsimMin: null,
-  glassFrostSsimMax: null,
+  glassClearSsimMin: 0.6,
+  glassFrostSsimMax: 0.3,
   glassClearEdgeMin: 12,
   glassEdgeRatioMin: 1.2,
   /** Adjacent material-grid pairs must differ ≥ 30% on at least one feature. */

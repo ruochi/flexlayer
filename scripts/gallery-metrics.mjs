@@ -1107,43 +1107,53 @@ for (const name of MATERIAL_GRID) {
 }
 
 /**
- * Glass transmittance (QUALITY-4 §4.4): mean-matched SSIM of the sphere
- * interior against the white-stripe vertical profile outside the sphere, plus
- * horizontal edge energy (clear keeps stripe edges; frost washes them out).
+ * Glass transmittance (QUALITY-4 §4.4): the material cells put vertical RGB
+ * stripes behind the sphere. SSIM is mean-matched against the per-column
+ * stripe profile measured *above* the sphere (the band below the disk is
+ * plinth/ground and flattens the reference; an earlier full-band Y-profile
+ * was flat for vertical bars). Clear keeps stripe edges; frost washes them.
  */
 function glassTransmit(cell) {
   const sphere = bounds(cell.ids.get('sphere')?.ink, cell.width, cell.height)
+  const red = bounds(cell.ids.get('stripe-red')?.ink, cell.width, cell.height)
   const white = bounds(cell.ids.get('stripe-white')?.ink, cell.width, cell.height)
-  if (!sphere || !white) return null
+  const blue = bounds(cell.ids.get('stripe-blue')?.ink, cell.width, cell.height)
+  if (!sphere || !red || !white || !blue) return null
   const cx = (sphere.x0 + sphere.x1) / 2
   const cy = (sphere.y0 + sphere.y1) / 2
   const r = Math.min(sphere.x1 - sphere.x0, sphere.y1 - sphere.y0) / 2
-  const x0 = Math.max(sphere.x0, white.x0)
-  const x1 = Math.min(sphere.x1, white.x1)
+  const bandX0 = Math.min(red.x0, white.x0, blue.x0)
+  const bandX1 = Math.max(red.x1, white.x1, blue.x1)
+  const bandY0 = Math.min(red.y0, white.y0, blue.y0)
+  const bandY1 = Math.max(red.y1, white.y1, blue.y1)
+  const x0 = Math.max(sphere.x0, bandX0)
+  const x1 = Math.min(sphere.x1, bandX1)
   if (x1 - x0 < 3) return null
-  const profile = []
-  for (let y = sphere.y0; y < sphere.y1; y++) {
+  // Per-column luma of the stripe band above the sphere disk — that is the
+  // part of the plate where the three fills are still readable as bars.
+  const profileX = []
+  for (let x = bandX0; x < bandX1; x++) {
     let sum = 0
     let n = 0
-    for (let x = white.x0; x < white.x1; x++) {
+    for (let y = bandY0; y < Math.min(bandY1, sphere.y0); y++) {
       if ((x - cx) ** 2 + (y - cy) ** 2 < r * r) continue
       sum += luma(cell.rgba, (y * cell.width + x) * 4)
       n += 1
     }
-    profile.push(n ? sum / n : null)
+    profileX[x] = n ? sum / n : null
   }
   const actual = []
   const expected = []
   let edge = 0
   let edgeN = 0
-  for (let y = sphere.y0; y < sphere.y1; y++) {
-    const py = profile[y - sphere.y0]
-    if (py == null) continue
+  for (let y = Math.max(sphere.y0, bandY0); y < Math.min(sphere.y1, bandY1); y++) {
     for (let x = x0; x < x1; x++) {
-      if ((x - cx) ** 2 + (y - cy) ** 2 > (r * 0.8) ** 2) continue
+      if ((x - cx) ** 2 + (y - cy) ** 2 > (r * 0.75) ** 2) continue
+      const px = profileX[x]
+      if (px == null) continue
       const yL = luma(cell.rgba, (y * cell.width + x) * 4)
       actual.push(yL)
-      expected.push(py)
+      expected.push(px)
       if (x > 0 && x < cell.width - 1) {
         edge += Math.abs(luma(cell.rgba, (y * cell.width + x + 1) * 4) - luma(cell.rgba, (y * cell.width + x - 1) * 4))
         edgeN += 1
