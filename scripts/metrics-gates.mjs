@@ -185,6 +185,8 @@ export const GATES = {
   glassEdgeRatioMin: 1.2,
   /** Adjacent material-grid pairs must differ ≥ 30% on at least one feature. */
   materialPairDeltaMin: 0.3,
+  /** QUALITY-4 §4.4: |metal.reflectContent − plastic.reflectContent| ≥ 0.2. */
+  metalPlasticReflectDeltaMin: 0.2,
 }
 
 /**
@@ -341,6 +343,9 @@ export function checkGates(gates, report, slack = { luma: 0, fraction: 0 }) {
       }
       minOf(gates.materialPairDeltaMin, delta, `${pair.a} vs ${pair.b} feature delta`)
     }
+  }
+  if (gates.metalPlasticReflectDeltaMin != null) {
+    minOf(gates.metalPlasticReflectDeltaMin, report.metalPlasticReflectDelta, 'metal vs plastic reflectContent Δ')
   }
   return errors
 }

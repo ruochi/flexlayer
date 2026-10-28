@@ -953,6 +953,9 @@ function printTable(report) {
       `material pair deltas ${report.materialPairDeltas.map((p) => `${p.a.split('3d-mat-')[1]}/${p.b.split('3d-mat-')[1]}:${p.bestDelta}`).join(' ')}`,
     )
   }
+  if (report.metalPlasticReflectDelta != null) {
+    console.log(`metal vs plastic reflectContent Δ ${report.metalPlasticReflectDelta}`)
+  }
   const weakest = report.materials
     .filter((pair) => pair.sphereFlip != null)
     .sort((a, b) => a.sphereFlip - b.sphereFlip)
@@ -1083,7 +1086,14 @@ for (const name of MATERIAL_GRID) {
   if (!cell) continue
   const rect = bounds(cell.ids.get('sphere')?.ink, cell.width, cell.height)
   if (!rect) continue
-  const accept = (x, y) => hit(rect, x, y)
+  // Stay inside 0.75 r so silhouette AA does not dominate reflectContent.
+  const cx = (rect.x0 + rect.x1) / 2
+  const cy = (rect.y0 + rect.y1) / 2
+  const rr = Math.min(rect.x1 - rect.x0, rect.y1 - rect.y0) / 2
+  const accept = (x, y) => {
+    if (!hit(rect, x, y)) return false
+    return (x - cx) ** 2 + (y - cy) ** 2 <= (rr * 0.75) ** 2
+  }
   const features = materialFeatures(cell.rgba, cell.width, cell.height, accept)
   if (!features) continue
   materialTraits.push({
@@ -1092,6 +1102,7 @@ for (const name of MATERIAL_GRID) {
     highlightSharpness: round(features.highlightSharpness, 2),
     darkFloor: round(features.darkFloor, 1),
     anisotropy: round(features.anisotropy, 3),
+    reflectContent: features.reflectContent == null ? null : round(features.reflectContent, 4),
   })
 }
 
@@ -1170,7 +1181,7 @@ const MATERIAL_PAIRS = [
   ['3d-mat-metal-0-08', '3d-mat-anisotropy-0-9'],
 ]
 function traitDelta(a, b) {
-  const keys = ['highlightArea', 'highlightSharpness', 'darkFloor', 'anisotropy']
+  const keys = ['highlightArea', 'highlightSharpness', 'darkFloor', 'anisotropy', 'reflectContent']
   let best = 0
   for (const key of keys) {
     if (a[key] == null || b[key] == null) continue
@@ -1189,6 +1200,11 @@ const materialPairDeltas = MATERIAL_PAIRS.map(([a, b]) => {
     bestDelta: A && B ? round(traitDelta(A, B), 4) : null,
   }
 })
+/** QUALITY-4 §4.4: metal vs plastic reflection-content NCC absolute gap ≥ 0.2. */
+const metalReflect = byCell.get('3d-mat-metal-0-08')?.reflectContent
+const plasticReflect = byCell.get('3d-mat-plastic-0-12')?.reflectContent
+const metalPlasticReflectDelta =
+  metalReflect != null && plasticReflect != null ? round(Math.abs(metalReflect - plasticReflect), 4) : null
 
 const studio = rendered.get('3d-shade-studio')
 const technical = rendered.get('3d-shade-technical')
@@ -1747,6 +1763,7 @@ const report = {
   materialTraits,
   glassSsim,
   materialPairDeltas,
+  metalPlasticReflectDelta,
   toon: rendered.get('3d-shade-toon')?.toon ?? null,
   manga: mangaCell?.paper ? { ...mangaCell.paper, hatchFlip, hatchFlipEngine } : null,
   technical: technicalReport,
