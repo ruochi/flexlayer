@@ -162,7 +162,8 @@ export const GATES = {
    * Metal / mirror / brushed / anisotropy dark floor (5th percentile on the
    * sphere). QUALITY-4 §4.4 asks ≥ 35. Null until calibrated on 8d7c9d0.
    */
-  materialDarkFloorMin: null,
+  /** QUALITY-4 §4.4: metal / mirror body floor on the sphere probe. */
+  materialDarkFloorMin: 35,
 }
 
 /**
