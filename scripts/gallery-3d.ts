@@ -11,7 +11,8 @@ import { formatIssueLine } from '../src/report.js'
 const BENCH_W = 880
 const BENCH_H = 540
 /** 长边不能超过 1920，所以对照格用这一档。distance 把同一组几何收进这个取景。 */
-const BENCH_CAMERA = 'fov 30, orbit 28 34, distance 1180, at 520 640 0'
+/** Pull in a little so the empty floor is not half the plate (§1.4). */
+const BENCH_CAMERA = 'fov 30, orbit 28 34, distance 1100, at 500 600 0'
 
 function bench(camera = BENCH_CAMERA, extra = ''): string {
   const attrs = extra ? ` ${extra}` : ''
@@ -22,18 +23,18 @@ function bench(camera = BENCH_CAMERA, extra = ''): string {
       <rect id="red-box" x="70" y="48" width="190" height="130" depth="100" rx="18" fill="#d23b3b" material="plastic 0.28" />
       <rect id="white-box" x="276" y="40" width="150" height="140" depth="180" rx="12" fill="#f4f1ea" />
       <rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#c5c9ce" material="metal 0.18" />
-      <sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#e8eef3" material="metal 0.05" />
+      <sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#d8dee4" material="metal 0.04" />
       <sphere id="blue-float" cx="160" cy="200" r="34" z="140" fill="#2a6fbe" material="plastic 0.42" />
       <rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#e23b2f" />
       <rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#f7f4ee" />
       <rect id="stripe-blue" x="282" y="200" width="36" height="78" depth="160" fill="#2a6fbe" />
-      <sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f4fffbcc" material="glass 0.07" />
+      <sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f4fffb99" material="glass 0.07" />
       <circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />
       <layer x="400" y="230">
         <path id="hole" d="M0 0 H120 V84 H0 Z M28 18 V66 H92 V18 Z" depth="14" fill="#1f8a5b" material="plastic 0.3" />
       </layer>
       <torus id="neon" cx="352" cy="300" r="40" tube="10" z="12" fill="#3ad8ff" material="neon" rotateX="0" />
-      <sphere id="lamp" cx="820" cy="50" r="18" z="150" material="lamp" />
+      <sphere id="lamp" cx="800" cy="55" r="20" z="150" material="lamp" />
     </layer>
   </layer>`
 }
