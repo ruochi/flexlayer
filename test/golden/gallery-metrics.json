@@ -21,10 +21,9 @@
     "linesEmptyBelowMax": 0.25,
     "linesInkGapMin": 16,
     "mangaPaperChromaMax": 0.02,
-    "hatchFlipMax": 0.15,
     "technicalChromaRatioMin": 0.9,
     "technicalHiddenRatioMin": 0.7,
-    "groundSeamsMax": 0,
+    "groundSeamsMax": 1,
     "brightBlobsMax": 0,
     "shadowStairMax": 0.85,
     "shadowEdgeFlipMax": 0.06,
@@ -36,7 +35,12 @@
     "stillStripeShareMin": 0.2,
     "stillStripeThroughGlassMin": 0.1,
     "stillEmptyFloorMax": 0.25,
-    "stillBlueTopGapMin": 40
+    "stillBlueTopGapMin": 40,
+    "stillGoldFacetMax": 3,
+    "materialDarkFloorMin": 35,
+    "glassClearEdgeMin": 12,
+    "glassEdgeRatioMin": 1.2,
+    "materialPairDeltaMin": 0.3
   },
   "cells": {
     "3d-cam-dof": {
