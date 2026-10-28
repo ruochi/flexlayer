@@ -1,17 +1,17 @@
 {
   "binaries": {
     "flexlayer-render.darwin-arm64.node": {
-      "commit": "05cb34f43a61a9d3bb855b93b761f308e265d6f7",
+      "commit": "e72b234169c7f6881a7e224b1996129d17b13424",
       "engine": "flexlayer-render/0.0.2+cap1080",
       "dirty": false
     },
     "flexlayer-render.linux-x64-gnu.node": {
-      "commit": "05cb34f43a61a9d3bb855b93b761f308e265d6f7",
+      "commit": "e72b234169c7f6881a7e224b1996129d17b13424",
       "engine": "flexlayer-render/0.0.2+cap1080",
       "dirty": false
     },
     "flexlayer-render.win32-x64-msvc.node": {
-      "commit": "05cb34f43a61a9d3bb855b93b761f308e265d6f7",
+      "commit": "e72b234169c7f6881a7e224b1996129d17b13424",
       "engine": "flexlayer-render/0.0.2+cap1080",
       "dirty": false
     }
