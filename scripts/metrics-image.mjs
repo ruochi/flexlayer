@@ -423,6 +423,11 @@ export function facetStripe(rgba, width, height, accept = () => true, quantile =
  * - `highlightSharpness`: mean gradient on the highlight rim
  * - `darkFloor`: 5th percentile luma
  * - `anisotropy`: highlight bbox aspect (width / height), 1 when round
+ * - `reflectContent`: Laplacian variance / 1000 on the body, clamped to 1
+ *   (QUALITY-4 §4.4). Metal/SSR carries env structure; smooth plastic does not.
+ *   Absolute NCC against neighbours is near zero (phase mismatch), so variance
+ *   of the high-pass field is the practical "reflection content" score; the
+ *   metal–plastic gate uses |Δ| ≥ 0.2 on this score.
  */
 export function materialFeatures(rgba, width, height, accept = () => true) {
   const values = []
@@ -457,11 +462,25 @@ export function materialFeatures(rgba, width, height, accept = () => true) {
   const highlightArea = highlight / values.length
   let sharpSum = 0
   let sharpN = 0
+  let lapSum = 0
+  let lapSq = 0
+  let lapN = 0
   for (let i = 0; i < values.length; i++) {
-    if (values[i] < p98) continue
     const x = coords[i * 2]
     const y = coords[i * 2 + 1]
     if (x < 1 || y < 1 || x >= width - 1 || y >= height - 1) continue
+    if (!accept(x - 1, y) || !accept(x + 1, y) || !accept(x, y - 1) || !accept(x, y + 1)) continue
+    const c = luma(rgba, (y * width + x) * 4)
+    const lap =
+      4 * c
+      - luma(rgba, (y * width + x - 1) * 4)
+      - luma(rgba, (y * width + x + 1) * 4)
+      - luma(rgba, ((y - 1) * width + x) * 4)
+      - luma(rgba, ((y + 1) * width + x) * 4)
+    lapSum += lap
+    lapSq += lap * lap
+    lapN += 1
+    if (values[i] < p98) continue
     const gx = luma(rgba, (y * width + x + 1) * 4) - luma(rgba, (y * width + x - 1) * 4)
     const gy = luma(rgba, ((y + 1) * width + x) * 4) - luma(rgba, ((y - 1) * width + x) * 4)
     sharpSum += Math.hypot(gx, gy)
@@ -469,11 +488,16 @@ export function materialFeatures(rgba, width, height, accept = () => true) {
   }
   const bw = Math.max(1, hx1 - hx0 + 1)
   const bh = Math.max(1, hy1 - hy0 + 1)
+  // Use E[lap²] (not centered variance): SSR metals carry larger absolute
+  // high-pass energy than smooth plastic even when the mean Laplacian is near 0.
+  const lapEnergy = lapN ? lapSq / lapN : 0
   return {
     highlightArea,
     highlightSharpness: sharpN ? sharpSum / sharpN : 0,
     darkFloor,
     anisotropy: Math.max(bw, bh) / Math.min(bw, bh),
+    // Soft-normalize so metal (~700) and plastic (~160) stay separated past 0.2.
+    reflectContent: lapN ? lapEnergy / (lapEnergy + 200) : null,
   }
 }
 
