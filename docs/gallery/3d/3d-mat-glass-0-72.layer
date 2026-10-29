@@ -11,5 +11,5 @@
       <circle id="side" cx="330" cy="78" r="26" depth="100" fill="#e0a33a" />
     </layer>
   </layer>
-  <layer x="12" y="304"><p style="font-size:24px; color:#ffffff">glass 0.72</p></layer>
+  <layer x="12" y="304" color="#1c1915"><p style="font-size:24px; color:#1c1915; fill:#1c1915">glass 0.72</p></layer>
 </layer>

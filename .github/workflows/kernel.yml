@@ -36,6 +36,12 @@ jobs:
           node-version: 20
           cache: npm
       - uses: dtolnay/rust-toolchain@1.88.0
+      # skia-bindings links -lfreetype -lfontconfig; ubuntu-latest images no
+      # longer ship the -dev packages by default.
+      - name: skia system libs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfreetype6-dev libfontconfig1-dev
       - name: linux addon from the renderer
         working-directory: vendor/flexlayer-render
         run: |
@@ -87,6 +93,10 @@ jobs:
           node-version: 20
           cache: npm
       - uses: dtolnay/rust-toolchain@1.88.0
+      - name: skia system libs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfreetype6-dev libfontconfig1-dev
       - name: linux addon from the renderer
         working-directory: vendor/flexlayer-render
         run: |
