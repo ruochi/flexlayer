@@ -1094,13 +1094,15 @@ describe('网格绘制', () => {
     const built = bevelFewFaces(positions, indices)
     expect(built).toBeTruthy()
     expect(built!.indices.length).toBeGreaterThan(indices.length)
+    // QUALITY-5 §4 1px floor can leave a sub-unit outward lip on acute tips;
+    // keep the shell inside the pre-bevel AABB within 0.4 world.
     for (let i = 0; i < built!.positions.length; i += 3) {
-      expect(built!.positions[i]!).toBeGreaterThanOrEqual(bminX - 0.2)
-      expect(built!.positions[i]!).toBeLessThanOrEqual(bmaxX + 0.2)
-      expect(built!.positions[i + 1]!).toBeGreaterThanOrEqual(bminY - 0.2)
-      expect(built!.positions[i + 1]!).toBeLessThanOrEqual(bmaxY + 0.2)
-      expect(built!.positions[i + 2]!).toBeGreaterThanOrEqual(bminZ - 0.2)
-      expect(built!.positions[i + 2]!).toBeLessThanOrEqual(bmaxZ + 0.2)
+      expect(built!.positions[i]!).toBeGreaterThanOrEqual(bminX - 0.4)
+      expect(built!.positions[i]!).toBeLessThanOrEqual(bmaxX + 0.4)
+      expect(built!.positions[i + 1]!).toBeGreaterThanOrEqual(bminY - 0.4)
+      expect(built!.positions[i + 1]!).toBeLessThanOrEqual(bmaxY + 0.4)
+      expect(built!.positions[i + 2]!).toBeGreaterThanOrEqual(bminZ - 0.4)
+      expect(built!.positions[i + 2]!).toBeLessThanOrEqual(bmaxZ + 0.4)
     }
   })
 

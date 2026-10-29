@@ -9,5 +9,5 @@
       <circle id="side" cx="330" cy="78" r="26" depth="100" fill="#e0a33a" />
     </layer>
   </layer>
-  <layer x="12" y="304"><p style="font-size:22px; color:#f4efe6">lamp</p></layer>
+  <layer x="12" y="304"><p style="font-size:24px; color:#ffffff">lamp</p></layer>
 </layer>
