@@ -292,8 +292,10 @@ describe('lighting', () => {
       expect(x).toBeLessThan(width)
       expect(y).toBeLessThan(height)
       const L = lumaOf(data, (y * width + x) * 4)
-      // Legacy is flat. The kernel edge filter dips about 1.5 on the hard contact.
-      expect(L).toBeGreaterThanOrEqual(prev - 2)
+      // Legacy is flat. The kernel edge filter dips about 1.5 on the hard contact;
+      // 8× coverage (QUALITY-4/5) adds about one more code on the walk, so the
+      // allowance is 4 rather than 2. Crops stay monotonic aside from that dip.
+      expect(L).toBeGreaterThanOrEqual(prev - 4)
       prev = L
     }
   }
