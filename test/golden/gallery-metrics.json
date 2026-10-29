@@ -22,7 +22,7 @@
     "linesInkGapMin": 16,
     "mangaPaperChromaMax": 0.02,
     "technicalHiddenRatioMin": 0.7,
-    "groundSeamsMax": 1,
+    "groundSeamsMax": 0,
     "brightBlobsMax": 0,
     "shadowStairMax": 0.85,
     "shadowEdgeFlipMax": 0.06,
@@ -42,8 +42,12 @@
     "materialPairDeltaMin": 0.3,
     "glassClearSsimMin": 0.6,
     "glassFrostSsimMax": 0.3,
-    "hatchFlipEngineMax": 0.02,
-    "hatchFlipMax": null
+    "hatchFlipEngineMax": null,
+    "hatchFlipMax": 0.15,
+    "technicalChromaRatioMin": 0.9,
+    "materialPairRules": true,
+    "glassOpaqueTransmitDeltaMin": 0.3,
+    "anisotropyAspectMin": 1.5
   },
   "cells": {
     "3d-cam-dof": {

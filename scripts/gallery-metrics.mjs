@@ -1183,32 +1183,42 @@ const glassSsim = {
   frostEdge: glassFrostT?.edge != null ? round(glassFrostT.edge, 2) : null,
 }
 
-/** Adjacent material-grid pairs: at least one feature must move ≥ 30%. */
+/**
+ * Adjacent material-grid pairs (QUALITY-5 §2.1 keeps the ≥30% bestDelta floor
+ * and adds category rules in `checkMaterialPairRules`).
+ */
 const MATERIAL_PAIRS = [
   ['3d-mat-plastic-0-12', '3d-mat-plastic-0-85'],
   ['3d-mat-glass-0-06', '3d-mat-glass-0-72'],
   ['3d-mat-metal-0-08', '3d-mat-metal-0-8'],
   ['3d-mat-plastic-0-12', '3d-mat-clearcoat-1'],
   ['3d-mat-metal-0-08', '3d-mat-anisotropy-0-9'],
+  ['3d-mat-metal-0-08', '3d-mat-brushed'],
+  ['3d-mat-metal-0-08', '3d-mat-mirror'],
 ]
 function traitDelta(a, b) {
   const keys = ['highlightArea', 'highlightSharpness', 'darkFloor', 'anisotropy', 'reflectContent']
   let best = 0
+  const perKey = {}
   for (const key of keys) {
     if (a[key] == null || b[key] == null) continue
     const d = Math.abs(a[key] - b[key]) / Math.max(Math.abs(a[key]), Math.abs(b[key]), 1e-6)
+    perKey[key] = round(d, 4)
     if (d > best) best = d
   }
-  return best
+  return { best, perKey }
 }
 const byCell = new Map(materialTraits.map((t) => [t.cell, t]))
 const materialPairDeltas = MATERIAL_PAIRS.map(([a, b]) => {
   const A = byCell.get(a)
   const B = byCell.get(b)
+  if (!A || !B) return { a, b, bestDelta: null, deltas: null }
+  const { best, perKey } = traitDelta(A, B)
   return {
     a,
     b,
-    bestDelta: A && B ? round(traitDelta(A, B), 4) : null,
+    bestDelta: round(best, 4),
+    deltas: perKey,
   }
 })
 /** QUALITY-4 §4.4: metal vs plastic reflection-content NCC absolute gap ≥ 0.2. */
@@ -1255,10 +1265,9 @@ const technicalReport = ratios.length
  */
 async function technicalHidden(technical) {
   if (!technical) return null
-  // LOOK_HIDDEN is (154,143,128). Draft AA puts most of the dash in the
-  // ±13 fringe; ±12 under-counts the current engine while the legacy page
-  // still concentrates in ±12, so the ratio falsely drops below 0.7.
-  const tol = 13
+  // LOOK_HIDDEN is (154,143,128). QUALITY-5 §2 restores ±12; AA fringe that
+  // drifts outside that band is a colour wash to fix, not a wider gate.
+  const tol = 12
   const match = (rgba, i) => {
     const r = rgba[i * 4]
     const g = rgba[i * 4 + 1]
