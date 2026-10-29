@@ -21,14 +21,13 @@ jobs:
       # which is the intent: a green job that tested a stale committed binary
       # would verify nothing.
       #
-      # RENDER_REF pins which renderer commit the checks build against. It is
-      # unset in steady state, so this reads main. Set the repository variable
-      # while a renderer change is still on a branch; otherwise the tests run
-      # against the previous kernel and fail for the wrong reason.
+      # RENDER_REF pins the renderer. Unset: on a PR, prefer the same branch
+      # name as the PR head (paired quality branches); otherwise main. Override
+      # with the repository variable when the renderer lives on another ref.
       - uses: actions/checkout@v4
         with:
           repository: ruochi/flexlayer-render
-          ref: ${{ vars.RENDER_REF || 'main' }}
+          ref: ${{ vars.RENDER_REF || github.event.pull_request.head.ref || 'main' }}
           token: ${{ secrets.RENDER_REPO_TOKEN }}
           path: vendor/flexlayer-render
       - uses: actions/setup-node@v4
@@ -85,7 +84,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: ruochi/flexlayer-render
-          ref: ${{ vars.RENDER_REF || 'main' }}
+          ref: ${{ vars.RENDER_REF || github.event.pull_request.head.ref || 'main' }}
           token: ${{ secrets.RENDER_REPO_TOKEN }}
           path: vendor/flexlayer-render
       - uses: actions/setup-node@v4
