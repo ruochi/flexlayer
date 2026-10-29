@@ -9,5 +9,5 @@
       <circle id="side" cx="330" cy="78" r="26" depth="100" fill="#c86a3e" material="brushed" />
     </layer>
   </layer>
-  <layer x="12" y="304"><p style="font-size:18px; color:#f4efe6">brushed</p></layer>
+  <layer x="12" y="304"><p style="font-size:22px; color:#f4efe6">brushed</p></layer>
 </layer>
