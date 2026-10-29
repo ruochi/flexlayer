@@ -274,7 +274,10 @@ describe('model object 和 unit', () => {
     const rightPx = await pixelAt(png, 180, 120)
     const mid = await pixelAt(png, 120, 120)
     expect(leftPx[0]).toBeGreaterThan(leftPx[2]! + 30)
-    expect(rightPx[2]).toBeGreaterThan(rightPx[0]! + 30)
+    // Metal desaturate (QUALITY-5 §3) softens pure studio blues; still must
+    // read cooler than the red plastic neighbour.
+    expect(rightPx[2]).toBeGreaterThan(rightPx[0]! + 12)
+    expect(rightPx[2]! + rightPx[1]!).toBeGreaterThan(rightPx[0]! + 20)
     expect(mid[0]).toBeLessThan(15)
 
     async function shade(metalness: number, roughness: number) {
