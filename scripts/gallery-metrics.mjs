@@ -18,7 +18,7 @@ import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { renderLayer } from '../src/render.ts'
 import { meanFlip } from './flip-diff.ts'
 import { GATES, checkGates, metalLumaDelta, platformSlack } from './metrics-gates.mjs'
-import { brightBlobs, edgeStairShare, facetStripe, luma, materialFeatures, moireEnergy, percentile, ssimLuma, steppedShare, straightSeams } from './metrics-image.mjs'
+import { brightBlobs, edgeStairShare, facetStripe, luma, materialFeatures, moireEnergy, percentile, ssimLuma, ssrChecker, steppedShare, straightSeams } from './metrics-image.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const repo = dirname(root)
@@ -177,18 +177,27 @@ function lineMask(rgba, width, height) {
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const i = (y * width + x) * 4
-      if (dist(i, [28, 25, 21]) < 800 || dist(i, [154, 143, 128]) < 400) line[y * width + x] = 1
+      // Canvas stroke AA mixes ink into the fill (QUALITY-5 §3.5). Catch the
+      // fringe so chroma is graded on body pixels, not the wash around a line.
+      // Exact ink is ~0; a half-mix with a mid fill sits around 2000–6000.
+      if (dist(i, [28, 25, 21]) < 6000 || dist(i, [154, 143, 128]) < 3500) line[y * width + x] = 1
+      else {
+        const r = rgba[i]
+        const g = rgba[i + 1]
+        const b = rgba[i + 2]
+        if (r + g + b < 100 && Math.max(r, g, b) - Math.min(r, g, b) < 28) line[y * width + x] = 1
+      }
     }
   }
   return line
 }
 
 function nearLine(line, width, height, x, y) {
-  for (let dy = -2; dy <= 2; dy++) {
+  for (let dy = -3; dy <= 3; dy++) {
     const yy = y + dy
     if (yy < 0 || yy >= height) continue
-    for (let dx = -2; dx <= 2; dx++) {
-      if (dx * dx + dy * dy > 5) continue
+    for (let dx = -3; dx <= 3; dx++) {
+      if (dx * dx + dy * dy > 10) continue
       const xx = x + dx
       if (xx < 0 || xx >= width) continue
       if (line[yy * width + xx]) return true
@@ -514,10 +523,24 @@ function measure(stem, rgba, width, height, elements, fills, seat, reference = n
     const rect = bounds(el.ink, width, height)
     if (rect) others.push(rect)
   }
+  // Cell captions sit in the 32px strip under the camera. Seat alignment can
+  // still map those rows onto ground texels, so a label baseline reads as a
+  // screen-aligned floor seam (QUALITY-5 §2: dof / anisotropy were the two
+  // survivors). Drop caption ink the same way manga paper already does.
+  // An opaque caption bar (QUALITY-5 §3.7, white on dark) cuts the projected
+  // ground with a hard horizontal edge — exclude the whole strip, not just
+  // glyph ink, or that edge counts as a floor seam.
+  const labels = elements
+    .filter((el) => el.tag === 'p' || (el.tag === 'layer' && !el.box?.width?.toString().match(/^\d{3,}/)))
+    .map((el) => bounds(el.ink, width, height))
+    .filter(Boolean)
+  const hasCaptionStrip = labels.some((rect) => rect.y0 >= height - 40)
+  // Drop a few rows above the bar so the ground→bar step itself is not a seam.
+  const captionFloor = hasCaptionStrip ? Math.max(0, height - 36) : null
   const distant = distantFloor(rgba, width, height, camera, others)
   const align = seat ? alignSeat(rgba, width, height, seat) : null
   // Ground pixels the page has not painted over: the seat knows which pixels
-  // are floor, `sameAsSeat` drops captions and other page overlays, and the
+  // are floor, captions and other page overlays are dropped, and the
   // silhouettes are left out so a body's own edge is never read as a seam.
   const groundPixel = (x, y) => {
     if (!seat || !align) return false
@@ -525,7 +548,11 @@ function measure(stem, rgba, width, height, elements, fills, seat, reference = n
     if (kx < 0 || ky < 0 || kx >= seat.pw || ky >= seat.ph) return false
     return seat.ground[ky * seat.pw + kx] !== 0
   }
-  const cleanGround = (x, y) => groundPixel(x, y) && !others.some((rect) => hit(rect, x, y))
+  const cleanGround = (x, y) =>
+    groundPixel(x, y) &&
+    !others.some((rect) => hit(rect, x, y)) &&
+    !labels.some((rect) => hit(rect, x, y)) &&
+    (captionFloor == null || y < captionFloor)
   const seams = seat && align ? straightSeams(rgba, width, height, cleanGround) : []
   const blobs = seat && align
     ? brightBlobs(rgba, width, height, camera, { require: cleanGround })
@@ -981,6 +1008,7 @@ function printTable(report) {
     const through = st.stripes?.throughGlass
     if (through) console.log(`still stripes inside glass red ${through.red} white ${through.white} blue ${through.blue} of ${through.total}`)
     console.log(`still empty floor ${st.emptyFloor ?? 'n/a'}  blue top gap ${st.blueTopGap ?? 'n/a'}`)
+    console.log(`still metal-plate SSR checker ${st.ssrChecker ?? 'n/a'}`)
   }
   const benchContacts = report.contacts.filter((item) => item.cell === '3d-quality-draft' || item.cell === '3d-quality-final')
   for (const item of benchContacts) {
@@ -1107,55 +1135,31 @@ for (const name of MATERIAL_GRID) {
 }
 
 /**
- * Glass transmittance (QUALITY-4 §4.4): the material cells put vertical RGB
- * stripes behind the sphere. SSIM is mean-matched against the per-column
- * stripe profile measured *above* the sphere (the band below the disk is
- * plinth/ground and flattens the reference; an earlier full-band Y-profile
- * was flat for vertical bars). Clear keeps stripe edges; frost washes them.
+ * Glass transmittance (QUALITY-5 §1.3): SSIM between the glass disk and the
+ * same pixels on a second render with the sphere removed. Clear keeps the
+ * behind structure (high SSIM); frost washes it (low SSIM). Mean-matched so
+ * a global veil cannot fail a true transmit. Edge energy still has to drop
+ * from clear to frost.
  */
-function glassTransmit(cell) {
+function glassTransmit(cell, open) {
+  if (!cell || !open || cell.width !== open.width || cell.height !== open.height) return null
   const sphere = bounds(cell.ids.get('sphere')?.ink, cell.width, cell.height)
-  const red = bounds(cell.ids.get('stripe-red')?.ink, cell.width, cell.height)
-  const white = bounds(cell.ids.get('stripe-white')?.ink, cell.width, cell.height)
-  const blue = bounds(cell.ids.get('stripe-blue')?.ink, cell.width, cell.height)
-  if (!sphere || !red || !white || !blue) return null
+  if (!sphere) return null
   const cx = (sphere.x0 + sphere.x1) / 2
   const cy = (sphere.y0 + sphere.y1) / 2
   const r = Math.min(sphere.x1 - sphere.x0, sphere.y1 - sphere.y0) / 2
-  const bandX0 = Math.min(red.x0, white.x0, blue.x0)
-  const bandX1 = Math.max(red.x1, white.x1, blue.x1)
-  const bandY0 = Math.min(red.y0, white.y0, blue.y0)
-  const bandY1 = Math.max(red.y1, white.y1, blue.y1)
-  const x0 = Math.max(sphere.x0, bandX0)
-  const x1 = Math.min(sphere.x1, bandX1)
-  if (x1 - x0 < 3) return null
-  // Per-column luma of the stripe band above the sphere disk — that is the
-  // part of the plate where the three fills are still readable as bars.
-  const profileX = []
-  for (let x = bandX0; x < bandX1; x++) {
-    let sum = 0
-    let n = 0
-    for (let y = bandY0; y < Math.min(bandY1, sphere.y0); y++) {
-      if ((x - cx) ** 2 + (y - cy) ** 2 < r * r) continue
-      sum += luma(cell.rgba, (y * cell.width + x) * 4)
-      n += 1
-    }
-    profileX[x] = n ? sum / n : null
-  }
   const actual = []
   const expected = []
   let edge = 0
   let edgeN = 0
-  for (let y = Math.max(sphere.y0, bandY0); y < Math.min(sphere.y1, bandY1); y++) {
-    for (let x = x0; x < x1; x++) {
+  for (let y = sphere.y0; y <= sphere.y1; y++) {
+    for (let x = sphere.x0; x <= sphere.x1; x++) {
       if ((x - cx) ** 2 + (y - cy) ** 2 > (r * 0.75) ** 2) continue
-      const px = profileX[x]
-      if (px == null) continue
-      const yL = luma(cell.rgba, (y * cell.width + x) * 4)
-      actual.push(yL)
-      expected.push(px)
+      const i = (y * cell.width + x) * 4
+      actual.push(luma(cell.rgba, i))
+      expected.push(luma(open.rgba, i))
       if (x > 0 && x < cell.width - 1) {
-        edge += Math.abs(luma(cell.rgba, (y * cell.width + x + 1) * 4) - luma(cell.rgba, (y * cell.width + x - 1) * 4))
+        edge += Math.abs(luma(cell.rgba, i + 4) - luma(cell.rgba, i - 4))
         edgeN += 1
       }
     }
@@ -1171,10 +1175,27 @@ function glassTransmit(cell) {
   }
 }
 
+/** Drop the glass sphere so the stripes/plinth behind it are the SSIM reference. */
+function stripGlassSphere(source) {
+  return source.replace(/<sphere\b[^>]*\/>/g, '')
+}
+
+async function renderGlassOpen(stem) {
+  const file = `${stem}.layer`
+  const source = stripGlassSphere(readFileSync(join(gallery, file), 'utf8'))
+  const dir = seatDirFor(`${stem}-open`)
+  clearSeat(dir)
+  mkdirSync(dir, { recursive: true })
+  process.env.FLEXLAYER_SEAT_DEBUG = dir
+  const painted = await renderLayer(source, { baseDir: join(repo, 'docs/gallery'), format: 'rgba', meshCache: false })
+  return { rgba: painted.rgba, width: painted.width, height: painted.height }
+}
+
 const glassClear = rendered.get('3d-mat-glass-0-06')
 const glassFrost = rendered.get('3d-mat-glass-0-72')
-const glassClearT = glassClear ? glassTransmit(glassClear) : null
-const glassFrostT = glassFrost ? glassTransmit(glassFrost) : null
+const glassOpen = glassClear || glassFrost ? await renderGlassOpen('3d-mat-glass-0-06') : null
+const glassClearT = glassClear && glassOpen ? glassTransmit(glassClear, glassOpen) : null
+const glassFrostT = glassFrost && glassOpen ? glassTransmit(glassFrost, glassOpen) : null
 const glassSsim = {
   clear: glassClearT?.ssim != null ? round(glassClearT.ssim, 4) : null,
   frost: glassFrostT?.ssim != null ? round(glassFrostT.ssim, 4) : null,
@@ -1182,32 +1203,42 @@ const glassSsim = {
   frostEdge: glassFrostT?.edge != null ? round(glassFrostT.edge, 2) : null,
 }
 
-/** Adjacent material-grid pairs: at least one feature must move ≥ 30%. */
+/**
+ * Adjacent material-grid pairs (QUALITY-5 §2.1 keeps the ≥30% bestDelta floor
+ * and adds category rules in `checkMaterialPairRules`).
+ */
 const MATERIAL_PAIRS = [
   ['3d-mat-plastic-0-12', '3d-mat-plastic-0-85'],
   ['3d-mat-glass-0-06', '3d-mat-glass-0-72'],
   ['3d-mat-metal-0-08', '3d-mat-metal-0-8'],
   ['3d-mat-plastic-0-12', '3d-mat-clearcoat-1'],
   ['3d-mat-metal-0-08', '3d-mat-anisotropy-0-9'],
+  ['3d-mat-metal-0-08', '3d-mat-brushed'],
+  ['3d-mat-metal-0-08', '3d-mat-mirror'],
 ]
 function traitDelta(a, b) {
   const keys = ['highlightArea', 'highlightSharpness', 'darkFloor', 'anisotropy', 'reflectContent']
   let best = 0
+  const perKey = {}
   for (const key of keys) {
     if (a[key] == null || b[key] == null) continue
     const d = Math.abs(a[key] - b[key]) / Math.max(Math.abs(a[key]), Math.abs(b[key]), 1e-6)
+    perKey[key] = round(d, 4)
     if (d > best) best = d
   }
-  return best
+  return { best, perKey }
 }
 const byCell = new Map(materialTraits.map((t) => [t.cell, t]))
 const materialPairDeltas = MATERIAL_PAIRS.map(([a, b]) => {
   const A = byCell.get(a)
   const B = byCell.get(b)
+  if (!A || !B) return { a, b, bestDelta: null, deltas: null }
+  const { best, perKey } = traitDelta(A, B)
   return {
     a,
     b,
-    bestDelta: A && B ? round(traitDelta(A, B), 4) : null,
+    bestDelta: round(best, 4),
+    deltas: perKey,
   }
 })
 /** QUALITY-4 §4.4: metal vs plastic reflection-content NCC absolute gap ≥ 0.2. */
@@ -1254,10 +1285,9 @@ const technicalReport = ratios.length
  */
 async function technicalHidden(technical) {
   if (!technical) return null
-  // LOOK_HIDDEN is (154,143,128). Draft AA puts most of the dash in the
-  // ±13 fringe; ±12 under-counts the current engine while the legacy page
-  // still concentrates in ±12, so the ratio falsely drops below 0.7.
-  const tol = 13
+  // LOOK_HIDDEN is (154,143,128). QUALITY-5 §2 restores ±12; AA fringe that
+  // drifts outside that band is a colour wash to fix, not a wider gate.
+  const tol = 12
   const match = (rgba, i) => {
     const r = rgba[i * 4]
     const g = rgba[i * 4 + 1]
@@ -1649,6 +1679,19 @@ if (stillCell) {
         0.9,
       )
     : null
+  const metalPlate = bounds(ids.get('metal-plate')?.ink, stillCell.width, stillCell.height)
+  const chrome = bounds(ids.get('chrome')?.ink, stillCell.width, stillCell.height)
+  // Grade the bowl under the chrome sphere — that is where draft SSR drew the
+  // checkerboard (QUALITY-5 §1.2), not the whole plate.
+  const ssrRate = metalPlate && chrome
+    ? ssrChecker(stillCell.rgba, stillCell.width, stillCell.height, (x, y) => {
+        if (!hit(metalPlate, x, y) || hit(chrome, x, y)) return false
+        const cx = (chrome.x0 + chrome.x1) / 2
+        const cy = chrome.y1
+        const r = Math.max(chrome.x1 - chrome.x0, chrome.y1 - chrome.y0) * 0.85
+        return Math.hypot(x - cx, y - cy) <= r
+      })
+    : null
   stillReport = {
     ...(floorStats(stillCell.rgba, stillCell.width, stillCell.height, ids) ?? {}),
     objectBlobs,
@@ -1660,6 +1703,7 @@ if (stillCell) {
     ...(stripeVisible(stillCell.rgba, stillCell.width, stillCell.height, ids, glassRect) ?? {}),
     ...(stillFrame(ids, cameraRect, cameraRect?.y0, stillCell.height) ?? {}),
     goldFacetStripe: goldStripe == null ? null : round(goldStripe, 2),
+    ssrChecker: ssrRate == null ? null : round(ssrRate, 4),
   }
 }
 const mangaCell = rendered.get('3d-shade-manga')

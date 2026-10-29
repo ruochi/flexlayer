@@ -9,5 +9,5 @@
       <torus id="side" cx="330" cy="78" r="32" tube="8" z="14" material="neon" rotateX="70" />
     </layer>
   </layer>
-  <layer x="12" y="304"><p style="font-size:18px">neon</p></layer>
+  <layer x="12" y="304" color="#1c1915"><p style="font-size:24px; color:#1c1915; fill:#1c1915">neon</p></layer>
 </layer>

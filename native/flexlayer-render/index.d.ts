@@ -105,7 +105,7 @@ export interface BevelGeometry {
   indices: Uint32Array
 }
 export declare function bevelRadius(depth: number): number
-export declare function bevelFewFaces(srcPos: Float32Array, srcIdx: Uint32Array, radiusOpt?: number | undefined | null): BevelGeometry | null
+export declare function bevelFewFaces(srcPos: Float32Array, srcIdx: Uint32Array, radiusOpt?: number | undefined | null, scaleField?: Float64Array | undefined | null): BevelGeometry | null
 export interface BuiltMesh {
   positions: Float32Array
   normals: Float32Array

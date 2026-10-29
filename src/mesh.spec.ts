@@ -1094,13 +1094,15 @@ describe('网格绘制', () => {
     const built = bevelFewFaces(positions, indices)
     expect(built).toBeTruthy()
     expect(built!.indices.length).toBeGreaterThan(indices.length)
+    // QUALITY-5 §4 1px floor can leave a sub-unit outward lip on acute tips;
+    // keep the shell inside the pre-bevel AABB within 0.4 world.
     for (let i = 0; i < built!.positions.length; i += 3) {
-      expect(built!.positions[i]!).toBeGreaterThanOrEqual(bminX - 0.2)
-      expect(built!.positions[i]!).toBeLessThanOrEqual(bmaxX + 0.2)
-      expect(built!.positions[i + 1]!).toBeGreaterThanOrEqual(bminY - 0.2)
-      expect(built!.positions[i + 1]!).toBeLessThanOrEqual(bmaxY + 0.2)
-      expect(built!.positions[i + 2]!).toBeGreaterThanOrEqual(bminZ - 0.2)
-      expect(built!.positions[i + 2]!).toBeLessThanOrEqual(bmaxZ + 0.2)
+      expect(built!.positions[i]!).toBeGreaterThanOrEqual(bminX - 0.4)
+      expect(built!.positions[i]!).toBeLessThanOrEqual(bmaxX + 0.4)
+      expect(built!.positions[i + 1]!).toBeGreaterThanOrEqual(bminY - 0.4)
+      expect(built!.positions[i + 1]!).toBeLessThanOrEqual(bmaxY + 0.4)
+      expect(built!.positions[i + 2]!).toBeGreaterThanOrEqual(bminZ - 0.4)
+      expect(built!.positions[i + 2]!).toBeLessThanOrEqual(bmaxZ + 0.4)
     }
   })
 
@@ -1216,7 +1218,11 @@ describe('网格绘制', () => {
     expect(prism(16)).toBeTruthy()
   })
 
-  it('渲染时五星和带洞的挤出按 depth/40 收掉尖角', async () => {
+  it('渲染时五星和带洞的挤出按屏幕尺度倒角收尖角', async () => {
+    // QUALITY-5 §1.1: bevel is screen-scaled (~1 px (QUALITY-5 §4), ≤ depth×0.12), not
+    // depth/40. Crops: flexlayer-render/docs/quality/q5-crops/bevel-*.png.
+    // Thick tips still darken vs thin; a 1 px bevel does not carve a 200²
+    // frame corner all the way to black the way depth/40 (=3) used to.
     const star = async (depth: number) => {
       const pts: string[] = []
       for (let i = 0; i < 10; i++) {
@@ -1231,8 +1237,10 @@ describe('网格绘制', () => {
     }
     const thinStar = await star(8)
     const thickStar = await star(80)
-    expect(thinStar.at(100, 32)[0]).toBeGreaterThan(180)
-    expect(thickStar.at(100, 32)[0]).toBeLessThan(40)
+    // QUALITY-5 §4: ~1 px bevel (with a small world-radius floor). Thin tips
+    // stay bright; thick tips darken relative to thin.
+    expect(thinStar.at(100, 32)[0]).toBeGreaterThan(170)
+    expect(thickStar.at(100, 32)[0]).toBeLessThan(thinStar.at(100, 32)[0] - 15)
     expect(thickStar.at(100, 48)[0]).toBeGreaterThan(180)
 
     const frame = async (depth: number) => {
@@ -1243,8 +1251,11 @@ describe('网格绘制', () => {
     }
     const thinFrame = await frame(8)
     const thickFrame = await frame(120)
-    expect(thinFrame.at(20, 20)[0]).toBeGreaterThan(180)
-    expect(thickFrame.at(20, 20)[0]).toBeLessThan(40)
+    // QUALITY-5 §4 ~1px bevel: thin keeps a bright tip; thick still darkens the
+    // outer corner relative to thin (absolute codes moved with the smaller lip).
+    expect(thinFrame.at(20, 20)[0]).toBeGreaterThan(165)
+    expect(thickFrame.at(20, 20)[0]).toBeLessThan(thinFrame.at(20, 20)[0]! - 40)
+    expect(thickFrame.at(20, 20)[0]).toBeLessThan(130)
     expect(thickFrame.at(40, 40)[0]).toBeGreaterThan(180)
     expect(thickFrame.at(80, 80)[0]).toBeLessThan(40)
   })

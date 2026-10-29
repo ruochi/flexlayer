@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { edgeLineCv, edgeStairShare, facetStripe, materialFeatures, moireEnergy, steppedShare } from '../scripts/metrics-image.mjs'
+import { edgeLineCv, edgeStairShare, facetStripe, materialFeatures, moireEnergy, ssrChecker, steppedShare } from '../scripts/metrics-image.mjs'
 
 /** A tall image whose every row is `values`. */
 function rows(values, height = values.length) {
@@ -150,6 +150,40 @@ describe('材质特征', () => {
     const features = materialFeatures(rgba, width, height)
     expect(features.darkFloor).toBeLessThan(60)
     expect(features.highlightArea).toBeGreaterThan(0.01)
+  })
+})
+
+describe('SSR 棋盘格', () => {
+  function fill(width: number, height: number, value: (x: number, y: number) => number) {
+    const rgba = new Uint8Array(width * height * 4)
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const v = value(x, y)
+        const i = (y * width + x) * 4
+        rgba[i] = rgba[i + 1] = rgba[i + 2] = v
+        rgba[i + 3] = 255
+      }
+    }
+    return rgba
+  }
+
+  it('1px 棋盘格接近 1，平滑渐变接近 0', () => {
+    const width = 48
+    const height = 48
+    const checker = fill(width, height, (x, y) => ((x + y) & 1 ? 40 : 120))
+    const ramp = fill(width, height, (x, y) => 40 + x * 2 + y)
+    expect(ssrChecker(checker, width, height)).toBeGreaterThan(0.9)
+    expect(ssrChecker(ramp, width, height)).toBe(0)
+  })
+
+  it('对角软边不算棋盘格', () => {
+    const width = 64
+    const height = 64
+    const soft = fill(width, height, (x, y) => {
+      const d = Math.hypot(x - 32, y - 32)
+      return Math.max(40, Math.min(255, Math.round(180 - d * 3)))
+    })
+    expect(ssrChecker(soft, width, height)).toBeLessThan(0.01)
   })
 })
 
