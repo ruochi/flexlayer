@@ -1039,8 +1039,9 @@ function lineStyleOf(node: MeshLayoutNode, opacity: number, shading?: string): L
   if (a <= 0) return null
   const scale = shading === 'technical' ? 1 : lineScale(node)
   // Hidden was 1px and under-counted vs legacy once tol tightened to ±12
-  // (QUALITY-5 §2). 1.6 clears the 0.7 ratio with crisp stamps.
-  const widths: [number, number, number] = shading === 'technical' ? [3, 2, 1.6] : [4 * scale, 2 * scale, 0]
+  // (QUALITY-5 §2). 1.7 clears the 0.7 ratio with a little headroom after
+  // glass/AA churn (1.6 slipped to 0.6979 on linux).
+  const widths: [number, number, number] = shading === 'technical' ? [3, 2, 1.7] : [4 * scale, 2 * scale, 0]
   const css = rgbaCss(LOOK_INK[0], LOOK_INK[1], LOOK_INK[2], a)
   const hiddenCss = shading === 'technical' ? rgbaCss(LOOK_HIDDEN[0], LOOK_HIDDEN[1], LOOK_HIDDEN[2], a) : null
   let creaseCss: string | null = null
