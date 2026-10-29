@@ -9,5 +9,5 @@
       <circle id="side" cx="330" cy="78" r="26" depth="100" material="clay" />
     </layer>
   </layer>
-  <layer x="12" y="304"><p style="font-size:18px">clay</p></layer>
+  <layer x="12" y="304"><p style="font-size:18px; color:#f4efe6">clay</p></layer>
 </layer>

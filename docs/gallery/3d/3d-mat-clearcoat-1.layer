@@ -9,5 +9,5 @@
       <circle id="side" cx="330" cy="78" r="26" depth="100" material="finish plastic, color #e0a33a, roughness 0.42, clearcoat 1" />
     </layer>
   </layer>
-  <layer x="12" y="304"><p style="font-size:18px">clearcoat 1</p></layer>
+  <layer x="12" y="304"><p style="font-size:18px; color:#f4efe6">clearcoat 1</p></layer>
 </layer>
