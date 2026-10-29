@@ -502,9 +502,13 @@ export function materialFeatures(rgba, width, height, accept = () => true) {
 }
 
 /**
- * Fraction of metal-ink pixels whose luma-delta signs alternate with their
- * four neighbours (QUALITY-5 §1.2 SSR checkerboard). A binary SSR hit/miss
- * leaves a high rate; a smooth reflection stays ≤ ~1%.
+ * Fraction of metal-ink pixels that are local extrema on both axes
+ * (QUALITY-5 §1.2 SSR checkerboard). A binary SSR hit/miss leaves a high
+ * rate of 1 px peaks; a smooth reflection stays ≤ ~1%.
+ *
+ * Same-axis opposite signs (`sign(c-l) === -sign(c-r)`) would count every
+ * steep diagonal softbox rim as "checker" — that is a smooth gradient, not
+ * a hit/miss lattice. A checker peak has the *same* sign to both neighbours.
  */
 export function ssrChecker(rgba, width, height, accept = () => true) {
   let n = 0
@@ -517,10 +521,16 @@ export function ssrChecker(rgba, width, height, accept = () => true) {
       const r = luma(rgba, (y * width + (x + 1)) * 4)
       const u = luma(rgba, ((y - 1) * width + x) * 4)
       const d = luma(rgba, ((y + 1) * width + x) * 4)
-      // True checkerboard: both axes alternate (binary SSR hit/miss). A single
-      // axis catches ordinary reflection edges and over-counts on metal plates.
-      const dx = Math.sign(c - l) !== 0 && Math.sign(c - l) === -Math.sign(c - r) && Math.abs(c - l) > 2.5 && Math.abs(c - r) > 2.5
-      const dy = Math.sign(c - u) !== 0 && Math.sign(c - u) === -Math.sign(c - d) && Math.abs(c - u) > 2.5 && Math.abs(c - d) > 2.5
+      const dx =
+        Math.sign(c - l) !== 0 &&
+        Math.sign(c - l) === Math.sign(c - r) &&
+        Math.abs(c - l) > 2.5 &&
+        Math.abs(c - r) > 2.5
+      const dy =
+        Math.sign(c - u) !== 0 &&
+        Math.sign(c - u) === Math.sign(c - d) &&
+        Math.abs(c - u) > 2.5 &&
+        Math.abs(c - d) > 2.5
       n += 1
       if (dx && dy) bad += 1
     }
