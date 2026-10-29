@@ -216,11 +216,13 @@ function lines(): string {
 type Plate = { name: string; source: string }
 
 function cell(label: string, body: string, w: number, h: number, background = '#241f1b', color = '#f4efe6'): string {
-  // QUALITY-5 §3.7: labels must clear 4.5:1. Force ink on the dark strip —
-  // inherited cream on beige ground was the recurring unreadability.
+  // QUALITY-5 §3.7: labels must clear 4.5:1. The camera ground often projects
+  // into the strip under the cell, so cream-on-beige fails. Dark ink on that
+  // beige (~12:1) stays readable without an opaque caption bar (a bar cut the
+  // floor and registered as a ground seam / manga page-grey fail).
   return `<layer width="${w}" height="${h + 32}" background="${background}" color="${color}" font-family="ChillDuanSans" min-font="16" safe="0">
   ${place(body, 0, 0)}
-  <layer x="12" y="${h + 4}"><p style="font-size:24px; color:#ffffff">${label}</p></layer>
+  <layer x="12" y="${h + 4}" color="#1c1915"><p style="font-size:24px; color:#1c1915; fill:#1c1915">${label}</p></layer>
 </layer>
 `
 }

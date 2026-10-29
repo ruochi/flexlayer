@@ -527,10 +527,16 @@ function measure(stem, rgba, width, height, elements, fills, seat, reference = n
   // still map those rows onto ground texels, so a label baseline reads as a
   // screen-aligned floor seam (QUALITY-5 §2: dof / anisotropy were the two
   // survivors). Drop caption ink the same way manga paper already does.
+  // An opaque caption bar (QUALITY-5 §3.7, white on dark) cuts the projected
+  // ground with a hard horizontal edge — exclude the whole strip, not just
+  // glyph ink, or that edge counts as a floor seam.
   const labels = elements
     .filter((el) => el.tag === 'p' || (el.tag === 'layer' && !el.box?.width?.toString().match(/^\d{3,}/)))
     .map((el) => bounds(el.ink, width, height))
     .filter(Boolean)
+  const hasCaptionStrip = labels.some((rect) => rect.y0 >= height - 40)
+  // Drop a few rows above the bar so the ground→bar step itself is not a seam.
+  const captionFloor = hasCaptionStrip ? Math.max(0, height - 36) : null
   const distant = distantFloor(rgba, width, height, camera, others)
   const align = seat ? alignSeat(rgba, width, height, seat) : null
   // Ground pixels the page has not painted over: the seat knows which pixels
@@ -543,7 +549,10 @@ function measure(stem, rgba, width, height, elements, fills, seat, reference = n
     return seat.ground[ky * seat.pw + kx] !== 0
   }
   const cleanGround = (x, y) =>
-    groundPixel(x, y) && !others.some((rect) => hit(rect, x, y)) && !labels.some((rect) => hit(rect, x, y))
+    groundPixel(x, y) &&
+    !others.some((rect) => hit(rect, x, y)) &&
+    !labels.some((rect) => hit(rect, x, y)) &&
+    (captionFloor == null || y < captionFloor)
   const seams = seat && align ? straightSeams(rgba, width, height, cleanGround) : []
   const blobs = seat && align
     ? brightBlobs(rgba, width, height, camera, { require: cleanGround })
