@@ -1853,7 +1853,7 @@ function readMeshLines(node: LayerNode, ctx: LayoutContext): { stroke: string; s
 }
 
 const MESH_MATERIALS = new Set(['matte', 'plastic', 'metal', 'glass', 'clay', 'mirror', 'brushed', 'lamp', 'neon'])
-const MESH_ROUGHNESS = { matte: 1, plastic: 0.4, metal: 0.25, glass: 0.08, clay: 1, mirror: 0.04, brushed: 1, lamp: 1, neon: 1 }
+const MESH_ROUGHNESS = { matte: 1, plastic: 0.4, metal: 0.25, glass: 0.08, clay: 1, mirror: 0.02, brushed: 1, lamp: 1, neon: 1 }
 // Mirror is a physical metal now (QUALITY-5 §2.1 / §3.2): the baked matcap
 // stayed soft and dark, so bare `material="mirror"` could not beat metal 0.08
 // on reflection sharpness. Clay / brushed stay matcap-only.

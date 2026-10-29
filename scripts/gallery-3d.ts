@@ -214,9 +214,11 @@ function lines(): string {
 type Plate = { name: string; source: string }
 
 function cell(label: string, body: string, w: number, h: number, background = '#241f1b', color = '#f4efe6'): string {
+  // QUALITY-5 §3.7: labels must clear 4.5:1. Force ink on the dark strip —
+  // inherited cream on beige ground was the recurring unreadability.
   return `<layer width="${w}" height="${h + 32}" background="${background}" color="${color}" font-family="ChillDuanSans" min-font="16" safe="0">
   ${place(body, 0, 0)}
-  <layer x="12" y="${h + 4}"><p style="font-size:18px">${label}</p></layer>
+  <layer x="12" y="${h + 4}"><p style="font-size:18px; color:#f4efe6">${label}</p></layer>
 </layer>
 `
 }
