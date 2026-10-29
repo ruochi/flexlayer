@@ -630,6 +630,12 @@ function paintGeometry(
   // (QUALITY-4 §2). Bevel on an already-rounded mesh is a no-op when no
   // sharp crease remains.
   const depth = bevelDepth(node, positions)
+  // Thin round-rect lids (macbook lid depth 10 / rx 24): bevel × arc chords
+  // cut a hard rectangular stroke (QUALITY-5 §1.4). Skip bevel; keep `rx`.
+  const rx = mesh.type === 'box' || mesh.type === 'cylinder' ? mesh.rx : 0
+  if (rx > 0 && depth > 0 && depth < rx * 0.55) {
+    return { positions, normals, indices }
+  }
   let radius = bevelRadius(depth)
   if (camera) {
     const c = meshCentroid(positions)
