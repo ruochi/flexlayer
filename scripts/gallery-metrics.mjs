@@ -18,7 +18,7 @@ import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { renderLayer } from '../src/render.ts'
 import { meanFlip } from './flip-diff.ts'
 import { GATES, checkGates, metalLumaDelta, platformSlack } from './metrics-gates.mjs'
-import { brightBlobs, edgeStairShare, facetStripe, luma, materialFeatures, moireEnergy, percentile, ssimLuma, steppedShare, straightSeams } from './metrics-image.mjs'
+import { brightBlobs, edgeStairShare, facetStripe, luma, materialFeatures, moireEnergy, percentile, ssimLuma, ssrChecker, steppedShare, straightSeams } from './metrics-image.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const repo = dirname(root)
@@ -1649,6 +1649,16 @@ if (stillCell) {
         0.9,
       )
     : null
+  const metalPlate = bounds(ids.get('metal-plate')?.ink, stillCell.width, stillCell.height)
+  const chrome = bounds(ids.get('chrome')?.ink, stillCell.width, stillCell.height)
+  const ssrRate = metalPlate
+    ? ssrChecker(stillCell.rgba, stillCell.width, stillCell.height, (x, y) => {
+        if (!hit(metalPlate, x, y)) return false
+        // Exclude the chrome sphere's own ink so we grade the plate reflection.
+        if (chrome && hit(chrome, x, y)) return false
+        return true
+      })
+    : null
   stillReport = {
     ...(floorStats(stillCell.rgba, stillCell.width, stillCell.height, ids) ?? {}),
     objectBlobs,
@@ -1660,6 +1670,7 @@ if (stillCell) {
     ...(stripeVisible(stillCell.rgba, stillCell.width, stillCell.height, ids, glassRect) ?? {}),
     ...(stillFrame(ids, cameraRect, cameraRect?.y0, stillCell.height) ?? {}),
     goldFacetStripe: goldStripe == null ? null : round(goldStripe, 2),
+    ssrChecker: ssrRate == null ? null : round(ssrRate, 4),
   }
 }
 const mangaCell = rendered.get('3d-shade-manga')

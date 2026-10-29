@@ -502,6 +502,32 @@ export function materialFeatures(rgba, width, height, accept = () => true) {
 }
 
 /**
+ * Fraction of metal-ink pixels whose luma-delta signs alternate with their
+ * four neighbours (QUALITY-5 §1.2 SSR checkerboard). A binary SSR hit/miss
+ * leaves a high rate; a smooth reflection stays ≤ ~1%.
+ */
+export function ssrChecker(rgba, width, height, accept = () => true) {
+  let n = 0
+  let bad = 0
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      if (!accept(x, y)) continue
+      const c = luma(rgba, (y * width + x) * 4)
+      const l = luma(rgba, (y * width + (x - 1)) * 4)
+      const r = luma(rgba, (y * width + (x + 1)) * 4)
+      const u = luma(rgba, ((y - 1) * width + x) * 4)
+      const d = luma(rgba, ((y + 1) * width + x) * 4)
+      const dx = Math.sign(c - l) !== 0 && Math.sign(c - l) === -Math.sign(c - r) && Math.abs(c - l) > 1.5 && Math.abs(c - r) > 1.5
+      const dy = Math.sign(c - u) !== 0 && Math.sign(c - u) === -Math.sign(c - d) && Math.abs(c - u) > 1.5 && Math.abs(c - d) > 1.5
+      n += 1
+      if (dx || dy) bad += 1
+    }
+  }
+  if (n < 32) return null
+  return bad / n
+}
+
+/**
  * Structural similarity between two luma patches of equal size. Used for glass
  * transmittance: clear glass keeps the stripes behind it (SSIM high), frosted
  * glass washes them out (SSIM low).
