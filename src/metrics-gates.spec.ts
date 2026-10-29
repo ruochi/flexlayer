@@ -19,7 +19,8 @@ const gates = {
   mangaPaperLumaMin: 238,
   mangaPaperShareMin: 0.7,
   mangaPaperChromaMax: 0.02,
-  hatchFlipMax: 0.18,
+  hatchFlipMax: 0.15,
+  hatchFlipEngineMax: 0.02,
   technicalChromaRatioMin: 0.9,
   technicalHiddenRatioMin: 0.7,
   stillPoolRiseMin: 15,
@@ -48,7 +49,7 @@ function passing() {
     emissive: { coreY: 245.18, haloRise: 0, outsideHot: 0 },
     materials: [{ a: '3d-mat-matte', b: '3d-mat-clay', flip: 0.39, sphereFlip: 0.4675 }],
     toon: [{ id: 'metal-plate', levels: 4 }],
-    manga: { meanY: 234.6, paperY: 239, share: 0.7552, chroma: 0.0136, grayShare: 0.011, hatchFlip: 0.124981 },
+    manga: { meanY: 234.6, paperY: 239, share: 0.7552, chroma: 0.0136, grayShare: 0.011, hatchFlip: 0.124981, hatchFlipEngine: 0.008 },
     lines: { emptyBelow: 0.027, inkGap: 24 },
     groundDefects: [{ cell: '3d-quality-final', seams: 0, blobs: 0, stair: 0.5, edgeFlip: 0.03 }],
     technical: { minRatio: 0.9889 },
@@ -241,8 +242,22 @@ describe('manga 排线对照', () => {
 
   it('门槛为 null 时只记录不判', () => {
     const report = passing()
-    report.manga = { ...report.manga!, hatchFlip: null }
-    expect(checkGates({ ...gates, hatchFlipMax: null }, report)).toEqual([])
+    report.manga = { ...report.manga!, hatchFlip: null, hatchFlipEngine: null }
+    expect(checkGates({ ...gates, hatchFlipMax: null, hatchFlipEngineMax: null }, report)).toEqual([])
+  })
+
+  it('引擎基线排线漂移超过门槛时失败', () => {
+    const report = passing()
+    report.manga = { ...report.manga!, hatchFlipEngine: 0.05 }
+    expect(checkGates(gates, report)[0]).toContain('manga engine hatch flip')
+  })
+
+  it('引擎基线找不到时失败，而不是当作通过', () => {
+    const report = passing()
+    report.manga = { ...report.manga!, hatchFlipEngine: null }
+    const errors = checkGates({ ...gates, hatchFlipMax: null }, report)
+    expect(errors.length).toBe(1)
+    expect(errors[0]).toContain('engine-baseline')
   })
 })
 
