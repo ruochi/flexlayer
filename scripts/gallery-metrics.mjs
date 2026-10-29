@@ -1126,55 +1126,31 @@ for (const name of MATERIAL_GRID) {
 }
 
 /**
- * Glass transmittance (QUALITY-4 §4.4): the material cells put vertical RGB
- * stripes behind the sphere. SSIM is mean-matched against the per-column
- * stripe profile measured *above* the sphere (the band below the disk is
- * plinth/ground and flattens the reference; an earlier full-band Y-profile
- * was flat for vertical bars). Clear keeps stripe edges; frost washes them.
+ * Glass transmittance (QUALITY-5 §1.3): SSIM between the glass disk and the
+ * same pixels on a second render with the sphere removed. Clear keeps the
+ * behind structure (high SSIM); frost washes it (low SSIM). Mean-matched so
+ * a global veil cannot fail a true transmit. Edge energy still has to drop
+ * from clear to frost.
  */
-function glassTransmit(cell) {
+function glassTransmit(cell, open) {
+  if (!cell || !open || cell.width !== open.width || cell.height !== open.height) return null
   const sphere = bounds(cell.ids.get('sphere')?.ink, cell.width, cell.height)
-  const red = bounds(cell.ids.get('stripe-red')?.ink, cell.width, cell.height)
-  const white = bounds(cell.ids.get('stripe-white')?.ink, cell.width, cell.height)
-  const blue = bounds(cell.ids.get('stripe-blue')?.ink, cell.width, cell.height)
-  if (!sphere || !red || !white || !blue) return null
+  if (!sphere) return null
   const cx = (sphere.x0 + sphere.x1) / 2
   const cy = (sphere.y0 + sphere.y1) / 2
   const r = Math.min(sphere.x1 - sphere.x0, sphere.y1 - sphere.y0) / 2
-  const bandX0 = Math.min(red.x0, white.x0, blue.x0)
-  const bandX1 = Math.max(red.x1, white.x1, blue.x1)
-  const bandY0 = Math.min(red.y0, white.y0, blue.y0)
-  const bandY1 = Math.max(red.y1, white.y1, blue.y1)
-  const x0 = Math.max(sphere.x0, bandX0)
-  const x1 = Math.min(sphere.x1, bandX1)
-  if (x1 - x0 < 3) return null
-  // Per-column luma of the stripe band above the sphere disk — that is the
-  // part of the plate where the three fills are still readable as bars.
-  const profileX = []
-  for (let x = bandX0; x < bandX1; x++) {
-    let sum = 0
-    let n = 0
-    for (let y = bandY0; y < Math.min(bandY1, sphere.y0); y++) {
-      if ((x - cx) ** 2 + (y - cy) ** 2 < r * r) continue
-      sum += luma(cell.rgba, (y * cell.width + x) * 4)
-      n += 1
-    }
-    profileX[x] = n ? sum / n : null
-  }
   const actual = []
   const expected = []
   let edge = 0
   let edgeN = 0
-  for (let y = Math.max(sphere.y0, bandY0); y < Math.min(sphere.y1, bandY1); y++) {
-    for (let x = x0; x < x1; x++) {
+  for (let y = sphere.y0; y <= sphere.y1; y++) {
+    for (let x = sphere.x0; x <= sphere.x1; x++) {
       if ((x - cx) ** 2 + (y - cy) ** 2 > (r * 0.75) ** 2) continue
-      const px = profileX[x]
-      if (px == null) continue
-      const yL = luma(cell.rgba, (y * cell.width + x) * 4)
-      actual.push(yL)
-      expected.push(px)
+      const i = (y * cell.width + x) * 4
+      actual.push(luma(cell.rgba, i))
+      expected.push(luma(open.rgba, i))
       if (x > 0 && x < cell.width - 1) {
-        edge += Math.abs(luma(cell.rgba, (y * cell.width + x + 1) * 4) - luma(cell.rgba, (y * cell.width + x - 1) * 4))
+        edge += Math.abs(luma(cell.rgba, i + 4) - luma(cell.rgba, i - 4))
         edgeN += 1
       }
     }
@@ -1190,10 +1166,27 @@ function glassTransmit(cell) {
   }
 }
 
+/** Drop the glass sphere so the stripes/plinth behind it are the SSIM reference. */
+function stripGlassSphere(source) {
+  return source.replace(/<sphere\b[^>]*\/>/g, '')
+}
+
+async function renderGlassOpen(stem) {
+  const file = `${stem}.layer`
+  const source = stripGlassSphere(readFileSync(join(gallery, file), 'utf8'))
+  const dir = seatDirFor(`${stem}-open`)
+  clearSeat(dir)
+  mkdirSync(dir, { recursive: true })
+  process.env.FLEXLAYER_SEAT_DEBUG = dir
+  const painted = await renderLayer(source, { baseDir: join(repo, 'docs/gallery'), format: 'rgba', meshCache: false })
+  return { rgba: painted.rgba, width: painted.width, height: painted.height }
+}
+
 const glassClear = rendered.get('3d-mat-glass-0-06')
 const glassFrost = rendered.get('3d-mat-glass-0-72')
-const glassClearT = glassClear ? glassTransmit(glassClear) : null
-const glassFrostT = glassFrost ? glassTransmit(glassFrost) : null
+const glassOpen = glassClear || glassFrost ? await renderGlassOpen('3d-mat-glass-0-06') : null
+const glassClearT = glassClear && glassOpen ? glassTransmit(glassClear, glassOpen) : null
+const glassFrostT = glassFrost && glassOpen ? glassTransmit(glassFrost, glassOpen) : null
 const glassSsim = {
   clear: glassClearT?.ssim != null ? round(glassClearT.ssim, 4) : null,
   frost: glassFrostT?.ssim != null ? round(glassFrostT.ssim, 4) : null,
