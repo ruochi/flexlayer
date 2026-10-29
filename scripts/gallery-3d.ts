@@ -218,7 +218,7 @@ function cell(label: string, body: string, w: number, h: number, background = '#
   // inherited cream on beige ground was the recurring unreadability.
   return `<layer width="${w}" height="${h + 32}" background="${background}" color="${color}" font-family="ChillDuanSans" min-font="16" safe="0">
   ${place(body, 0, 0)}
-  <layer x="12" y="${h + 4}"><p style="font-size:18px; color:#f4efe6">${label}</p></layer>
+  <layer x="12" y="${h + 4}"><p style="font-size:22px; color:#f4efe6">${label}</p></layer>
 </layer>
 `
 }

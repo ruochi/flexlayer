@@ -9,5 +9,5 @@
       <circle id="side" cx="330" cy="78" r="26" depth="100" material="finish metal, color #c5c9ce, roughness 0.32, metalness 1, anisotropy 0.9" />
     </layer>
   </layer>
-  <layer x="12" y="304"><p style="font-size:18px; color:#f4efe6">anisotropy 0.9</p></layer>
+  <layer x="12" y="304"><p style="font-size:22px; color:#f4efe6">anisotropy 0.9</p></layer>
 </layer>

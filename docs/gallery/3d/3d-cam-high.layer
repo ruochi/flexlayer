@@ -20,5 +20,5 @@
       <sphere id="lamp" cx="800" cy="55" r="20" z="150" material="lamp" />
     </layer>
   </layer>
-  <layer x="12" y="544"><p style="font-size:18px; color:#f4efe6">orbit 10 46</p></layer>
+  <layer x="12" y="544"><p style="font-size:22px; color:#f4efe6">orbit 10 46</p></layer>
 </layer>
