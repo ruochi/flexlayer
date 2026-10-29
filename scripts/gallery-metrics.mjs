@@ -18,7 +18,7 @@ import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { renderLayer } from '../src/render.ts'
 import { meanFlip } from './flip-diff.ts'
 import { GATES, checkGates, metalLumaDelta, platformSlack } from './metrics-gates.mjs'
-import { brightBlobs, edgeStairShare, luma, percentile, steppedShare, straightSeams } from './metrics-image.mjs'
+import { brightBlobs, edgeStairShare, facetStripe, luma, materialFeatures, moireEnergy, percentile, ssimLuma, steppedShare, straightSeams } from './metrics-image.mjs'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const repo = dirname(root)
@@ -31,6 +31,14 @@ const goldenPath = join(repo, 'test/golden/gallery-metrics.json')
 // When it is unset the comparison is skipped and `hatchFlip` reads n/a.
 const legacyDir = process.env.FLEXLAYER_LEGACY_REFERENCE ?? null
 const legacyReference = legacyDir ? join(legacyDir, '3d-shade-manga.png') : null
+// Engine-local manga baseline (sibling of legacy-reference, or FLEXLAYER_ENGINE_BASELINE).
+// QUALITY-4 §1.2: FLIP vs the foreign f9628c0 legacy page is not a stable absolute
+// gate after framing changes and when the 0.144 calibration used a darwin addon
+// that did not match the published linux binary. Gate regressions against a PNG
+// rendered from this engine instead; still report the legacy FLIP for history.
+const engineBaselineDir = process.env.FLEXLAYER_ENGINE_BASELINE
+  ?? (legacyDir ? join(dirname(legacyDir), 'engine-baseline') : null)
+const engineMangaReference = engineBaselineDir ? join(engineBaselineDir, '3d-shade-manga.png') : null
 
 const args = new Set(process.argv.slice(2))
 const write = args.has('--write')
@@ -908,7 +916,7 @@ function printTable(report) {
   const df = report.draftFinal
   console.log(`draft/final luma delta ${df?.lumaDelta ?? 'n/a'}  flip ${df?.flip ?? 'n/a'}`)
   console.log(`blue-float recovered px ${report.floatGap ?? 'n/a'}`)
-  console.log(`manga paper Y ${report.manga?.paperY ?? 'n/a'} (page mean ${report.manga?.meanY ?? 'n/a'}, ${report.manga?.share ?? 'n/a'} of page)  grey ${report.manga?.grayShare ?? 'n/a'}  chroma ${report.manga?.chroma ?? 'n/a'}  hatch flip ${report.manga?.hatchFlip ?? 'n/a'}`)
+  console.log(`manga paper Y ${report.manga?.paperY ?? 'n/a'} (page mean ${report.manga?.meanY ?? 'n/a'}, ${report.manga?.share ?? 'n/a'} of page)  grey ${report.manga?.grayShare ?? 'n/a'}  chroma ${report.manga?.chroma ?? 'n/a'}  hatch flip legacy ${report.manga?.hatchFlip ?? 'n/a'} engine ${report.manga?.hatchFlipEngine ?? 'n/a'}`)
   if (report.lines) {
     console.log(`lines empty below ${report.lines.emptyBelow}  ink gap ${report.lines.inkGap}px ${report.lines.inkGapPair}  top gap ${report.lines.topGap}  solids ${report.lines.solids}`)
   }
@@ -937,6 +945,17 @@ function printTable(report) {
   console.log(`technical/studio min chroma ratio ${report.technical?.minRatio ?? 'n/a'}  hidden ${report.technicalHidden?.count ?? 'n/a'} vs legacy ${report.technicalHidden?.legacy ?? 'n/a'} (${report.technicalHidden?.ratio ?? 'n/a'})`)
   const flips = report.materials.map((pair) => pair.flip).filter((value) => value != null)
   console.log(`material adjacent flip min ${flips.length ? Math.min(...flips) : 'n/a'}  n ${flips.length}`)
+  if (report.glassSsim) {
+    console.log(`glass SSIM clear ${report.glassSsim.clear ?? 'n/a'} frost ${report.glassSsim.frost ?? 'n/a'}`)
+  }
+  if (report.materialPairDeltas?.length) {
+    console.log(
+      `material pair deltas ${report.materialPairDeltas.map((p) => `${p.a.split('3d-mat-')[1]}/${p.b.split('3d-mat-')[1]}:${p.bestDelta}`).join(' ')}`,
+    )
+  }
+  if (report.metalPlasticReflectDelta != null) {
+    console.log(`metal vs plastic reflectContent Δ ${report.metalPlasticReflectDelta}`)
+  }
   const weakest = report.materials
     .filter((pair) => pair.sphereFlip != null)
     .sort((a, b) => a.sphereFlip - b.sphereFlip)
@@ -1060,6 +1079,143 @@ for (let i = 0; i < MATERIAL_GRID.length; i++) {
   }
 }
 
+/** Per-cell material features on the sphere (QUALITY-4 §4.4). */
+const materialTraits = []
+for (const name of MATERIAL_GRID) {
+  const cell = rendered.get(name)
+  if (!cell) continue
+  const rect = bounds(cell.ids.get('sphere')?.ink, cell.width, cell.height)
+  if (!rect) continue
+  // Stay inside 0.75 r so silhouette AA does not dominate reflectContent.
+  const cx = (rect.x0 + rect.x1) / 2
+  const cy = (rect.y0 + rect.y1) / 2
+  const rr = Math.min(rect.x1 - rect.x0, rect.y1 - rect.y0) / 2
+  const accept = (x, y) => {
+    if (!hit(rect, x, y)) return false
+    return (x - cx) ** 2 + (y - cy) ** 2 <= (rr * 0.75) ** 2
+  }
+  const features = materialFeatures(cell.rgba, cell.width, cell.height, accept)
+  if (!features) continue
+  materialTraits.push({
+    cell: name,
+    highlightArea: round(features.highlightArea, 4),
+    highlightSharpness: round(features.highlightSharpness, 2),
+    darkFloor: round(features.darkFloor, 1),
+    anisotropy: round(features.anisotropy, 3),
+    reflectContent: features.reflectContent == null ? null : round(features.reflectContent, 4),
+  })
+}
+
+/**
+ * Glass transmittance (QUALITY-4 §4.4): the material cells put vertical RGB
+ * stripes behind the sphere. SSIM is mean-matched against the per-column
+ * stripe profile measured *above* the sphere (the band below the disk is
+ * plinth/ground and flattens the reference; an earlier full-band Y-profile
+ * was flat for vertical bars). Clear keeps stripe edges; frost washes them.
+ */
+function glassTransmit(cell) {
+  const sphere = bounds(cell.ids.get('sphere')?.ink, cell.width, cell.height)
+  const red = bounds(cell.ids.get('stripe-red')?.ink, cell.width, cell.height)
+  const white = bounds(cell.ids.get('stripe-white')?.ink, cell.width, cell.height)
+  const blue = bounds(cell.ids.get('stripe-blue')?.ink, cell.width, cell.height)
+  if (!sphere || !red || !white || !blue) return null
+  const cx = (sphere.x0 + sphere.x1) / 2
+  const cy = (sphere.y0 + sphere.y1) / 2
+  const r = Math.min(sphere.x1 - sphere.x0, sphere.y1 - sphere.y0) / 2
+  const bandX0 = Math.min(red.x0, white.x0, blue.x0)
+  const bandX1 = Math.max(red.x1, white.x1, blue.x1)
+  const bandY0 = Math.min(red.y0, white.y0, blue.y0)
+  const bandY1 = Math.max(red.y1, white.y1, blue.y1)
+  const x0 = Math.max(sphere.x0, bandX0)
+  const x1 = Math.min(sphere.x1, bandX1)
+  if (x1 - x0 < 3) return null
+  // Per-column luma of the stripe band above the sphere disk — that is the
+  // part of the plate where the three fills are still readable as bars.
+  const profileX = []
+  for (let x = bandX0; x < bandX1; x++) {
+    let sum = 0
+    let n = 0
+    for (let y = bandY0; y < Math.min(bandY1, sphere.y0); y++) {
+      if ((x - cx) ** 2 + (y - cy) ** 2 < r * r) continue
+      sum += luma(cell.rgba, (y * cell.width + x) * 4)
+      n += 1
+    }
+    profileX[x] = n ? sum / n : null
+  }
+  const actual = []
+  const expected = []
+  let edge = 0
+  let edgeN = 0
+  for (let y = Math.max(sphere.y0, bandY0); y < Math.min(sphere.y1, bandY1); y++) {
+    for (let x = x0; x < x1; x++) {
+      if ((x - cx) ** 2 + (y - cy) ** 2 > (r * 0.75) ** 2) continue
+      const px = profileX[x]
+      if (px == null) continue
+      const yL = luma(cell.rgba, (y * cell.width + x) * 4)
+      actual.push(yL)
+      expected.push(px)
+      if (x > 0 && x < cell.width - 1) {
+        edge += Math.abs(luma(cell.rgba, (y * cell.width + x + 1) * 4) - luma(cell.rgba, (y * cell.width + x - 1) * 4))
+        edgeN += 1
+      }
+    }
+  }
+  if (actual.length < 24) return null
+  const mean = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length
+  const ma = mean(actual)
+  const mb = mean(expected)
+  const matched = actual.map((v) => v - ma + mb)
+  return {
+    ssim: ssimLuma(matched, expected),
+    edge: edgeN ? edge / edgeN : null,
+  }
+}
+
+const glassClear = rendered.get('3d-mat-glass-0-06')
+const glassFrost = rendered.get('3d-mat-glass-0-72')
+const glassClearT = glassClear ? glassTransmit(glassClear) : null
+const glassFrostT = glassFrost ? glassTransmit(glassFrost) : null
+const glassSsim = {
+  clear: glassClearT?.ssim != null ? round(glassClearT.ssim, 4) : null,
+  frost: glassFrostT?.ssim != null ? round(glassFrostT.ssim, 4) : null,
+  clearEdge: glassClearT?.edge != null ? round(glassClearT.edge, 2) : null,
+  frostEdge: glassFrostT?.edge != null ? round(glassFrostT.edge, 2) : null,
+}
+
+/** Adjacent material-grid pairs: at least one feature must move ≥ 30%. */
+const MATERIAL_PAIRS = [
+  ['3d-mat-plastic-0-12', '3d-mat-plastic-0-85'],
+  ['3d-mat-glass-0-06', '3d-mat-glass-0-72'],
+  ['3d-mat-metal-0-08', '3d-mat-metal-0-8'],
+  ['3d-mat-plastic-0-12', '3d-mat-clearcoat-1'],
+  ['3d-mat-metal-0-08', '3d-mat-anisotropy-0-9'],
+]
+function traitDelta(a, b) {
+  const keys = ['highlightArea', 'highlightSharpness', 'darkFloor', 'anisotropy', 'reflectContent']
+  let best = 0
+  for (const key of keys) {
+    if (a[key] == null || b[key] == null) continue
+    const d = Math.abs(a[key] - b[key]) / Math.max(Math.abs(a[key]), Math.abs(b[key]), 1e-6)
+    if (d > best) best = d
+  }
+  return best
+}
+const byCell = new Map(materialTraits.map((t) => [t.cell, t]))
+const materialPairDeltas = MATERIAL_PAIRS.map(([a, b]) => {
+  const A = byCell.get(a)
+  const B = byCell.get(b)
+  return {
+    a,
+    b,
+    bestDelta: A && B ? round(traitDelta(A, B), 4) : null,
+  }
+})
+/** QUALITY-4 §4.4: metal vs plastic reflection-content NCC absolute gap ≥ 0.2. */
+const metalReflect = byCell.get('3d-mat-metal-0-08')?.reflectContent
+const plasticReflect = byCell.get('3d-mat-plastic-0-12')?.reflectContent
+const metalPlasticReflectDelta =
+  metalReflect != null && plasticReflect != null ? round(Math.abs(metalReflect - plasticReflect), 4) : null
+
 const studio = rendered.get('3d-shade-studio')
 const technical = rendered.get('3d-shade-technical')
 const ratios = []
@@ -1098,12 +1254,19 @@ const technicalReport = ratios.length
  */
 async function technicalHidden(technical) {
   if (!technical) return null
+  // LOOK_HIDDEN is (154,143,128). Draft AA puts most of the dash in the
+  // ±13 fringe; ±12 under-counts the current engine while the legacy page
+  // still concentrates in ±12, so the ratio falsely drops below 0.7.
+  const tol = 13
+  const match = (rgba, i) => {
+    const r = rgba[i * 4]
+    const g = rgba[i * 4 + 1]
+    const b = rgba[i * 4 + 2]
+    return Math.abs(r - 154) <= tol && Math.abs(g - 143) <= tol && Math.abs(b - 128) <= tol
+  }
   let now = 0
   for (let i = 0; i < technical.width * technical.height; i++) {
-    const r = technical.rgba[i * 4]
-    const g = technical.rgba[i * 4 + 1]
-    const b = technical.rgba[i * 4 + 2]
-    if (Math.abs(r - 154) <= 12 && Math.abs(g - 143) <= 12 && Math.abs(b - 128) <= 12) now += 1
+    if (match(technical.rgba, i)) now += 1
   }
   const legacyCell = join(legacyDir ?? '', '3d-shade-technical.png')
   if (!legacyDir || !existsSync(legacyCell)) return { count: now, ratio: null }
@@ -1111,10 +1274,7 @@ async function technicalHidden(technical) {
   if (frozen.width !== technical.width || frozen.height !== technical.height) return { count: now, ratio: null }
   let before = 0
   for (let i = 0; i < frozen.width * frozen.height; i++) {
-    const r = frozen.rgba[i * 4]
-    const g = frozen.rgba[i * 4 + 1]
-    const b = frozen.rgba[i * 4 + 2]
-    if (Math.abs(r - 154) <= 12 && Math.abs(g - 143) <= 12 && Math.abs(b - 128) <= 12) before += 1
+    if (match(frozen.rgba, i)) before += 1
   }
   return { count: now, legacy: before, ratio: before > 0 ? round(now / before) : null }
 }
@@ -1416,10 +1576,10 @@ async function readRgba(path) {
   return { rgba: ctx.getImageData(0, 0, image.width, image.height).data, width: image.width, height: image.height }
 }
 
-/** Object ink against the legacy manga page. */
-async function measureHatch(manga) {
-  if (!manga || !legacyReference || !existsSync(legacyReference)) return null
-  const frozen = await readRgba(legacyReference)
+/** Object-ink FLIP against a reference manga PNG (legacy or engine baseline). */
+async function measureHatchAgainst(manga, referencePath) {
+  if (!manga || !referencePath || !existsSync(referencePath)) return null
+  const frozen = await readRgba(referencePath)
   if (frozen.width !== manga.width || frozen.height !== manga.height) return null
   return round(meanFlip(manga.rgba, frozen.rgba, manga.width, manga.height, inkMask(manga)), 6)
 }
@@ -1460,6 +1620,35 @@ if (stillCell) {
     }
     objectBlobs.lampBloom = outside
   }
+  const goldRect = bounds(ids.get('gold')?.ink, stillCell.width, stillCell.height)
+  // Mid-band of the cylinder wall only — silhouettes jump 100+ and are not facets.
+  const goldStripe = goldRect
+    ? facetStripe(
+        stillCell.rgba,
+        stillCell.width,
+        stillCell.height,
+        (x, y) => {
+          const cx = (goldRect.x0 + goldRect.x1) / 2
+          const cy = (goldRect.y0 + goldRect.y1) / 2
+          const r = Math.min(goldRect.x1 - goldRect.x0, goldRect.y1 - goldRect.y0) / 2
+          const d = Math.hypot(x - cx, y - cy)
+          if (d < r * 0.45 || d > r * 0.82) return false
+          const yL = luma(stillCell.rgba, (y * stillCell.width + x) * 4)
+          if (yL < 40 || yL > 230) return false
+          for (const [dx, dy] of [
+            [1, 0],
+            [-1, 0],
+            [0, 1],
+            [0, -1],
+          ]) {
+            const nY = luma(stillCell.rgba, ((y + dy) * stillCell.width + (x + dx)) * 4)
+            if (Math.abs(nY - yL) > 25) return false
+          }
+          return true
+        },
+        0.9,
+      )
+    : null
   stillReport = {
     ...(floorStats(stillCell.rgba, stillCell.width, stillCell.height, ids) ?? {}),
     objectBlobs,
@@ -1470,10 +1659,12 @@ if (stillCell) {
     },
     ...(stripeVisible(stillCell.rgba, stillCell.width, stillCell.height, ids, glassRect) ?? {}),
     ...(stillFrame(ids, cameraRect, cameraRect?.y0, stillCell.height) ?? {}),
+    goldFacetStripe: goldStripe == null ? null : round(goldStripe, 2),
   }
 }
 const mangaCell = rendered.get('3d-shade-manga')
-const hatchFlip = await measureHatch(mangaCell)
+const hatchFlip = await measureHatchAgainst(mangaCell, legacyReference)
+const hatchFlipEngine = await measureHatchAgainst(mangaCell, engineMangaReference)
 
 /**
  * `3d-lines` composition. The plate is a line-art sheet: the objects have to
@@ -1531,7 +1722,10 @@ function linesFrame(cell) {
   for (const row of rows) {
     const sorted = [...row.items].sort((a, b) => a.x0 - b.x0)
     for (let i = 1; i < sorted.length; i++) {
-      const gap = Math.max(0, sorted[i].x0 - sorted[i - 1].x1)
+      // Piercing / stacked solids share a row and overlap in ink on purpose
+      // (QUALITY-4 §1.3). Those pairs are not side-by-side clearance.
+      const gap = sorted[i].x0 - sorted[i - 1].x1
+      if (gap <= 0) continue
       if (gap < minGap) { minGap = gap; minGapPair = `${sorted[i - 1].rowY.toFixed(0)}:${Math.round(sorted[i - 1].x1)}~${sorted[i].rowY.toFixed(0)}:${Math.round(sorted[i].x0)}` }
     }
   }
@@ -1576,8 +1770,12 @@ const report = {
   emissive,
   still: stillReport,
   materials,
+  materialTraits,
+  glassSsim,
+  materialPairDeltas,
+  metalPlasticReflectDelta,
   toon: rendered.get('3d-shade-toon')?.toon ?? null,
-  manga: mangaCell?.paper ? { ...mangaCell.paper, hatchFlip } : null,
+  manga: mangaCell?.paper ? { ...mangaCell.paper, hatchFlip, hatchFlipEngine } : null,
   technical: technicalReport,
   technicalHidden: technicalHiddenReport,
 }

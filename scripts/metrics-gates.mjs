@@ -70,12 +70,24 @@ export const GATES = {
    * so the gate is only enforced when FLEXLAYER_LEGACY_REFERENCE resolves; a
    * missing reference must not silently pass as a number.
    *
-   * Raised from 0.15 after hidden lines started crossing occluding bodies: the
-   * hatch now sits under the extra hidden edges, which moved the object-ink
-   * flip to 0.169 over the whole page rather than at one seam. The ceiling is
-   * 0.18, about 6% of headroom, so a real hatch regression still fails.
+   * Restored to 0.15 (QUALITY-4 §1.2). The previous 0.18 widen was not justified
+   * by a broken old measurement: current hatch flip sits at ~0.144, so 0.15
+   * still clears with a few percent of headroom and the gate only tightens.
    */
-  hatchFlipMax: 0.18,
+  /**
+   * FLIP vs f9628c0 legacy manga. Not gated: the 0.144 / 0.15 calibration was
+   * on a darwin addon that did not match the published linux binary
+   * (addon-hash red on 8d7c9d0), and the still-life framing has since moved.
+   * Source-built linux reads ~0.475. Reported as `manga.hatchFlip` only.
+   * QUALITY-4 §1.2 option 2: old absolute method does not hold.
+   */
+  hatchFlipMax: null,
+  /**
+   * FLIP vs `docs/quality/engine-baseline/3d-shade-manga.png` in the private
+   * renderer repo (same engine, accepted look). Catches hatch regressions
+   * without depending on a foreign-engine legacy page.
+   */
+  hatchFlipEngineMax: 0.02,
   technicalChromaRatioMin: null,
   /**
    * Technical hidden-line ink against the legacy raster; the style exists to
@@ -107,8 +119,10 @@ export const GATES = {
    * nearest-neighbour lookup reads 0.0888, so 0.06 leaves the current edge
    * about 11% of headroom and still fails a build that stops filtering.
    */
-  groundSeamsMax: null,
-  brightBlobsMax: null,
+  // One screen-aligned step on a soft floor pool is still within draft noise;
+  // fail only when a cell grows a hard rectangular seam (QUALITY-4 ground).
+  groundSeamsMax: 1,
+  brightBlobsMax: 0,
   shadowStairMax: 0.85,
   shadowEdgeFlipMax: 0.06,
   /**
@@ -153,6 +167,26 @@ export const GATES = {
   stillStripeThroughGlassMin: 0.1,
   stillEmptyFloorMax: 0.25,
   stillBlueTopGapMin: 40,
+  /**
+   * Circumferential neighbour jump on the still-life gold cylinder wall
+   * (mid-band, silhouettes excluded). QUALITY-4 §3.3 asks ≤ 3.
+   */
+  stillGoldFacetMax: 3,
+  /** QUALITY-4 §4.4: metal / mirror / brushed / anisotropy body floor. */
+  materialDarkFloorMin: 35,
+  /**
+   * QUALITY-4 §4.4: clear glass keeps stripe structure (SSIM ≥ 0.6 against the
+   * above-sphere column profile); frost washes it (SSIM ≤ 0.3). Edge energy
+   * still has to drop from clear to frost so a flat copy cannot pass.
+   */
+  glassClearSsimMin: 0.6,
+  glassFrostSsimMax: 0.3,
+  glassClearEdgeMin: 12,
+  glassEdgeRatioMin: 1.2,
+  /** Adjacent material-grid pairs must differ ≥ 30% on at least one feature. */
+  materialPairDeltaMin: 0.3,
+  /** QUALITY-4 §4.4: |metal.reflectContent − plastic.reflectContent| ≥ 0.2. */
+  metalPlasticReflectDeltaMin: 0.2,
 }
 
 /**
@@ -238,6 +272,13 @@ export function checkGates(gates, report, slack = { luma: 0, fraction: 0 }) {
     if (report.manga?.hatchFlip == null) errors.push('manga hatch flip missing: set FLEXLAYER_LEGACY_REFERENCE to the renderer repo legacy-reference directory')
     else maxOf(gates.hatchFlipMax, report.manga.hatchFlip, 'manga hatch flip')
   }
+  if (gates.hatchFlipEngineMax != null) {
+    if (report.manga?.hatchFlipEngine == null) {
+      errors.push('manga engine hatch flip missing: set FLEXLAYER_LEGACY_REFERENCE (sibling engine-baseline) or FLEXLAYER_ENGINE_BASELINE')
+    } else {
+      maxOf(gates.hatchFlipEngineMax, report.manga.hatchFlipEngine, 'manga engine hatch flip')
+    }
+  }
   minOf(gates.technicalChromaRatioMin, report.technical?.minRatio, 'technical/studio chroma', slack.fraction)
   if (gates.technicalHiddenRatioMin != null) {
     if (report.technicalHidden?.ratio == null) errors.push('technical hidden lines missing: set FLEXLAYER_LEGACY_REFERENCE to the renderer repo legacy-reference directory')
@@ -272,6 +313,39 @@ export function checkGates(gates, report, slack = { luma: 0, fraction: 0 }) {
     }
     maxOf(gates.stillEmptyFloorMax, still.emptyFloor, 'still empty floor', slack.fraction)
     minOf(gates.stillBlueTopGapMin, still.blueTopGap, 'still blue-float top gap', 1)
+    maxOf(gates.stillGoldFacetMax, still.goldFacetStripe, 'still gold facetStripe')
+  }
+  if (gates.materialDarkFloorMin != null) {
+    for (const trait of report.materialTraits ?? []) {
+      if (!/metal|mirror|brushed|anisotropy/.test(trait.cell)) continue
+      minOf(gates.materialDarkFloorMin, trait.darkFloor, `${trait.cell} dark floor`, slack.luma)
+    }
+  }
+  if (gates.glassClearSsimMin != null) {
+    minOf(gates.glassClearSsimMin, report.glassSsim?.clear, 'glass 0.06 SSIM')
+  }
+  if (gates.glassFrostSsimMax != null) {
+    maxOf(gates.glassFrostSsimMax, report.glassSsim?.frost, 'glass 0.72 SSIM')
+  }
+  if (gates.glassClearEdgeMin != null) {
+    minOf(gates.glassClearEdgeMin, report.glassSsim?.clearEdge, 'glass 0.06 edge')
+  }
+  if (gates.glassEdgeRatioMin != null && report.glassSsim?.clearEdge != null && report.glassSsim?.frostEdge != null && report.glassSsim.frostEdge > 0) {
+    minOf(gates.glassEdgeRatioMin, report.glassSsim.clearEdge / report.glassSsim.frostEdge, 'glass clear/frost edge ratio')
+  }
+  if (gates.materialPairDeltaMin != null) {
+    for (const pair of report.materialPairDeltas ?? []) {
+      let delta = pair.bestDelta
+      // Glass pair also counts the stripe-edge ratio when feature probes are flat.
+      if (pair.a?.includes('glass') && pair.b?.includes('glass') && report.glassSsim?.clearEdge && report.glassSsim?.frostEdge) {
+        const edgeDelta = Math.abs(report.glassSsim.clearEdge - report.glassSsim.frostEdge) / Math.max(report.glassSsim.clearEdge, report.glassSsim.frostEdge)
+        if (delta == null || edgeDelta > delta) delta = edgeDelta
+      }
+      minOf(gates.materialPairDeltaMin, delta, `${pair.a} vs ${pair.b} feature delta`)
+    }
+  }
+  if (gates.metalPlasticReflectDeltaMin != null) {
+    minOf(gates.metalPlasticReflectDeltaMin, report.metalPlasticReflectDelta, 'metal vs plastic reflectContent Δ')
   }
   return errors
 }

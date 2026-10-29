@@ -67,8 +67,11 @@ const keyPath = keys().map((k) => roundRect(k.w, k.h, 4, k.x, k.y)).join(' ')
 const WELL_BOX = { x: KB.x, y: KB.y, w: 14.5 * PITCH + 10, h: 6 * PITCH + 10 }
 
 function grille(x: number, y: number, w: number, h: number) {
-  const step = 5.2
-  const r = 1.05
+  // Period under ~2 px on screen reads as moiré (QUALITY-4 §3.4). Keep holes
+  // large enough that a pixel footprint covers at most one, and pad the well
+  // with the area-average grey so sparse samples still look even.
+  const step = 6.5
+  const r = 1.55
   let d = ''
   for (let gy = y + step / 2; gy < y + h; gy += step) {
     for (let gx = x + step / 2; gx < x + w; gx += step) {
@@ -89,9 +92,11 @@ const padY = D - 30 - PAD.h
 function Base() {
   return (
     <layer x={STAGE.x} y={STAGE.groundY - TOP} width={W} height={D} origin={`${W / 2} 0`} rotateX="90" preserve-3d>
-      <path d={roundRect(W, D, 24)} fill={SILVER} material={SHELL} depth={T} stroke="none" />
+      <rect width={W} height={D} rx="24" fill={SILVER} material={SHELL} depth={T} stroke="none" />
       <layer x="0" y="0" width={W} height={D} z={TOP + 0.2} cast-shadow="false">
         <rect x={WELL_BOX.x} y={WELL_BOX.y} width={WELL_BOX.w} height={WELL_BOX.h} rx="8" fill={WELL} />
+        <rect x={KB.x - GRILLE_W - 18} y={KB.y + 4} width={GRILLE_W} height={WELL_BOX.h - 8} rx="4" fill="#4a4c51" />
+        <rect x={WELL_BOX.x + WELL_BOX.w + 18} y={KB.y + 4} width={GRILLE_W} height={WELL_BOX.h - 8} rx="4" fill="#4a4c51" />
         <path d={grilleLeft} fill="#3c3e43" stroke="none" />
         <path d={grilleRight} fill="#3c3e43" stroke="none" />
         <rect x={padX - 1.5} y={padY - 1.5} width={PAD.w + 3} height={PAD.h + 3} rx="13" fill="#8f9298" />
@@ -154,7 +159,7 @@ function Wallpaper() {
 function Lid() {
   return (
     <layer x={STAGE.x} y={STAGE.groundY - T + 4 - LID_H} width={W} height={LID_H} origin={`${W / 2} ${LID_H}`} rotateX={LID_TILT} cast-shadow="false">
-      <path d={roundRect(W, LID_H, 24)} fill={SILVER} material={SHELL} depth={LID_T} z={-LID_T / 2 - 1} stroke="none" cast-shadow="false" />
+      <rect width={W} height={LID_H} rx="24" fill={SILVER} material={SHELL} depth={LID_T} z={-LID_T / 2 - 1} stroke="none" cast-shadow="false" />
       <rect x="7" y="7" width={W - 14} height={LID_H - 14} rx="18" fill="#050608" cast-shadow="false" />
       <Wallpaper />
       <rect x={W / 2 - 36} y="7" width="72" height="27" rx="8" fill="#050608" cast-shadow="false" />
