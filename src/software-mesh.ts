@@ -597,15 +597,17 @@ function meshCentroid(positions: Float32Array): { x: number; y: number; z: numbe
 }
 
 /**
- * QUALITY-4 §2.3 first step: one radius so the bevel is ~1 px at the mesh
- * centroid. Skip when that would land under 0.75 px (sub-pixel dashes).
+ * QUALITY-5 §4: world radius so the bevel is ~1 screen px at the sample
+ * point. Skip when that would land under 0.75 px (sub-pixel dashes).
  */
 export function bevelRadiusFromScale(scale: number, depth: number): number | null {
   if (!(scale > 1e-6)) return null
-  // Target ~1.75 screen px so a long laptop lip stays continuous under
-  // perspective (1.0–1.5 still dashed on the base-front chord). Thin lids
-  // (depth 10) need up to ~0.12·depth to realise that on screen.
-  let r = 1.75 / scale
+  // Target ~1.0 screen px (QUALITY-5 §4). `bevel_few_faces` needs a little
+  // world radius to inset on parallel unit-scale shots; floor toward 1.5 world
+  // only while the projected width stays ≤ ~1.5 px.
+  let r = 1.0 / scale
+  const minWorld = 1.5
+  if (r < minWorld && minWorld * scale <= 1.5) r = minWorld
   r = Math.min(r, Math.max(depth, 0) * 0.12)
   if (r * scale < 0.75 || r < 0.05) return null
   return r
@@ -637,6 +639,7 @@ function paintGeometry(
     return { positions, normals, indices }
   }
   let radius = bevelRadius(depth)
+  let scaleField: Float64Array | null = null
   if (camera) {
     const c = meshCentroid(positions)
     const scale = screenScaleAt(
@@ -653,9 +656,68 @@ function paintGeometry(
     const scaled = scale == null ? null : bevelRadiusFromScale(scale, depth)
     if (scaled == null) return { positions, normals, indices }
     radius = scaled
+    // QUALITY-5 §4: per-edge radii from an AABB scale field so near/far lips
+    // stay near 1 px under perspective (centroid-only drifted past 1.25×).
+    let minX = Infinity
+    let minY = Infinity
+    let minZ = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    let maxZ = -Infinity
+    const n = Math.floor(positions.length / 3)
+    for (let i = 0; i < n; i++) {
+      const x = positions[i * 3]!
+      const y = positions[i * 3 + 1]!
+      const z = positions[i * 3 + 2]!
+      if (x < minX) minX = x
+      if (y < minY) minY = y
+      if (z < minZ) minZ = z
+      if (x > maxX) maxX = x
+      if (y > maxY) maxY = y
+      if (z > maxZ) maxZ = z
+    }
+    const xs = [minX, maxX]
+    const ys = [minY, maxY]
+    const zs = [minZ, maxZ]
+    const field = new Float64Array(15)
+    field[0] = minX
+    field[1] = minY
+    field[2] = minZ
+    field[3] = maxX
+    field[4] = maxY
+    field[5] = maxZ
+    let fi = 6
+    for (let iz = 0; iz < 2; iz++) {
+      for (let iy = 0; iy < 2; iy++) {
+        for (let ix = 0; ix < 2; ix++) {
+          const s = screenScaleAt(
+            camera.toLayer,
+            camera.originX,
+            camera.originY,
+            xs[ix]!,
+            ys[iy]!,
+            zs[iz]!,
+            camera.vx,
+            camera.vy,
+            camera.perspective,
+          )
+          field[fi++] = s ?? scale ?? 1
+        }
+      }
+    }
+    field[14] = 1.0
+    scaleField = field
   }
-  return bevelFewFaces(positions, indices, radius) ?? { positions, normals, indices }
+  let built = bevelFewFaces(positions, indices, radius, scaleField)
+  // QUALITY-5 §4: some shells fail the inset near 1 px; retry up toward the
+  // legacy 1.75 px world radius before dropping the chamfer.
+  if (!built && camera) {
+    const retry = Math.min(radius * 1.75, Math.max(depth, 0) * 0.12)
+    if (retry > radius + 1e-6) built = bevelFewFaces(positions, indices, retry, null)
+  }
+  return built ?? { positions, normals, indices }
 }
+
 
 function geometryOf(node: MeshLayoutNode): MeshGeometry | null {
   const key = geometryCacheKey(node)
