@@ -51,9 +51,11 @@ const EDGE_WINDOWS = [
   { name: 'base-front', y0: 1100, y1: 1210, x0: 310, x1: 400 },
   { name: 'base-right', y0: 1080, y1: 1165, x0: 980, x1: 1100 },
   // Short chords on the silver bezel — a full-width lid-top row crosses the
-  // wallpaper and looks like a dashed bevel.
-  { name: 'lid-top', y0: 230, y1: 300, x0: 400, x1: 560 },
-  { name: 'lid-side', y0: 420, y1: 620, x0: 1040, x1: 1160 },
+  // wallpaper and looks like a dashed bevel. Thin lids skip crease bevel
+  // (QUALITY-5 §1.4), so these windows often return null; that is fine —
+  // worstEdgeSd only grades rows that resolve to a mid-tone bevel chord.
+  { name: 'lid-top', y0: 330, y1: 365, x0: 480, x1: 640 },
+  { name: 'lid-side', y0: 500, y1: 700, x0: 1095, x1: 1135 },
 ]
 
 function rowMean(samples) {
@@ -74,7 +76,11 @@ function bestEdgeInWindow(rgba, width, win) {
     if (samples.length < 24) continue
     const stats = edgeLineCv(samples)
     if (!stats) continue
-    if (stats.mean < 70 || stats.mean > 185) continue
+    // Silver lips sit around Y 170–205; keep the ceiling above the metal
+    // floor but reject near-white cliffs.
+    if (stats.mean < 70 || stats.mean > 205) continue
+    // A row with sd already above the continuity gate is not a bevel chord.
+    if (stats.sd > 6) continue
     const above = rowMean(sampleRow(rgba, width, y - 2, win.x0, win.x1, [0, 255]))
     const below = rowMean(sampleRow(rgba, width, y + 2, win.x0, win.x1, [0, 255]))
     if (above == null || below == null) continue
