@@ -1853,8 +1853,11 @@ function readMeshLines(node: LayerNode, ctx: LayoutContext): { stroke: string; s
 }
 
 const MESH_MATERIALS = new Set(['matte', 'plastic', 'metal', 'glass', 'clay', 'mirror', 'brushed', 'lamp', 'neon'])
-const MESH_ROUGHNESS = { matte: 1, plastic: 0.4, metal: 0.25, glass: 0.08, clay: 1, mirror: 1, brushed: 1, lamp: 1, neon: 1 }
-const MATCAP_ONLY = new Set(['clay', 'mirror', 'brushed'])
+const MESH_ROUGHNESS = { matte: 1, plastic: 0.4, metal: 0.25, glass: 0.08, clay: 1, mirror: 0.04, brushed: 1, lamp: 1, neon: 1 }
+// Mirror is a physical metal now (QUALITY-5 §2.1 / §3.2): the baked matcap
+// stayed soft and dark, so bare `material="mirror"` could not beat metal 0.08
+// on reflection sharpness. Clay / brushed stay matcap-only.
+const MATCAP_ONLY = new Set(['clay', 'brushed'])
 const LIGHTS = new Set(['lamp', 'neon'])
 const MATERIAL_PARAMS = new Set(['color', 'roughness', 'metalness', 'clearcoat', 'transmission', 'ior', 'sheen', 'anisotropy', 'emissive'])
 const MATERIAL_HINT = '预设写 finish，例如 material="finish metal, color #c6c9ce, roughness 0.28, metalness 1"。color 盖过 fill。不写 finish 是磨砂'
@@ -2075,6 +2078,19 @@ function readMeshMaterial(raw: string | undefined, ctx: LayoutContext, tag: stri
       })
     }
     return { kind, roughness: MESH_ROUGHNESS[kind], matcap: name }
+  }
+  // Bare mirror: physical metal at near-zero roughness (QUALITY-5 §2.1 / §3.2).
+  if (name === 'mirror') {
+    if (parts.length > 1) {
+      ctx.issues.push({
+        level: 'warn',
+        code: 'invalid-attr',
+        path: ctx.pathPrefix,
+        message: `${tag} 的 mirror 不写粗糙度`,
+        hint: '删掉数字。颜色写 fill，例如 material="mirror" fill="#e4b33a"',
+      })
+    }
+    return { kind: 'metal', roughness: MESH_ROUGHNESS.mirror, metalness: 1 }
   }
   let roughness = MESH_ROUGHNESS[kind]
   if (parts.length > 1) {

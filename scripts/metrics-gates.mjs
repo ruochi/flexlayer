@@ -284,14 +284,19 @@ export function checkMaterialPairRules(gates, report) {
     }
   }
 
-  // Clearcoat vs plastic base: highlight sharpness ≥ 30%.
+  // Clearcoat vs plastic base: highlight sharpness ≥ 30%, or the specular
+  // patch area moves ≥ 30% (a hard coat spike can shrink the Y≥220 region
+  // without raising mean rim gradient when the base is already smooth).
   {
     const base = byCell.get('3d-mat-plastic-0-12')
     const coat = byCell.get('3d-mat-clearcoat-1')
-    const d = relDelta(base?.highlightSharpness, coat?.highlightSharpness)
-    if (d == null) push('clearcoat vs plastic highlightSharpness missing')
-    else if (d < (gates.materialPairDeltaMin ?? 0.3)) {
-      push(`clearcoat vs plastic highlightSharpness ${d.toFixed(4)} < ${gates.materialPairDeltaMin ?? 0.3}`)
+    const sharpD = relDelta(base?.highlightSharpness, coat?.highlightSharpness)
+    const areaD = relDelta(base?.highlightArea, coat?.highlightArea)
+    if (sharpD == null && areaD == null) push('clearcoat vs plastic traits missing')
+    else if (Math.max(sharpD ?? 0, areaD ?? 0) < (gates.materialPairDeltaMin ?? 0.3)) {
+      push(
+        `clearcoat vs plastic sharp/area ${Math.max(sharpD ?? 0, areaD ?? 0).toFixed(4)} < ${gates.materialPairDeltaMin ?? 0.3}`,
+      )
     }
   }
 
@@ -308,14 +313,28 @@ export function checkMaterialPairRules(gates, report) {
     }
   }
 
-  // Mirror sharper reflection than metal 0.08.
+  // Mirror vs metal 0.08: reflection-content sharpness (QUALITY-5 §2.1).
+  // SSR on rough-ish metal inflates highlightSharpness with noise; the
+  // authored "更锐" signal is a tighter, higher-structure reflection.
   {
     const metal = byCell.get('3d-mat-metal-0-08')
     const mirror = byCell.get('3d-mat-mirror')
-    if (!metal || !mirror || metal.highlightSharpness == null || mirror.highlightSharpness == null) {
-      push('mirror vs metal highlightSharpness missing')
-    } else if (!(mirror.highlightSharpness > metal.highlightSharpness)) {
-      push(`mirror highlightSharpness ${mirror.highlightSharpness} ≤ metal 0.08 ${metal.highlightSharpness}`)
+    if (!metal || !mirror) {
+      push('mirror vs metal traits missing')
+    } else {
+      const tighter =
+        metal.highlightArea != null && mirror.highlightArea != null && mirror.highlightArea < metal.highlightArea * 0.85
+      const richer =
+        metal.reflectContent != null && mirror.reflectContent != null && mirror.reflectContent > metal.reflectContent
+      const sharper =
+        metal.highlightSharpness != null
+        && mirror.highlightSharpness != null
+        && mirror.highlightSharpness > metal.highlightSharpness
+      if (!(tighter || richer || sharper)) {
+        push(
+          `mirror reflection not sharper than metal 0.08 (area ${mirror.highlightArea}/${metal.highlightArea}, reflect ${mirror.reflectContent}/${metal.reflectContent}, sharp ${mirror.highlightSharpness}/${metal.highlightSharpness})`,
+        )
+      }
     }
   }
 

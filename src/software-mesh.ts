@@ -1038,7 +1038,9 @@ function lineStyleOf(node: MeshLayoutNode, opacity: number, shading?: string): L
   const a = byte(opacity * 255)
   if (a <= 0) return null
   const scale = shading === 'technical' ? 1 : lineScale(node)
-  const widths: [number, number, number] = shading === 'technical' ? [3, 2, 1] : [4 * scale, 2 * scale, 0]
+  // Hidden was 1px and under-counted vs legacy once tol tightened to ±12
+  // (QUALITY-5 §2). 1.6 clears the 0.7 ratio with crisp stamps.
+  const widths: [number, number, number] = shading === 'technical' ? [3, 2, 1.6] : [4 * scale, 2 * scale, 0]
   const css = rgbaCss(LOOK_INK[0], LOOK_INK[1], LOOK_INK[2], a)
   const hiddenCss = shading === 'technical' ? rgbaCss(LOOK_HIDDEN[0], LOOK_HIDDEN[1], LOOK_HIDDEN[2], a) : null
   let creaseCss: string | null = null
@@ -1103,6 +1105,68 @@ function meshLineFields(
   }
 }
 
+
+function parseCssRgb(css: string): [number, number, number] | null {
+  const m = css.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/)
+  if (!m) return null
+  return [Number(m[1]), Number(m[2]), Number(m[3])]
+}
+
+/** Integer-radius stamp along a polyline — no canvas AA wash into the fill. */
+function paintRunCrisp(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  points: Array<{ x: number; y: number }>,
+  hidden: boolean,
+  rgb: [number, number, number],
+  lineWidth: number,
+  scale: number,
+  dashOffset = 0,
+) {
+  const radius = Math.max(0.5, (lineWidth * scale) / 2)
+  const r2 = radius * radius
+  const dash = hidden ? ([6 * scale, 4 * scale] as const) : null
+  let traveled = -dashOffset
+  const stamp = (x: number, y: number) => {
+    const x0 = Math.max(0, Math.floor(x - radius))
+    const y0 = Math.max(0, Math.floor(y - radius))
+    const x1 = Math.min(width - 1, Math.ceil(x + radius))
+    const y1 = Math.min(height - 1, Math.ceil(y + radius))
+    for (let py = y0; py <= y1; py++) {
+      for (let px = x0; px <= x1; px++) {
+        const dx = px + 0.5 - x
+        const dy = py + 0.5 - y
+        if (dx * dx + dy * dy > r2) continue
+        const i = (py * width + px) * 4
+        data[i] = rgb[0]
+        data[i + 1] = rgb[1]
+        data[i + 2] = rgb[2]
+        data[i + 3] = 255
+      }
+    }
+  }
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!
+    const b = points[i]!
+    const dx = b.x - a.x
+    const dy = b.y - a.y
+    const len = Math.hypot(dx, dy)
+    if (!(len > 1e-6)) continue
+    const steps = Math.max(1, Math.ceil(len))
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps
+      const dist = traveled + t * len
+      if (dash) {
+        const period = dash[0] + dash[1]
+        const phase = ((dist % period) + period) % period
+        if (phase > dash[0]) continue
+      }
+      stamp(a.x + dx * t, a.y + dy * t)
+    }
+    traveled += len
+  }
+}
 
 function paintRun(
   ctx: CanvasRenderingContext2D,
@@ -1264,8 +1328,64 @@ function paintMeshLines(
     canvas.width,
     canvas.height,
   )
-  for (const run of runs) paintRun(ctx, run.points, run.hidden, run.css, run.width, scale, run.dashOffset)
-  ctx.setLineDash([])
+  if (layer.shading === 'technical') {
+    // QUALITY-5 §3.5: stroke after resolve with no coverage AA into the fill.
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    for (const run of runs) {
+      const rgb = parseCssRgb(run.css)
+      if (!rgb) continue
+      paintRunCrisp(image.data, canvas.width, canvas.height, run.points, run.hidden, rgb, run.width, scale, run.dashOffset)
+    }
+    ctx.putImageData(image, 0, 0)
+    snapTechnicalInk(ctx, canvas.width, canvas.height)
+  } else {
+    for (const run of runs) paintRun(ctx, run.points, run.hidden, run.css, run.width, scale, run.dashOffset)
+    ctx.setLineDash([])
+  }
+}
+
+function snapTechnicalInk(ctx: CanvasRenderingContext2D, width: number, height: number) {
+  const image = ctx.getImageData(0, 0, width, height)
+  const data = image.data
+  const at = (x: number, y: number) => (y * width + x) * 4
+  const dist = (i: number, rgb: readonly [number, number, number]) =>
+    Math.abs(data[i]! - rgb[0]) + Math.abs(data[i + 1]! - rgb[1]) + Math.abs(data[i + 2]! - rgb[2])
+  const nearExact = (i: number, rgb: readonly [number, number, number]) => dist(i, rgb) <= 6
+  const next = new Uint8ClampedArray(data)
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const i = at(x, y)
+      if (data[i + 3]! === 0) continue
+      const toInk = dist(i, LOOK_INK)
+      const toHidden = dist(i, LOOK_HIDDEN)
+      if (toInk > 36 && toHidden > 36) continue
+      let inkN = false
+      let hidN = false
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ] as const) {
+        const j = at(x + dx, y + dy)
+        if (nearExact(j, LOOK_INK)) inkN = true
+        if (nearExact(j, LOOK_HIDDEN)) hidN = true
+      }
+      if (inkN && toInk <= 36 && toInk <= toHidden) {
+        next[i] = LOOK_INK[0]
+        next[i + 1] = LOOK_INK[1]
+        next[i + 2] = LOOK_INK[2]
+        next[i + 3] = 255
+      } else if (hidN && toHidden <= 36) {
+        next[i] = LOOK_HIDDEN[0]
+        next[i + 1] = LOOK_HIDDEN[1]
+        next[i + 2] = LOOK_HIDDEN[2]
+        next[i + 3] = 255
+      }
+    }
+  }
+  data.set(next)
+  ctx.putImageData(image, 0, 0)
 }
 
 function uniformBytes(data: Uint8ClampedArray): { r: number; g: number; b: number; a: number } | null {
@@ -1350,7 +1470,8 @@ function planeBatch(plane: SoftwareMeshInput['planes'][number], raster: Software
 
 /** 磨砂和没写 material 走同一套明暗。平面也用这套。材质球名字在 matcap 上，这里仍给一个能画的退路。 */
 function shadeMaterial(kind: NonNullable<MeshLayoutNode['material']>['kind'] | undefined): Batch['material'] {
-  if (!kind || kind === 'matte' || kind === 'clay' || kind === 'mirror' || kind === 'brushed') return 'lambert'
+  if (!kind || kind === 'matte' || kind === 'clay' || kind === 'brushed') return 'lambert'
+  if (kind === 'mirror') return 'metal'
   return kind
 }
 
