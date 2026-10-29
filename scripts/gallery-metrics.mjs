@@ -981,6 +981,7 @@ function printTable(report) {
     const through = st.stripes?.throughGlass
     if (through) console.log(`still stripes inside glass red ${through.red} white ${through.white} blue ${through.blue} of ${through.total}`)
     console.log(`still empty floor ${st.emptyFloor ?? 'n/a'}  blue top gap ${st.blueTopGap ?? 'n/a'}`)
+    console.log(`still metal-plate SSR checker ${st.ssrChecker ?? 'n/a'}`)
   }
   const benchContacts = report.contacts.filter((item) => item.cell === '3d-quality-draft' || item.cell === '3d-quality-final')
   for (const item of benchContacts) {
@@ -1651,12 +1652,15 @@ if (stillCell) {
     : null
   const metalPlate = bounds(ids.get('metal-plate')?.ink, stillCell.width, stillCell.height)
   const chrome = bounds(ids.get('chrome')?.ink, stillCell.width, stillCell.height)
-  const ssrRate = metalPlate
+  // Grade the bowl under the chrome sphere — that is where draft SSR drew the
+  // checkerboard (QUALITY-5 §1.2), not the whole plate.
+  const ssrRate = metalPlate && chrome
     ? ssrChecker(stillCell.rgba, stillCell.width, stillCell.height, (x, y) => {
-        if (!hit(metalPlate, x, y)) return false
-        // Exclude the chrome sphere's own ink so we grade the plate reflection.
-        if (chrome && hit(chrome, x, y)) return false
-        return true
+        if (!hit(metalPlate, x, y) || hit(chrome, x, y)) return false
+        const cx = (chrome.x0 + chrome.x1) / 2
+        const cy = chrome.y1
+        const r = Math.max(chrome.x1 - chrome.x0, chrome.y1 - chrome.y0) * 0.85
+        return Math.hypot(x - cx, y - cy) <= r
       })
     : null
   stillReport = {
