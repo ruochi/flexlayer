@@ -108,6 +108,68 @@ describe('3d-lines 样张验收', () => {
   }, 60000)
 })
 
+describe('3d-lines 外轮廓覆盖', () => {
+  it('盒体与平板外轮廓上的墨线覆盖率 ≥ 95%', async () => {
+    // QUALITY-5 §1.5: the box left/top outlines dashed under 8× coverage.
+    // Curved silhouettes (cylinder, sphere, tube) do not sit on AABB sides, so
+    // this gate grades the rectilinear solids the bug report named.
+    const painted = await renderLayer(read('3d-lines'), { baseDir: gallery, format: 'rgba', meshCache: false })
+    const rects = (painted.report?.elements ?? [])
+      .filter((el: any) => (el.id === 'box' || el.id === 'hole-plate') && el.ink)
+      .map((el: any) => ({
+        id: el.id,
+        x0: el.ink.x,
+        y0: el.ink.y,
+        x1: el.ink.x + el.ink.width,
+        y1: el.ink.y + el.ink.height,
+      }))
+    expect(rects.length).toBe(2)
+    const isInk = (x: number, y: number) => {
+      if (x < 0 || y < 0 || x >= painted.width || y >= painted.height) return false
+      return near(painted.rgba, (y * painted.width + x) * 4, INK, 80)
+    }
+    const spanCover = (coords: number[]) => {
+      if (coords.length < 8) return null
+      const uniq = [...new Set(coords)].sort((a, b) => a - b)
+      const lo = uniq[0]!
+      const hi = uniq[uniq.length - 1]!
+      const span = hi - lo + 1
+      if (span < 8) return null
+      let missing = 0
+      for (let i = 1; i < uniq.length; i++) {
+        const gap = uniq[i]! - uniq[i - 1]!
+        if (gap > 2) missing += gap - 1
+      }
+      return 1 - missing / span
+    }
+    for (const box of rects) {
+      const x0 = Math.floor(box.x0)
+      const y0 = Math.floor(box.y0)
+      const x1 = Math.ceil(box.x1) - 1
+      const y1 = Math.ceil(box.y1) - 1
+      if (x1 - x0 < 16 || y1 - y0 < 16) continue
+      const pad = Math.min(12, Math.floor((x1 - x0) / 3), Math.floor((y1 - y0) / 3))
+      const leftYs: number[] = []
+      const rightYs: number[] = []
+      const topXs: number[] = []
+      for (let x = x0; x <= x0 + pad; x++) {
+        for (let y = y0; y <= y1; y++) if (isInk(x, y)) leftYs.push(y)
+      }
+      for (let x = x1 - pad; x <= x1; x++) {
+        for (let y = y0; y <= y1; y++) if (isInk(x, y)) rightYs.push(y)
+      }
+      for (let y = y0; y <= y0 + pad; y++) {
+        for (let x = x0; x <= x1; x++) if (isInk(x, y)) topXs.push(x)
+      }
+      // Bottom often meets the ground / hidden pass — grade left, right, top.
+      for (const rate of [spanCover(leftYs), spanCover(rightYs), spanCover(topXs)]) {
+        if (rate == null) continue
+        expect(rate).toBeGreaterThanOrEqual(0.95)
+      }
+    }
+  }, 60000)
+})
+
 describe('3d-lines 隐藏线遮罩', () => {
   it('隐藏线落在实体遮罩内', async () => {
     // Q4: counting pale pixels only proves some were drawn, not that they are
