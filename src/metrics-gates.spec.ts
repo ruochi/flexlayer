@@ -19,7 +19,7 @@ const gates = {
   mangaPaperLumaMin: 238,
   mangaPaperShareMin: 0.7,
   mangaPaperChromaMax: 0.02,
-  hatchFlipMax: 0.15,
+  hatchFlipMax: null,
   hatchFlipEngineMax: 0.02,
   technicalChromaRatioMin: 0.9,
   technicalHiddenRatioMin: 0.7,
@@ -28,6 +28,9 @@ const gates = {
   stillStripeShareMin: 0.2,
   stillEmptyFloorMax: 0.25,
   stillBlueTopGapMin: 40,
+  materialPairRules: true,
+  glassOpaqueTransmitDeltaMin: 0.3,
+  anisotropyAspectMin: 1.5,
 }
 
 /** A report that passes every gate, so each test can move one number. */
@@ -54,6 +57,27 @@ function passing() {
     groundDefects: [{ cell: '3d-quality-final', seams: 0, blobs: 0, stair: 0.5, edgeFlip: 0.03 }],
     technical: { minRatio: 0.9889 },
     technicalHidden: { count: 3432, legacy: 3406, ratio: 1.0076 },
+    glassSsim: { clear: 0.65, frost: 0.2, clearEdge: 20, frostEdge: 8 },
+    metalPlasticReflectDelta: 0.45,
+    materialTraits: [
+      { cell: '3d-mat-plastic-0-12', highlightArea: 0.02, highlightSharpness: 40, darkFloor: 80, anisotropy: 1.1, reflectContent: 0.2 },
+      { cell: '3d-mat-plastic-0-85', highlightArea: 0.08, highlightSharpness: 12, darkFloor: 90, anisotropy: 1.1, reflectContent: 0.15 },
+      { cell: '3d-mat-metal-0-08', highlightArea: 0.03, highlightSharpness: 50, darkFloor: 45, anisotropy: 1.2, reflectContent: 0.65 },
+      { cell: '3d-mat-metal-0-8', highlightArea: 0.1, highlightSharpness: 15, darkFloor: 55, anisotropy: 1.2, reflectContent: 0.4 },
+      { cell: '3d-mat-clearcoat-1', highlightArea: 0.04, highlightSharpness: 70, darkFloor: 75, anisotropy: 1.1, reflectContent: 0.25 },
+      { cell: '3d-mat-anisotropy-0-9', highlightArea: 0.04, highlightSharpness: 35, darkFloor: 48, anisotropy: 2.2, reflectContent: 0.55 },
+      { cell: '3d-mat-brushed', highlightArea: 0.04, highlightSharpness: 30, darkFloor: 50, anisotropy: 1.8, reflectContent: 0.5 },
+      { cell: '3d-mat-mirror', highlightArea: 0.02, highlightSharpness: 80, darkFloor: 40, anisotropy: 1.1, reflectContent: 0.7 },
+    ],
+    materialPairDeltas: [
+      { a: '3d-mat-plastic-0-12', b: '3d-mat-plastic-0-85', bestDelta: 0.75 },
+      { a: '3d-mat-glass-0-06', b: '3d-mat-glass-0-72', bestDelta: 0.7 },
+      { a: '3d-mat-metal-0-08', b: '3d-mat-metal-0-8', bestDelta: 0.7 },
+      { a: '3d-mat-plastic-0-12', b: '3d-mat-clearcoat-1', bestDelta: 0.43 },
+      { a: '3d-mat-metal-0-08', b: '3d-mat-anisotropy-0-9', bestDelta: 0.45 },
+      { a: '3d-mat-metal-0-08', b: '3d-mat-brushed', bestDelta: 0.33 },
+      { a: '3d-mat-metal-0-08', b: '3d-mat-mirror', bestDelta: 0.38 },
+    ],
     still: {
       openMedian: 224.6,
       openPeak: 245.2,
@@ -229,7 +253,9 @@ describe('manga 排线对照', () => {
   it('对照图找不到时失败，而不是当作通过', () => {
     const report = passing()
     report.manga = { ...report.manga!, hatchFlip: null }
-    const errors = checkGates(gates, report)
+    // QUALITY-5 §3.6: absolute legacy hatchFlipMax is null; missing legacy is
+    // only an error when that gate is armed again.
+    const errors = checkGates({ ...gates, hatchFlipMax: 0.15 }, report)
     expect(errors.length).toBe(1)
     expect(errors[0]).toContain('FLEXLAYER_LEGACY_REFERENCE')
   })
@@ -237,7 +263,7 @@ describe('manga 排线对照', () => {
   it('排线漂移超过门槛时失败', () => {
     const report = passing()
     report.manga = { ...report.manga!, hatchFlip: 0.19 }
-    expect(checkGates(gates, report)[0]).toContain('manga hatch flip')
+    expect(checkGates({ ...gates, hatchFlipMax: 0.15 }, report)[0]).toContain('manga hatch flip')
   })
 
   it('门槛为 null 时只记录不判', () => {
@@ -249,15 +275,24 @@ describe('manga 排线对照', () => {
   it('引擎基线排线漂移超过门槛时失败', () => {
     const report = passing()
     report.manga = { ...report.manga!, hatchFlipEngine: 0.05 }
-    expect(checkGates(gates, report)[0]).toContain('manga engine hatch flip')
+    expect(checkGates({ ...gates, hatchFlipEngineMax: 0.02 }, report)[0]).toContain('manga engine hatch flip')
   })
 
   it('引擎基线找不到时失败，而不是当作通过', () => {
     const report = passing()
     report.manga = { ...report.manga!, hatchFlipEngine: null }
-    const errors = checkGates({ ...gates, hatchFlipMax: null }, report)
+    const errors = checkGates({ ...gates, hatchFlipMax: null, hatchFlipEngineMax: 0.02 }, report)
     expect(errors.length).toBe(1)
     expect(errors[0]).toContain('engine-baseline')
+  })
+
+  it('QUALITY-5 §2.1：金属粗糙度高光不单调会失败', () => {
+    const report = passing()
+    report.materialTraits = report.materialTraits!.map((t) =>
+      t.cell === '3d-mat-metal-0-8' ? { ...t, highlightArea: 0.01, highlightSharpness: 60 } : t,
+    )
+    const text = checkGates(gates, report).join('\n')
+    expect(text).toMatch(/metal roughness/)
   })
 })
 

@@ -75,29 +75,24 @@ export const GATES = {
    * still clears with a few percent of headroom and the gate only tightens.
    */
   /**
-   * FLIP vs f9628c0 legacy manga. Not gated: the 0.144 / 0.15 calibration was
-   * on a darwin addon that did not match the published linux binary
-   * (addon-hash red on 8d7c9d0), and the still-life framing has since moved.
-   * Source-built linux reads ~0.475. Reported as `manga.hatchFlip` only.
-   * QUALITY-4 §1.2 option 2: old absolute method does not hold.
+   * FLIP vs f9628c0 legacy manga. Report-only (QUALITY-5 §3.6): that raster is
+   * a different framing; linux reads ~0.47. The accepted look is documented in
+   * `docs/GALLERY-3D.md` and gated by `hatchFlipEngineMax` against
+   * `engine-baseline/3d-shade-manga.png`.
    */
   hatchFlipMax: null,
   /**
-   * FLIP vs `docs/quality/engine-baseline/3d-shade-manga.png` in the private
-   * renderer repo (same engine, accepted look). Catches hatch regressions
-   * without depending on a foreign-engine legacy page.
+   * FLIP vs the accepted manga cell in the private renderer repo
+   * (`docs/quality/engine-baseline/`). Catches hatch regressions after the
+   * GALLERY-3D manga standard replaced the foreign legacy absolute.
    */
   hatchFlipEngineMax: 0.02,
-  technicalChromaRatioMin: null,
+  /** QUALITY-5 §2: technical fill chroma vs studio; 8× AA wash must be fixed. */
+  technicalChromaRatioMin: 0.9,
   /**
-   * Technical hidden-line ink against the legacy raster; the style exists to
-   * show them. Currently 0.716, short of the 0.9 the brief asks for: the cell
-   * draws a hidden edge only when a body covers its own far side, and the
-   * legacy raster also counted edges that another body covered. Raising the
-   * rule to draw those would break `software-mesh.spec` "被第三只球挡住的部分不画",
-   * which is a deliberate product decision, so the gap stays visible here
-   * instead of being papered over. Set to the measured value so a regression
-   * still fails; raise it to 0.9 when the rule itself changes.
+   * Technical hidden-line ink against the legacy raster. Count ratio stays at
+   * 0.7 until the product rule draws inter-body occlusion; the colour match
+   * tolerance is ±12 (QUALITY-5 §2), not a ratio raise.
    */
   technicalHiddenRatioMin: 0.7,
   /**
@@ -119,9 +114,10 @@ export const GATES = {
    * nearest-neighbour lookup reads 0.0888, so 0.06 leaves the current edge
    * about 11% of headroom and still fails a build that stops filtering.
    */
-  // One screen-aligned step on a soft floor pool is still within draft noise;
-  // fail only when a cell grows a hard rectangular seam (QUALITY-4 ground).
-  groundSeamsMax: 1,
+  /** QUALITY-5 §2: draft floor steps are a defect to fix, not a slack to keep. */
+  groundSeamsMax: 0,
+  /** QUALITY-5 §1.2: metal-plate SSR checkerboard rate ≤ 1%. */
+  ssrCheckerMax: 0.01,
   brightBlobsMax: 0,
   shadowStairMax: 0.85,
   shadowEdgeFlipMax: 0.06,
@@ -175,9 +171,9 @@ export const GATES = {
   /** QUALITY-4 §4.4: metal / mirror / brushed / anisotropy body floor. */
   materialDarkFloorMin: 35,
   /**
-   * QUALITY-4 §4.4: clear glass keeps stripe structure (SSIM ≥ 0.6 against the
-   * above-sphere column profile); frost washes it (SSIM ≤ 0.3). Edge energy
-   * still has to drop from clear to frost so a flat copy cannot pass.
+   * QUALITY-5 §1.3: clear glass keeps behind structure (SSIM ≥ 0.6 against the
+   * same disk with the sphere removed); frost washes it (SSIM ≤ 0.3). Edge
+   * energy still has to drop from clear to frost so a flat copy cannot pass.
    */
   glassClearSsimMin: 0.6,
   glassFrostSsimMax: 0.3,
@@ -187,6 +183,16 @@ export const GATES = {
   materialPairDeltaMin: 0.3,
   /** QUALITY-4 §4.4: |metal.reflectContent − plastic.reflectContent| ≥ 0.2. */
   metalPlasticReflectDeltaMin: 0.2,
+  /**
+   * QUALITY-5 §2.1 category constraints. Each rule names the features that must
+   * move for that pair; `null` disables the structured check (legacy bestDelta
+   * alone). See `checkMaterialPairRules`.
+   */
+  materialPairRules: true,
+  /** Clear glass transmit (SSIM) vs an opaque finish must differ by this much. */
+  glassOpaqueTransmitDeltaMin: 0.3,
+  /** Anisotropy / brushed highlight aspect vs round metal. Absolute ratio. */
+  anisotropyAspectMin: 1.5,
 }
 
 /**
@@ -216,6 +222,125 @@ export function metalLumaDelta(report) {
     if (worst == null || rel > worst) worst = rel
   }
   return worst
+}
+
+function relDelta(a, b) {
+  if (a == null || b == null) return null
+  return Math.abs(a - b) / Math.max(Math.abs(a), Math.abs(b), 1e-6)
+}
+
+/**
+ * QUALITY-5 §2.1: category-specific material pair constraints. Returns error
+ * strings; empty when every named rule holds or the structured check is off.
+ */
+export function checkMaterialPairRules(gates, report) {
+  if (!gates.materialPairRules) return []
+  const errors = []
+  const byCell = new Map((report.materialTraits ?? []).map((t) => [t.cell, t]))
+  const push = (msg) => errors.push(msg)
+
+  const roughnessPair = (smooth, rough, label) => {
+    const A = byCell.get(smooth)
+    const B = byCell.get(rough)
+    if (!A || !B) {
+      push(`${label}: traits missing`)
+      return
+    }
+    for (const key of ['highlightArea', 'highlightSharpness']) {
+      const d = relDelta(A[key], B[key])
+      if (d == null) {
+        push(`${label} ${key} missing`)
+        continue
+      }
+      if (d < (gates.materialPairDeltaMin ?? 0.3)) {
+        push(`${label} ${key} delta ${d.toFixed(4)} < ${gates.materialPairDeltaMin ?? 0.3}`)
+      }
+    }
+    // Higher roughness → larger, softer highlight.
+    if (A.highlightArea != null && B.highlightArea != null && !(B.highlightArea > A.highlightArea)) {
+      push(`${label} highlightArea not monotonic (rough ${B.highlightArea} ≤ smooth ${A.highlightArea})`)
+    }
+    if (A.highlightSharpness != null && B.highlightSharpness != null && !(A.highlightSharpness > B.highlightSharpness)) {
+      push(`${label} highlightSharpness not monotonic (smooth ${A.highlightSharpness} ≤ rough ${B.highlightSharpness})`)
+    }
+  }
+
+  roughnessPair('3d-mat-plastic-0-12', '3d-mat-plastic-0-85', 'plastic roughness')
+  roughnessPair('3d-mat-metal-0-08', '3d-mat-metal-0-8', 'metal roughness')
+
+  // Glass clear vs frost: transmittance (SSIM against behind) must move ≥ 0.3.
+  const gClear = report.glassSsim?.clear
+  const gFrost = report.glassSsim?.frost
+  const gDelta = relDelta(gClear, gFrost)
+  if (gClear == null || gFrost == null) push('glass transmit traits missing')
+  else if (gDelta < (gates.materialPairDeltaMin ?? 0.3)) {
+    push(`glass clear/frost transmit delta ${gDelta.toFixed(4)} < ${gates.materialPairDeltaMin ?? 0.3}`)
+  }
+
+  // Glass vs opaque: clear glass transmit must clear the opaque floor by ≥ 0.3.
+  const opaqueFloor = 0
+  if (gClear != null && gates.glassOpaqueTransmitDeltaMin != null) {
+    const d = gClear - opaqueFloor
+    if (d < gates.glassOpaqueTransmitDeltaMin) {
+      push(`glass vs opaque transmit ${d.toFixed(4)} < ${gates.glassOpaqueTransmitDeltaMin}`)
+    }
+  }
+
+  // Clearcoat vs plastic base: highlight sharpness ≥ 30%, or the specular
+  // patch area moves ≥ 30% (a hard coat spike can shrink the Y≥220 region
+  // without raising mean rim gradient when the base is already smooth).
+  {
+    const base = byCell.get('3d-mat-plastic-0-12')
+    const coat = byCell.get('3d-mat-clearcoat-1')
+    const sharpD = relDelta(base?.highlightSharpness, coat?.highlightSharpness)
+    const areaD = relDelta(base?.highlightArea, coat?.highlightArea)
+    if (sharpD == null && areaD == null) push('clearcoat vs plastic traits missing')
+    else if (Math.max(sharpD ?? 0, areaD ?? 0) < (gates.materialPairDeltaMin ?? 0.3)) {
+      push(
+        `clearcoat vs plastic sharp/area ${Math.max(sharpD ?? 0, areaD ?? 0).toFixed(4)} < ${gates.materialPairDeltaMin ?? 0.3}`,
+      )
+    }
+  }
+
+  // Anisotropy / brushed: highlight aspect ≥ 1.5 (and ahead of round metal).
+  const aspectMin = gates.anisotropyAspectMin ?? 1.5
+  for (const cell of ['3d-mat-anisotropy-0-9', '3d-mat-brushed']) {
+    const t = byCell.get(cell)
+    if (!t || t.anisotropy == null) {
+      push(`${cell} anisotropy missing`)
+      continue
+    }
+    if (t.anisotropy < aspectMin) {
+      push(`${cell} highlight aspect ${t.anisotropy} < ${aspectMin}`)
+    }
+  }
+
+  // Mirror vs metal 0.08: reflection-content sharpness (QUALITY-5 §2.1).
+  // SSR on rough-ish metal inflates highlightSharpness with noise; the
+  // authored "更锐" signal is a tighter, higher-structure reflection.
+  {
+    const metal = byCell.get('3d-mat-metal-0-08')
+    const mirror = byCell.get('3d-mat-mirror')
+    if (!metal || !mirror) {
+      push('mirror vs metal traits missing')
+    } else {
+      const tighter =
+        metal.highlightArea != null && mirror.highlightArea != null && mirror.highlightArea < metal.highlightArea * 0.85
+      const richer =
+        metal.reflectContent != null && mirror.reflectContent != null && mirror.reflectContent > metal.reflectContent
+      const sharper =
+        metal.highlightSharpness != null
+        && mirror.highlightSharpness != null
+        && mirror.highlightSharpness > metal.highlightSharpness
+      if (!(tighter || richer || sharper)) {
+        push(
+          `mirror reflection not sharper than metal 0.08 (area ${mirror.highlightArea}/${metal.highlightArea}, reflect ${mirror.reflectContent}/${metal.reflectContent}, sharp ${mirror.highlightSharpness}/${metal.highlightSharpness})`,
+        )
+      }
+    }
+  }
+
+  return errors
 }
 
 /** Every gate the report misses, as readable lines. Empty means it passed. */
@@ -314,6 +439,7 @@ export function checkGates(gates, report, slack = { luma: 0, fraction: 0 }) {
     maxOf(gates.stillEmptyFloorMax, still.emptyFloor, 'still empty floor', slack.fraction)
     minOf(gates.stillBlueTopGapMin, still.blueTopGap, 'still blue-float top gap', 1)
     maxOf(gates.stillGoldFacetMax, still.goldFacetStripe, 'still gold facetStripe')
+    maxOf(gates.ssrCheckerMax, still.ssrChecker, 'still metal-plate SSR checker')
   }
   if (gates.materialDarkFloorMin != null) {
     for (const trait of report.materialTraits ?? []) {
@@ -347,5 +473,6 @@ export function checkGates(gates, report, slack = { luma: 0, fraction: 0 }) {
   if (gates.metalPlasticReflectDeltaMin != null) {
     minOf(gates.metalPlasticReflectDeltaMin, report.metalPlasticReflectDelta, 'metal vs plastic reflectContent Δ')
   }
+  errors.push(...checkMaterialPairRules(gates, report))
   return errors
 }

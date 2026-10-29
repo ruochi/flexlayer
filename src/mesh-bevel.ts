@@ -13,8 +13,14 @@ export function bevelRadius(depth: number): number {
   return addon.bevelRadius(depth)
 }
 
-/** 面数少就返回带窄圆角的网格，否则返回 null，调用方继续用原来的网格。半径不写时用 z 向厚度的 1/40。 */
-export function bevelFewFaces(srcPos: Float32Array, srcIdx: Uint32Array, radius?: number): BevelGeometry | null {
+/** 面数少就返回带窄圆角的网格，否则返回 null，调用方继续用原来的网格。半径不写时用 z 向厚度的 1/40。
+ * `scaleField` is the QUALITY-5 §4 AABB pack: min(3), max(3), 8 corner scales, target_px. */
+export function bevelFewFaces(
+  srcPos: Float32Array,
+  srcIdx: Uint32Array,
+  radius?: number,
+  scaleField?: Float64Array | null,
+): BevelGeometry | null {
   if (!addon) throw new Error('Native mesh-bevel addon not loaded - cannot call bevelFewFaces')
-  return addon.bevelFewFaces(srcPos, srcIdx, radius ?? null)
+  return addon.bevelFewFaces(srcPos, srcIdx, radius ?? null, scaleField ?? null)
 }

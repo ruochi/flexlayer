@@ -28,6 +28,17 @@ The camera, unless the plate says otherwise, is `fov 30, orbit 28 32, distance 1
 | --- | --- | --- |
 | [3d-still.png](gallery/3d-still.png) | the bench, studio, draft | Contact is dark and tight. The lifted sphere's shadow is separate. The near solids cut the far ones. The hole stays open. The lamp lights a pool. Neon has a core and a halo. |
 | [3d-shading.png](gallery/3d-shading.png) | `studio`, `toon`, `technical`, `manga` | The same bench. Studio is the continuous finish. Toon is flat color and an ink outline. Technical keeps the finish and adds an outline, a crease, and a hidden line. Manga is paper, hatch, or ink. No solid on this plate writes `stroke`. The lines come from `shading`. |
+
+### Manga look (QUALITY-5 §3.5 / §3.6)
+
+The f9628c0 legacy manga raster is a different framing of the same bench (FLIP sits around 0.47 on a matching linux build). It is **not** the absolute gate anymore. The accepted look is the current engine cell, frozen in the private renderer repo as `docs/quality/engine-baseline/3d-shade-manga.png`, gated by `hatchFlipEngineMax`. Legacy FLIP stays reported as `manga.hatchFlip` for history.
+
+What the manga cell must read as:
+
+- Paper is near-white; hatch and cross-hatch follow form (constant height on verticals, rings on spheres), not a flat screen grid.
+- Cast shadows on the ground carry hatch, not a grey wash.
+- `lamp` and `neon` are ink + paper (outline and hatch), never a solid emissive fill or a cyan disc.
+- Background paper stays clean: no large grey stains outside the solids (`mangaBackgroundGrayMax`).
 | [3d-quality.png](gallery/3d-quality.png) | `draft`, `final` | The same bench. Both grades use the same shadow map. Final adds one bounce, a reflection on metal smoother than roughness 0.12, and a glass tint. Draft stays on the shadow map. The two panels have to differ in the crevice, in the chrome sphere, and in the glass. |
 | [3d-materials.png](gallery/3d-materials.png) | sixteen finishes | Every cell is the same cluster: a wall, a rounded box, a sphere, and a cylinder or a neon torus, on a ground. One finish changes. Neighbors have to be distinguishable. The matte cell's camera-facing face stays the written fill. The two glass cells put the sphere in front of red, white, and blue stripes. |
 | [3d-camera.png](gallery/3d-camera.png) | `orbit 28 32`, `orbit 10 46` at distance 1200, `orbit 62 22` at distance 1040, `aperture 14` | Three-quarter, from above, and from the side. Each view fills its cell. The depth-of-field cell is soft away from the middle. The blur fades out. |

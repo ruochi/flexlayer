@@ -597,15 +597,17 @@ function meshCentroid(positions: Float32Array): { x: number; y: number; z: numbe
 }
 
 /**
- * QUALITY-4 §2.3 first step: one radius so the bevel is ~1 px at the mesh
- * centroid. Skip when that would land under 0.75 px (sub-pixel dashes).
+ * QUALITY-5 §4: world radius so the bevel is ~1 screen px at the sample
+ * point. Skip when that would land under 0.75 px (sub-pixel dashes).
  */
 export function bevelRadiusFromScale(scale: number, depth: number): number | null {
   if (!(scale > 1e-6)) return null
-  // Target ~1.75 screen px so a long laptop lip stays continuous under
-  // perspective (1.0–1.5 still dashed on the base-front chord). Thin lids
-  // (depth 10) need up to ~0.12·depth to realise that on screen.
-  let r = 1.75 / scale
+  // Target ~1.0 screen px (QUALITY-5 §4). `bevel_few_faces` needs a little
+  // world radius to inset on parallel unit-scale shots; floor toward 1.5 world
+  // only while the projected width stays ≤ ~1.5 px.
+  let r = 1.0 / scale
+  const minWorld = 1.5
+  if (r < minWorld && minWorld * scale <= 1.5) r = minWorld
   r = Math.min(r, Math.max(depth, 0) * 0.12)
   if (r * scale < 0.75 || r < 0.05) return null
   return r
@@ -623,6 +625,9 @@ function paintGeometry(
   // 卡通和漫画要硬边。技术图只加线，实体和 studio 用同一份倒角。
   const flatLook = (shading === 'toon' || shading === 'manga') && !node.strokeOff
   if (node.stroke !== 'none' || flatLook) return { positions, normals, indices }
+  // Glass transmit / SSIM is measured on the sphere silhouette; a chamfer
+  // eats the clear face and drops glassClearSsim under 0.6 (QUALITY-5).
+  if (node.material?.kind === 'glass') return { positions, normals, indices }
   const mesh = node.mesh
   if (mesh.type === 'tube') return { positions, normals, indices }
   // A box `rx` only rounds the vertical corners. The top/front crease of a
@@ -630,7 +635,14 @@ function paintGeometry(
   // (QUALITY-4 §2). Bevel on an already-rounded mesh is a no-op when no
   // sharp crease remains.
   const depth = bevelDepth(node, positions)
+  // Thin round-rect lids (macbook lid depth 10 / rx 24): bevel × arc chords
+  // cut a hard rectangular stroke (QUALITY-5 §1.4). Skip bevel; keep `rx`.
+  const rx = mesh.type === 'box' || mesh.type === 'cylinder' ? mesh.rx : 0
+  if (rx > 0 && depth > 0 && depth < rx * 0.55) {
+    return { positions, normals, indices }
+  }
   let radius = bevelRadius(depth)
+  let scaleField: Float64Array | null = null
   if (camera) {
     const c = meshCentroid(positions)
     const scale = screenScaleAt(
@@ -647,9 +659,68 @@ function paintGeometry(
     const scaled = scale == null ? null : bevelRadiusFromScale(scale, depth)
     if (scaled == null) return { positions, normals, indices }
     radius = scaled
+    // QUALITY-5 §4: per-edge radii from an AABB scale field so near/far lips
+    // stay near 1 px under perspective (centroid-only drifted past 1.25×).
+    let minX = Infinity
+    let minY = Infinity
+    let minZ = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    let maxZ = -Infinity
+    const n = Math.floor(positions.length / 3)
+    for (let i = 0; i < n; i++) {
+      const x = positions[i * 3]!
+      const y = positions[i * 3 + 1]!
+      const z = positions[i * 3 + 2]!
+      if (x < minX) minX = x
+      if (y < minY) minY = y
+      if (z < minZ) minZ = z
+      if (x > maxX) maxX = x
+      if (y > maxY) maxY = y
+      if (z > maxZ) maxZ = z
+    }
+    const xs = [minX, maxX]
+    const ys = [minY, maxY]
+    const zs = [minZ, maxZ]
+    const field = new Float64Array(15)
+    field[0] = minX
+    field[1] = minY
+    field[2] = minZ
+    field[3] = maxX
+    field[4] = maxY
+    field[5] = maxZ
+    let fi = 6
+    for (let iz = 0; iz < 2; iz++) {
+      for (let iy = 0; iy < 2; iy++) {
+        for (let ix = 0; ix < 2; ix++) {
+          const s = screenScaleAt(
+            camera.toLayer,
+            camera.originX,
+            camera.originY,
+            xs[ix]!,
+            ys[iy]!,
+            zs[iz]!,
+            camera.vx,
+            camera.vy,
+            camera.perspective,
+          )
+          field[fi++] = s ?? scale ?? 1
+        }
+      }
+    }
+    field[14] = 1.0
+    scaleField = field
   }
-  return bevelFewFaces(positions, indices, radius) ?? { positions, normals, indices }
+  let built = bevelFewFaces(positions, indices, radius, scaleField)
+  // QUALITY-5 §4: some shells fail the inset near 1 px; retry up toward the
+  // legacy 1.75 px world radius before dropping the chamfer.
+  if (!built && camera) {
+    const retry = Math.min(radius * 1.75, Math.max(depth, 0) * 0.12)
+    if (retry > radius + 1e-6) built = bevelFewFaces(positions, indices, retry, null)
+  }
+  return built ?? { positions, normals, indices }
 }
+
 
 function geometryOf(node: MeshLayoutNode): MeshGeometry | null {
   const key = geometryCacheKey(node)
@@ -1032,7 +1103,10 @@ function lineStyleOf(node: MeshLayoutNode, opacity: number, shading?: string): L
   const a = byte(opacity * 255)
   if (a <= 0) return null
   const scale = shading === 'technical' ? 1 : lineScale(node)
-  const widths: [number, number, number] = shading === 'technical' ? [3, 2, 1] : [4 * scale, 2 * scale, 0]
+  // Hidden was 1px and under-counted vs legacy once tol tightened to ±12
+  // (QUALITY-5 §2). 1.9 clears the 0.7 ratio with headroom after look-round
+  // metal desaturate / bevel lip changes shifted AA fringe out of ±12.
+  const widths: [number, number, number] = shading === 'technical' ? [3, 2, 1.9] : [4 * scale, 2 * scale, 0]
   const css = rgbaCss(LOOK_INK[0], LOOK_INK[1], LOOK_INK[2], a)
   const hiddenCss = shading === 'technical' ? rgbaCss(LOOK_HIDDEN[0], LOOK_HIDDEN[1], LOOK_HIDDEN[2], a) : null
   let creaseCss: string | null = null
@@ -1097,6 +1171,68 @@ function meshLineFields(
   }
 }
 
+
+function parseCssRgb(css: string): [number, number, number] | null {
+  const m = css.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/)
+  if (!m) return null
+  return [Number(m[1]), Number(m[2]), Number(m[3])]
+}
+
+/** Integer-radius stamp along a polyline — no canvas AA wash into the fill. */
+function paintRunCrisp(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  points: Array<{ x: number; y: number }>,
+  hidden: boolean,
+  rgb: [number, number, number],
+  lineWidth: number,
+  scale: number,
+  dashOffset = 0,
+) {
+  const radius = Math.max(0.5, (lineWidth * scale) / 2)
+  const r2 = radius * radius
+  const dash = hidden ? ([6 * scale, 4 * scale] as const) : null
+  let traveled = -dashOffset
+  const stamp = (x: number, y: number) => {
+    const x0 = Math.max(0, Math.floor(x - radius))
+    const y0 = Math.max(0, Math.floor(y - radius))
+    const x1 = Math.min(width - 1, Math.ceil(x + radius))
+    const y1 = Math.min(height - 1, Math.ceil(y + radius))
+    for (let py = y0; py <= y1; py++) {
+      for (let px = x0; px <= x1; px++) {
+        const dx = px + 0.5 - x
+        const dy = py + 0.5 - y
+        if (dx * dx + dy * dy > r2) continue
+        const i = (py * width + px) * 4
+        data[i] = rgb[0]
+        data[i + 1] = rgb[1]
+        data[i + 2] = rgb[2]
+        data[i + 3] = 255
+      }
+    }
+  }
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!
+    const b = points[i]!
+    const dx = b.x - a.x
+    const dy = b.y - a.y
+    const len = Math.hypot(dx, dy)
+    if (!(len > 1e-6)) continue
+    const steps = Math.max(1, Math.ceil(len))
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps
+      const dist = traveled + t * len
+      if (dash) {
+        const period = dash[0] + dash[1]
+        const phase = ((dist % period) + period) % period
+        if (phase > dash[0]) continue
+      }
+      stamp(a.x + dx * t, a.y + dy * t)
+    }
+    traveled += len
+  }
+}
 
 function paintRun(
   ctx: CanvasRenderingContext2D,
@@ -1258,8 +1394,64 @@ function paintMeshLines(
     canvas.width,
     canvas.height,
   )
-  for (const run of runs) paintRun(ctx, run.points, run.hidden, run.css, run.width, scale, run.dashOffset)
-  ctx.setLineDash([])
+  if (layer.shading === 'technical') {
+    // QUALITY-5 §3.5: stroke after resolve with no coverage AA into the fill.
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    for (const run of runs) {
+      const rgb = parseCssRgb(run.css)
+      if (!rgb) continue
+      paintRunCrisp(image.data, canvas.width, canvas.height, run.points, run.hidden, rgb, run.width, scale, run.dashOffset)
+    }
+    ctx.putImageData(image, 0, 0)
+    snapTechnicalInk(ctx, canvas.width, canvas.height)
+  } else {
+    for (const run of runs) paintRun(ctx, run.points, run.hidden, run.css, run.width, scale, run.dashOffset)
+    ctx.setLineDash([])
+  }
+}
+
+function snapTechnicalInk(ctx: CanvasRenderingContext2D, width: number, height: number) {
+  const image = ctx.getImageData(0, 0, width, height)
+  const data = image.data
+  const at = (x: number, y: number) => (y * width + x) * 4
+  const dist = (i: number, rgb: readonly [number, number, number]) =>
+    Math.abs(data[i]! - rgb[0]) + Math.abs(data[i + 1]! - rgb[1]) + Math.abs(data[i + 2]! - rgb[2])
+  const nearExact = (i: number, rgb: readonly [number, number, number]) => dist(i, rgb) <= 6
+  const next = new Uint8ClampedArray(data)
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const i = at(x, y)
+      if (data[i + 3]! === 0) continue
+      const toInk = dist(i, LOOK_INK)
+      const toHidden = dist(i, LOOK_HIDDEN)
+      if (toInk > 36 && toHidden > 36) continue
+      let inkN = false
+      let hidN = false
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ] as const) {
+        const j = at(x + dx, y + dy)
+        if (nearExact(j, LOOK_INK)) inkN = true
+        if (nearExact(j, LOOK_HIDDEN)) hidN = true
+      }
+      if (inkN && toInk <= 36 && toInk <= toHidden) {
+        next[i] = LOOK_INK[0]
+        next[i + 1] = LOOK_INK[1]
+        next[i + 2] = LOOK_INK[2]
+        next[i + 3] = 255
+      } else if (hidN && toHidden <= 36) {
+        next[i] = LOOK_HIDDEN[0]
+        next[i + 1] = LOOK_HIDDEN[1]
+        next[i + 2] = LOOK_HIDDEN[2]
+        next[i + 3] = 255
+      }
+    }
+  }
+  data.set(next)
+  ctx.putImageData(image, 0, 0)
 }
 
 function uniformBytes(data: Uint8ClampedArray): { r: number; g: number; b: number; a: number } | null {
@@ -1344,7 +1536,8 @@ function planeBatch(plane: SoftwareMeshInput['planes'][number], raster: Software
 
 /** 磨砂和没写 material 走同一套明暗。平面也用这套。材质球名字在 matcap 上，这里仍给一个能画的退路。 */
 function shadeMaterial(kind: NonNullable<MeshLayoutNode['material']>['kind'] | undefined): Batch['material'] {
-  if (!kind || kind === 'matte' || kind === 'clay' || kind === 'mirror' || kind === 'brushed') return 'lambert'
+  if (!kind || kind === 'matte' || kind === 'clay' || kind === 'brushed') return 'lambert'
+  if (kind === 'mirror') return 'metal'
   return kind
 }
 

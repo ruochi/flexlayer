@@ -115,10 +115,12 @@ const FINISHES: Finish[] = [
     side: 'fill="#e4b33a" material="mirror"',
   },
   {
+    // Cool mid silver — bright #e8eef3 washed the aniso tip (aspect→1); orange
+    // #c86a3e + stripes read as wood (QUALITY-5 §3.3 look).
     label: 'brushed',
-    box: 'fill="#c86a3e" material="brushed"',
-    sphere: 'fill="#c86a3e" material="brushed"',
-    side: 'fill="#c86a3e" material="brushed"',
+    box: 'fill="#9aa3ab" material="brushed"',
+    sphere: 'fill="#9aa3ab" material="brushed"',
+    side: 'fill="#9aa3ab" material="brushed"',
   },
   {
     label: 'glass 0.06',
@@ -198,15 +200,15 @@ function lines(): string {
   // Technical shading avoids studio specular blow-past of overexposureMax.
   return `<layer width="1180" height="516" camera="fov 36, orbit 28 18, distance 1060, at 560 310 0" shading="technical">
     <layer x="40" y="20" width="1100" height="580" rotateX="38" preserve-3d>
-      <rect id="box" x="40" y="70" width="260" height="200" depth="110" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
-      <cylinder id="piercing" cx="170" cy="170" r="52" height="320" fill="#e7d3a8" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
-      <rect id="round-box" x="400" y="80" width="210" height="160" depth="96" rx="26" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" rotateY="-26" />
-      <cylinder id="rim" cx="720" cy="175" r="48" height="230" rx="14" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
-      <sphere id="ball" cx="960" cy="190" r="68" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
+      <rect id="box" x="40" y="70" width="260" height="200" depth="110" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
+      <cylinder id="piercing" cx="170" cy="170" r="52" height="320" fill="#e7d3a8" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
+      <rect id="round-box" x="400" y="80" width="210" height="160" depth="96" rx="26" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" rotateY="-26" />
+      <cylinder id="rim" cx="720" cy="175" r="48" height="230" rx="14" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
+      <sphere id="ball" cx="960" cy="190" r="68" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
       <layer x="380" y="320">
-        <path id="hole-plate" d="M0 0 H180 V120 H0 Z M45 28 V92 H135 V28 Z" depth="28" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1" hidden="#a89880" />
+        <path id="hole-plate" d="M0 0 H180 V120 H0 Z M45 28 V92 H135 V28 Z" depth="28" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
       </layer>
-      <tube id="elbow" x="60" y="380" d="M0 16 H220 V160" r="16" fill="none" stroke="#1c1915" stroke-width="3 2 1" halo="8" />
+      <tube id="elbow" x="60" y="380" d="M0 16 H220 V160" r="16" fill="none" stroke="#1c1915" stroke-width="3 2 1.9" halo="8" />
     </layer>
   </layer>`
 }
@@ -214,9 +216,13 @@ function lines(): string {
 type Plate = { name: string; source: string }
 
 function cell(label: string, body: string, w: number, h: number, background = '#241f1b', color = '#f4efe6'): string {
+  // QUALITY-5 §3.7: labels must clear 4.5:1. The camera ground often projects
+  // into the strip under the cell, so cream-on-beige fails. Dark ink on that
+  // beige (~12:1) stays readable without an opaque caption bar (a bar cut the
+  // floor and registered as a ground seam / manga page-grey fail).
   return `<layer width="${w}" height="${h + 32}" background="${background}" color="${color}" font-family="ChillDuanSans" min-font="16" safe="0">
   ${place(body, 0, 0)}
-  <layer x="12" y="${h + 4}"><p style="font-size:18px">${label}</p></layer>
+  <layer x="12" y="${h + 4}" color="#1c1915"><p style="font-size:24px; color:#1c1915; fill:#1c1915">${label}</p></layer>
 </layer>
 `
 }
