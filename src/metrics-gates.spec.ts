@@ -253,7 +253,9 @@ describe('manga 排线对照', () => {
   it('对照图找不到时失败，而不是当作通过', () => {
     const report = passing()
     report.manga = { ...report.manga!, hatchFlip: null }
-    const errors = checkGates(gates, report)
+    // QUALITY-5 §3.6: absolute legacy hatchFlipMax is null; missing legacy is
+    // only an error when that gate is armed again.
+    const errors = checkGates({ ...gates, hatchFlipMax: 0.15 }, report)
     expect(errors.length).toBe(1)
     expect(errors[0]).toContain('FLEXLAYER_LEGACY_REFERENCE')
   })
@@ -261,7 +263,7 @@ describe('manga 排线对照', () => {
   it('排线漂移超过门槛时失败', () => {
     const report = passing()
     report.manga = { ...report.manga!, hatchFlip: 0.19 }
-    expect(checkGates(gates, report)[0]).toContain('manga hatch flip')
+    expect(checkGates({ ...gates, hatchFlipMax: 0.15 }, report)[0]).toContain('manga hatch flip')
   })
 
   it('门槛为 null 时只记录不判', () => {

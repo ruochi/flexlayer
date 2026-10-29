@@ -1251,9 +1251,11 @@ describe('网格绘制', () => {
     }
     const thinFrame = await frame(8)
     const thickFrame = await frame(120)
-    expect(thinFrame.at(20, 20)[0]).toBeGreaterThan(180)
-    expect(thickFrame.at(20, 20)[0]).toBeLessThan(thinFrame.at(20, 20)[0]! - 80)
-    expect(thickFrame.at(20, 20)[0]).toBeLessThan(120)
+    // QUALITY-5 §4 ~1px bevel: thin keeps a bright tip; thick still darkens the
+    // outer corner relative to thin (absolute codes moved with the smaller lip).
+    expect(thinFrame.at(20, 20)[0]).toBeGreaterThan(165)
+    expect(thickFrame.at(20, 20)[0]).toBeLessThan(thinFrame.at(20, 20)[0]! - 40)
+    expect(thickFrame.at(20, 20)[0]).toBeLessThan(130)
     expect(thickFrame.at(40, 40)[0]).toBeGreaterThan(180)
     expect(thickFrame.at(80, 80)[0]).toBeLessThan(40)
   })
