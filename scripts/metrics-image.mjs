@@ -419,8 +419,10 @@ export function facetStripe(rgba, width, height, accept = () => true, quantile =
  * Material-feature probes on a sphere (or any accept mask). Used to tell
  * finishes apart when whole-cell FLIP only sees colour.
  *
- * - `highlightArea`: share of pixels at or above the 98th percentile
- * - `highlightSharpness`: mean gradient on the highlight rim
+ * - `highlightArea`: share of pixels at or above a fixed luma floor (200).
+ *   A per-image 98th percentile is always ~2% of the body, so roughness pairs
+ *   could never move the area by ≥30% (QUALITY-5 §2.1).
+ * - `highlightSharpness`: mean gradient on those highlight pixels
  * - `darkFloor`: 5th percentile luma
  * - `anisotropy`: highlight bbox aspect (width / height), 1 when round
  * - `reflectContent`: Laplacian variance / 1000 on the body, clamped to 1
@@ -442,7 +444,10 @@ export function materialFeatures(rgba, width, height, accept = () => true) {
   }
   if (values.length < 40) return null
   const sorted = [...values].sort((a, b) => a - b)
-  const p98 = percentile(sorted, 0.98)
+  // Absolute floor so smooth vs rough can grow or shrink the bright patch.
+  // 200 covered most of a lit plastic body; 220 isolates the specular patch
+  // (QUALITY-5 §2.1).
+  const highlightFloor = 220
   const darkFloor = percentile(sorted, 0.05)
   let highlight = 0
   let hx0 = width
@@ -450,7 +455,7 @@ export function materialFeatures(rgba, width, height, accept = () => true) {
   let hx1 = -1
   let hy1 = -1
   for (let i = 0; i < values.length; i++) {
-    if (values[i] < p98) continue
+    if (values[i] < highlightFloor) continue
     highlight += 1
     const x = coords[i * 2]
     const y = coords[i * 2 + 1]
@@ -480,7 +485,7 @@ export function materialFeatures(rgba, width, height, accept = () => true) {
     lapSum += lap
     lapSq += lap * lap
     lapN += 1
-    if (values[i] < p98) continue
+    if (values[i] < highlightFloor) continue
     const gx = luma(rgba, (y * width + x + 1) * 4) - luma(rgba, (y * width + x - 1) * 4)
     const gy = luma(rgba, ((y + 1) * width + x) * 4) - luma(rgba, ((y - 1) * width + x) * 4)
     sharpSum += Math.hypot(gx, gy)

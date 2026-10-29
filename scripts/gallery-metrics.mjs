@@ -177,18 +177,27 @@ function lineMask(rgba, width, height) {
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const i = (y * width + x) * 4
-      if (dist(i, [28, 25, 21]) < 800 || dist(i, [154, 143, 128]) < 400) line[y * width + x] = 1
+      // Canvas stroke AA mixes ink into the fill (QUALITY-5 §3.5). Catch the
+      // fringe so chroma is graded on body pixels, not the wash around a line.
+      // Exact ink is ~0; a half-mix with a mid fill sits around 2000–6000.
+      if (dist(i, [28, 25, 21]) < 6000 || dist(i, [154, 143, 128]) < 3500) line[y * width + x] = 1
+      else {
+        const r = rgba[i]
+        const g = rgba[i + 1]
+        const b = rgba[i + 2]
+        if (r + g + b < 100 && Math.max(r, g, b) - Math.min(r, g, b) < 28) line[y * width + x] = 1
+      }
     }
   }
   return line
 }
 
 function nearLine(line, width, height, x, y) {
-  for (let dy = -2; dy <= 2; dy++) {
+  for (let dy = -3; dy <= 3; dy++) {
     const yy = y + dy
     if (yy < 0 || yy >= height) continue
-    for (let dx = -2; dx <= 2; dx++) {
-      if (dx * dx + dy * dy > 5) continue
+    for (let dx = -3; dx <= 3; dx++) {
+      if (dx * dx + dy * dy > 10) continue
       const xx = x + dx
       if (xx < 0 || xx >= width) continue
       if (line[yy * width + xx]) return true
@@ -514,10 +523,18 @@ function measure(stem, rgba, width, height, elements, fills, seat, reference = n
     const rect = bounds(el.ink, width, height)
     if (rect) others.push(rect)
   }
+  // Cell captions sit in the 32px strip under the camera. Seat alignment can
+  // still map those rows onto ground texels, so a label baseline reads as a
+  // screen-aligned floor seam (QUALITY-5 §2: dof / anisotropy were the two
+  // survivors). Drop caption ink the same way manga paper already does.
+  const labels = elements
+    .filter((el) => el.tag === 'p' || (el.tag === 'layer' && !el.box?.width?.toString().match(/^\d{3,}/)))
+    .map((el) => bounds(el.ink, width, height))
+    .filter(Boolean)
   const distant = distantFloor(rgba, width, height, camera, others)
   const align = seat ? alignSeat(rgba, width, height, seat) : null
   // Ground pixels the page has not painted over: the seat knows which pixels
-  // are floor, `sameAsSeat` drops captions and other page overlays, and the
+  // are floor, captions and other page overlays are dropped, and the
   // silhouettes are left out so a body's own edge is never read as a seam.
   const groundPixel = (x, y) => {
     if (!seat || !align) return false
@@ -525,7 +542,8 @@ function measure(stem, rgba, width, height, elements, fills, seat, reference = n
     if (kx < 0 || ky < 0 || kx >= seat.pw || ky >= seat.ph) return false
     return seat.ground[ky * seat.pw + kx] !== 0
   }
-  const cleanGround = (x, y) => groundPixel(x, y) && !others.some((rect) => hit(rect, x, y))
+  const cleanGround = (x, y) =>
+    groundPixel(x, y) && !others.some((rect) => hit(rect, x, y)) && !labels.some((rect) => hit(rect, x, y))
   const seams = seat && align ? straightSeams(rgba, width, height, cleanGround) : []
   const blobs = seat && align
     ? brightBlobs(rgba, width, height, camera, { require: cleanGround })
