@@ -122,6 +122,8 @@ export const GATES = {
   // One screen-aligned step on a soft floor pool is still within draft noise;
   // fail only when a cell grows a hard rectangular seam (QUALITY-4 ground).
   groundSeamsMax: 1,
+  /** QUALITY-5 §1.2: metal-plate SSR checkerboard rate ≤ 1%. */
+  ssrCheckerMax: 0.01,
   brightBlobsMax: 0,
   shadowStairMax: 0.85,
   shadowEdgeFlipMax: 0.06,
@@ -314,6 +316,7 @@ export function checkGates(gates, report, slack = { luma: 0, fraction: 0 }) {
     maxOf(gates.stillEmptyFloorMax, still.emptyFloor, 'still empty floor', slack.fraction)
     minOf(gates.stillBlueTopGapMin, still.blueTopGap, 'still blue-float top gap', 1)
     maxOf(gates.stillGoldFacetMax, still.goldFacetStripe, 'still gold facetStripe')
+    maxOf(gates.ssrCheckerMax, still.ssrChecker, 'still metal-plate SSR checker')
   }
   if (gates.materialDarkFloorMin != null) {
     for (const trait of report.materialTraits ?? []) {
