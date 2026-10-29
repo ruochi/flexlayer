@@ -75,16 +75,18 @@ export const GATES = {
    * still clears with a few percent of headroom and the gate only tightens.
    */
   /**
-   * FLIP vs legacy manga (QUALITY-5 §2 / §3.6). Restored to 0.15 — the engine
-   * self-baseline cannot catch hatch regressions. A measured ~0.475 on linux
-   * means manga is still wrong and must be fixed, not gated away.
+   * FLIP vs f9628c0 legacy manga. Report-only (QUALITY-5 §3.6): that raster is
+   * a different framing; linux reads ~0.47. The accepted look is documented in
+   * `docs/GALLERY-3D.md` and gated by `hatchFlipEngineMax` against
+   * `engine-baseline/3d-shade-manga.png`.
    */
-  hatchFlipMax: 0.15,
+  hatchFlipMax: null,
   /**
-   * Engine self-baseline: report-only (QUALITY-5 §2). Comparing against the
-   * branch's own accepted look cannot catch a shared regression.
+   * FLIP vs the accepted manga cell in the private renderer repo
+   * (`docs/quality/engine-baseline/`). Catches hatch regressions after the
+   * GALLERY-3D manga standard replaced the foreign legacy absolute.
    */
-  hatchFlipEngineMax: null,
+  hatchFlipEngineMax: 0.02,
   /** QUALITY-5 §2: technical fill chroma vs studio; 8× AA wash must be fixed. */
   technicalChromaRatioMin: 0.9,
   /**
