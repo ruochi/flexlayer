@@ -171,9 +171,9 @@ export const GATES = {
   /** QUALITY-4 §4.4: metal / mirror / brushed / anisotropy body floor. */
   materialDarkFloorMin: 35,
   /**
-   * QUALITY-4 §4.4: clear glass keeps stripe structure (SSIM ≥ 0.6 against the
-   * above-sphere column profile); frost washes it (SSIM ≤ 0.3). Edge energy
-   * still has to drop from clear to frost so a flat copy cannot pass.
+   * QUALITY-5 §1.3: clear glass keeps behind structure (SSIM ≥ 0.6 against the
+   * same disk with the sphere removed); frost washes it (SSIM ≤ 0.3). Edge
+   * energy still has to drop from clear to frost so a flat copy cannot pass.
    */
   glassClearSsimMin: 0.6,
   glassFrostSsimMax: 0.3,

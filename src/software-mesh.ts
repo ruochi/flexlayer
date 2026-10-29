@@ -625,6 +625,9 @@ function paintGeometry(
   // 卡通和漫画要硬边。技术图只加线，实体和 studio 用同一份倒角。
   const flatLook = (shading === 'toon' || shading === 'manga') && !node.strokeOff
   if (node.stroke !== 'none' || flatLook) return { positions, normals, indices }
+  // Glass transmit / SSIM is measured on the sphere silhouette; a chamfer
+  // eats the clear face and drops glassClearSsim under 0.6 (QUALITY-5).
+  if (node.material?.kind === 'glass') return { positions, normals, indices }
   const mesh = node.mesh
   if (mesh.type === 'tube') return { positions, normals, indices }
   // A box `rx` only rounds the vertical corners. The top/front crease of a
