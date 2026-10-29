@@ -9,7 +9,7 @@
 
     <sphere cx="150" cy="640" r="70" fill="#c45a3a" material="clay" />
     <sphere cx="390" cy="640" r="70" fill="#c45a3a" />
-    <sphere cx="710" cy="640" r="70" fill="#c86a3e" material="brushed" />
+    <sphere cx="710" cy="640" r="70" fill="#c5c9ce" material="brushed" />
     <sphere cx="950" cy="640" r="70" fill="#c86a3e" material="metal 0.5" />
     <sphere cx="1270" cy="640" r="70" fill="#f7f4ee" material="glass 0.08" />
     <sphere cx="1510" cy="640" r="70" fill="#f7f4ee" material="glass 0.7" />

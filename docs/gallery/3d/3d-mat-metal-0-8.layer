@@ -9,5 +9,5 @@
       <circle id="side" cx="330" cy="78" r="26" depth="100" fill="#c5c9ce" material="metal 0.8" />
     </layer>
   </layer>
-  <layer x="12" y="304"><p style="font-size:22px; color:#f4efe6">metal 0.8</p></layer>
+  <layer x="12" y="304"><p style="font-size:24px; color:#ffffff">metal 0.8</p></layer>
 </layer>
