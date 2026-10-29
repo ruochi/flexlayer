@@ -1216,7 +1216,11 @@ describe('网格绘制', () => {
     expect(prism(16)).toBeTruthy()
   })
 
-  it('渲染时五星和带洞的挤出按 depth/40 收掉尖角', async () => {
+  it('渲染时五星和带洞的挤出按屏幕尺度倒角收尖角', async () => {
+    // QUALITY-5 §1.1: bevel is screen-scaled (~1.75 px, ≤ depth×0.12), not
+    // depth/40. Crops: flexlayer-render/docs/quality/q5-crops/bevel-*.png.
+    // Thick tips still darken vs thin; a 1 px bevel does not carve a 200²
+    // frame corner all the way to black the way depth/40 (=3) used to.
     const star = async (depth: number) => {
       const pts: string[] = []
       for (let i = 0; i < 10; i++) {
@@ -1244,7 +1248,8 @@ describe('网格绘制', () => {
     const thinFrame = await frame(8)
     const thickFrame = await frame(120)
     expect(thinFrame.at(20, 20)[0]).toBeGreaterThan(180)
-    expect(thickFrame.at(20, 20)[0]).toBeLessThan(40)
+    expect(thickFrame.at(20, 20)[0]).toBeLessThan(thinFrame.at(20, 20)[0]! - 80)
+    expect(thickFrame.at(20, 20)[0]).toBeLessThan(120)
     expect(thickFrame.at(40, 40)[0]).toBeGreaterThan(180)
     expect(thickFrame.at(80, 80)[0]).toBeLessThan(40)
   })
