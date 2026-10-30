@@ -47,6 +47,24 @@ What the manga cell must read as:
 | [3d-lines.png](gallery/3d-lines.png) | one drawing | A different stage, framed on the row: `fov 36, orbit 32 22, distance 1120, at 640 440 0` on a 1180×680 layer set into the 1180×480 sheet. A cylinder through a box, both with `stroke` and `hidden`. A turned box with `rx`. A cylinder with rim `rx`. A sphere outline. A plate with a hole. A tube elbow with `halo`. |
 | [3d-lights.png](gallery/3d-lights.png) | six author lights, then no light | One small scene — a red plastic box, a matte white box, a metal sphere, a mid-tone floor — with only the `<light>` changed. The last cell writes none and is the control. Each light has to move the picture against that control (`lightEffectMin`), a `spot` has to draw a disc that only falls outward (`spotDiscRiseMin`), a `point` pool has to fall off (`pointFalloffDropMin`), and a lamp has to lift the matte box's dark face (`matteLitRiseMin`). The floor is mid-tone on purpose: on cream paper a lamp clips and the disc is unreadable. |
 
+## Animation plates (QUALITY-6 §B)
+
+Three `.tsx` compositions under `docs/gallery/3d/anim/`, rendered as contact sheets by `scripts/gallery-3d.ts`. A still cannot show a flicker; these are strips of the whole run so a frame-to-frame jump reads as a step along the page.
+
+| Sheet | What moves | What you are looking at |
+| --- | --- | --- |
+| [orbit.png](gallery/orbit.png) | the camera, 80° over 30 frames | The §7.2 light bench. The contact shadow under the red box and the sphere slides with the camera; it must slide, not step. The sphere's silhouette must not grow a white fringe on some frames and not others. |
+| [dolly.png](gallery/dolly.png) | the camera, `distance` 1400 → 700 | A bevel radius is chosen from the screen scale, so this sweep crosses the 0.75 px threshold where a bevel appears or vanishes. `bevelPop` counts the frames where it toggles, and has to be 0. |
+| [light-sweep.png](gallery/light-sweep.png) | the key light, a full turn; camera fixed | Geometry and camera never move, so every difference is the shadow map and the contact map. This is the cleanest read on whether the maps are anchored in world space. |
+
+The numbers come from `scripts/anim-metrics.mjs` (`npm run anim:metrics -- --check`):
+
+- `temporalFlicker` ≤ 0.3 % — pixels whose luma reverses between three frames while the neighbourhood is flat in all three. Raw flips are *not* the gate: a hard edge sliding across a pixel reverses it on a perfectly stable renderer, and that accounts for 98 % of the raw count on `orbit`. Measured: orbit 0.004 %, dolly 0.001 %, light-sweep 0.000 %.
+- `contactJitter` ≤ 2 px — how far the contact edge's position departs from a smooth slide, under the red box and the sphere. Measured: 1.17 px, against a 3.4 px/frame slide.
+- `bevelPop` = 0 — frames where the bevel row appears or disappears.
+
+A contact sheet wider or taller than the 1920 edge shrinks its cells rather than failing with `output-limit` (§B.4).
+
 Material cells, in order: `matte`, `clay`, `clay` with `fill`, `plastic 0.12`, `plastic 0.85`, `metal 0.08`, `metal 0.8`, `mirror`, `brushed`, `glass 0.06`, `glass 0.72`, `clearcoat 1`, `anisotropy 0.9`, `sheen 0.85`, `lamp`, `neon`.
 
 ## A new plate

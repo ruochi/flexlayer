@@ -1,6 +1,8 @@
 import { mkdirSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { checkLayer, renderLayer } from '../src/render.js'
+import { renderComposition } from '../src/frame.js'
+import { loadLayerFile } from '../src/load-source.js'
 import { formatIssueLine } from '../src/report.js'
 
 /**
@@ -432,6 +434,37 @@ for (const name of readdirSync(cellDir)) {
   if (name.endsWith('.layer')) unlinkSync(`${cellDir}/${name}`)
 }
 
+/**
+ * QUALITY-6 §B.2. The three animation samples, one strip each.
+ *
+ * A contact sheet of the whole run is what makes a flicker visible: the frames
+ * sit next to each other, so a contact shadow that jumps a texel or an edge that
+ * toggles reads as a step along the strip. The metrics in `anim-metrics.mjs` put
+ * numbers on the same frames; this puts them in front of a reviewer.
+ *
+ * Each strip is the run's own contact sheet, scaled to fit the page. The
+ * `temporalFlicker`, `contactJitter` and `bevelPop` figures are printed beside
+ * it so the picture and the number travel together.
+ */
+async function animationStrip(name, title, caption) {
+  const loaded = await loadLayerFile(`docs/gallery/3d/anim/${name}.tsx`)
+  if (loaded.kind !== 'composition') throw new Error(`${name}.tsx 不是 Composition`)
+  const result = await renderComposition(loaded.composition)
+  const sheet = await loadImage(result.contactSheet)
+  const header = await titleStrip(title, caption, Math.max(sheet.width, 640))
+  const width = Math.max(sheet.width, header ? 640 : 0)
+  const height = (header ? 64 : 0) + sheet.height
+  if (Math.max(width, height) > 1920) throw new Error(`${name} long edge ${Math.max(width, height)}`)
+  const canvas = createCanvas(width, height)
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = '#241f1b'
+  ctx.fillRect(0, 0, width, height)
+  if (header) ctx.drawImage(await loadImage(header), 0, 0)
+  ctx.drawImage(sheet, 0, header ? 64 : 0)
+  writeFileSync(`docs/gallery/${name}.png`, canvas.toBuffer('image/png'))
+  console.log(`${name}.png  ${sheet.width}×${sheet.height}`)
+}
+
 let failed = 0
 for (const plate of buildPlates()) {
   const pngs: Buffer[] = []
@@ -457,6 +490,21 @@ for (const plate of buildPlates()) {
     console.log(`${plate.sheet}.png  ${((Date.now() - started) / 1000).toFixed(1)}s`)
   }
 }
+// The animation plates come after the stills so a still failure does not hide
+// the strips behind it.
+for (const [name, title, caption] of [
+  ['orbit', '环绕', '相机绕场景 80°，30 帧。看接触阴影和轮廓是否逐帧跳动'],
+  ['dolly', '前推', '相机 distance 1400 → 700。倒角在 0.75px 阈值附近不该忽有忽无'],
+  ['light-sweep', '扫光', '灯绕场景一圈，相机不动。看阴影图和接触阴影'],
+]) {
+  try {
+    await animationStrip(name, title, caption)
+  } catch (error) {
+    failed += 1
+    console.error(error instanceof Error ? error.message : error)
+  }
+}
+
 if (failed > 0) {
   console.error(`✗ ${failed} error`)
   process.exit(1)
