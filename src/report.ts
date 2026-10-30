@@ -150,6 +150,91 @@ function inkOverlap(a: Box, b: Box): boolean {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
 }
 
+type GroundPlane = { point: [number, number, number]; normal: [number, number, number]; eye: number }
+
+/** 地面在镜头空间里的平面，以及眼睛在哪一侧。`eye` 是眼睛到平面的有符号距离。 */
+function groundPlaneOf(toLayer: number[], eye: [number, number, number]): GroundPlane | null {
+  const p = applyPoseMatrix(toLayer, 0, 0, 0)
+  const ax = applyPoseMatrix(toLayer, 1, 0, 0)
+  const ay = applyPoseMatrix(toLayer, 0, 1, 0)
+  const ux = ax.x - p.x
+  const uy = ax.y - p.y
+  const uz = ax.z - p.z
+  const vx = ay.x - p.x
+  const vy = ay.y - p.y
+  const vz = ay.z - p.z
+  let nx = uy * vz - uz * vy
+  let ny = uz * vx - ux * vz
+  let nz = ux * vy - uy * vx
+  const len = Math.hypot(nx, ny, nz)
+  if (!(len > 1e-8)) return null
+  nx /= len
+  ny /= len
+  nz /= len
+  const eyeH = (eye[0] - p.x) * nx + (eye[1] - p.y) * ny + (eye[2] - p.z) * nz
+  if (Math.abs(eyeH) < 1e-6) return null
+  return { point: [p.x, p.y, p.z], normal: [nx, ny, nz], eye: eyeH }
+}
+
+/**
+ * QUALITY-6 §D. A solid that sits below an opaque ground is behind the plane
+ * from the eye, and the ground is infinite, so every such point is covered.
+ * That is the trap the doc describes: the floor hides the body but its shadow
+ * stays on the floor, and `check` said nothing.
+ *
+ * Returns the visible fraction per path, 0 when the whole body is under the
+ * plane. Only camera layers that own meshes are walked.
+ */
+function buriedSolids(root: LayoutNode): Map<string, number> {
+  const hidden = new Map<string, number>()
+  const visit = (node: LayoutNode) => {
+    if (node.kind === 'layer' && hasPerspective(node.perspective)) {
+      auditBuried(node, hidden)
+    }
+    if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
+      for (const child of node.children) visit(child)
+    }
+  }
+  visit(root)
+  return hidden
+}
+
+function auditBuried(layer: LayerLayoutNode, out: Map<string, number>) {
+  const items = cameraItems(layer)
+  if (items.length === 0) return
+  const perspective = layer.perspective
+  const eyeZ = typeof perspective === 'number' ? perspective : 1e9
+  const eye: [number, number, number] = [layer.width / 2 + (layer.vanishX ?? 0), layer.height / 2 + (layer.vanishY ?? 0), eyeZ]
+  const planes: GroundPlane[] = []
+  for (const item of items) {
+    if (item.kind !== 'ground') continue
+    const ground = item.node
+    if (ground.kind !== 'ground' || !ground.fill || ground.opacity < VISIBLE_OPACITY) continue
+    const plane = groundPlaneOf(item.toLayer, eye)
+    if (plane) planes.push(plane)
+  }
+  if (planes.length === 0) return
+  for (const item of items) {
+    if (item.kind !== 'mesh' || item.node.kind !== 'mesh') continue
+    if (item.opacity < VISIBLE_OPACITY) continue
+    const samples = meshSamples(item.node)
+    if (samples.length === 0) continue
+    let visible = samples.length
+    for (const plane of planes) {
+      let above = 0
+      for (const [u, v, z] of samples) {
+        const p = applyPoseMatrix(item.toLayer, u, v, z)
+        const h = (p.x - plane.point[0]) * plane.normal[0] + (p.y - plane.point[1]) * plane.normal[1] + (p.z - plane.point[2]) * plane.normal[2]
+        // Same side as the eye: the plane is not between them. A body resting
+        // exactly on the plane counts as visible.
+        if (h * plane.eye >= -1e-3) above += 1
+      }
+      visible = Math.min(visible, above)
+    }
+    if (visible < samples.length) out.set(item.node.path, visible / samples.length)
+  }
+}
+
 function quadsOverlap(a: Quad, b: Quad): boolean {
   const polys = [a, b]
   for (const poly of polys) {
@@ -879,10 +964,31 @@ export function buildReport(doc: LayerDocument, clock: { frame?: number; fps?: n
   const issues: Issue[] = [...doc.issues, ...maskIssues]
   const visible = elements.filter((el) => el.opacity >= VISIBLE_OPACITY && hasArea(el.ink))
   const minFontHits: Array<{ path: string; shown: number; floor: number; message: string }> = []
+  // QUALITY-6 §D: a solid that the floor swallows. `visible` is the fraction of
+  // the body's sampled points that are on the eye's side of every opaque
+  // ground. Anything under half is buried, and a body at zero has no ink left
+  // to report: the floor covers all of it.
+  const buried = buriedSolids(doc.root)
 
   for (let index = 0; index < elements.length; index++) {
     const el = elements[index]!
     if (el.opacity < VISIBLE_OPACITY || !hasArea(el.ink)) continue
+    const shown = buried.get(el.path)
+    if (shown != null && shown < 0.5 - 1e-9) {
+      // A body that the floor swallows keeps its `box` (where it was written)
+      // but has no ink: nothing of it reaches the picture. The fraction stays
+      // on the record so a half-sunk body is visible in the table too.
+      el.visible = Math.round(shown * 1000) / 1000
+      if (shown <= 0) el.ink = emptyBox()
+      issues.push({
+        level: 'warn',
+        code: 'buried-in-ground',
+        path: el.path,
+        message: `${el.tag} 大部分在地面以下，被地面挡住`,
+        hint: '放实体的层加 origin="宽/2 0"，或者把 ground 的 y 对齐到实体底部',
+      })
+      continue
+    }
     const slack = inkSlack[index] ?? 0
     const edge = 1e-3 + slack
     const inkOutside = el.ink.x + el.ink.width > doc.width + edge || el.ink.y + el.ink.height > doc.height + edge || el.ink.x < -edge || el.ink.y < -edge
@@ -1068,6 +1174,7 @@ const EXPECT_CODES = new Set([
   'ink-inset',
   'ink-anchor-empty',
   'ink-anchor-rotate',
+  'buried-in-ground',
 ])
 
 type ExpectDecl = { path: string; code: string; reason?: string; used: boolean; window?: { start: number; end: number } }

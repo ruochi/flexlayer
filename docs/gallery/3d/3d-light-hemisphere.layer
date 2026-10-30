@@ -1,0 +1,12 @@
+<layer width="440" height="332" background="#241f1b" color="#f4efe6" font-family="ChillDuanSans" min-font="16" safe="0">
+  <layer x="0" y="0" width="440" height="300" camera="fov 32, orbit 34 22, distance 860, at 220 160 0">
+    <light type="hemisphere" intensity="1.2" color="#7fb2ff" ground-color="#8a6a45" />
+    <ground id="ground" y="220" rotateX="90" fill="#9a9285" shadow-blur="26" shadow-opacity="0.5" />
+    <layer x="28" y="220" width="400" height="190" origin="200 0" rotateX="90" preserve-3d>
+      <rect id="red" x="30" y="34" width="120" height="86" depth="72" rx="12" fill="#d23b3b" material="plastic 0.3" />
+      <rect id="matte" x="168" y="26" width="96" height="96" depth="60" rx="8" fill="#f4f1ea" material="matte" />
+      <sphere id="ball" cx="330" cy="78" r="46" z="46" fill="#c5c9ce" material="metal 0.2" />
+    </layer>
+  </layer>
+  <layer x="12" y="304" color="#1c1915"><p style="font-size:24px; color:#1c1915; fill:#1c1915">hemisphere 天蓝地棕</p></layer>
+</layer>

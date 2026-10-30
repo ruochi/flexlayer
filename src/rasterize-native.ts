@@ -194,6 +194,19 @@ export function rasterizeNative(
               tx: light.target[0],
               ty: light.target[1],
               tz: light.target[2],
+              // Every other field the kernel's AuthorLight carries. Dropping
+              // them here made a spot fall back to the default cone and a point
+              // to the default range, which is why spot was a no-op.
+              ...(light.distance != null ? { distance: light.distance } : {}),
+              ...(light.decay != null ? { decay: light.decay } : {}),
+              ...(light.angle != null ? { angle: light.angle } : {}),
+              ...(light.penumbra != null ? { penumbra: light.penumbra } : {}),
+              ...(light.width != null ? { width: light.width } : {}),
+              ...(light.height != null ? { height: light.height } : {}),
+              ...(light.castShadow === false ? { castShadow: false } : {}),
+              ...(light.groundColor
+                ? { groundR: light.groundColor[0], groundG: light.groundColor[1], groundB: light.groundColor[2] }
+                : {}),
             })),
           }
         : {}),

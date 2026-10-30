@@ -4033,11 +4033,14 @@ function readLight(node: LayerNode, ctx: LayoutContext): LightSpec | null {
     target: readVec3(node.attrs.target, [0, 0, 0]),
     ...(node.attrs.distance != null ? { distance: readNonNegative(node.attrs.distance, 0, ctx, 'distance', '例如 distance="80"') } : {}),
     ...(node.attrs.decay != null ? { decay: readNonNegative(node.attrs.decay, 2, ctx, 'decay', '例如 decay="2"') } : {}),
-    ...(node.attrs.angle != null ? { angle: readNonNegative(node.attrs.angle, 0, ctx, 'angle', '例如 angle="0.6"') } : {}),
+    ...(node.attrs.angle != null ? { angle: readNonNegative(node.attrs.angle, 0, ctx, 'angle', '例如 angle="0.6"，单位是弧度') } : {}),
     ...(node.attrs.penumbra != null ? { penumbra: readUnitInterval(node.attrs.penumbra, 0, ctx, 'penumbra', '例如 penumbra="0.2"') } : {}),
     ...(node.attrs.width != null ? { width: readNonNegative(node.attrs.width, 0, ctx, 'width', '例如 width="40"') } : {}),
     ...(node.attrs.height != null ? { height: readNonNegative(node.attrs.height, 0, ctx, 'height', '例如 height="20"') } : {}),
     ...(node.attrs['cast-shadow'] === 'false' ? { castShadow: false } : {}),
+    ...(rawType === 'hemisphere' && node.attrs['ground-color'] != null
+      ? { groundColor: (() => { const c = parseColor(node.attrs['ground-color']!.trim()); return c ? [c.r, c.g, c.b] as [number, number, number] : undefined })() }
+      : {}),
   }
 }
 

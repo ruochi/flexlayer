@@ -268,7 +268,7 @@ function blankPng(): Buffer {
 
 /**
  * 逐帧往联系表里放。列数约为帧数的平方根，单元格只缩小不放大，空白为白色。
- * 单元格最长边不超过 480px，整张宽度不超过 3840px。
+ * 单元格最长边不超过 480px，整张长边不超过成片上限（公开档 1920），超了就把格子缩小。
  */
 export function createContactSheet(input: { count: number; width: number; height: number }): ContactSheet {
   painterMode()
@@ -289,7 +289,7 @@ export function createContactSheet(input: { count: number; width: number; height
 
 /**
  * 把各帧 PNG 排成网格。列数约为帧数的平方根，单元格只缩小不放大，空白为白色。
- * 单元格最长边不超过 480px，整张宽度不超过 3840px。
+ * 单元格最长边不超过 480px，整张长边不超过成片上限（公开档 1920），超了就把格子缩小。
  */
 export async function contactSheetFromPngs(frames: Buffer[]): Promise<Buffer> {
   painterMode()
