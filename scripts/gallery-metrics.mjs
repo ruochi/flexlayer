@@ -1310,6 +1310,169 @@ async function technicalHidden(technical) {
 }
 const technicalHiddenReport = await technicalHidden(rendered.get('3d-shade-technical'))
 
+/**
+ * QUALITY-6 §A.4. The six author-light cells plus the control, measured on the
+ * same small scene. Every value is computed from the painted pixels; none of
+ * them reads the source, so a light that parses but does nothing fails.
+ */
+function authorLightReport(cells) {
+  const control = cells.get('3d-light-不写灯（对照）')
+  if (!control) return null
+  const grid = [
+    ['directional', '3d-light-directional'],
+    ['point', '3d-light-point'],
+    ['spot', '3d-light-spot'],
+    ['area', '3d-light-area'],
+    ['hemisphere', '3d-light-hemisphere'],
+    ['ambient', '3d-light-ambient'],
+  ]
+  const effect = {}
+  for (const [name, stem] of grid) {
+    const cell = cells.get(stem)
+    if (!cell) {
+      effect[name] = null
+      continue
+    }
+    effect[name] = cell.width === control.width && cell.height === control.height
+      ? round(meanFlip(cell.rgba, control.rgba, cell.width, cell.height), 4)
+      : null
+  }
+
+  // The floor band: below every object's ink, inside the cell's own 300px scene
+  // window. Taking the whole frame would include the label strip, which is a
+  // different page. The band is what a light on the floor can be measured on.
+  const floorBand = (cell) => {
+    let bottom = 0
+    for (const el of cell.ids.values()) {
+      if (el.id === 'ground' || !el.ink || el.ink.height <= 0) continue
+      bottom = Math.max(bottom, el.ink.y + el.ink.height)
+    }
+    const y0 = Math.min(cell.height - 2, Math.ceil(bottom + 2))
+    const y1 = Math.min(cell.height - 1, 300)
+    return y1 > y0 ? { y0, y1 } : null
+  }
+  const lumaAt = (cell, x, y) => luma(cell.rgba, (y * cell.width + x) * 4)
+  const bandPixels = (cell, band) => {
+    const out = []
+    for (let y = band.y0; y <= band.y1; y++) {
+      for (let x = 1; x < cell.width - 1; x++) out.push({ x, y, Y: lumaAt(cell, x, y) })
+    }
+    return out
+  }
+  const quantile = (values, q) => {
+    if (!values.length) return null
+    const sorted = [...values].sort((a, b) => a - b)
+    return sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(q * (sorted.length - 1))))]
+  }
+
+  // `spotDisc`: how far the disc's core stands above the floor outside it, and
+  // whether the profile walking out from the core only ever falls. A ring or a
+  // step at the penumbra shows up as a reversal, which is what a hard-edged
+  // cone looks like once it lands on a floor.
+  const spot = cells.get('3d-light-spot')
+  let spotDisc = null
+  const spotBand = spot ? floorBand(spot) : null
+  if (spot && spotBand) {
+    const pixels = bandPixels(spot, spotBand)
+    const peakPixel = pixels.reduce((best, p) => (p.Y > best.Y ? p : best), pixels[0])
+    const outside = quantile(pixels.map((p) => p.Y), 0.1)
+    // Walk both ways along the row through the peak, away from it, and stop at
+    // the open floor. Past that point the walk measures the bodies' contact
+    // shadow rather than the cone, and a dip there is the shadow's business.
+    let dips = 0
+    for (const step of [-1, 1]) {
+      let prev = peakPixel.Y
+      for (let k = 1; k < 400; k++) {
+        const x = peakPixel.x + step * k
+        if (x < 1 || x >= spot.width - 1) break
+        const Y = lumaAt(spot, x, peakPixel.y)
+        if (Y <= outside + 2) break
+        if (Y > prev + 2) dips += 1
+        prev = Y
+      }
+    }
+    spotDisc = {
+      peak: round(peakPixel.Y, 1),
+      outside: round(outside, 1),
+      rise: round(peakPixel.Y - outside, 1),
+      dips,
+      at: [peakPixel.x, peakPixel.y],
+    }
+  }
+
+  // `pointFalloff`: five samples walking away from the brightest floor pixel,
+  // which is where the point light's foot lands. A drop that only ever falls is
+  // what separates a real falloff from a flat wash.
+  const point = cells.get('3d-light-point')
+  let pointFalloff = null
+  const pointBand = point ? floorBand(point) : null
+  if (point && pointBand) {
+    const pixels = bandPixels(point, pointBand)
+    const peakPixel = pixels.reduce((best, p) => (p.Y > best.Y ? p : best), pixels[0])
+    const step = Math.max(24, Math.round(point.width / 12))
+    const direction = peakPixel.x < point.width / 2 ? 1 : -1
+    const samples = []
+    for (let k = 0; k < 5; k++) {
+      const x = peakPixel.x + direction * step * k
+      if (x < 1 || x >= point.width - 1) break
+      samples.push(round(lumaAt(point, x, peakPixel.y), 1))
+    }
+    let monotone = samples.length >= 3
+    for (let i = 1; i < samples.length; i++) {
+      if (samples[i] > samples[i - 1] + 1) monotone = false
+    }
+    pointFalloff = { samples, monotone, at: [peakPixel.x, peakPixel.y] }
+  }
+
+  // `matteLit`: the matte box's shaded face against the same pixels without a
+  // light. The studio key already lights the right of the box, so the face an
+  // author light is meant to lift is the one the key leaves dark. Those pixels
+  // are picked once, on the control, as the darkest quarter of the box's ink,
+  // and the same set is read on the lit cell.
+  //
+  // The rise is a mean, not a maximum. A single pixel on the box's edge can be a
+  // specular sliver that swings by 200 counts on either side of the box, which
+  // says nothing about whether the lamp reached the face.
+  const matteFace = (cell) => {
+    const rect = bounds(control.ids.get('matte')?.ink, control.width, control.height)
+    if (!rect) return null
+    const picked = []
+    for (let y = Math.ceil(rect.y0); y < rect.y1; y++) {
+      for (let x = Math.ceil(rect.x0); x < rect.x1; x++) {
+        picked.push({ x, y, Y: lumaAt(control, x, y) })
+      }
+    }
+    if (picked.length < 16) return null
+    picked.sort((a, b) => a.Y - b.Y)
+    const face = picked.slice(0, Math.max(12, Math.floor(picked.length * 0.25)))
+    let lumaSum = 0
+    let baseSum = 0
+    const channelSum = [0, 0, 0]
+    for (const p of face) {
+      const i = (p.y * cell.width + p.x) * 4
+      const j = (p.y * control.width + p.x) * 4
+      lumaSum += luma(cell.rgba, i)
+      baseSum += p.Y
+      for (let c = 0; c < 3; c++) channelSum[c] += cell.rgba[i + c] - control.rgba[j + c]
+    }
+    // A red light on a white box cannot raise luma much: it raises red and
+    // leaves green alone. The per-channel rise is the honest reading, so both
+    // are reported and the gate uses the larger.
+    const channel = Math.max(...channelSum) / face.length
+    return { lit: lumaSum / face.length, base: baseSum / face.length, rise: (lumaSum - baseSum) / face.length, channel }
+  }
+  const face = point ? matteFace(point) : null
+  const matteLit = face
+    ? {
+        luma: round(face.rise, 1),
+        channel: round(face.channel, 1),
+        rise: round(Math.max(face.rise, face.channel), 1),
+      }
+    : null
+
+  return { effect, spotDisc, pointFalloff, matteLit }
+}
+
 function topCore(rgba, width, rect) {
   if (!rect) return null
   let peak = -1
@@ -1822,6 +1985,7 @@ const report = {
   manga: mangaCell?.paper ? { ...mangaCell.paper, hatchFlip, hatchFlipEngine } : null,
   technical: technicalReport,
   technicalHidden: technicalHiddenReport,
+  authorLights: authorLightReport(rendered),
 }
 
 printTable(report)

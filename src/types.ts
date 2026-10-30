@@ -239,6 +239,11 @@ export type ElementReport = {
   mask?: MaskReport
   /** 逐层相乘后的有效透明度。 */
   opacity: number
+  /**
+   * 被地面挡住时，实体还有多少比例露在画面上，0–1。整只都在地面以下时 ink 为空。
+   * 只在小于 1 时写。
+   */
+  visible?: number
   fontSize?: number
   lines?: TextLineReport[]
   /**
@@ -682,6 +687,8 @@ export type LightSpec = {
   width?: number
   height?: number
   castShadow?: boolean
+  /** Hemisphere only. 0–1 channels; the sky colour is `color`. */
+  groundColor?: [number, number, number]
 }
 
 /** 无限平面。不写 fill 时透明，只接网格沿主光投下的影子。旋转和 box 同一套。 */

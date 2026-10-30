@@ -18,7 +18,7 @@ import { nondeterministicCalls, staticLayerFonts } from './syntax.js'
 import type { Issue } from './types.js'
 
 /** 打包参数变了就加一，旧缓存作废。 */
-const CODE_CACHE_REV = '3'
+const CODE_CACHE_REV = '4'
 const CODE_EXTS = ['.tsx', '.ts', '.jsx', '.js', '.mjs']
 
 const CODE_EXT = new Set(['.tsx', '.jsx', '.ts', '.js'])
@@ -180,6 +180,12 @@ function codeHash(file: string): string {
     }
     hash.update('\0')
     hash.update(text)
+    // `import.meta.url` is rewritten to the file's own absolute path, so the
+    // same text in a different directory produces a different bundle. Keying on
+    // contents alone reused a bundle that pointed at a directory which had been
+    // deleted, and the import failed with ENOENT.
+    hash.update('\0path\0')
+    hash.update(abs)
     for (const spec of localImportSpecs(text)) {
       const next = resolveCodeImport(abs, spec)
       if (next) walk(next)

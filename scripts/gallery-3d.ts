@@ -193,6 +193,82 @@ function cluster(finish: Finish): string {
   </layer>`
 }
 
+/**
+ * QUALITY-6 §A.4. One small scene per author light. Every cell is the same
+ * geometry — a red plastic box, a matte white box, a metal sphere, a floor — so
+ * a difference between cells can only come from the light.
+ *
+ * The lights hang above the floor (layer y is down, the floor is at y=420), and
+ * the `spot` is straight overhead so its disc lands inside the frame. A light
+ * below the floor is physically behind it and correctly lights nothing; the
+ * first draft of this plate hung the spot at y=520 and drew a blank cell.
+ */
+const LIGHT_SCENE_FLOOR = 220
+
+function lightScene(light: string, extra = ''): string {
+  // Same framing as `cluster()`: the floor sits at y=220 and the camera pulls
+  // back just enough that the three bodies fill the cell. A wider shot left the
+  // objects a few dozen pixels tall and the floor band under them a thin strip,
+  // which made every light look the same size.
+  //
+  // The floor is a mid tone, not the cream of the bench. A lamp adds energy to
+  // whatever it lands on, and on cream (Y 224) a spot at `intensity="8"` had
+  // nowhere to go but 255: the disc clipped flat and the ring around it was the
+  // only thing that moved. At Y 146 the same light leaves a 30-luma disc with a
+  // smooth penumbra, which is what the `spotDisc` metric reads.
+  return `<layer width="440" height="300" camera="fov 32, orbit 34 22, distance 860, at 220 160 0"${extra}>
+    ${light}
+    <ground id="ground" y="${LIGHT_SCENE_FLOOR}" rotateX="90" fill="#9a9285" shadow-blur="26" shadow-opacity="0.5" />
+    <layer x="28" y="${LIGHT_SCENE_FLOOR}" width="400" height="190" origin="200 0" rotateX="90" preserve-3d>
+      <rect id="red" x="30" y="34" width="120" height="86" depth="72" rx="12" fill="#d23b3b" material="plastic 0.3" />
+      <rect id="matte" x="168" y="26" width="96" height="96" depth="60" rx="8" fill="#f4f1ea" material="matte" />
+      <sphere id="ball" cx="330" cy="78" r="46" z="46" fill="#c5c9ce" material="metal 0.2" />
+    </layer>
+  </layer>`
+}
+
+function lightsPlate(): { label: string; body: string }[] {
+  // The intensities are not the ones a three.js scene would use: the kernel's
+  // irradiance is not divided by π the way three.js' `PointLight` is, so a
+  // `intensity="6"` point at 160 units lands about 4 luma on the floor. These
+  // numbers were measured, not guessed, so each cell reads at a glance.
+  return [
+    {
+      label: 'directional 暖光',
+      body: lightScene('<light type="directional" x="-260" y="-160" z="200" target="220 220 0" intensity="2" color="#ffcf88" />'),
+    },
+    {
+      label: 'point 红色',
+      // `distance` gives the falloff a cut-off, which is what makes the pool
+      // read as a pool: without it the whole floor warms by a few luma.
+      body: lightScene('<light type="point" x="80" y="60" z="90" intensity="20" distance="500" color="#ff2020" />'),
+    },
+    {
+      label: 'spot 圆斑',
+      // The cone has to be wide enough to cover the floor patch the camera can
+      // see. At `angle="0.5"` from 360 units up, the visible floor is already
+      // past the 30° half-angle and the disc fell outside the frame.
+      body: lightScene('<light type="spot" x="220" y="-80" z="20" target="220 220 0" angle="0.9" penumbra="0.4" intensity="14" color="#ffb066" />'),
+    },
+    {
+      label: 'area 宽柔光',
+      body: lightScene('<light type="area" x="220" y="-120" z="60" target="220 220 0" width="300" height="300" intensity="60" color="#fff2dd" />'),
+    },
+    {
+      label: 'hemisphere 天蓝地棕',
+      body: lightScene('<light type="hemisphere" intensity="1.2" color="#7fb2ff" ground-color="#8a6a45" />'),
+    },
+    {
+      label: 'ambient 弱白光',
+      body: lightScene('<light type="ambient" intensity="0.5" color="#ffffff" />'),
+    },
+    {
+      label: '不写灯（对照）',
+      body: lightScene(''),
+    },
+  ]
+}
+
 function lines(): string {
   // QUALITY-4 §1.3: the plate must show a cylinder through a box, a holed
   // plate, and a tube that crosses another body so halo / crossings are
@@ -250,6 +326,10 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
     name: `3d-mat-${finish.label.replace(/[^a-z0-9]+/gi, '-')}`,
     source: cell(finish.label, cluster(finish), 440, 300),
   }))
+  const lights = lightsPlate().map((item) => ({
+    name: `3d-light-${item.label.split(' ')[0]}`,
+    source: cell(item.label, item.body, 440, 300),
+  }))
   const cameras: { label: string; camera: string; file: string }[] = [
     { label: 'orbit 28 32', camera: BENCH_CAMERA, file: 'orbit' },
     { label: 'orbit 10 46', camera: 'fov 30, orbit 10 46, distance 1200, at 550 560 0', file: 'high' },
@@ -280,6 +360,13 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
     { sheet: '3d-materials', title: '材质', cols: 4, cells: materials, caption: '每一格是同一组：墙、圆角盒、球、圆柱。变的只有材质' },
     { sheet: '3d-camera', title: '镜头', cols: 2, cells: cameraCells, caption: '俯视看顶面和接触。侧面把前后拉开。景深里中间清楚，前后糊开' },
     { sheet: '3d-lines', title: '', cols: 1, cells: [linesPlate], caption: '' },
+    {
+      sheet: '3d-lights',
+      title: '作者灯',
+      cols: 4,
+      cells: lights,
+      caption: '红塑料盒、matte 白盒、金属球、地面。每格只换一盏灯，最后一格不写灯',
+    },
   ]
 }
 

@@ -41,7 +41,7 @@ Plain HTML and CSS work too, so they are not listed here. Reach for these when a
 | Knockout | `<mask>` with `op="subtract"`, `feather`, `invert` | Shapes or image alpha. The layer's shadow follows the cut contour |
 | 3D objects in a 2D page | `depth="40"` on `rect`, `circle`, `path`; `sphere`, `torus`, `tube` | Same coordinates as 2D. `material="finish metal, color #c6c9ce, roughness 0.28, metalness 1"`. `color` replaces `fill`. `finish` is clay, plastic, metal, mirror, brushed, glass, lamp, or neon. A bare name is still a baked finish |
 | 3D lettering | `glyph()` outlines into `<path d depth>` | Any catalog font becomes an extruded solid |
-| Product shot | `camera="fov 40, orbit 35 18, aperture 12"` plus `<ground>` | Orbit, shadows on the ground and on solids, depth of field. `shadow-blur` is the maximum softness and `0` stays hard. `sharp="true"` keeps a layer in focus. `light="world"` keeps the key fixed as the camera orbits. `light="camera"` locks it to the lens |
+| Product shot | `camera="fov 40, orbit 35 18, aperture 12"` plus `<ground>` | Orbit, shadows on the ground and on solids, depth of field. `shadow-blur` is the maximum softness and `0` stays hard. `sharp="true"` keeps a layer in focus. `light="world"` keeps the key fixed as the camera orbits. `light="camera"` locks it to the lens. The layer that holds the bodies is turned down 90°, so it needs `origin="W/2 0"`; without it the layer spins about its own centre, half of it sinks under the floor, and the floor hides the bodies. Copy the skeleton in the next row |
 | Author light | `<light type="directional" x="0" y="-200" z="400" target="0 0 0">` | The first directional light replaces the studio key. Also `point`, `spot`, `hemisphere`, `area`, `ambient` |
 | Technical line art | Solid with `stroke` and `hidden="#999"` | Visible edges solid, hidden edges in another color |
 | three.js scenes | `<model x y width height>` or `<model unit x y>` | Contain-fit in its own box, or put the model origin at `(x, y)`. Meshes, lines, and points share one depth buffer |
@@ -85,6 +85,19 @@ Combine two or three per picture. A cover usually needs one strong type treatmen
 - A positive `depth` extrudes along z. `rect` is a box (`rx` rounds the edges). `circle` is a cylinder along z. `cylinder` stands upright (`cx` `cy` `r` `height`). Also `sphere`, `torus`, `tube`, and `model`. `<box>` and `<extrude>` are not tags. `tube` `d` is the centerline in layer coordinates, the same as `path`. `<model x y width height>` contain-fits in that box. `<model unit x y>` puts the model origin at `(x, y)`. Omitting both is an error. `<model object={mesh} />` reads a three.js mesh. `unit` is pixels per model unit. Model space keeps y pointing up.
 - Write `camera` on the layer that frames the shot. A number is the viewing distance, for example `camera="900"`. Omitting it leaves the picture in 2D and reports `flatten-3d`. Do not combine `camera` and `view` on the same layer.
 - `<ground>` receives shadows. With no `fill`, only the shadow is drawn. `shadows="none"` on the camera layer turns shadows off.
+- A layer that is turned down to lay bodies on the floor needs `origin="W/2 0"`. Without it the layer spins about its own centre, half of it sinks under the floor, and the floor hides the bodies while their shadow stays. Copy this skeleton:
+
+```xml
+<layer width="640" height="420" background="#efe9df">
+  <layer width="640" height="420" camera="fov 30, orbit 24 26, distance 1000, at 320 360 0">
+    <ground y="420" rotateX="90" fill="#e7e0d4" shadow-blur="30" />
+    <layer x="60" y="420" width="520" height="260" origin="260 0" rotateX="90" preserve-3d>
+      <rect x="120" y="70" width="130" height="100" depth="100" rx="10" fill="#d23b3b" material="plastic 0.3" />
+      <sphere cx="370" cy="120" r="56" z="56" fill="#c5c9ce" material="metal 0.2" />
+    </layer>
+  </layer>
+</layer>
+```
 - `shading` on that same layer is `studio` when omitted, or `toon`, `technical`, or `manga`. It covers every solid under the camera. An authored `stroke` still wins.
 - `quality` is `draft` when omitted. Draft and final use the same shadow map. `quality="final"` does not widen it. Where the map is already a penumbra it mixes a 4-tap ray, then adds one diffuse bounce, a reflection where metalness is above 0.5 and roughness is below 0.12, and a glass tint of up to three refraction steps. An open face is not darkened by a hemisphere occlusion. Baked finishes stay baked.
 - `flexlayer pick scene.tsx --at x,y` hits a layout box. The ray form `pick --positions --indices --from --dir` still returns a triangle index.
@@ -111,7 +124,7 @@ Combine two or three per picture. A cover usually needs one strong type treatmen
 | Stroke | Write only `stroke`. Shapes may add `stroke-width`. A stroke along the ink is `stroke="6 #000 outside"`. A filled `path` writes `stroke="none"` | `invalid-attr` |
 | An effect on a whole subtree | `<layer grade="lomo" overlay="#00000066">` | `invalid-attr` |
 | Solids | A positive `depth` extrudes a shape along z. `rect` is a box (`rx` rounds the edges). `circle` is a cylinder along z. `cylinder` stands upright. `path` keeps holes by `fill-rule`. There are also `sphere`, `torus`, `tube`, and `model`. `model` writes `x` `y` `width` `height`, or `unit` with `x` `y`. `<box>` and `<extrude>` are unknown tags | `flatten-3d` |
-| Ground | `<ground y="520" rotateX="70" />` receives shadows. `shadows="none"` turns them off. With no `fill`, only the shadow is drawn | `invalid-attr` |
+| Ground | `<ground y="520" rotateX="70" />` receives shadows. `shadows="none"` turns them off. With no `fill`, only the shadow is drawn. A solid more than half below an opaque ground is `buried-in-ground`: the floor hides it and it casts no shadow | `invalid-attr` |
 | Structured data | `data={{ values: [1, 2] }}`. In `.layer`, `data='{"values":[1,2]}'` | `invalid-attr` |
 | An issue you expect | `expect="overflow-canvas: full bleed"`. On the root it covers the whole subtree. A window is `text-overlap@800-846` or `@26.7s-28.2s`. If it never appears, the report is `unused-expect` | `unused-expect` |
 | Minimum type size | On the root, `min-font="print"` or `min-font="16"`. When omitted, screen mode is `min(width, height) / 1080 × 24`. Several too-small spots collapse into one issue | `min-font-size` |

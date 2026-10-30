@@ -193,6 +193,35 @@ export const GATES = {
   glassOpaqueTransmitDeltaMin: 0.3,
   /** Anisotropy / brushed highlight aspect vs round metal. Absolute ratio. */
   anisotropyAspectMin: 1.5,
+  /**
+   * QUALITY-6 §A.4 author lights, measured on `3d-lights`.
+   *
+   * `lightEffectMin` is FLIP against the same scene with no `<light>` written.
+   * 0.03 is what "the light is visible" means on this plate: the weakest cell
+   * that actually lights something reads 0.14, and a cell whose light parses
+   * but does nothing reads 0.00 (spot and point were both 0.000 when this
+   * round started). The margin is wide because the metric is not the point --
+   * a light that stops working collapses to zero, it does not drift.
+   */
+  lightEffectMin: 0.03,
+  /**
+   * Centre of a spot's floor disc over the floor outside it. The proposal asks
+   * for 25; the plate reads 41, so the bar sits where a hard-edged cone with no
+   * penumbra still passes but a spot that draws no disc fails.
+   */
+  spotDiscRiseMin: 25,
+  /**
+   * A point light's floor pool has to fall off. Five samples walk away from the
+   * brightest floor pixel and every step must not rise; the total drop has to
+   * clear 8 luma, which is what separates a real falloff from a flat wash.
+   */
+  pointFalloffDropMin: 8,
+  /**
+   * The matte box's dark face against the same pixels without a light. A red
+   * lamp raises the red channel without moving luma much, so the gate reads the
+   * larger of the two. The proposal asks 15; the plate reads 39.
+   */
+  matteLitRiseMin: 15,
 }
 
 /**
@@ -472,6 +501,37 @@ export function checkGates(gates, report, slack = { luma: 0, fraction: 0 }) {
   }
   if (gates.metalPlasticReflectDeltaMin != null) {
     minOf(gates.metalPlasticReflectDeltaMin, report.metalPlasticReflectDelta, 'metal vs plastic reflectContent Δ')
+  }
+  // QUALITY-6 §A.4. A light that parses but paints nothing is the failure mode
+  // this plate exists for, so a missing reading is an error, not a skip: the
+  // control cell has to be there for the FLIP to mean anything.
+  const lights = report.authorLights
+  if (gates.lightEffectMin != null) {
+    if (!lights) {
+      errors.push('author lights missing: 3d-lights plate did not render')
+    } else {
+      for (const [name, flip] of Object.entries(lights.effect ?? {})) {
+        if (flip == null) errors.push(`author light ${name} effect missing`)
+        else minOf(gates.lightEffectMin, flip, `author light ${name} effect`)
+      }
+      if (lights.spotDisc == null) {
+        errors.push('author light spot disc missing')
+      } else {
+        minOf(gates.spotDiscRiseMin, lights.spotDisc.rise, 'author light spot disc rise', slack.luma)
+        maxOf(0, lights.spotDisc.dips, 'author light spot disc dips')
+      }
+      if (lights.pointFalloff == null) {
+        errors.push('author light point falloff missing')
+      } else {
+        if (!lights.pointFalloff.monotone) errors.push('author light point falloff rises')
+        const samples = lights.pointFalloff.samples ?? []
+        if (samples.length >= 2) {
+          minOf(gates.pointFalloffDropMin, samples[0] - samples[samples.length - 1], 'author light point falloff drop', slack.luma)
+        }
+      }
+      if (lights.matteLit == null) errors.push('author light matte lit missing')
+      else minOf(gates.matteLitRiseMin, lights.matteLit.rise, 'author light matte lit rise', slack.luma)
+    }
   }
   errors.push(...checkMaterialPairRules(gates, report))
   return errors

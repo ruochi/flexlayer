@@ -96,6 +96,12 @@ function passing() {
       emptyFloor: 0.23,
       blueTopGap: 102,
     },
+    authorLights: {
+      effect: { directional: 0.26, point: 0.21, spot: 0.18, area: 0.14, hemisphere: 0.22, ambient: 0.14 },
+      spotDisc: { peak: 188.1, outside: 146.8, rise: 41.4, dips: 0 },
+      pointFalloff: { samples: [171.4, 170.9, 167.7, 164.3, 159.2], monotone: true },
+      matteLit: { luma: 12.6, channel: 39.4, rise: 39.4 },
+    },
   }
 }
 
