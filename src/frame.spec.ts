@@ -79,6 +79,31 @@ describe('renderComposition', () => {
     expect(a.frames[0]!.equals(b.frames[0]!)).toBe(true)
   })
 
+  // QUALITY-6 §B.4. A 30-frame 640×420 contact sheet is 2880×1575 at full cell
+  // size, over the 1920 edge, and used to fail with `output-limit` instead of
+  // shrinking its cells. The sheet has to fit the edge on its own.
+  it('联系表超过长边时把格子缩小，而不是报 output-limit', async () => {
+    const wide: Composition = {
+      id: 'wide',
+      width: 640,
+      height: 420,
+      fps: 30,
+      durationInFrames: 30,
+      component: ({ frame }) =>
+        h(
+          'layer',
+          { width: '640', height: '420', background: '#efe9df' },
+          h('rect', { x: String(frame * 4), y: '40', width: '120', height: '90', fill: '#d23b3b' }),
+        ),
+    }
+    const { contactSheet, reports } = await renderComposition(wide)
+    expect(reports.flatMap((r) => r.issues).filter((i) => i.code === 'output-limit')).toEqual([])
+    const sheet = await loadImage(contactSheet)
+    expect(Math.max(sheet.width, sheet.height)).toBeLessThanOrEqual(1920)
+    // Still a grid of all 30 frames, not a single cell.
+    expect(sheet.width).toBeGreaterThan(640)
+  })
+
   it('fps 或时长非法时抛出', async () => {
     await expect(renderComposition({ ...slide, fps: 0 })).rejects.toThrow(/fps/)
     await expect(renderComposition({ ...slide, durationInFrames: 0 })).rejects.toThrow(/durationInFrames/)
