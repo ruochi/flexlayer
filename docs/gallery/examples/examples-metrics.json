@@ -96,8 +96,8 @@
     "width": 1640,
     "height": 800,
     "ground": true,
-    "contactRatio": 0.992,
-    "zFight": 0,
+    "contactRatio": 0.99,
+    "zFight": 0.0001,
     "errors": [],
     "warnings": []
   },
