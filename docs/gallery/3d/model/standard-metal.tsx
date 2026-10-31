@@ -7,7 +7,8 @@ import * as THREE from 'three'
 // `material="metal 0.2"`.
 const mesh = new THREE.Mesh(
   new THREE.BoxGeometry(1, 1, 1),
-  new THREE.MeshStandardMaterial({ color: '#c5c9ce', metalness: 1, roughness: 0.2 }),
+  // Slightly lighter albedo so the metal-1 top does not read near-black (§9.2).
+  new THREE.MeshStandardMaterial({ color: '#d4d9df', metalness: 1, roughness: 0.22 }),
 )
 
 export default layer.create(
