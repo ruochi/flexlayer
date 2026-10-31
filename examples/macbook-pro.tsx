@@ -5,7 +5,7 @@
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
 const SILVER = '#e8ecf2'
 // Product aluminum; clearcoat off (wet chrome lip read).
-const SHELL = 'finish metal, color #d5d9df, roughness 0.44, metalness 0.55, clearcoat 0'
+const SHELL = 'finish metal, color #d0d4da, roughness 0.40, metalness 0.55, clearcoat 0'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 
@@ -64,6 +64,33 @@ function keys(): Key[] {
 
 const keyPath = keys().map((k) => roundRect(k.w, k.h, 4, k.x, k.y)).join(' ')
 
+/** Visible legends for the letter rows (blank caps failed §9.2 dual-blind). */
+const KEY_LEGENDS: (string | null)[][] = [
+  [null, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', null],
+  ['⇥', 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '[', ']', '⌫'],
+  ['⇪', 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ';', "'", '↩', null],
+  [null, 'Z', 'X', 'C', 'V', 'B', 'N', 'M', ',', '.', '/', null],
+  [null, null, null, null, null, null, null, null, null, null, null, null],
+  [null, null, null, null, null, null, null],
+]
+
+function keyLegends() {
+  const out: { x: number; y: number; w: number; h: number; label: string }[] = []
+  ROWS.forEach((row, r) => {
+    let u = 0
+    const y = KB.y + 8 + r * PITCH
+    const labels = KEY_LEGENDS[r] || []
+    row.forEach((span, i) => {
+      const label = labels[i]
+      const x = KB.x + 8 + u * PITCH
+      const w = span * PITCH - GAP
+      const h = PITCH - GAP
+      if (label) out.push({ x, y, w, h, label })
+      u += span
+    })
+  })
+  return out
+}
 
 const WELL_BOX = { x: KB.x, y: KB.y, w: 14.5 * PITCH + 10, h: 6 * PITCH + 10 }
 
@@ -104,6 +131,11 @@ function Base() {
         <rect x={padX} y={padY} width={PAD.w} height={PAD.h} rx="12" fill="linear-gradient(180deg, #d0d3d7 0%, #c3c6cb 100%)" />
       </layer>
       <path d={keyPath} fill={KEY} material="plastic" depth="4" z={TOP + 1.6} stroke="none" cast-shadow="false" />
+      {keyLegends().map((k) => (
+        <layer x={k.x + k.w / 2} y={k.y + k.h / 2 - 2} z={TOP + 4} anchor="center" cast-shadow="false">
+          <p style="font-family:Inter; font-size:11px; font-weight:600; color:#b8bcc4">{k.label}</p>
+        </layer>
+      ))}
       <rect x="70" y="-8" width={W - 140} height="18" rx="9" fill="#2a2b2f" material="plastic" depth="18" z={TOP - 3} cast-shadow="false" />
       <layer x={W - T / 2} y="0" width={T} height={D} origin={`${T / 2} 0`} rotateY="90" z="0.3" cast-shadow="false">
         <rect x={T / 2 - 4} y="214" width="8" height="30" rx="3" fill="#1c1d20" />
