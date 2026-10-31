@@ -3,8 +3,9 @@
 // 银色 16 英寸 MacBook Pro 海报，以后渲染用这个场景。
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
-const SILVER = '#c6c9ce'
-const SHELL = 'metal'
+const SILVER = '#d0d4da'
+// Soft metal: full metalness read near-black on this stage (§9.2 dual-blind).
+const SHELL = 'finish metal, color #d0d4da, roughness 0.38, metalness 0.55'
 const KEY = '#222327'
 const WELL = '#060607'
 

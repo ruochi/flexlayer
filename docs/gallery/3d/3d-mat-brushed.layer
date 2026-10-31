@@ -1,12 +1,12 @@
 <layer width="440" height="332" background="#241f1b" color="#f4efe6" font-family="ChillDuanSans" min-font="16" safe="0">
   <layer x="0" y="0" width="440" height="300" camera="fov 32, orbit 34 22, distance 860, at 220 160 0">
-    <ground id="ground" y="220" rotateX="90" fill="#e7e0d4" shadow-blur="26" shadow-opacity="0.5" />
+    <ground id="ground" y="220" rotateX="90" fill="#e7e0d4" shadow-blur="34" shadow-opacity="0.38" />
     <layer x="28" y="220" width="400" height="190" origin="200 0" rotateX="90" preserve-3d>
-      <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" fill="#f6f2ea" />
-      <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" fill="#9aa3ab" material="brushed" />
+      <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" z="4" fill="#f6f2ea" />
+      <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" z="36" fill="#9aa3ab" material="brushed" />
       
       <sphere id="sphere" cx="204" cy="72" r="30" z="30" fill="#9aa3ab" material="brushed" />
-      <circle id="side" cx="330" cy="78" r="26" depth="100" fill="#9aa3ab" material="brushed" />
+      <rect id="side" x="304" y="52" width="52" height="52" depth="100" rx="26" z="50" fill="#9aa3ab" material="brushed" />
     </layer>
   </layer>
   <layer x="12" y="304" color="#1c1915"><p style="font-size:24px; color:#1c1915; fill:#1c1915">brushed</p></layer>
