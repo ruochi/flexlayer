@@ -4,8 +4,8 @@
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
 const SILVER = '#e8ecf2'
-// metalness just into product-metal band (≥0.5) + clearcoat for Al streak (§9.2).
-const SHELL = 'finish metal, color #e8ecf2, roughness 0.34, metalness 0.58, clearcoat 0.4'
+// Product aluminum; clearcoat off (read as glass shell on the lid lip).
+const SHELL = 'finish metal, color #d5d9df, roughness 0.42, metalness 0.55, clearcoat 0'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 
@@ -197,9 +197,8 @@ export default (
     <layer x="82" y="232">
       <h2 style="font-size:44px; font-weight:700; letter-spacing:-0.8px; line-height:1.15; color:#1c1916">把创意，带到更远。</h2>
     </layer>
-    <layer x="84" y="300" width="300">
-      <p style="font-size:18px; line-height:1.55; color:#5e564e">16 英寸 · M4 Max</p>
-      <p style="font-size:18px; line-height:1.55; color:#5e564e">为专业创作而生</p>
+    <layer x="84" y="300" width="280">
+      <p style="font-size:18px; line-height:1.7; color:#5e564e">16 英寸 · M4 Max</p>
     </layer>
     <layer x="760" y="1340" width="720" anchor="top">
       <p style="width:720px; font-size:14px; font-weight:600; letter-spacing:2.2px; color:#5e564e; text-align:center">16 英寸 · 银色 · M4 Max</p>
