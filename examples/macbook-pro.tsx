@@ -197,8 +197,9 @@ export default (
     <layer x="82" y="232">
       <h2 style="font-size:44px; font-weight:700; letter-spacing:-0.8px; line-height:1.15; color:#1c1916">把创意，带到更远。</h2>
     </layer>
-    <layer x="84" y="300" width="760">
-      <p style="font-size:18px; line-height:1.7; color:#5e564e">16 英寸 · M4 Max · 为专业创作而生</p>
+    <layer x="84" y="300" width="300">
+      <p style="font-size:18px; line-height:1.55; color:#5e564e">16 英寸 · M4 Max</p>
+      <p style="font-size:18px; line-height:1.55; color:#5e564e">为专业创作而生</p>
     </layer>
     <layer x="760" y="1340" width="720" anchor="top">
       <p style="width:720px; font-size:14px; font-weight:600; letter-spacing:2.2px; color:#5e564e; text-align:center">16 英寸 · 银色 · M4 Max</p>
