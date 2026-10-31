@@ -277,6 +277,21 @@ describe('emitLayer', () => {
 })
 
 describe('load .tsx', () => {
+  it('相对路径也能打包：esbuild 要绝对 working directory', async () => {
+    // gallery-3d passes repo-relative names; a relative absWorkingDir used to
+    // throw "is not an absolute path" on CI (QUALITY-6 gallery job).
+    const prev = process.cwd()
+    process.chdir(pkgDir)
+    try {
+      const loaded = await loadLayerFile('docs/gallery/3d/model/standard-metal.tsx')
+      expect(loaded.kind).toBe('node')
+      const anim = await loadLayerFile('docs/gallery/3d/anim/orbit.tsx')
+      expect(anim.kind).toBe('composition')
+    } finally {
+      process.chdir(prev)
+    }
+  })
+
   it('hello.tsx 展开后能检查，报告带源码位置', async () => {
     const loaded = await loadLayerFile(join(pkgDir, 'examples', 'hello.tsx'))
     expect(loaded.kind).toBe('node')
