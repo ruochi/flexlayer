@@ -17,13 +17,19 @@ const wedge = part('#7dce8a', 0.3, 0.42, new THREE.ExtrudeGeometry(wedgeShape, {
 
 const stroke = { stroke: '#1c1915', 'stroke-width': '2.5 1.6 1', hidden: '#9a8f80' }
 
+// The title is a caption on the page, not a sign in the scene: inside the
+// camera layer it takes the camera's perspective and its baseline slopes with
+// the orbit (§C.1). It is drawn over the camera instead, so it stays level.
 export default layer.create(
-  <layer width={960} height={640} background="#f3efe6" camera="fov 28, orbit 32 18">
-    <model object={body} unit={210} x={480} y={320} {...stroke} />
-    <model object={head} unit={210} x={480} y={320} {...stroke} />
-    <model object={arm} unit={210} x={480} y={320} {...stroke} />
-    <model object={wedge} unit={210} x={480} y={320} {...stroke} />
-    <layer x={64} y={48} z={30}>
+  <layer width={960} height={640} background="#f3efe6">
+    <layer width={960} height={640} camera="fov 28, orbit 32 18">
+      <ground y={520} rotateX={90} fill="#e7e0d4" shadow-blur={30} shadow-opacity={0.5} />
+      <model object={body} unit={210} x={480} y={381} {...stroke} />
+      <model object={head} unit={210} x={480} y={381} {...stroke} />
+      <model object={arm} unit={210} x={480} y={381} {...stroke} />
+      <model object={wedge} unit={210} x={480} y={381} {...stroke} />
+    </layer>
+    <layer x={64} y={48}>
       <p style="font-size:32px; color:#1c1915">线稿、材质、文字，同一帧</p>
     </layer>
   </layer>,

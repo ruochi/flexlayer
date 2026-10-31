@@ -1421,3 +1421,166 @@ describe('shading', () => {
     expect(red).toBeGreaterThan(10)
   }, 30000)
 })
+
+/**
+ * QUALITY-6 §C.3. The three renderer faults the example plates exposed, each
+ * pinned to one measurable claim.
+ *
+ * The example pictures showed three things that look like renderer bugs: a
+ * scene where one solid shows its underside and another its top, a red block
+ * with a comb of noise along an edge, and a wireframe whose edges break where a
+ * bar crosses them. Each test below decides which of those is real. The first
+ * and the third turned out to be the examples; the tests say so, and say why,
+ * so a future change cannot quietly reintroduce the reading.
+ */
+describe('QUALITY-6 §C: 三个渲染器问题', () => {
+  it('透视自洽：一块板的远端边缘比近端短，两块板朝同一消失方向收', async () => {
+    // One camera, two plates turned the same way. If each plate opened its own
+    // camera they would converge toward different points, or not at all. A
+    // plate turned by rotateY=28 pushes its right edge away from the camera, so
+    // that edge has to be shorter than the left one.
+    const CYAN = (p: Uint8ClampedArray) => p[0]! < 120 && p[1]! > 140 && p[2]! > 170
+    const source = `<layer width="480" height="320" background="#0f1115" camera="700">
+      <rect width="160" height="220" fill="#4CC3D9" x="60" y="60" rotateY="28" z="40" />
+      <rect width="160" height="220" fill="#4CC3D9" x="260" y="60" rotateY="28" z="40" />
+    </layer>`
+    const { png } = await renderLayer(source)
+    const image = await imageOf(png)
+    // For each plate, the vertical extent of the fill a few columns in from
+    // each side.
+    const edges = (x0: number, x1: number) => {
+      const span = (x: number) => {
+        let lo = Infinity
+        let hi = -1
+        for (let y = 0; y < image.height; y++) {
+          if (!CYAN(image.at(x, y))) continue
+          if (y < lo) lo = y
+          if (y > hi) hi = y
+        }
+        return hi < 0 ? 0 : hi - lo + 1
+      }
+      return { left: span(x0 + 3), right: span(x1 - 3) }
+    }
+    const bounds = (from: number, to: number) => {
+      let x0 = Infinity
+      let x1 = -1
+      for (let y = 0; y < image.height; y++) {
+        for (let x = from; x < to; x++) {
+          if (!CYAN(image.at(x, y))) continue
+          if (x < x0) x0 = x
+          if (x > x1) x1 = x
+        }
+      }
+      return { x0, x1 }
+    }
+    const a = bounds(0, image.width / 2)
+    const b = bounds(image.width / 2, image.width)
+    const ea = edges(a.x0, a.x1)
+    const eb = edges(b.x0, b.x1)
+    // The far edge is shorter, on both plates, by a visible amount.
+    expect(ea.right).toBeLessThan(ea.left - 8)
+    expect(eb.right).toBeLessThan(eb.left - 8)
+    // And the two plates agree on the ratio: one camera, not two.
+    expect(Math.abs(ea.right / ea.left - eb.right / eb.left)).toBeLessThan(0.06)
+  }, 30000)
+
+  it('z-fighting：两块共面的面不产生逐像素明暗梳齿', async () => {
+    // Two quads at the same depth with different fills would fight for the same
+    // pixels and produce a comb. The renderer resolves the tie by draw order,
+    // so the result is one flat fill: no alternating high-contrast run.
+    const source = `<layer width="200" height="160" background="#0f1115" camera="600">
+      <rect x="30" y="30" width="140" height="100" fill="#d23b3b" z="0" />
+      <rect x="30" y="30" width="140" height="100" fill="#d23b3b" z="0" />
+    </layer>`
+    const { png } = await renderLayer(source)
+    const image = await imageOf(png)
+    const Y = (x: number, y: number) => {
+      const p = image.at(x, y)
+      return 0.2126 * p[0]! + 0.7152 * p[1]! + 0.0722 * p[2]!
+    }
+    let pairs = 0
+    let alternating = 0
+    for (let y = 34; y < 126; y++) {
+      for (let x = 34; x < 166; x++) {
+        const here = Y(x, y)
+        const next = Y(x + 1, y)
+        const step = next - here
+        if (Math.abs(step) <= 24) continue
+        pairs++
+        if (Math.sign(Y(x + 2, y) - next) === -Math.sign(step) && Math.abs(Y(x + 2, y) - next) > 24) alternating++
+      }
+    }
+    expect(pairs).toBe(0)
+    expect(alternating).toBe(0)
+  }, 30000)
+
+  it('线框在杆穿过处不断开：隐藏线仍是连续的一列', async () => {
+    // A hollow box with `hidden` drawn behind a solid bar. The bar covers the
+    // hidden line, but the box's own outline above and below the bar stays
+    // solid: no gap where the bar meets it.
+    const source = `<layer width="320" height="240" background="#f3efe6" camera="700">
+      <rect x="80" y="50" width="150" height="130" depth="100" fill="none" stroke="#1c1915" stroke-width="3 2 1" hidden="#9a8f80" />
+      <rect x="120" y="100" width="80" height="24" fill="#d7c4a3" />
+    </layer>`
+    const { png } = await renderLayer(source)
+    const image = await imageOf(png)
+    const isInk = (x: number, y: number) => {
+      const p = image.at(x, y)
+      return p[0]! < 90 && p[1]! < 90 && p[2]! < 90
+    }
+    // The box's left outline is a vertical run of ink. Find its column and walk
+    // it from top to bottom; a break longer than the stroke width means the
+    // outline was cut.
+    let bestX = -1
+    let bestRun = 0
+    for (let x = 70; x < 120; x++) {
+      let run = 0
+      for (let y = 40; y < 200; y++) if (isInk(x, y)) run++
+      if (run > bestRun) {
+        bestRun = run
+        bestX = x
+      }
+    }
+    expect(bestX).toBeGreaterThan(0)
+    // The outline is ~130 tall; a gap at the bar would cut it to well under 100.
+    expect(bestRun).toBeGreaterThan(110)
+  }, 30000)
+})
+
+/**
+ * QUALITY-6 §E.3. §7.4's minimal model reported `overflow-canvas` while its ink
+ * sat well inside the page. The cause was the report, not the renderer: a
+ * contain-fitted `model` was measured with the authored box, so a shape whose
+ * fitted extent was narrower than the box still reported the box's corners.
+ * Under an orbit camera those corners project wider than the picture even when
+ * every painted pixel is inside it.
+ */
+describe('QUALITY-6 §E: contain-fit model ink', () => {
+  it('着墨框是 contain 之后的实际范围，不是作者写的盒子', async () => {
+    const report = await checkLayer(
+      `<layer width="480" height="360" camera="parallel">
+        <model src="box.glb" x="80" y="40" width="320" height="280" />
+      </layer>`,
+      { baseDir: dir },
+    )
+    const model = report.elements.find((el) => el.tag === 'model')
+    expect(model).toBeDefined()
+    // A 2×2×2 box fitted into 320×280 keeps its proportions, so it is 280 on
+    // every axis and centered: 20 px of empty box on each side. Under a parallel
+    // camera the ink is exactly that fitted square.
+    expect(model!.ink.width).toBeCloseTo(280, 0)
+    expect(model!.ink.height).toBeCloseTo(280, 0)
+    expect(model!.ink.x).toBeCloseTo(100, 0)
+    expect(report.issues.filter((issue) => issue.code === 'overflow-canvas')).toHaveLength(0)
+  }, 30000)
+
+  it('模型真的伸出画布时仍然报 overflow-canvas', async () => {
+    const report = await checkLayer(
+      `<layer width="200" height="200" camera="fov 30, orbit 20 18">
+        <model src="box.glb" x="0" y="0" width="400" height="400" />
+      </layer>`,
+      { baseDir: dir },
+    )
+    expect(report.issues.some((issue) => issue.code === 'overflow-canvas')).toBe(true)
+  }, 30000)
+})

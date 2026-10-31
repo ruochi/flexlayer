@@ -317,8 +317,10 @@ The argument to `layer.create` must already be a `<layer>`. It returns that `<la
 | `path`, `tag`, `id` | Path relative to this layer. `id` is present only when one was written |
 | `box` | The layout box. It does not include this element's own `rotate` |
 | `ink` | The bounding rectangle after this element's own `rotate` and `scale`. Lines include the stroke |
+| `material` | Present only on a `mesh` that wrote `material`. The finish name, the first word: `matte`, `clay`, `plastic`, `metal`, `mirror`, `brushed`, `glass`, `lamp`, or `neon`. A caller measuring the picture uses it to tell a body that can have a contact shadow from one that cannot, because glass keeps its own colour at the rim and writes no hard shadow |
 | `mask` | Present only on a `layer` that wrote `<mask>`. Fields match `mask` in the report |
 | `points`, `edges`, `d` | Present only on a solid that landed in the camera. Projected vertices, edges, and the visible contour. A sphere gives only the analytic contour and does not write `points` |
+| `visible` | Present only on a solid that is buried: more than half its sampled vertices are on the far side of an opaque `<ground>`. The fraction still on the viewer's side, rounded to three decimals, so `0` is entirely hidden. Such a solid also reports `buried-in-ground` and has an empty `ink`. An unburied solid does not write the field |
 
 When the root layer itself wrote `<mask>`, the return value has `mask` too.
 

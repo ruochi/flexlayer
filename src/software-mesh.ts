@@ -1551,13 +1551,26 @@ function surfaceMaterial(material: MeshLayoutNode['material'] | undefined): Batc
   return (metal ?? 0) >= 0.5 ? 'metal' : 'plastic'
 }
 
+/**
+ * The scalars a batch carries: written ones first, then the model's own.
+ *
+ * A written `material` is the author's answer to "what is this surface", so a
+ * mesh's own `metalness` must not override it. It used to: `metal 0.2` on a
+ * `<model>` kept the glb's `metalness 0`, and because the kernel reads the
+ * scalar rather than the name, the body painted as plastic. §E's mapping test
+ * caught it — `material="metal 0.2"` and a `MeshPhongMaterial` rendered
+ * bit-identically, which is only possible if the metal never reached the shader.
+ * Leaving the field undefined instead lets the material name supply its own
+ * default, which is what a written `metal`/`plastic`/`glass` means.
+ */
 function surfaceScalars(material: MeshLayoutNode['material'] | undefined, prim?: ModelPrim) {
+  const own = material ? undefined : prim
   return {
-    metalness: material?.metalness ?? prim?.metalness,
-    clearcoat: material?.clearcoat ?? prim?.clearcoat,
-    clearcoatRoughness: prim?.clearcoatRoughness,
-    sheen: material?.sheen ?? prim?.sheen,
-    anisotropy: material?.anisotropy ?? prim?.anisotropy ?? (material?.kind === 'brushed' ? 0.8 : undefined),
+    metalness: material?.metalness ?? own?.metalness,
+    clearcoat: material?.clearcoat ?? own?.clearcoat,
+    clearcoatRoughness: own?.clearcoatRoughness,
+    sheen: material?.sheen ?? own?.sheen,
+    anisotropy: material?.anisotropy ?? own?.anisotropy ?? (material?.kind === 'brushed' ? 0.8 : undefined),
   }
 }
 

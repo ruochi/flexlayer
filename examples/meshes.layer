@@ -1,16 +1,9 @@
-<layer width="640" height="800" background="#0f1115" camera="700" x="0" y="0">
-  
-  
-  <sphere cx="220" cy="340" r="90" z="50" fill="#4CC3D9" />
-  
-  
-  <rect width="150" height="100" depth="60" z="-20" fill="#EF2D5E" x="355" y="350" />
-  
-  
-  <path d="M0 0 H140 V36 H90 V80 H0 Z" depth="18" fill="#f4f1ea" x="250" y="600" />
-  
-  
-  <model src="box.glb" x="220" y="80" width="200" height="200" z="10" />
-  
-
+<layer width="960" height="640" background="#f3efe6" camera="fov 30, orbit 26 30, distance 1150, at 480 460 0">
+  <ground y="500" rotateX="90" fill="#e7e0d4" shadow-blur="34" shadow-opacity="0.45" />
+  <layer x="0" y="500" width="960" height="380" origin="480 0" rotateX="90" preserve-3d>
+    <sphere cx="150" cy="150" r="72" z="72" fill="#4CC3D9" />
+    <rect x="300" y="120" width="150" height="100" depth="72" rx="8" z="36" fill="#EF2D5E" />
+    <path d="M530 150 H670 V186 H620 V230 H530 Z" depth="26" z="13" fill="#f4f1ea" />
+    <model src="box.glb" x="720" y="60" width="110" height="110" />
+  </layer>
 </layer>

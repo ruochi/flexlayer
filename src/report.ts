@@ -2,9 +2,10 @@ import { cameraItems } from './camera.js'
 import { circleOfConfusion } from './dof.js'
 import { filtersInPaintOrder, getFilter } from './filter.js'
 import { MESH_TAGS } from './tags.js'
-import { absoluteNodeMatrix, apply, applyToBox, IDENTITY, intersectBox, isIdentity, matrixScale, multiply, translated, type Matrix } from './matrix.js'
+import { absoluteNodeMatrix, apply, applyToBox, IDENTITY, intersectBox, isIdentity, matrixScale, multiply, originOffset, translated, type Matrix } from './matrix.js'
 import { applyPoseMatrix, behindCamera, cameraSceneCustom, has3dPose, hasPerspective, planeDepth, poseMatrix, posePoint, project as projectPoint, splitsForCamera, type Perspective } from './perspective.js'
 import { maskStats } from './mask-stats.js'
+import { meshPrims } from './software-mesh.js'
 import { contentInsets, cssFilterPad, flexContentInset, hasBorder, innerInkStrokeReach, outerInkStrokeReach, overflowClips, shadowLayers } from './style.js'
 import type { Box, ColorFilterSpec, ElementReport, LayerDocument, LayerReport, InlineOwner, Issue, LayerLayoutNode, LayoutNode, MeshLayoutNode, MinFontSpec, TextLayoutNode } from './types.js'
 import { boxToRect, emptyBox, translateBox, unionBoxes } from './types.js'
@@ -70,8 +71,44 @@ function meshHalfDepth(node: MeshLayoutNode): number {
   return (mesh.span.z * s) / 2
 }
 
+/**
+ * A `model` with `width`/`height` is contain-fitted: the mesh is scaled to the
+ * smaller of the two ratios and centered in the box. Its ink is the fitted
+ * geometry itself, not the authored box.
+ *
+ * Two steps of approximation were wrong here. Reporting the authored box made a
+ * torus knot that sat well inside its box report `overflow-canvas` (§7.4), and
+ * reporting the *fitted bounding box* still did: a knot does not fill its box,
+ * so the box's eight corners project wider than the shape under a pitched
+ * camera. The samples are the vertices the renderer will actually draw, taken
+ * from the same builder, so the ink is the silhouette's own bounds.
+ */
+function containModelSamples(node: MeshLayoutNode): Array<[number, number, number]> | null {
+  const mesh = node.mesh
+  if (mesh.type !== 'model' || (mesh.unit != null && mesh.unit > 0)) return null
+  if (!mesh.span || !(node.width > 0) || !(node.height > 0)) return null
+  const prims = meshPrims(node)
+  const o = originOffset(node.origin, node.width, node.height)
+  // The fitted geometry's own vertices, not its bounding box: a knot does not
+  // fill its box, and the box's corners project wider than the shape under a
+  // pitched camera (§7.4). A mesh small enough to project exactly is projected
+  // exactly; a huge one is strided, because the report only needs its extent.
+  const pts: Array<[number, number, number]> = []
+  let total = 0
+  for (const prim of prims) total += prim.positions.length / 3
+  if (total === 0) return null
+  const step = Math.max(1, Math.ceil(total / 20000))
+  for (const prim of prims) {
+    const src = prim.positions
+    for (let v = 0; v < src.length / 3; v += step) {
+      pts.push([src[v * 3]! + o.x, src[v * 3 + 1]! + o.y, src[v * 3 + 2]!])
+    }
+  }
+  return pts
+}
+
 function meshSamples(node: MeshLayoutNode): Array<[number, number, number]> {
-  const fitted = unitModelSamples(node)
+  const fitted = unitModelSamples(node) ?? containModelSamples(node)
   if (fitted) return fitted
   if (node.mesh.type === 'sphere') {
     const r = node.mesh.r
@@ -643,6 +680,10 @@ function walk(
   if (node.noise) entry.noise = node.noise
   if (node.overlay) entry.overlay = node.overlay
   if (node.glass) entry.glass = node.glass
+  // The surface a body is painted with, so a caller measuring the picture can
+  // tell a body that has a contact shadow from one that cannot: SPEC says glass
+  // keeps its own colour at the rim and writes no hard shadow.
+  if (node.kind === 'mesh' && node.material) entry.material = node.material.kind
   if (node.colorFilter) entry.filter = node.colorFilter
   if (node.blend) entry.blend = node.blend
   if (node.grade) entry.grade = node.grade

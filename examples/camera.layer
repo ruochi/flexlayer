@@ -1,11 +1,30 @@
-<layer width="640" height="360" background="#0c1424" color="#f4ecdf" safe="24">
-  <layer width="640" height="360" view="200 80 320 180">
-    <layer width="960" height="540">
-      <rect x="0" y="0" width="960" height="540" fill="#1c3148" />
-      <circle cx="360" cy="170" r="70" fill="#e8b04a" />
-      <layer x="300" y="250"><p style="font-size:28px; white-space:nowrap">这里</p></layer>
+<layer width="640" height="470" background="#0c1424" color="#f4ecdf" safe="0">
+  <!-- A camera study: one stage, two shots of it. The left cell is the wide
+       shot with the camera layer's own `view`; the right cell is the same stage
+       seen from a different orbit. Both are 3D now, so the plate shows what the
+       camera attributes do rather than a flat circle on a dark page (§C.1). -->
+  <layer x="24" y="16"><p style="font-size:26px; white-space:nowrap">同一舞台 · 两个机位</p></layer>
+
+  <layer x="24" y="64" width="288" height="352">
+    <layer width="288" height="352" camera="fov 32, orbit 18 24, distance 700, at 144 300 0">
+      <ground y="290" rotateX="90" fill="#1c3148" shadow-blur="24" shadow-opacity="0.5" />
+      <layer x="0" y="290" width="288" height="240" origin="144 0" rotateX="90" preserve-3d>
+        <sphere cx="86" cy="90" r="52" z="52" fill="#e8b04a" material="plastic 0.28" />
+        <rect x="150" y="60" width="90" height="90" depth="90" rx="12" fill="#d23b3b" material="plastic 0.34" />
+      </layer>
     </layer>
   </layer>
-  <layer x="40" y="24"><p style="font-size:28px; white-space:nowrap">第三章 · 着墨</p></layer>
-  <rect x="520" y="300" width="80" height="36" fill="none" stroke="#f4ecdf" stroke-width="3" />
+
+  <layer x="328" y="64" width="288" height="352">
+    <layer width="288" height="352" camera="fov 32, orbit 52 34, distance 560, at 144 300 0">
+      <ground y="290" rotateX="90" fill="#1c3148" shadow-blur="24" shadow-opacity="0.5" />
+      <layer x="0" y="290" width="288" height="240" origin="144 0" rotateX="90" preserve-3d>
+        <sphere cx="86" cy="90" r="52" z="52" fill="#e8b04a" material="plastic 0.28" />
+        <rect x="150" y="60" width="90" height="90" depth="90" rx="12" fill="#d23b3b" material="plastic 0.34" />
+      </layer>
+    </layer>
+  </layer>
+
+  <layer x="24" y="424" width="288"><p style="font-size:22px; color:#a9b6c6">orbit 18 24 · distance 700</p></layer>
+  <layer x="328" y="424" width="288"><p style="font-size:22px; color:#a9b6c6">orbit 52 34 · distance 560</p></layer>
 </layer>
