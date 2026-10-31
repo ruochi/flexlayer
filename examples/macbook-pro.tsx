@@ -213,7 +213,7 @@ export default (
       <light type="directional" intensity="0.45" color="#fff5ea" x="200" y="-400" z="600" target="0 0 0" />
       <Lid />
       <Base />
-      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="36" shadow-opacity="0.22" />
+      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="48" shadow-opacity="0.38" />
     </layer>
     <layer x="80" y="66">
       <p style="font-family:Inter; font-size:13px; font-weight:700; letter-spacing:6.2px; color:#c88255">PRO PERFORMANCE · M4 MAX</p>
