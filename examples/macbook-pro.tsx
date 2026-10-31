@@ -4,8 +4,8 @@
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
 const SILVER = '#e8ecf2'
-// Product aluminum; clearcoat off (read as glass shell on the lid lip).
-const SHELL = 'finish metal, color #d5d9df, roughness 0.42, metalness 0.55, clearcoat 0'
+// Product aluminum; clearcoat off (wet chrome lip read).
+const SHELL = 'finish metal, color #d5d9df, roughness 0.44, metalness 0.55, clearcoat 0'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 
