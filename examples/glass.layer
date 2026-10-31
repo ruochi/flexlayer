@@ -16,7 +16,7 @@
        own contact shadow is readable (§C.2) — a card the bodies stood against
        would put its own projected base under theirs. -->
   <layer x="0" y="112" width="1520" height="392" camera="fov 30, orbit 18 20, distance 1750, at 760 470 0">
-    <ground y="330" rotateX="90" fill="#2a2d36" shadow-blur="34" shadow-opacity="0.55" />
+    <ground y="330" rotateX="90" fill="#2a2d36" shadow-blur="48" shadow-opacity="0.4" />
     <layer x="0" y="330" width="1520" height="420" origin="760 0" rotateX="90" preserve-3d>
       <!-- the wall: 24 cards, 60 wide, standing 210 tall -->
       <rect x="40" y="0" width="60" height="24" depth="210" z="105" fill="#e23b2f" />
@@ -56,7 +56,7 @@
   </layer>
 
   <layer x="0" y="556" width="1520" height="392" camera="fov 30, orbit 18 20, distance 1750, at 760 470 0">
-    <ground y="330" rotateX="90" fill="#2a2d36" shadow-blur="34" shadow-opacity="0.55" />
+    <ground y="330" rotateX="90" fill="#2a2d36" shadow-blur="48" shadow-opacity="0.4" />
     <layer x="0" y="330" width="1520" height="420" origin="760 0" rotateX="90" preserve-3d>
       <rect x="40" y="0" width="60" height="24" depth="210" z="105" fill="#e23b2f" />
       <rect x="100" y="0" width="60" height="24" depth="210" z="105" fill="#f7f4ee" />

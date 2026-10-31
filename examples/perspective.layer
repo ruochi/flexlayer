@@ -1,14 +1,13 @@
-<layer width="880" height="600" background="#0f1115" camera="fov 30, orbit 22 26, distance 1100, at 440 560 0">
-  <!-- QUALITY-6 §C.2: `depth` is centred on the plate's own plane, so a plate
-       standing on the floor needs `z` equal to half its depth (§D); at `z="0"`
-       the floor cuts it in half and there is no contact shadow to read. -->
-  <ground y="530" rotateX="90" fill="#d9dee7" shadow-blur="34" shadow-opacity="0.6" />
-  <layer x="0" y="530" width="880" height="400" origin="440 0" rotateX="90" preserve-3d>
-    <!-- Two plates, both turned the same way, standing on the same floor. One
-         camera is what makes their far edges converge on one vanishing point;
-         `mesh.spec.ts` pins that. The cyan plate is turned away on its right
-         edge, so that edge is shorter than its left one. -->
-    <rect x="250" y="60" width="200" height="230" depth="26" z="13" fill="#4CC3D9" rotateY="28" />
-    <rect x="580" y="60" width="160" height="200" depth="26" z="13" fill="#EF2D5E" rotateY="28" />
+<layer width="880" height="600" background="#0f1115" camera="fov 28, orbit 18 32, distance 1050, at 440 520 0" quality="final">
+  <!-- QUALITY-6 §C.2: two plates, same rotateY, one camera — vanishing edges
+       agree. Pivot at the bottom edge so the plate stands on the floor. -->
+  <ground y="500" rotateX="90" fill="#cfd5de" shadow-blur="56" shadow-opacity="0.36" />
+  <layer x="0" y="500" width="880" height="420" origin="440 0" rotateX="90" preserve-3d>
+    <layer x="220" y="40" width="220" height="260" origin="110 260" rotateY="22" preserve-3d>
+      <rect x="0" y="0" width="220" height="260" depth="40" z="20" rx="6" fill="#4CC3D9" material="plastic 0.32" />
+    </layer>
+    <layer x="520" y="40" width="180" height="220" origin="90 220" rotateY="22" preserve-3d>
+      <rect x="0" y="0" width="180" height="220" depth="40" z="20" rx="6" fill="#EF2D5E" material="plastic 0.32" />
+    </layer>
   </layer>
 </layer>
