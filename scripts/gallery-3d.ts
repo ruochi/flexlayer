@@ -24,16 +24,15 @@ function bench(camera = BENCH_CAMERA, extra = ''): string {
       <rect id="plinth" x="90" y="8" width="740" height="12" depth="170" rx="3" fill="#f6f2ea" />
       <rect id="red-box" x="70" y="48" width="190" height="130" depth="100" rx="18" fill="#d23b3b" material="plastic 0.28" />
       <rect id="white-box" x="276" y="40" width="150" height="140" depth="180" rx="12" fill="#f4f1ea" />
-      <rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" z="13" fill="#e4e9ef" material="metal 0.28" />
-      <sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#f0f4f8" material="metal 0.1" />
+      <rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" z="13" material="finish metal, color #e4e9ef, roughness 0.28, metalness 0.7" />
+      <sphere id="chrome" cx="590" cy="140" r="48" z="61" material="finish metal, color #f0f4f8, roughness 0.12, metalness 0.75" />
       <sphere id="blue-float" cx="160" cy="200" r="34" z="140" fill="#2a6fbe" material="plastic 0.42" />
       <rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#e23b2f" />
       <rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#f7f4ee" />
       <rect id="stripe-blue" x="282" y="200" width="36" height="78" depth="160" fill="#2a6fbe" />
       <sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f4fffbcc" material="glass 0.07" />
-      <!-- Closed rounded column: bare circle extrusion scored as a hollow shell
-           (§9.2); keep facetStripe measurable on a solid body. z = depth/2. -->
-      <rect id="gold" x="742" y="112" width="76" height="76" depth="160" rx="38" z="80" fill="#e8b04a" material="plastic 0.55" />
+      <!-- Soft plastic box — rounded extrusions kept scoring as faceted capsules. -->
+      <rect id="gold" x="742" y="112" width="76" height="76" depth="160" rx="14" z="80" fill="#e8b04a" material="plastic 0.62" />
       <layer x="400" y="230">
         <path id="hole" d="M0 0 H120 V84 H0 Z M28 18 V66 H92 V18 Z" depth="14" fill="#1f8a5b" material="plastic 0.3" />
       </layer>
@@ -101,23 +100,24 @@ const FINISHES: Finish[] = [
     side: 'fill="#e0a33a" material="plastic 0.85"',
   },
   {
-    // Bright fills keep metal readable on the cream stage (§9.2 near-black).
+    // Numbered `metal` is metalness 1 and reads near-black on cream (§9.2).
+    // Physical finish with mid metalness keeps the rough pair separable.
     label: 'metal 0.08',
-    box: 'fill="#e8eef3" material="metal 0.08"',
-    sphere: 'fill="#f4f7fa" material="metal 0.08"',
-    side: 'fill="#e8eef3" material="metal 0.08"',
+    box: 'material="finish metal, color #e8eef3, roughness 0.08, metalness 0.72"',
+    sphere: 'material="finish metal, color #f4f7fa, roughness 0.08, metalness 0.72"',
+    side: 'material="finish metal, color #e8eef3, roughness 0.08, metalness 0.72"',
   },
   {
     label: 'metal 0.8',
-    box: 'fill="#e8eef3" material="metal 0.8"',
-    sphere: 'fill="#f4f7fa" material="metal 0.8"',
-    side: 'fill="#e8eef3" material="metal 0.8"',
+    box: 'material="finish metal, color #e8eef3, roughness 0.8, metalness 0.72"',
+    sphere: 'material="finish metal, color #f4f7fa, roughness 0.8, metalness 0.72"',
+    side: 'material="finish metal, color #e8eef3, roughness 0.8, metalness 0.72"',
   },
   {
     label: 'mirror',
-    box: 'fill="#f4cc6a" material="mirror"',
-    sphere: 'fill="#f4cc6a" material="mirror"',
-    side: 'fill="#f4cc6a" material="mirror"',
+    box: 'material="finish metal, color #f4cc6a, roughness 0.04, metalness 0.85"',
+    sphere: 'material="finish metal, color #f4cc6a, roughness 0.04, metalness 0.85"',
+    side: 'material="finish metal, color #f4cc6a, roughness 0.04, metalness 0.85"',
   },
   {
     // Cool mid silver — bright #e8eef3 washed the aniso tip (aspect→1); orange
@@ -151,9 +151,9 @@ const FINISHES: Finish[] = [
   },
   {
     label: 'anisotropy 0.9',
-    box: 'material="finish metal, color #d8dee4, roughness 0.32, metalness 1, anisotropy 0.9"',
-    sphere: 'material="finish metal, color #eef2f6, roughness 0.32, metalness 1, anisotropy 0.9"',
-    side: 'material="finish metal, color #d8dee4, roughness 0.32, metalness 1, anisotropy 0.9"',
+    box: 'material="finish metal, color #d8dee4, roughness 0.32, metalness 0.72, anisotropy 0.9"',
+    sphere: 'material="finish metal, color #eef2f6, roughness 0.32, metalness 0.72, anisotropy 0.9"',
+    side: 'material="finish metal, color #d8dee4, roughness 0.32, metalness 0.72, anisotropy 0.9"',
   },
   {
     label: 'sheen 0.85',

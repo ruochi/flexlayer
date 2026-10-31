@@ -3,10 +3,10 @@
     <ground id="ground" y="220" rotateX="90" fill="#e7e0d4" shadow-blur="34" shadow-opacity="0.38" />
     <layer x="28" y="220" width="400" height="190" origin="200 0" rotateX="90" preserve-3d>
       <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" z="4" fill="#f6f2ea" />
-      <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" z="36" fill="#f4cc6a" material="mirror" />
+      <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" z="36" material="finish metal, color #f4cc6a, roughness 0.04, metalness 0.85" />
       
-      <sphere id="sphere" cx="204" cy="72" r="30" z="30" fill="#f4cc6a" material="mirror" />
-      <rect id="side" x="304" y="52" width="52" height="52" depth="100" rx="26" z="50" fill="#f4cc6a" material="mirror" />
+      <sphere id="sphere" cx="204" cy="72" r="30" z="30" material="finish metal, color #f4cc6a, roughness 0.04, metalness 0.85" />
+      <rect id="side" x="304" y="52" width="52" height="52" depth="100" rx="26" z="50" material="finish metal, color #f4cc6a, roughness 0.04, metalness 0.85" />
     </layer>
   </layer>
   <layer x="12" y="304" color="#1c1915"><p style="font-size:24px; color:#1c1915; fill:#1c1915">mirror</p></layer>
