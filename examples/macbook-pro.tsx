@@ -7,8 +7,8 @@ const SILVER = '#e8ecf1'
 // Product-metal lift (render) + bright silver: prior 1.0 metalness crushed the
 // deck (§9.2). Roughness stays in the 0.12–0.55 product-metal band.
 const SHELL = 'finish metal, color #e8ecf1, roughness 0.28, metalness 0.82'
-const KEY = '#222327'
-const WELL = '#060607'
+const KEY = '#3a3d44'
+const WELL = '#2a2d33'
 
 const W = 980
 const D = 670
