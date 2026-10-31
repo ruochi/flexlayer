@@ -24,14 +24,16 @@ function bench(camera = BENCH_CAMERA, extra = ''): string {
       <rect id="plinth" x="90" y="8" width="740" height="12" depth="170" rx="3" fill="#f6f2ea" />
       <rect id="red-box" x="70" y="48" width="190" height="130" depth="100" rx="18" fill="#d23b3b" material="plastic 0.28" />
       <rect id="white-box" x="276" y="40" width="150" height="140" depth="180" rx="12" fill="#f4f1ea" />
-      <rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#c5c9ce" material="metal 0.18" />
-      <sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#d8dee4" material="metal 0.04" />
+      <rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" z="13" fill="#e4e9ef" material="metal 0.28" />
+      <sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#f0f4f8" material="metal 0.1" />
       <sphere id="blue-float" cx="160" cy="200" r="34" z="140" fill="#2a6fbe" material="plastic 0.42" />
       <rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#e23b2f" />
       <rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#f7f4ee" />
       <rect id="stripe-blue" x="282" y="200" width="36" height="78" depth="160" fill="#2a6fbe" />
-      <sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f4fffb99" material="glass 0.07" />
-      <circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />
+      <sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f4fffbcc" material="glass 0.07" />
+      <!-- Closed rounded column: bare circle extrusion scored as a hollow shell
+           (§9.2); keep facetStripe measurable on a solid body. z = depth/2. -->
+      <rect id="gold" x="742" y="112" width="76" height="76" depth="160" rx="38" z="80" fill="#e8b04a" material="plastic 0.55" />
       <layer x="400" y="230">
         <path id="hole" d="M0 0 H120 V84 H0 Z M28 18 V66 H92 V18 Z" depth="14" fill="#1f8a5b" material="plastic 0.3" />
       </layer>
@@ -99,22 +101,23 @@ const FINISHES: Finish[] = [
     side: 'fill="#e0a33a" material="plastic 0.85"',
   },
   {
+    // Bright fills keep metal readable on the cream stage (§9.2 near-black).
     label: 'metal 0.08',
-    box: 'fill="#c5c9ce" material="metal 0.08"',
-    sphere: 'fill="#e8eef3" material="metal 0.08"',
-    side: 'fill="#c5c9ce" material="metal 0.08"',
+    box: 'fill="#e8eef3" material="metal 0.08"',
+    sphere: 'fill="#f4f7fa" material="metal 0.08"',
+    side: 'fill="#e8eef3" material="metal 0.08"',
   },
   {
     label: 'metal 0.8',
-    box: 'fill="#c5c9ce" material="metal 0.8"',
-    sphere: 'fill="#e8eef3" material="metal 0.8"',
-    side: 'fill="#c5c9ce" material="metal 0.8"',
+    box: 'fill="#e8eef3" material="metal 0.8"',
+    sphere: 'fill="#f4f7fa" material="metal 0.8"',
+    side: 'fill="#e8eef3" material="metal 0.8"',
   },
   {
     label: 'mirror',
-    box: 'fill="#e4b33a" material="mirror"',
-    sphere: 'fill="#e4b33a" material="mirror"',
-    side: 'fill="#e4b33a" material="mirror"',
+    box: 'fill="#f4cc6a" material="mirror"',
+    sphere: 'fill="#f4cc6a" material="mirror"',
+    side: 'fill="#f4cc6a" material="mirror"',
   },
   {
     // Cool mid silver — bright #e8eef3 washed the aniso tip (aspect→1); orange
@@ -125,15 +128,17 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
+    // Box must also be glass — a solid charcoal fill was what §9.2 scored as
+    // "glass 0.06/0.72 boxes solid black".
     label: 'glass 0.06',
-    box: 'fill="#3a342e"',
+    box: 'fill="#f4fffbcc" material="glass 0.06"',
     sphere: 'fill="#f4fffbcc" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#3a342e"',
+    box: 'fill="#f4fffbcc" material="glass 0.72"',
     sphere: 'fill="#f4fffbcc" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
@@ -146,9 +151,9 @@ const FINISHES: Finish[] = [
   },
   {
     label: 'anisotropy 0.9',
-    box: 'material="finish metal, color #c5c9ce, roughness 0.32, metalness 1, anisotropy 0.9"',
-    sphere: 'material="finish metal, color #e8eef3, roughness 0.32, metalness 1, anisotropy 0.9"',
-    side: 'material="finish metal, color #c5c9ce, roughness 0.32, metalness 1, anisotropy 0.9"',
+    box: 'material="finish metal, color #d8dee4, roughness 0.32, metalness 1, anisotropy 0.9"',
+    sphere: 'material="finish metal, color #eef2f6, roughness 0.32, metalness 1, anisotropy 0.9"',
+    side: 'material="finish metal, color #d8dee4, roughness 0.32, metalness 1, anisotropy 0.9"',
   },
   {
     label: 'sheen 0.85',
@@ -182,12 +187,12 @@ function cluster(finish: Finish): string {
     : `<sphere id="sphere" cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
   const side = finish.neon
     ? `<torus id="side" cx="330" cy="78" r="32" tube="8" z="14" ${finish.side} rotateX="70" />`
-    : `<circle id="side" cx="330" cy="78" r="26" depth="100" ${finish.side} />`
+    : `<rect id="side" x="304" y="52" width="52" height="52" depth="100" rx="26" z="50" ${finish.side} />`
   return `<layer width="440" height="300" camera="fov 32, orbit 34 22, distance 860, at 220 160 0">
-    <ground id="ground" y="220" rotateX="90" fill="#e7e0d4" shadow-blur="26" shadow-opacity="0.5" />
+    <ground id="ground" y="220" rotateX="90" fill="#e7e0d4" shadow-blur="34" shadow-opacity="0.38" />
     <layer x="28" y="220" width="400" height="190" origin="200 0" rotateX="90" preserve-3d>
-      <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" fill="#f6f2ea" />
-      <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" ${finish.box} />
+      <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" z="4" fill="#f6f2ea" />
+      <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" z="36" ${finish.box} />
       ${stripes}
       ${sphere}
       ${side}
