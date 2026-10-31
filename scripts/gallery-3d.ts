@@ -184,9 +184,13 @@ function cluster(finish: Finish): string {
   const side = finish.neon
     ? `<torus id="side" cx="330" cy="78" r="32" tube="8" z="14" ${finish.side} rotateX="70" />`
     : `<circle id="side" cx="330" cy="78" r="26" depth="100" ${finish.side} />`
+  // Warm back + accent card so metal/mirror/aniso reflect cream and coral
+  // instead of the dark page (QUALITY-6 §9.2 near-black dual-blind).
   return `<layer width="440" height="300" camera="fov 32, orbit 34 22, distance 860, at 220 160 0">
     <ground id="ground" y="220" rotateX="90" fill="#e7e0d4" shadow-blur="26" shadow-opacity="0.5" />
     <layer x="28" y="220" width="400" height="190" origin="200 0" rotateX="90" preserve-3d>
+      <rect id="back" x="-30" y="-90" width="440" height="14" depth="300" fill="#efe8dc" />
+      <rect id="accent" x="300" y="-40" width="70" height="10" depth="160" fill="#e08a5c" />
       <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" fill="#f6f2ea" />
       <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" ${finish.box} />
       ${stripes}
