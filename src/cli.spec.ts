@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { readFile } from 'node:fs/promises'
@@ -144,21 +144,30 @@ export const composition: Composition = {
     child.stderr.on('data', (chunk: Buffer) => {
       err += chunk.toString('utf8')
     })
-    const waitFor = async (count: number) => {
+    const waitFor = async (count: number, hint = '') => {
       const start = Date.now()
-      while (Date.now() - start < 20000) {
+      while (Date.now() - start < 25000) {
         if (text.split('✓').length - 1 >= count) return
         await new Promise((resolve) => setTimeout(resolve, 40))
       }
-      throw new Error(`没等到 ${count} 次渲染\n${text}\n${err}`)
+      throw new Error(`没等到 ${count} 次渲染${hint}\n${text}\n${err}`)
     }
     try {
       await waitFor(1)
       expect(text).toContain('20×16')
-      writeFileSync(file, `<layer width="28" height="16" background="#111"></layer>`)
-      await waitFor(2)
-      expect(text).toContain('28×16')
+      // Wait until the watcher is armed; writing before "watching" races on CI.
+      const armed = Date.now()
+      while (Date.now() - armed < 10000 && !text.includes('watching')) {
+        await new Promise((resolve) => setTimeout(resolve, 40))
+      }
       expect(text).toContain('watching')
+      // Rename swap so fs.watch always sees a directory event (some hosts
+      // coalesce same-inode in-place writes).
+      const next = join(watchDir, 'card.next.layer')
+      writeFileSync(next, `<layer width="28" height="16" background="#111"></layer>`)
+      renameSync(next, file)
+      await waitFor(2, ' after rewrite')
+      expect(text).toContain('28×16')
     } finally {
       child.kill('SIGKILL')
     }
