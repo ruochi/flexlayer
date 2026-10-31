@@ -314,7 +314,16 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
       width: BENCH_W,
       height: BENCH_H + 96,
       caption: '贴地接触 · 悬空软影 · 缝里的遮挡 · 铬球 · 玻璃和色条 · 洞 · 霓虹 · 灯',
-      body: place(bench(), 0, 52),
+      // Still-only lift + softer plate — shared bench keeps manga hatchFlip
+      // and quality gold facetStripe (QUALITY-6 §9.2).
+      body: place(
+        bench().replace(
+          '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#cfd3d8" material="finish metal, color #cfd3d8, roughness 0.58, metalness 0.42, clearcoat 0" />',
+          '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" z="5" fill="#d5d9de" material="finish metal, color #d5d9de, roughness 0.78, metalness 0.22, clearcoat 0" />',
+        ),
+        0,
+        52,
+      ),
     }),
   }
   const shading = (['studio', 'toon', 'technical', 'manga'] as const).map((name) => ({
