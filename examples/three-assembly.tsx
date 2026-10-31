@@ -25,11 +25,12 @@ const stroke = { stroke: '#1c1915', 'stroke-width': '2.5 1.6 1', hidden: '#9a8f8
 export default layer.create(
   <layer width={960} height={640} background="#f3efe6">
     <layer width={960} height={640} camera="fov 28, orbit 32 18">
-      <ground y={520} rotateX={90} fill="#e7e0d4" shadow-blur={48} shadow-opacity={0.34} />
-      <model object={body} unit={210} x={480} y={520} {...stroke} />
-      <model object={head} unit={210} x={480} y={520} {...stroke} />
-      <model object={arm} unit={210} x={480} y={520} {...stroke} />
-      <model object={wedge} unit={210} x={480} y={520} {...stroke} />
+      <ground y={520} rotateX={90} fill="#e7e0d4" shadow-blur={56} shadow-opacity={0.28} />
+      {/* y a few px above the ground plane so soft contact reads as seated, not a float gap. */}
+      <model object={body} unit={210} x={480} y={518} {...stroke} />
+      <model object={head} unit={210} x={480} y={518} {...stroke} />
+      <model object={arm} unit={210} x={480} y={518} {...stroke} />
+      <model object={wedge} unit={210} x={480} y={518} {...stroke} />
     </layer>
     <layer x={64} y={48}>
       <p style="font-size:32px; color:#1c1915">线稿、材质、文字，同一帧</p>

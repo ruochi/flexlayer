@@ -1,13 +1,13 @@
-<layer width="880" height="600" background="#0f1115" camera="fov 28, orbit 18 32, distance 1050, at 440 520 0" quality="final">
-  <!-- QUALITY-6 §C.2: two plates, same rotateY, one camera — vanishing edges
-       agree. Pivot at the bottom edge so the plate stands on the floor. -->
-  <ground y="500" rotateX="90" fill="#cfd5de" shadow-blur="56" shadow-opacity="0.36" />
-  <layer x="0" y="500" width="880" height="420" origin="440 0" rotateX="90" preserve-3d>
-    <layer x="220" y="40" width="220" height="260" origin="110 260" rotateY="22" preserve-3d>
-      <rect x="0" y="0" width="220" height="260" depth="40" z="20" rx="6" fill="#4CC3D9" material="plastic 0.32" />
+<layer width="880" height="600" background="#12141a" camera="fov 28, orbit 16 34, distance 1100, at 440 500 0" quality="final">
+  <!-- Lean with rotateX, pivot on the floor edge. Keep the plates inside the
+       canvas so check stays clean (no overflow-canvas). -->
+  <ground y="500" rotateX="90" fill="#d5dae3" shadow-blur="60" shadow-opacity="0.3" />
+  <layer x="0" y="500" width="880" height="380" origin="440 0" rotateX="90" preserve-3d>
+    <layer x="240" y="40" width="160" height="220" origin="80 220" rotateX="-22" preserve-3d>
+      <rect x="0" y="0" width="160" height="220" depth="32" z="16" rx="4" fill="#4CC3D9" material="plastic 0.3" />
     </layer>
-    <layer x="520" y="40" width="180" height="220" origin="90 220" rotateY="22" preserve-3d>
-      <rect x="0" y="0" width="180" height="220" depth="40" z="20" rx="6" fill="#EF2D5E" material="plastic 0.32" />
+    <layer x="500" y="40" width="140" height="200" origin="70 200" rotateX="-22" preserve-3d>
+      <rect x="0" y="0" width="140" height="200" depth="32" z="16" rx="4" fill="#EF2D5E" material="plastic 0.3" />
     </layer>
   </layer>
 </layer>

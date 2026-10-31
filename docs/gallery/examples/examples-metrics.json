@@ -60,7 +60,7 @@
     "width": 640,
     "height": 470,
     "ground": true,
-    "contactRatio": 0.914,
+    "contactRatio": 1,
     "zFight": 0,
     "errors": [],
     "warnings": []

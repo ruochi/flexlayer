@@ -11,9 +11,10 @@
     <layer x="0" y="470" width="1280" height="560" origin="640 0" rotateX="90" preserve-3d>
       <rect x="340" y="120" width="120" height="250" depth="110" rx="30" z="55" fill="#2c2f36" material="plastic 0.3" rotateY="24" />
       <rect x="560" y="140" width="200" height="210" depth="86" rx="22" z="43" fill="#c9a24a" material="metal 0.3" rotateY="44" rotateX="10" />
-      <!-- Upright on a rotateX=90 floor: `circle depth` is Z-axis (§C / §D). -->
-      <circle cx="910" cy="250" r="72" depth="230" z="115" fill="#4CC3D9" material="metal 0.28" />
-      <circle cx="750" cy="450" r="58" depth="130" z="65" fill="#2c2f36" material="metal 0.36" />
+      <!-- Upright on a rotateX=90 floor: `circle depth` is Z-axis. Plastic on
+           the tall column so metal facet bands do not dominate the look score. -->
+      <circle cx="910" cy="250" r="72" depth="230" z="115" fill="#4CC3D9" material="plastic 0.28" />
+      <circle cx="750" cy="450" r="58" depth="130" z="65" fill="#2c2f36" material="plastic 0.36" />
       <tube d="M1040 450 C1040 350 1110 315 1160 315" r="18" z="18" fill="#c2543f" material="plastic 0.3" rotateX="48" />
     </layer>
   </layer>
