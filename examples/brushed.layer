@@ -1,22 +1,27 @@
-<layer width="1400" height="760" background="#101114" color="#f4efe6" font-family="ChillDuanSans">
-  <layer camera="1600" width="1400" height="760">
-    <sphere cx="200" cy="230" r="88" material="brushed" />
-    <circle cx="620" cy="250" r="70" depth="220" material="brushed" rotateX="90" />
+<layer width="1400" height="760" background="#101114" color="#f4efe6" font-family="ChillDuanSans" safe="0">
+  <!-- QUALITY-6 §C.2: the bodies sit on a floor. `z` equals the sphere radius
+       or half the plate's depth, so the ground plane does not cut them (§D). -->
+  <layer camera="fov 30, orbit 10 22, distance 1700, at 700 560 0" width="1400" height="760">
+    <ground y="560" rotateX="90" fill="#3c414c" shadow-blur="34" shadow-opacity="0.55" />
+    <layer x="0" y="560" width="1400" height="620" origin="700 0" rotateX="90" preserve-3d>
+      <sphere cx="300" cy="120" r="84" z="84" material="brushed" />
+      <circle cx="560" cy="170" r="70" depth="220" material="brushed" rotateX="90" z="110" />
+      <rect x="740" y="110" width="200" height="140" depth="16" rx="8" material="brushed" rotateX="10" rotateY="-16" z="21" />
 
-    <sphere cx="200" cy="560" r="88" fill="#c86a3e" material="brushed" />
-    <circle cx="620" cy="530" r="70" depth="220" fill="#c86a3e" material="brushed" rotateX="90" />
+      <sphere cx="300" cy="330" r="84" z="84" fill="#c86a3e" material="brushed" />
+      <circle cx="560" cy="380" r="70" depth="220" fill="#c86a3e" material="brushed" rotateX="90" z="110" />
+      <rect x="740" y="320" width="200" height="140" depth="16" rx="8" fill="#c86a3e" material="brushed" rotateX="10" rotateY="-16" z="21" />
 
-    <ground y="700" rotateX="72" fill="#181a20" />
+      <rect x="990" y="130" width="220" height="150" depth="14" rx="7" material="brushed" rotateX="12" rotateY="-18" z="23" />
+      <rect x="990" y="340" width="220" height="150" depth="14" rx="7" fill="#c86a3e" material="brushed" rotateX="12" rotateY="-18" z="23" />
+    </layer>
   </layer>
-  <layer x="900" y="60" width="440" height="640" camera="420">
-    <rect x="80" y="80" width="280" height="180" depth="14" rx="7" material="brushed" rotateX="10" rotateY="-15" />
-    <rect x="80" y="400" width="280" height="180" depth="14" rx="7" fill="#c86a3e" material="brushed" rotateX="10" rotateY="-15" />
-    <ground y="640" rotateX="72" />
-  </layer>
+
   <layer x="72" y="28">
     <p style="font-size:32px">brushed · 纹路沿局部 x，高光与纹路垂直</p>
   </layer>
-  <layer x="140" y="340" width="120"><p style="font-size:24px; color:#c8c2b6">球</p></layer>
-  <layer x="540" y="390" width="160"><p style="font-size:24px; color:#c8c2b6">圆柱</p></layer>
-  <layer x="1080" y="340" width="160"><p style="font-size:24px; color:#c8c2b6">平板</p></layer>
+  <layer x="206" y="626" width="188"><p style="font-size:24px; color:#c8c2b6">球</p></layer>
+  <layer x="486" y="626" width="148"><p style="font-size:24px; color:#c8c2b6">圆柱</p></layer>
+  <layer x="700" y="626" width="280"><p style="font-size:24px; color:#c8c2b6">斜放的平板</p></layer>
+  <layer x="950" y="626" width="280"><p style="font-size:24px; color:#c8c2b6">正对的平板</p></layer>
 </layer>

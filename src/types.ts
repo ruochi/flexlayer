@@ -270,6 +270,8 @@ export type ElementReport = {
   noise?: NoiseSpec
   overlay?: OverlaySpec
   glass?: GlassSpec
+  /** 网格表面的材质种类，`material` 里的第一个词。只在网格上写。 */
+  material?: MeshMaterial['kind']
   filter?: ColorFilterSpec[]
   blend?: BlendMode
   /** 预设展开后的调色参数。 */

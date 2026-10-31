@@ -15,6 +15,8 @@ const budgets = {
   strokes: 200,
   cards: 60,
   'macbook-pro': 800,
+  // QUALITY-6 §F.2.3: 30 frames of a camera orbit, whole run.
+  'anim-orbit-30': 8000,
 }
 
 const file = process.argv[2]

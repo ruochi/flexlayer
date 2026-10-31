@@ -12,6 +12,7 @@ import { h } from './h.js'
 import { loadLayerFile } from './load-source.js'
 import { checkLayer, renderLayer } from './render.js'
 import { fromThree, lightsFromThree } from './three.js'
+import { meanFlip } from '../scripts/flip-diff.ts'
 import { typecheckLayerFile } from './typecheck.js'
 
 const pkgDir = join(fileURLToPath(import.meta.url), '..', '..')
@@ -554,4 +555,196 @@ describe('three 的模块', () => {
     expect(typecheckLayerFile(file).some((issue) => issue.message.includes("Cannot find module 'three'"))).toBe(true)
     await expect(loadLayerFile(file)).rejects.toThrow(/无法解析 three/)
   })
+})
+
+/**
+ * QUALITY-6 §E.2.4 / §E's 验收: "每种材质映射一个像素断言". SPEC's table promises
+ * that a three.js material maps onto the same body a written `material` would
+ * paint — Lambert/Toon to matte, Phong's shininess to roughness, transmission to
+ * glass, metalness to metal. The `3d-model.png` cells are the picture; these are
+ * the claim behind it.
+ *
+ * Each case renders one sphere twice: once with the three.js material on the
+ * object, once with the equivalent `material` string on the same geometry. FLIP
+ * zero means the mapping is not an approximation — the two paths reach the same
+ * batch. A second render with a *different* mapping is the control: if the pairs
+ * matched regardless of material, the equality would prove nothing.
+ */
+describe('QUALITY-6 §E: three.js 材质映射', () => {
+  const CAMERA = 'fov 32, orbit 34 22, distance 860, at 100 95 0'
+
+  function modelScene(material: THREE.Material, attrs: Record<string, unknown> = {}) {
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.55, 48, 32), material)
+    return h(
+      'layer',
+      { width: 200, height: 200, background: '#241f1b' },
+      h(
+        'layer',
+        { width: 200, height: 200, camera: CAMERA },
+        h('ground', { y: 100, rotateX: 90, fill: '#3a3f49', 'shadow-blur': 26, 'shadow-opacity': 0.5 }),
+        h(
+          'layer',
+          { x: 14, y: 100, width: 180, height: 90, origin: '90 0', rotateX: 90, 'preserve-3d': true },
+          h('model', { object: mesh, unit: 120, x: 90, y: 90, ...attrs }),
+        ),
+      ),
+    )
+  }
+
+  async function flipOf(material: THREE.Material, attrs: Record<string, unknown>) {
+    const a = await renderLayer(modelScene(material), { format: 'rgba', meshCache: false })
+    const b = await renderLayer(modelScene(material, attrs), { format: 'rgba', meshCache: false })
+    return meanFlip(a.rgba, b.rgba, a.width, a.height)
+  }
+
+  it('StandardMaterial 的 metalness / roughness 等于写 metal、plastic', async () => {
+    const metal = new THREE.MeshStandardMaterial({ color: '#c5c9ce', metalness: 1, roughness: 0.2 })
+    expect(await flipOf(metal, { material: 'finish metal, roughness 0.2, metalness 1' })).toBeLessThan(0.02)
+    expect(await flipOf(metal, { material: 'metal 0.2' })).toBeLessThan(0.02)
+
+    const rough = new THREE.MeshStandardMaterial({ color: '#d9d2c4', metalness: 0, roughness: 0.85 })
+    expect(await flipOf(rough, { material: 'finish plastic, roughness 0.85, metalness 0' })).toBeLessThan(0.02)
+    expect(await flipOf(rough, { material: 'plastic 0.85' })).toBeLessThan(0.02)
+
+    // The control: metal painted as plastic does not match, so the equality
+    // above is the mapping and not a coincidence of a flat-shaded sphere.
+    expect(await flipOf(metal, { material: 'plastic 0.85' })).toBeGreaterThan(0.03)
+  }, 60000)
+
+  it('Lambert 等于 matte，Phong 的 shininess 80 等于 plastic 0.2', async () => {
+    const lambert = new THREE.MeshLambertMaterial({ color: '#f4f1ea' })
+    expect(await flipOf(lambert, { material: 'matte' })).toBeLessThan(0.02)
+
+    // SPEC: roughness = 1 - shininess / 100, so 80 is 0.2. The control is
+    // `metal 0.2`: it shares the roughness and differs only in the metalness the
+    // mapping chose, so a match there would mean the shininess had been read and
+    // the plastic had not. (Two plastics differ by about a hundredth, too close
+    // to the tolerance to prove anything; matte by 0.018.)
+    const phong = new THREE.MeshPhongMaterial({ color: '#4CC3D9', shininess: 80, specular: '#ffffff' })
+    expect(await flipOf(phong, { material: 'finish plastic, roughness 0.2, metalness 0' })).toBeLessThan(0.02)
+    expect(await flipOf(phong, { material: 'metal 0.2' })).toBeGreaterThan(0.03)
+  }, 60000)
+
+  it('PhysicalMaterial 的 transmission 1 等于写 glass', async () => {
+    const glass = new THREE.MeshPhysicalMaterial({ color: '#ffffff', transmission: 1, roughness: 0.05, ior: 1.45, metalness: 0 })
+    expect(await flipOf(glass, { material: 'finish glass, roughness 0.05, transmission 1' })).toBeLessThan(0.02)
+    expect(await flipOf(glass, { material: 'plastic 0.05' })).toBeGreaterThan(0.03)
+  }, 60000)
+
+  it('同一个 Group 里的线、点和实体共用一个深度缓冲', async () => {
+    // §E.2 cell 8. A ring of segments and a ring of dots around a box, all three
+    // in one Group and therefore one `<model>`. The back half of each ring is
+    // behind the box and must vanish; the front half must stay. Drawing lines
+    // and points in a separate pass — what a naive port of three's renderer does
+    // — leaves a complete circle painted across the box face.
+    const SIDES = 20
+    const RADIUS = 0.92
+    const ringPoint = (i: number): [number, number, number] => {
+      const angle = (i / SIDES) * Math.PI * 2
+      return [Math.cos(angle) * RADIUS, 0.4 + Math.sin(angle) * RADIUS, 0.02]
+    }
+    const segmentPoints: number[] = []
+    for (let i = 0; i < SIDES; i++) segmentPoints.push(...ringPoint(i), ...ringPoint(i + 1))
+    const ringGeometry = new THREE.BufferGeometry()
+    ringGeometry.setAttribute('position', new THREE.Float32BufferAttribute(segmentPoints, 3))
+    const ring = new THREE.LineSegments(ringGeometry, new THREE.LineBasicMaterial({ color: '#e23b2f', linewidth: 3 }))
+    const dotPoints: number[] = []
+    for (let i = 0; i < SIDES; i++) dotPoints.push(...ringPoint(i))
+    const dotGeometry = new THREE.BufferGeometry()
+    dotGeometry.setAttribute('position', new THREE.Float32BufferAttribute(dotPoints, 3))
+    const dots = new THREE.Points(dotGeometry, new THREE.PointsMaterial({ color: '#ffcf88', size: 0.15 }))
+    const box = new THREE.Mesh(
+      new THREE.BoxGeometry(0.8, 0.8, 0.8),
+      new THREE.MeshStandardMaterial({ color: '#d9d2c4', roughness: 0.75, metalness: 0 }),
+    )
+    box.position.set(0, 0.4, 0.4)
+
+    const scene = (withBox: boolean) => {
+      const group = new THREE.Group()
+      if (withBox) group.add(box)
+      group.add(ring, dots)
+      return h(
+        'layer',
+        { width: 440, height: 300, background: '#241f1b' },
+        h(
+          'layer',
+          { width: 440, height: 300, camera: 'fov 32, orbit 34 22, distance 860, at 220 210 0' },
+          h('ground', { y: 220, rotateX: 90, fill: '#3a3f49', 'shadow-blur': 26, 'shadow-opacity': 0.5 }),
+          h(
+            'layer',
+            { x: 28, y: 220, width: 400, height: 190, origin: '200 0', rotateX: 90, 'preserve-3d': true },
+            h('model', { object: group, unit: 120, x: 200, y: 190 }),
+          ),
+        ),
+      )
+    }
+
+    const bare = await renderLayer(scene(false), { format: 'rgba', meshCache: false })
+    const covered = await renderLayer(scene(true), { format: 'rgba', meshCache: false })
+    const isRing = (rgba: Uint8ClampedArray, i: number) => rgba[i]! > 70 && rgba[i]! > rgba[i + 1]! + 25
+    let drawn = 0
+    let hidden = 0
+    for (let i = 0; i < bare.rgba.length; i += 4) {
+      if (!isRing(bare.rgba, i)) continue
+      drawn += 1
+      if (!isRing(covered.rgba, i)) hidden += 1
+    }
+    expect(drawn).toBeGreaterThan(600)
+    // A quarter of the ring is behind the box. Anything between a fifth and a
+    // half says "the back half went away"; zero would be no depth sharing and
+    // everything would be a separate pass.
+    expect(hidden / drawn).toBeGreaterThan(0.2)
+    expect(hidden / drawn).toBeLessThan(0.5)
+  }, 60000)
+
+  it('emissive 的网格会照亮身边的地面', async () => {
+    // §E.2: "带 emissive 的物体，验证它照亮周围". A glow that only brightened
+    // its own faces left the floor at its base colour; the picture is about the
+    // floor, so the floor is what is measured. The bulb hangs low and in front
+    // of the box, so the lit patch is beside it and not under it.
+    const bulb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.35, 40, 28),
+      new THREE.MeshStandardMaterial({ color: '#3ad8ff', emissive: new THREE.Color('#3ad8ff'), emissiveIntensity: 2, roughness: 0.4 }),
+    )
+    bulb.position.set(-1, 0.35, 0.3)
+    const dark = new THREE.Mesh(
+      new THREE.SphereGeometry(0.35, 40, 28),
+      new THREE.MeshStandardMaterial({ color: '#3ad8ff', roughness: 0.4 }),
+    )
+    dark.position.copy(bulb.position)
+    const scene = (object: THREE.Object3D) =>
+      h(
+        'layer',
+        { width: 200, height: 200, background: '#241f1b' },
+        h(
+          'layer',
+          { width: 200, height: 200, camera: CAMERA },
+          h('ground', { y: 100, rotateX: 90, fill: '#3a3f49', 'shadow-blur': 26, 'shadow-opacity': 0.5 }),
+          h(
+            'layer',
+            { x: 14, y: 100, width: 180, height: 90, origin: '90 0', rotateX: 90, 'preserve-3d': true },
+            h('model', { object, unit: 90, x: 90, y: 90 }),
+          ),
+        ),
+      )
+    const lit = await renderLayer(scene(bulb), { format: 'rgba', meshCache: false })
+    const unlit = await renderLayer(scene(dark), { format: 'rgba', meshCache: false })
+    // Only the floor: a pixel that the unlit render left at the floor's own
+    // blue is floor in both pictures, so a lift there is light landing on the
+    // floor and not the bulb's own face brightening.
+    const floorBlue = unlit.rgba[(150 * 200 + 20) * 4 + 2]!
+    let best = 0
+    let count = 0
+    for (let y = 0; y < 200; y++) {
+      for (let x = 0; x < 200; x++) {
+        const i = (y * 200 + x) * 4
+        if (Math.abs(unlit.rgba[i + 2]! - floorBlue) > 1) continue
+        const lift = lit.rgba[i + 2]! - unlit.rgba[i + 2]!
+        if (lift > 12) count += 1
+        if (lift > best) best = lift
+      }
+    }
+    expect(best).toBeGreaterThan(12)
+    expect(count).toBeGreaterThan(200)
+  }, 60000)
 })

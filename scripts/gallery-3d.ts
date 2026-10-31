@@ -465,6 +465,55 @@ async function animationStrip(name, title, caption) {
   console.log(`${name}.png  ${sheet.width}×${sheet.height}`)
 }
 
+/**
+ * QUALITY-6 §E.2. `3d-model.png`: one cell per three.js material mapping and
+ * per primitive kind, each written as a `.tsx` `object` and rendered through the
+ * same path an author's own `<model object={…}>` takes.
+ *
+ * These cells are separate files rather than strings because they need real
+ * three.js objects: a `DataTexture` built in memory, a `BufferAttribute` of
+ * vertex colours, `LineSegments` and `Points`. A layer string cannot express
+ * them, so the plate is the only place the mappings are looked at.
+ */
+const MODEL_CELLS = [
+  'standard-metal',
+  'standard-rough',
+  'physical-glass',
+  'phong',
+  'map',
+  'vertex-colors',
+  'emissive',
+  'lines-points',
+  'glb',
+]
+
+async function modelPlate(): Promise<void> {
+  const pngs: Buffer[] = []
+  const started = Date.now()
+  for (const name of MODEL_CELLS) {
+    const file = `docs/gallery/3d/model/${name}.tsx`
+    try {
+      const loaded = await loadLayerFile(file)
+      if (loaded.kind !== 'node') throw new Error(`${file} 不是 layer`)
+      const painted = await renderLayer(loaded.node, { baseDir: 'docs/gallery/3d/model' })
+      const errors = painted.report.issues.filter((issue) => issue.level === 'error')
+      if (!painted.png.length || errors.length) {
+        for (const issue of errors) console.log(formatIssueLine(issue))
+        throw new Error(file)
+      }
+      pngs.push(painted.png)
+    } catch (error) {
+      failed += 1
+      console.error(error instanceof Error ? error.message : error)
+    }
+  }
+  if (pngs.length !== MODEL_CELLS.length) return
+  // The cells carry their own caption line, so the sheet has no title strip:
+  // a header would repeat what each cell already says.
+  await composite('3d-model', '', '', 3, pngs)
+  console.log(`3d-model.png  ${((Date.now() - started) / 1000).toFixed(1)}s`)
+}
+
 let failed = 0
 for (const plate of buildPlates()) {
   const pngs: Buffer[] = []
@@ -490,6 +539,15 @@ for (const plate of buildPlates()) {
     console.log(`${plate.sheet}.png  ${((Date.now() - started) / 1000).toFixed(1)}s`)
   }
 }
+// The three.js plate comes after the stills for the same reason: its own
+// failure should not hide the plates that were already written.
+try {
+  await modelPlate()
+} catch (error) {
+  failed += 1
+  console.error(error instanceof Error ? error.message : error)
+}
+
 // The animation plates come after the stills so a still failure does not hide
 // the strips behind it.
 for (const [name, title, caption] of [

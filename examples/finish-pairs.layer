@@ -1,38 +1,32 @@
-<layer width="1640" height="900" background="#101114" color="#f4efe6" font-family="ChillDuanSans" safe="0">
-  <layer camera="1600" width="1640" height="900">
-    <sphere cx="150" cy="300" r="70" fill="#2a6fbe" material="plastic" />
-    <sphere cx="390" cy="300" r="70" fill="#2a6fbe" material="plastic 0.4" />
-    <sphere cx="710" cy="300" r="70" fill="#e4b33a" material="metal" />
-    <sphere cx="950" cy="300" r="70" fill="#e4b33a" material="metal 0.28" />
-    <sphere cx="1270" cy="300" r="70" fill="#e4b33a" material="mirror" />
-    <sphere cx="1510" cy="300" r="70" fill="#e4b33a" material="metal 0.08" />
+<layer width="1640" height="800" background="#101114" color="#f4efe6" font-family="ChillDuanSans" safe="0">
+  <!-- QUALITY-6 §C.2: a floor, and `z` equal to each sphere's radius so the
+       ground plane does not cut the bodies in half (§D). Six pairs, one pair per
+       column: the left sphere of a pair has no `material` and the right one is
+       the named finish, so the two are the same colour and differ only in the
+       surface. -->
+  <layer camera="fov 30, orbit 4 22, distance 1700, at 820 700 0" width="1640" height="800">
+    <ground y="560" rotateX="90" fill="#3c414c" shadow-blur="36" shadow-opacity="0.55" />
+    <layer x="0" y="560" width="1640" height="700" origin="820 0" rotateX="90" preserve-3d>
+      <sphere cx="250" cy="150" r="76" z="76" fill="#2a6fbe" material="plastic" />
+      <sphere cx="480" cy="150" r="76" z="76" fill="#2a6fbe" material="plastic 0.4" />
+      <sphere cx="710" cy="150" r="76" z="76" fill="#e4b33a" material="metal" />
+      <sphere cx="940" cy="150" r="76" z="76" fill="#e4b33a" material="metal 0.28" />
+      <sphere cx="1170" cy="150" r="76" z="76" fill="#e4b33a" material="mirror" />
+      <sphere cx="1400" cy="150" r="76" z="76" fill="#e4b33a" material="metal 0.08" />
 
-    <sphere cx="150" cy="640" r="70" fill="#c45a3a" material="clay" />
-    <sphere cx="390" cy="640" r="70" fill="#c45a3a" />
-    <sphere cx="710" cy="640" r="70" fill="#c86a3e" material="brushed" />
-    <sphere cx="950" cy="640" r="70" fill="#c86a3e" material="metal 0.5" />
-    <sphere cx="1270" cy="640" r="70" fill="#f7f4ee" material="glass 0.08" />
-    <sphere cx="1510" cy="640" r="70" fill="#f7f4ee" material="glass 0.7" />
+      <sphere cx="250" cy="430" r="76" z="76" fill="#c45a3a" material="clay" />
+      <sphere cx="480" cy="430" r="76" z="76" fill="#c45a3a" />
+      <sphere cx="710" cy="430" r="76" z="76" fill="#c86a3e" material="brushed" />
+      <sphere cx="940" cy="430" r="76" z="76" fill="#c86a3e" material="metal 0.5" />
+      <sphere cx="1170" cy="430" r="76" z="76" fill="#f7f4ee" material="glass 0.08" />
+      <sphere cx="1400" cy="430" r="76" z="76" fill="#f7f4ee" material="glass 0.7" />
+    </layer>
   </layer>
 
-  <layer x="64" y="28" anchor-box="ink">
-    <p style="font-size:40px">同一个颜色</p>
+  <layer x="64" y="24" anchor-box="ink">
+    <p style="font-size:38px">同一个颜色</p>
   </layer>
-  <layer x="64" y="84">
-    <p style="font-size:28px; color:#c8c2b6">每对填充相同</p>
+  <layer x="64" y="78">
+    <p style="font-size:26px; color:#c8c2b6">每对填充相同，只差表面</p>
   </layer>
-
-  <layer x="90" y="390" width="140"><p style="font-size:26px; color:#c8c2b6">plastic</p></layer>
-  <layer x="290" y="390" width="190"><p style="font-size:26px; color:#c8c2b6">plastic 0.4</p></layer>
-  <layer x="650" y="390" width="120"><p style="font-size:26px; color:#c8c2b6">metal</p></layer>
-  <layer x="850" y="390" width="190"><p style="font-size:26px; color:#c8c2b6">metal 0.28</p></layer>
-  <layer x="1200" y="390" width="140"><p style="font-size:26px; color:#c8c2b6">mirror</p></layer>
-  <layer x="1400" y="390" width="190"><p style="font-size:26px; color:#c8c2b6">metal 0.08</p></layer>
-
-  <layer x="100" y="730" width="110"><p style="font-size:26px; color:#c8c2b6">clay</p></layer>
-  <layer x="340" y="730" width="110"><p style="font-size:26px; color:#c8c2b6">磨砂</p></layer>
-  <layer x="630" y="730" width="160"><p style="font-size:26px; color:#c8c2b6">brushed</p></layer>
-  <layer x="860" y="730" width="180"><p style="font-size:26px; color:#c8c2b6">metal 0.5</p></layer>
-  <layer x="1170" y="730" width="190"><p style="font-size:26px; color:#c8c2b6">glass 0.08</p></layer>
-  <layer x="1420" y="730" width="170"><p style="font-size:26px; color:#c8c2b6">glass 0.7</p></layer>
 </layer>

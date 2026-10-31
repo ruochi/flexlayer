@@ -1,25 +1,31 @@
-<layer width="1400" height="760" background="#101114" color="#f4efe6" font-family="ChillDuanSans">
-  <layer camera="1600" width="1400" height="760">
-    <sphere cx="160" cy="250" r="88" material="clay" />
-    <sphere cx="430" cy="250" r="88" material="plastic" />
-    <sphere cx="700" cy="250" r="88" material="metal" />
-    <sphere cx="970" cy="250" r="88" material="mirror" />
-    <sphere cx="1240" cy="250" r="88" material="brushed" />
+<layer width="1400" height="760" background="#101114" color="#f4efe6" font-family="ChillDuanSans" safe="0">
+  <!-- QUALITY-6 §C.2: every body sits on the floor. A sphere needs `z` equal to
+       its radius and a box needs `z` equal to half its depth, or the floor
+       plane cuts it in half and hides the lower part (§D). -->
+  <layer camera="fov 30, orbit 6 22, distance 1500, at 700 620 0" width="1400" height="760">
+    <ground y="620" rotateX="90" fill="#3c414c" shadow-blur="34" shadow-opacity="0.55" />
+    <layer x="0" y="620" width="1400" height="620" origin="700 0" rotateX="90" preserve-3d>
+      <sphere cx="260" cy="150" r="78" z="78" material="clay" />
+      <sphere cx="480" cy="150" r="78" z="78" material="plastic" />
+      <sphere cx="700" cy="150" r="78" z="78" material="metal" />
+      <sphere cx="920" cy="150" r="78" z="78" material="mirror" />
+      <sphere cx="1140" cy="150" r="78" z="78" material="brushed" />
 
-    <sphere cx="160" cy="560" r="88" fill="#c45a3a" material="clay" />
-    <sphere cx="430" cy="560" r="88" fill="#2a6fbe" material="plastic" />
-    <sphere cx="700" cy="560" r="88" fill="#e4b33a" material="metal" />
-    <sphere cx="970" cy="560" r="88" fill="#e4b33a" material="mirror" />
-    <sphere cx="1240" cy="560" r="88" fill="#c86a3e" material="brushed" />
-
-    <ground y="680" rotateX="72" fill="#181a20" />
+      <sphere cx="260" cy="380" r="78" z="78" fill="#c45a3a" material="clay" />
+      <sphere cx="480" cy="380" r="78" z="78" fill="#2a6fbe" material="plastic" />
+      <sphere cx="700" cy="380" r="78" z="78" fill="#e4b33a" material="metal" />
+      <sphere cx="920" cy="380" r="78" z="78" fill="#e4b33a" material="mirror" />
+      <sphere cx="1140" cy="380" r="78" z="78" fill="#c86a3e" material="brushed" />
+    </layer>
   </layer>
+
   <layer x="72" y="28">
     <p style="font-size:32px">clay · plastic · metal · mirror · brushed</p>
   </layer>
-  <layer x="96" y="360" width="128"><p style="font-size:24px; color:#c8c2b6">clay</p></layer>
-  <layer x="350" y="360" width="160"><p style="font-size:24px; color:#c8c2b6">plastic</p></layer>
-  <layer x="636" y="360" width="128"><p style="font-size:24px; color:#c8c2b6">metal</p></layer>
-  <layer x="900" y="360" width="140"><p style="font-size:24px; color:#c8c2b6">mirror</p></layer>
-  <layer x="1164" y="360" width="150"><p style="font-size:24px; color:#c8c2b6">brushed</p></layer>
+  <layer x="72" y="80"><p style="font-size:24px; color:#c8c2b6">上排不写 fill，用材质自带色；下排换同一个 fill</p></layer>
+  <layer x="186" y="666" width="148"><p style="font-size:24px; color:#c8c2b6">clay</p></layer>
+  <layer x="406" y="666" width="148"><p style="font-size:24px; color:#c8c2b6">plastic</p></layer>
+  <layer x="626" y="666" width="148"><p style="font-size:24px; color:#c8c2b6">metal</p></layer>
+  <layer x="846" y="666" width="148"><p style="font-size:24px; color:#c8c2b6">mirror</p></layer>
+  <layer x="1066" y="666" width="148"><p style="font-size:24px; color:#c8c2b6">brushed</p></layer>
 </layer>

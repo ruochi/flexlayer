@@ -9,6 +9,7 @@ import { writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadLayerFile } from '../src/load-source.ts'
+import { renderFrames } from '../src/frame.ts'
 import { renderLayer } from '../src/render.ts'
 
 const scenes = {
@@ -83,6 +84,33 @@ rows.push({
   sha256: createHash('sha256').update(mac.png).digest('hex'),
 })
 console.log(`macbook-pro  ${rows.at(-1).ms} ms  png ${mac.png.length}`)
+
+/**
+ * QUALITY-6 §F.2.3. A 30-frame camera orbit, end to end.
+ *
+ * Every other row here is one still, so none of them can see the per-frame cost
+ * that only an animation pays. The orbit is the §7.2 bench: two bodies on a
+ * floor, the camera turning 80° over 30 frames. Nothing in the scene changes but
+ * the camera, which is the point — the geometry, the shadow map and the contact
+ * map should all be reused, and the number here is what says whether they are.
+ *
+ * Budget is 8 s for the run (QUALITY-6 §F.2.3), which is 266 ms a frame at
+ * 640×420. The warmup render is one frame, so the first-frame compile cost does
+ * not land in the measurement; the batch below is the same call the animation
+ * path makes.
+ */
+const orbitFile = fileURLToPath(new URL('../docs/gallery/3d/anim/orbit.tsx', import.meta.url))
+const orbit = await loadLayerFile(orbitFile)
+if (orbit.kind !== 'composition') throw new Error('orbit.tsx 不是 Composition')
+for await (const _ of renderFrames(orbit.composition, { from: 0, to: 0, baseDir: dirname(orbitFile) })) {
+  // one frame to warm the builder and the native heap
+}
+const tOrbit = performance.now()
+let orbitFrames = 0
+for await (const _ of renderFrames(orbit.composition, { baseDir: dirname(orbitFile) })) orbitFrames += 1
+const orbitMs = performance.now() - tOrbit
+rows.push({ name: 'anim-orbit-30', ms: Math.round(orbitMs), frames: orbitFrames, pngBytes: 0, rssBytes: 0, sha256: '' })
+console.log(`anim-orbit-30  ${orbitMs.toFixed(0)} ms  ${orbitFrames} frames  ${(orbitMs / Math.max(1, orbitFrames)).toFixed(0)} ms/frame`)
 
 const report = { at: new Date().toISOString(), scenes: rows }
 const text = JSON.stringify(report, null, 2)

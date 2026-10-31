@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.17.4
+
+The 3D examples are measured now. `scripts/examples-gallery.mjs` renders all thirteen of them, writes the pictures beside the current build, and scores three things a picture alone hides: `contactRatio` (how much of each body's bottom edge sits in its own contact shadow), `zFight` (the share of neighbouring pixels whose luma combs at high contrast inside one owner), and the example's own `check`. Every example that writes a `<ground>` has to reach 0.8; `wire.layer` is the one plate deliberately in space and is not judged. `docs/gallery/examples/` holds the pictures and `examples-metrics.json`.
+
+`3d-model.png` is a new plate: nine cells, each one three.js object handed to `<model object>`, on the bench the material cells already use. `MeshStandardMaterial` at metal and at rough, `MeshPhysicalMaterial` with transmission 1, `MeshPhongMaterial` shininess 80, an in-memory `map`, vertex colours, an `emissive` body, `LineSegments` and `Points` mixed with a solid, and the two shipped glb files. Each mapping rule in SPEC now has a pixel assertion: the three.js path and the equivalent written `material` render bit-identically, and a different mapping is the control.
+
+Three faults the example pictures exposed, each pinned by a test. A `model` written with `width`/`height` reports the ink of the fitted geometry instead of the authored box, so a torus knot that sits inside its box no longer reports `overflow-canvas`. A written `material` on a `<model>` now overrides the glb's own `metalness` rather than being overridden by it: `material="metal 0.2"` used to render bit-identically to `MeshPhongMaterial`, which is only possible if the metal never reached the shader. An `emissive` body lights the ground around it, not only its own faces, and a `ground` authored facing down takes the glow on the side that faces up.
+
+The examples themselves were restaged rather than the renderer bent to fit them: each 3D example now has a `<ground>`, a camera that shows a top, a front, and a side, and bodies seated with `origin="W/2 0"` so `depth` does not put them half under the floor.
+
+`bench-3d` gains `anim-orbit-30`: the §7.2 camera orbit, 30 frames end to end, budget 8 s. It is the only row that pays per-frame cost, so it is the one that can see whether the geometry, shadow map, and contact map are reused across an animation.
+
 ## 0.17.2
 
 `native/flexlayer-render` is rebuilt from `flexlayer-render` commit `e72b234` (`0.0.2+cap1080`). `paint_ink` now follows `path` / `polygon` geometry for `kind: line` nodes instead of filling the axis-aligned box. A sized `<layer filter="drop-shadow(...)">` that groups white capsule paths no longer paints a rectangular semi-transparent veil over the layer box; the shadow follows content alpha again (same as 0.13.3 canvas filter behavior). The unlimited private build under `flexlayer-render/dist/unlimited` is rebuilt from the same commit.

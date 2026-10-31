@@ -189,6 +189,10 @@ Text, icons, charts, and layout stay here.
 | How one attribute is written | [docs/attrs.json](docs/attrs.json), look up the name |
 | A Chinese face | 黑体, 宋体, 楷体, 仿宋, and 圆体 are Chill faces in the catalog: 寒蝉端黑体, 寒蝉端黑宋, 寒蝉楷体, 寒蝉活仿宋, 寒蝉全圆体. They download on first use and are not packaged. The wider list is in [docs/RESOURCES.md](docs/RESOURCES.md), in the order 最推荐, 推荐, 其他, 英文, 等宽. 等宽 is JetBrains Mono and Space Mono. Other names need their own font file |
 
+## The 3D examples
+
+`npx tsx scripts/examples-gallery.mjs` renders every 3D example under `examples/`, writes the pictures to `docs/gallery/examples/`, and scores contact, z-fighting, and each example's own report. The numbers and gates are in [docs/GALLERY-3D.md](docs/GALLERY-3D.md). A plate that writes a `<ground>` has to seat its bodies (`contactRatio` ≥ 0.8); `wire.layer` is the one deliberate exception, because a wireframe study has no floor.
+
 HTML and `display:flex` render as CSS. Defaults are not copied here.
 
 ## Repository
@@ -198,6 +202,6 @@ HTML and `display:flex` render as CSS. Defaults are not copied here.
 - `test/golden/manga-hatch.png` is gone. The manga hatch is compared against the legacy raster in `flexlayer-render/docs/quality/legacy-reference/`, resolved at run time through `FLEXLAYER_LEGACY_REFERENCE`; CI points that variable at the vendored renderer checkout. A missing reference fails `--check` instead of passing quietly, so no copy of a retired renderer's output is committed here.
 - Use font names from [docs/RESOURCES.md](docs/RESOURCES.md). Do not invent font-file URLs. A photo, a real object, or a material comes from the asset service, not from a URL you make up.
 - Implementation notes are in [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md). Picking and author lights are not built yet. See [docs/proposals/3D.md](docs/proposals/3D.md). three.js geometry goes through `<model object>`.
-- Automation: `npm test`, `npm run gallery`, `npm run gallery:3d`. The 3D gates are `npx tsx scripts/gallery-metrics.mjs --check`, `npx tsx scripts/check-golden.mjs`, and the budget pair `npx tsx scripts/bench-3d.mjs --out bench-3d.json` then `npx tsx scripts/check-budget.mjs bench-3d.json`. `bench-3d` refuses a scene whose report carries an error, so an unknown tag cannot pass for a rendered picture.
+- Automation: `npm test`, `npm run gallery`, `npm run gallery:3d`. The 3D gates are `npx tsx scripts/gallery-metrics.mjs --check`, `npx tsx scripts/check-golden.mjs`, `npx tsx scripts/examples-gallery.mjs`, and the budget pair `npx tsx scripts/bench-3d.mjs --out bench-3d.json` then `npx tsx scripts/check-budget.mjs bench-3d.json`. `bench-3d` refuses a scene whose report carries an error, so an unknown tag cannot pass for a rendered picture.
 - `node scripts/addon-hash.mjs` refuses a `native/flexlayer-render/BUILD.json` whose three binaries came from different commits, from a dirty tree, or whose `engine()` disagrees with the record. `flexlayer-render/scripts/build-manifest.mjs` writes one platform's record beside the build, and `scripts/merge-build-manifest.mjs` folds the three into `BUILD.json`.
 - When merging to `main`, bump the patch version in the root `package.json` and `package-lock.json`. If a still-working old syntax is removed, bump the minor version.

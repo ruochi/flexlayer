@@ -45,6 +45,7 @@ What the manga cell must read as:
 | [3d-materials.png](gallery/3d-materials.png) | sixteen finishes | Every cell is the same cluster: a wall, a rounded box, a sphere, and a cylinder or a neon torus, on a ground. One finish changes. Neighbors have to be distinguishable. The matte cell's camera-facing face stays the written fill. The two glass cells put the sphere in front of red, white, and blue stripes. |
 | [3d-camera.png](gallery/3d-camera.png) | `orbit 28 32`, `orbit 10 46` at distance 1200, `orbit 62 22` at distance 1040, `aperture 14` | Three-quarter, from above, and from the side. Each view fills its cell. The depth-of-field cell is soft away from the middle. The blur fades out. |
 | [3d-lines.png](gallery/3d-lines.png) | one drawing | A different stage, framed on the row: `fov 36, orbit 32 22, distance 1120, at 640 440 0` on a 1180×680 layer set into the 1180×480 sheet. A cylinder through a box, both with `stroke` and `hidden`. A turned box with `rx`. A cylinder with rim `rx`. A sphere outline. A plate with a hole. A tube elbow with `halo`. |
+| [3d-model.png](gallery/3d-model.png) | nine three.js cells | `standard-metal`, `standard-rough`, `physical-glass`, `phong`, `map`, `vertex-colors`, `emissive`, `lines-points`, and the two shipped glb files. Every cell is one `<model object>` on the same bench as the material cells, so a difference between cells can only come from the mesh and its material. The emissive cell has to light the floor beside it, not only its own faces. The line and point cell has to be cut by the box in front of it, which is what says they share the depth buffer. The glb cell is the check that node transforms survive the loader: a dropped transform floats or sinks the diamond. |
 | [3d-lights.png](gallery/3d-lights.png) | six author lights, then no light | One small scene — a red plastic box, a matte white box, a metal sphere, a mid-tone floor — with only the `<light>` changed. The last cell writes none and is the control. Each light has to move the picture against that control (`lightEffectMin`), a `spot` has to draw a disc that only falls outward (`spotDiscRiseMin`), a `point` pool has to fall off (`pointFalloffDropMin`), and a lamp has to lift the matte box's dark face (`matteLitRiseMin`). The floor is mid-tone on purpose: on cream paper a lamp clips and the disc is unreadable. |
 
 ## Animation plates (QUALITY-6 §B)
@@ -66,6 +67,18 @@ The numbers come from `scripts/anim-metrics.mjs` (`npm run anim:metrics -- --che
 A contact sheet wider or taller than the 1920 edge shrinks its cells rather than failing with `output-limit` (§B.4).
 
 Material cells, in order: `matte`, `clay`, `clay` with `fill`, `plastic 0.12`, `plastic 0.85`, `metal 0.08`, `metal 0.8`, `mirror`, `brushed`, `glass 0.06`, `glass 0.72`, `clearcoat 1`, `anisotropy 0.9`, `sheen 0.85`, `lamp`, `neon`.
+
+## The examples (QUALITY-6 §C)
+
+The files under `examples/` are what a new author reads first, and no earlier round's plates covered them. `npx tsx scripts/examples-gallery.mjs` renders all thirteen and writes the pictures plus `examples-metrics.json` to `docs/gallery/examples/`.
+
+| Number | Meaning | Gate |
+| --- | --- | --- |
+| `contactRatio` | How much of each body's bottom edge sits in its own contact shadow. The open floor is the luma covering the most pixels; a column is seated when any of the three rows under the body's last painted row is 6 or more away from it | 0.8 on every plate that writes a `<ground>` |
+| `zFight` | Share of neighbouring pixel pairs inside one owner whose luma reverses twice at contrast 24 or more. Two coplanar faces comb; a drawn outline is one reversal and does not count | Reported, not gated |
+| `errors` | The example's own report | 0 |
+
+`wire.layer` is `ground: false`: a wireframe study has no floor, and adding one would hide the lines it is about. Glass bodies are exempt from the contact score — SPEC says glass keeps its own colour at the rim and writes no hard shadow — and the report's `material` field is what names them, so a plate does not have to list its own tags.
 
 ## A new plate
 

@@ -1,0 +1,122 @@
+{
+  "meshes.layer": {
+    "width": 960,
+    "height": 640,
+    "ground": true,
+    "contactRatio": 1,
+    "zFight": 0.0001,
+    "errors": [],
+    "warnings": []
+  },
+  "perspective.layer": {
+    "width": 880,
+    "height": 600,
+    "ground": true,
+    "contactRatio": 1,
+    "zFight": 0,
+    "errors": [],
+    "warnings": []
+  },
+  "solids.layer": {
+    "width": 960,
+    "height": 600,
+    "ground": true,
+    "contactRatio": 1,
+    "zFight": 0,
+    "errors": [],
+    "warnings": []
+  },
+  "wire.layer": {
+    "width": 960,
+    "height": 540,
+    "ground": false,
+    "contactRatio": null,
+    "zFight": 0.0001,
+    "errors": [],
+    "warnings": [
+      "invalid-attr",
+      "invalid-attr"
+    ]
+  },
+  "glass.layer": {
+    "width": 1520,
+    "height": 1000,
+    "ground": true,
+    "contactRatio": 0.845,
+    "zFight": 0,
+    "errors": [],
+    "warnings": []
+  },
+  "product-shapes.layer": {
+    "width": 1280,
+    "height": 760,
+    "ground": true,
+    "contactRatio": 0.896,
+    "zFight": 0.0001,
+    "errors": [],
+    "warnings": []
+  },
+  "camera.layer": {
+    "width": 640,
+    "height": 470,
+    "ground": true,
+    "contactRatio": 1,
+    "zFight": 0,
+    "errors": [],
+    "warnings": []
+  },
+  "materials.layer": {
+    "width": 1520,
+    "height": 1080,
+    "ground": true,
+    "contactRatio": 0.978,
+    "zFight": 0,
+    "errors": [],
+    "warnings": []
+  },
+  "brushed.layer": {
+    "width": 1400,
+    "height": 760,
+    "ground": true,
+    "contactRatio": 0.983,
+    "zFight": 0.0001,
+    "errors": [],
+    "warnings": []
+  },
+  "finish-mix.layer": {
+    "width": 1760,
+    "height": 820,
+    "ground": true,
+    "contactRatio": 0.992,
+    "zFight": 0.0001,
+    "errors": [],
+    "warnings": []
+  },
+  "finish-pairs.layer": {
+    "width": 1640,
+    "height": 800,
+    "ground": true,
+    "contactRatio": 0.99,
+    "zFight": 0,
+    "errors": [],
+    "warnings": []
+  },
+  "matcaps.layer": {
+    "width": 1400,
+    "height": 760,
+    "ground": true,
+    "contactRatio": 0.996,
+    "zFight": 0.0001,
+    "errors": [],
+    "warnings": []
+  },
+  "three-assembly.tsx": {
+    "width": 960,
+    "height": 640,
+    "ground": true,
+    "contactRatio": 0.948,
+    "zFight": 0,
+    "errors": [],
+    "warnings": []
+  }
+}
