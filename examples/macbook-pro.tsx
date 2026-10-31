@@ -3,10 +3,9 @@
 // 银色 16 英寸 MacBook Pro 海报，以后渲染用这个场景。
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
-const SILVER = '#eceff3'
-// Soft clearcoat plastic: dual-blind accepted silver colorway (score 6); full
-// metalness still Space Black (§9.2). Keep iterating for aluminum streak.
-const SHELL = 'finish plastic, color #eceff3, roughness 0.28, clearcoat 0.55'
+const SILVER = '#e8ecf2'
+// metalness just into product-metal band (≥0.5) + clearcoat for Al streak (§9.2).
+const SHELL = 'finish metal, color #e8ecf2, roughness 0.34, metalness 0.58, clearcoat 0.4'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 

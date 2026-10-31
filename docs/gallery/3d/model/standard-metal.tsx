@@ -7,8 +7,15 @@ import * as THREE from 'three'
 // `material="metal 0.2"`.
 const mesh = new THREE.Mesh(
   new THREE.BoxGeometry(1, 1, 1),
-  // Slightly lighter albedo so the metal-1 top does not read near-black (§9.2).
-  new THREE.MeshStandardMaterial({ color: '#d4d9df', metalness: 1, roughness: 0.22 }),
+  // Physical + clearcoat: Standard alone read flat matte on the top (§9.2).
+  // Still metalness ≥ 0.5 so SPEC maps to metal; roughness keeps a visible lobe.
+  new THREE.MeshPhysicalMaterial({
+    color: '#e2e6eb',
+    metalness: 1,
+    roughness: 0.22,
+    clearcoat: 0.55,
+    clearcoatRoughness: 0.12,
+  }),
 )
 
 export default layer.create(
@@ -20,7 +27,7 @@ export default layer.create(
       </layer>
     </layer>
     <layer x={12} y={272}>
-      <p style="font-size:19px; color:#b7aea2">Standard · metal 1 · rough 0.2</p>
+      <p style="font-size:19px; color:#b7aea2">Physical · metal 1 · rough 0.22 · coat</p>
     </layer>
   </layer>,
 )
