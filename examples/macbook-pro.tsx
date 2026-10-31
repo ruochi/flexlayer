@@ -3,10 +3,11 @@
 // 银色 16 英寸 MacBook Pro 海报，以后渲染用这个场景。
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
-const SILVER = '#c6c9ce'
-const SHELL = 'metal'
-const KEY = '#222327'
-const WELL = '#060607'
+const SILVER = '#e8ecf2'
+// Product aluminum; clearcoat off (wet chrome lip read).
+const SHELL = 'finish metal, color #b8bcc2, roughness 0.86, metalness 0.18, clearcoat 0'
+const KEY = '#2e3138'
+const WELL = '#1a1c20'
 
 const W = 980
 const D = 670
@@ -63,6 +64,33 @@ function keys(): Key[] {
 
 const keyPath = keys().map((k) => roundRect(k.w, k.h, 4, k.x, k.y)).join(' ')
 
+/** Visible legends for the letter rows (blank caps failed §9.2 dual-blind). */
+const KEY_LEGENDS: (string | null)[][] = [
+  [null, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', null],
+  ['⇥', 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '[', ']', '⌫'],
+  ['⇪', 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ';', "'", '↩', null],
+  [null, 'Z', 'X', 'C', 'V', 'B', 'N', 'M', ',', '.', '/', null],
+  [null, null, null, null, null, null, null, null, null, null, null, null],
+  [null, null, null, null, null, null, null],
+]
+
+function keyLegends() {
+  const out: { x: number; y: number; w: number; h: number; label: string }[] = []
+  ROWS.forEach((row, r) => {
+    let u = 0
+    const y = KB.y + 8 + r * PITCH
+    const labels = KEY_LEGENDS[r] || []
+    row.forEach((span, i) => {
+      const label = labels[i]
+      const x = KB.x + 8 + u * PITCH
+      const w = span * PITCH - GAP
+      const h = PITCH - GAP
+      if (label) out.push({ x, y, w, h, label })
+      u += span
+    })
+  })
+  return out
+}
 
 const WELL_BOX = { x: KB.x, y: KB.y, w: 14.5 * PITCH + 10, h: 6 * PITCH + 10 }
 
@@ -103,6 +131,11 @@ function Base() {
         <rect x={padX} y={padY} width={PAD.w} height={PAD.h} rx="12" fill="linear-gradient(180deg, #d0d3d7 0%, #c3c6cb 100%)" />
       </layer>
       <path d={keyPath} fill={KEY} material="plastic" depth="4" z={TOP + 1.6} stroke="none" cast-shadow="false" />
+      {keyLegends().map((k) => (
+        <layer x={k.x + k.w / 2} y={k.y + k.h / 2 - 2} z={TOP + 4} anchor="center" cast-shadow="false">
+          <p style="font-family:Inter; font-size:11px; font-weight:600; color:#b8bcc4">{k.label}</p>
+        </layer>
+      ))}
       <rect x="70" y="-8" width={W - 140} height="18" rx="9" fill="#2a2b2f" material="plastic" depth="18" z={TOP - 3} cast-shadow="false" />
       <layer x={W - T / 2} y="0" width={T} height={D} origin={`${T / 2} 0`} rotateY="90" z="0.3" cast-shadow="false">
         <rect x={T / 2 - 4} y="214" width="8" height="30" rx="3" fill="#1c1d20" />
@@ -174,10 +207,13 @@ function Lid() {
 export default (
   <layer width="1440" height="1800" background="#f6f3ee" color="#1c1916" min-font="10" noise="0.012">
     <rect x="0" y="0" width="1440" height="1800" fill="linear-gradient(180deg, #f7f4ef 0%, #efe8df 100%)" />
-    <layer width="1440" height="1800" camera="fov 28, orbit 16 14">
+    <layer width="1440" height="1800" camera="fov 28, orbit 16 14" light="world">
+      {/* Soft fill so silver shell keeps midtones under the key (§9.2). */}
+      <light type="hemisphere" intensity="0.85" color="#fff8f0" ground-color="#d2ccc4" />
+      <light type="directional" intensity="0.45" color="#fff5ea" x="200" y="-400" z="600" target="0 0 0" />
       <Lid />
       <Base />
-      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="36" shadow-opacity="0.34" />
+      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="64" shadow-opacity="0.32" />
     </layer>
     <layer x="80" y="66">
       <p style="font-family:Inter; font-size:13px; font-weight:700; letter-spacing:6.2px; color:#c88255">PRO PERFORMANCE · M4 MAX</p>
@@ -193,8 +229,8 @@ export default (
     <layer x="82" y="232">
       <h2 style="font-size:44px; font-weight:700; letter-spacing:-0.8px; line-height:1.15; color:#1c1916">把创意，带到更远。</h2>
     </layer>
-    <layer x="84" y="300" width="760">
-      <p style="font-size:18px; line-height:1.7; color:#5e564e">16 英寸 · M4 Max · 为专业创作而生</p>
+    <layer x="84" y="300" width="280">
+      <p style="font-size:18px; line-height:1.7; color:#5e564e">16 英寸 · M4 Max</p>
     </layer>
     <layer x="760" y="1340" width="720" anchor="top">
       <p style="width:720px; font-size:14px; font-weight:600; letter-spacing:2.2px; color:#5e564e; text-align:center">16 英寸 · 银色 · M4 Max</p>

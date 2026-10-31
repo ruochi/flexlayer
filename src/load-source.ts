@@ -296,20 +296,24 @@ function withAbsoluteLocs(loaded: ExecutedLayer, file: string): ExecutedLayer {
 
 /** `.layer` 原样读出。`.tsx` / `.jsx` / `.ts` / `.js` 执行后得到节点或 Composition。 */
 export async function loadLayerFile(file: string): Promise<LoadedLayer> {
-  const source = await readFile(file, 'utf8')
-  if (!CODE_EXT.has(extname(file).toLowerCase())) return { kind: 'markup', source }
-  const fonts = staticLayerFonts(source, file)
-  if (fonts.length > 0) await registerFontsFromDocument(fonts, dirname(file))
-  setLayerBaseDir(dirname(file))
+  // esbuild's `absWorkingDir` refuses a relative path. Callers often pass a
+  // repo-relative name (`docs/gallery/3d/model/….tsx`); resolve it here so a
+  // relative argument never reaches the bundler (QUALITY-6 gallery:3d on CI).
+  const abs = resolve(file)
+  const source = await readFile(abs, 'utf8')
+  if (!CODE_EXT.has(extname(abs).toLowerCase())) return { kind: 'markup', source }
+  const fonts = staticLayerFonts(source, abs)
+  if (fonts.length > 0) await registerFontsFromDocument(fonts, dirname(abs))
+  setLayerBaseDir(dirname(abs))
   await ensureAuthorSource(source)
   beginGeomIssues()
   let loaded: ExecutedLayer
   let geom: Issue[]
   try {
-    loaded = withAbsoluteLocs(resolveExport(await importCode(file), file), file)
+    loaded = withAbsoluteLocs(resolveExport(await importCode(abs), abs), abs)
   } finally {
     geom = endGeomIssues()
   }
-  const issues = [...nondeterministicIssues(source, file), ...geom]
+  const issues = [...nondeterministicIssues(source, abs), ...geom]
   return { ...loaded, issues }
 }

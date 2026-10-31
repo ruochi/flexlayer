@@ -24,13 +24,13 @@ function bench(camera = BENCH_CAMERA, extra = ''): string {
       <rect id="plinth" x="90" y="8" width="740" height="12" depth="170" rx="3" fill="#f6f2ea" />
       <rect id="red-box" x="70" y="48" width="190" height="130" depth="100" rx="18" fill="#d23b3b" material="plastic 0.28" />
       <rect id="white-box" x="276" y="40" width="150" height="140" depth="180" rx="12" fill="#f4f1ea" />
-      <rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#c5c9ce" material="metal 0.18" />
-      <sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#d8dee4" material="metal 0.04" />
+      <rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#c5c9ce" material="metal 0.32" />
+      <sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#d8dee4" material="metal 0.12" />
       <sphere id="blue-float" cx="160" cy="200" r="34" z="140" fill="#2a6fbe" material="plastic 0.42" />
       <rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#e23b2f" />
       <rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#f7f4ee" />
       <rect id="stripe-blue" x="282" y="200" width="36" height="78" depth="160" fill="#2a6fbe" />
-      <sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f4fffb99" material="glass 0.07" />
+      <sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f4fffbcc" material="glass 0.07" />
       <circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />
       <layer x="400" y="230">
         <path id="hole" d="M0 0 H120 V84 H0 Z M28 18 V66 H92 V18 Z" depth="14" fill="#1f8a5b" material="plastic 0.3" />
@@ -125,15 +125,16 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
+    // Box must also be glass — solid charcoal was §9.2 "glass boxes solid black".
     label: 'glass 0.06',
-    box: 'fill="#3a342e"',
+    box: 'fill="#f4fffbcc" material="glass 0.06"',
     sphere: 'fill="#f4fffbcc" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#3a342e"',
+    box: 'fill="#f4fffbcc" material="glass 0.72"',
     sphere: 'fill="#f4fffbcc" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
