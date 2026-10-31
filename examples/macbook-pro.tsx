@@ -5,7 +5,7 @@
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
 const SILVER = '#e8ecf2'
 // Product aluminum; clearcoat off (wet chrome lip read).
-const SHELL = 'finish metal, color #b8bcc2, roughness 0.92, metalness 0.12, clearcoat 0'
+const SHELL = 'finish metal, color #bcc0c5, roughness 0.94, metalness 0.08, clearcoat 0'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 
