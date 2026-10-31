@@ -178,10 +178,11 @@ export default (
     <rect x="0" y="0" width="1440" height="1800" fill="linear-gradient(180deg, #f7f4ef 0%, #efe8df 100%)" />
     <layer width="1440" height="1800" camera="fov 28, orbit 16 14" light="world">
       {/* Soft fill so silver shell keeps midtones under the key (§9.2). */}
-      <light type="hemisphere" intensity="0.55" color="#fff6ea" ground-color="#c8c2b8" />
+      <light type="hemisphere" intensity="0.85" color="#fff8f0" ground-color="#d2ccc4" />
+      <light type="directional" intensity="0.45" color="#fff5ea" x="200" y="-400" z="600" target="0 0 0" />
       <Lid />
       <Base />
-      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="36" shadow-opacity="0.28" />
+      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="36" shadow-opacity="0.22" />
     </layer>
     <layer x="80" y="66">
       <p style="font-family:Inter; font-size:13px; font-weight:700; letter-spacing:6.2px; color:#c88255">PRO PERFORMANCE · M4 MAX</p>
