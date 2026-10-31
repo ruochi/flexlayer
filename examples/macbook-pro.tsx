@@ -3,10 +3,10 @@
 // 银色 16 英寸 MacBook Pro 海报，以后渲染用这个场景。
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
-const SILVER = '#e6eaef'
-// Hybrid: metalness under 0.5 uses dielectric env (not ink-dark metal path) while
-// clearcoat gives a hard shell highlight (§9.2 dual-blind).
-const SHELL = 'finish metal, color #e6eaef, roughness 0.36, metalness 0.42, clearcoat 0.55'
+const SILVER = '#eceff3'
+// Soft clearcoat plastic: dual-blind accepted silver colorway (score 6); full
+// metalness still Space Black (§9.2). Keep iterating for aluminum streak.
+const SHELL = 'finish plastic, color #eceff3, roughness 0.28, clearcoat 0.55'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 
