@@ -4,8 +4,9 @@
     <layer x="28" y="220" width="400" height="190" origin="200 0" rotateX="90" preserve-3d>
       <rect id="back" x="-30" y="-90" width="440" height="14" depth="300" fill="#f4efe6" />
       <rect id="accent" x="280" y="-50" width="100" height="14" depth="180" fill="#f0a060" />
-      <sphere id="key" cx="90" cy="-10" r="34" z="150" material="lamp" />
-      <sphere id="key2" cx="320" cy="-20" r="18" z="110" material="lamp" />
+      <sphere id="key" cx="90" cy="-10" r="36" z="160" material="lamp" />
+      <sphere id="key2" cx="300" cy="-30" r="24" z="130" material="lamp" />
+      <rect id="bounce" x="40" y="-70" width="200" height="8" depth="220" fill="#fff8f0" />
       <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" fill="#f6f2ea" />
       <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" fill="#d23b3b" material="plastic 0.85" />
       

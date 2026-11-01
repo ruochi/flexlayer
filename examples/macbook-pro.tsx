@@ -4,8 +4,9 @@
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
 // Darker shell so lid bezel specular cannot read as chrome (§9.2).
-const SILVER = '#7c8188'
-const SHELL = 'plastic 0.842'
+const SILVER = '#6e737a'
+const SHELL = 'plastic 0.845'
+const FRONT = '#555960'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 
@@ -121,6 +122,8 @@ function Base() {
   return (
     <layer x={STAGE.x} y={STAGE.groundY - TOP} width={W} height={D} origin={`${W / 2} 0`} rotateX="90" preserve-3d>
       <rect width={W} height={D} rx="24" fill={SILVER} material={SHELL} depth={T} stroke="none" />
+      {/* Darker front lip so the extruded front face cannot read as chrome. */}
+      <rect x="12" y={D - 14} width={W - 24} height="14" rx="6" fill={FRONT} material="plastic 0.84" depth="6" z={TOP - 2} stroke="none" cast-shadow="false" />
       <layer x="0" y="0" width={W} height={D} z={TOP + 0.2} cast-shadow="false">
         <rect x={WELL_BOX.x} y={WELL_BOX.y} width={WELL_BOX.w} height={WELL_BOX.h} rx="8" fill={WELL} />
         <rect x={KB.x - GRILLE_W - 18} y={KB.y + 4} width={GRILLE_W} height={WELL_BOX.h - 8} rx="4" fill="#4a4c51" />
@@ -207,13 +210,13 @@ function Lid() {
 export default (
   <layer width="1440" height="1800" background="#f6f3ee" color="#1c1916" min-font="10" noise="0.012">
     <rect x="0" y="0" width="1440" height="1800" fill="linear-gradient(180deg, #f7f4ef 0%, #efe8df 100%)" />
-    <layer width="1440" height="1800" camera="fov 28, orbit 16 14" light="world" grade="matte 0.55">
-      {/* Soft fill + matte grade crush chrome lip under dual-blind (§9.2). */}
-      <light type="hemisphere" intensity="0.64" color="#fff8f0" ground-color="#d2ccc4" />
-      <light type="directional" intensity="0.22" color="#fff5ea" x="200" y="-400" z="600" target="0 0 0" />
+    <layer width="1440" height="1800" camera="fov 28, orbit 16 14" light="world" grade="matte 0.7">
+      {/* Stronger matte + darker front bevel kill chrome lip (§9.2). */}
+      <light type="hemisphere" intensity="0.58" color="#fff8f0" ground-color="#d2ccc4" />
+      <light type="directional" intensity="0.18" color="#fff5ea" x="200" y="-400" z="600" target="0 0 0" />
       <Lid />
       <Base />
-      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="64" shadow-opacity="0.32" />
+      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="72" shadow-opacity="0.28" />
     </layer>
     <layer x="80" y="66">
       <p style="font-family:Inter; font-size:13px; font-weight:700; letter-spacing:6.2px; color:#c88255">PRO PERFORMANCE · M4 MAX</p>
