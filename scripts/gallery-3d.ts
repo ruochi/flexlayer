@@ -130,18 +130,17 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Light mint glass — deep teal hid the sphere (glassbody materials 4).
-    // Gate stripe footprint near the sphere (frost SSIM); no side columns
-    // stacked on the box (opaque RGB read).
+    // Mint glass + outside stroke so the box edge reads as glass, not as the
+    // RWB gate columns beside it (lightglass dual-blind materials 5).
     label: 'glass 0.06',
-    box: 'fill="#c5ddd6a0" material="glass 0.06"',
+    box: 'fill="#c5ddd6a0" material="glass 0.06" stroke="2.5 #f4fffb outside"',
     sphere: 'fill="#daf0eab8" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#c5ddd6a0" material="glass 0.72"',
+    box: 'fill="#c5ddd6a0" material="glass 0.72" stroke="2.5 #f4fffb outside"',
     sphere: 'fill="#daf0eab8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
@@ -181,8 +180,8 @@ const FINISHES: Finish[] = [
 ]
 
 function cluster(finish: Finish): string {
-  // Exact gate footprint that held frost SSIM ≤0.3 (y=-8). Light mint glass
-  // body is the look lever — do not move stripes off the sphere again.
+  // Gate footprint kept; sphere pulled forward (z) so stripes read behind glass
+  // instead of as the glass body (lightglass dual-blind).
   const stripes = finish.stripes
     ? `      <rect id="stripe-red" x="168" y="-8" width="28" height="40" depth="160" fill="#e23b2f" />
       <rect id="stripe-white" x="196" y="-8" width="28" height="40" depth="160" fill="#f7f4ee" />
@@ -190,7 +189,9 @@ function cluster(finish: Finish): string {
     : ''
   const sphere = finish.lamp
     ? `<sphere id="sphere" cx="210" cy="78" r="16" z="120" ${finish.sphere} />`
-    : `<sphere id="sphere" cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
+    : finish.stripes
+      ? `<sphere id="sphere" cx="210" cy="70" r="30" z="48" ${finish.sphere} />`
+      : `<sphere id="sphere" cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
   // Gold accent sphere (not finish.side): metal cells used to paint two
   // identical chrome spheres and dual-blind called them inseparable clones
   // (§9.2). Extruded-circle sides also scooped hollow. Neon keeps its torus.
