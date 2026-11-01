@@ -1177,7 +1177,7 @@ function glassTransmit(cell, open) {
 
 /** Drop the glass sphere so the stripes/plinth behind it are the SSIM reference. */
 function stripGlassSphere(source) {
-  return source.replace(/<sphere\b[^>]*\/>/g, '')
+  return source.replace(/<sphere\b[^>]*\bid=["']sphere["'][^>]*\/>/g, '')
 }
 
 async function renderGlassOpen(stem) {
