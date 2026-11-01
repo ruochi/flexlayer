@@ -180,13 +180,12 @@ const FINISHES: Finish[] = [
 ]
 
 function cluster(finish: Finish): string {
-  // Behind the glass box (x overlaps 28–148, y toward the back wall) so clear
-  // glass refracts columns. Side-of-box stripes read as solid RGB slabs
-  // (envfill dual-blind). Depth kept short of the far-wall tip that blew SSIM.
+  // Gate footprint (near sphere) that held frost SSIM ≤0.3 + clear edge ≥12.
+  // Tinted glass box keeps its own body so side columns are not the only read.
   const stripes = finish.stripes
-    ? `      <rect id="stripe-red" x="48" y="-48" width="24" height="70" depth="120" fill="#e23b2f" />
-      <rect id="stripe-white" x="74" y="-48" width="24" height="70" depth="120" fill="#f7f4ee" />
-      <rect id="stripe-blue" x="100" y="-48" width="24" height="70" depth="120" fill="#2a6fbe" />`
+    ? `      <rect id="stripe-red" x="168" y="-8" width="28" height="40" depth="160" fill="#e23b2f" />
+      <rect id="stripe-white" x="196" y="-8" width="28" height="40" depth="160" fill="#f7f4ee" />
+      <rect id="stripe-blue" x="224" y="-8" width="28" height="40" depth="160" fill="#2a6fbe" />`
     : ''
   const sphere = finish.lamp
     ? `<sphere id="sphere" cx="210" cy="78" r="16" z="120" ${finish.sphere} />`
@@ -343,7 +342,7 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
             '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="40" shadow-opacity="0.5" />',
             // Softer contact — dual-blind still cites jagged metal-plate rim (§9.2).
             // Keep plate metalness ≤0.62 / r≥0.48 — brighter plate blew SSR >0.01.
-            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="96" shadow-opacity="0.36" />',
+            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="110" shadow-opacity="0.34" />',
           )
           .replace(
             '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#cfd3d8" material="finish metal, color #cfd3d8, roughness 0.58, metalness 0.42, clearcoat 0" />',
