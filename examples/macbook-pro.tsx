@@ -5,8 +5,9 @@
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
 const SILVER = '#e8ecf2'
 // Product aluminum — dielectric, not chrome. Metalness >0 still grazed into a
-// bright chrome lip under dual-blind (§9.2); plastic finish keeps silver midtones.
-const SHELL = 'finish plastic, color #c5c9ce, roughness 0.62, clearcoat 0'
+// bright chrome lip under dual-blind (§9.2); matte plastic + shade ceil keep
+// the front bevel near body midtones instead of a white stripe.
+const SHELL = 'finish plastic, color #bcc0c6, roughness 0.78, clearcoat 0'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 
