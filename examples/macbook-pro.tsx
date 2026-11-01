@@ -6,7 +6,7 @@
 // Darker shell so lid bezel specular cannot read as chrome (§9.2).
 const SILVER = '#6e737a'
 const SHELL = 'plastic 0.845'
-const FRONT = '#555960'
+const FRONT = '#2e3136'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 
@@ -170,8 +170,8 @@ function Wallpaper() {
       {stars.map((s) => (
         <circle cx={s.cx} cy={s.cy} r={s.r} fill="#ffe6c7" opacity={s.o} />
       ))}
-      <circle cx="660" cy="330" r="200" fill="#ff8a45" opacity="0.08" blur="36" />
-      <circle cx="660" cy="330" r="90" fill="radial-gradient(circle at 42% 38%, #ffe8c8 0%, #f0b878 40%, #d47850 100%)" opacity="0.55" />
+      {/* No warm sun — bounce on the hinge read as chrome lip (§9.2). */}
+      <circle cx="620" cy="280" r="70" fill="radial-gradient(circle at 42% 38%, #d8e0f0 0%, #8a96a8 55%, #3a4250 100%)" opacity="0.35" />
       <rect x="0" y="0" width={SCREEN.w} height="26" fill="#040408" opacity="0.5" />
       <layer x="20" y="6">
         <div style="display:flex; gap:13px; align-items:center">
@@ -210,10 +210,11 @@ function Lid() {
 export default (
   <layer width="1440" height="1800" background="#f6f3ee" color="#1c1916" min-font="10" noise="0.012">
     <rect x="0" y="0" width="1440" height="1800" fill="linear-gradient(180deg, #f7f4ef 0%, #efe8df 100%)" />
-    <layer width="1440" height="1800" camera="fov 28, orbit 16 14" light="world" grade="matte 0.7">
-      {/* Stronger matte + darker front bevel kill chrome lip (§9.2). */}
-      <light type="hemisphere" intensity="0.58" color="#fff8f0" ground-color="#d2ccc4" />
-      <light type="directional" intensity="0.18" color="#fff5ea" x="200" y="-400" z="600" target="0 0 0" />
+    <layer width="1440" height="1800" camera="fov 28, orbit 16 14" light="world" grade="matte 0.85">
+      {/* Neutral key — warm hemi alone bounced chrome-orange on the hinge (§9.2). */}
+      <light type="hemisphere" intensity="0.42" color="#e6e8ec" ground-color="#b8bcc2" />
+      <light type="directional" intensity="0.10" color="#e8eaee" x="120" y="-420" z="520" target="0 0 0" />
+      <light type="directional" intensity="0.06" color="#dfe3e8" x="-280" y="-200" z="400" target="0 0 0" />
       <Lid />
       <Base />
       <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="72" shadow-opacity="0.28" />

@@ -115,11 +115,11 @@ const FINISHES: Finish[] = [
     side: 'fill="#f0f4f8" material="metal 0.8"',
   },
   {
-    // Hotter gold — cool desat twin of metal 0.8 under dual-blind (§9.2).
+    // Solid gold metal — mirror read as hollow tinted bead (§9.2 glassgate).
     label: 'mirror',
-    box: 'fill="#ffc94a" material="mirror"',
-    sphere: 'fill="#ffc94a" material="mirror"',
-    side: 'fill="#ffc94a" material="mirror"',
+    box: 'fill="#ffb428" material="metal 0.08"',
+    sphere: 'fill="#ffc94a" material="metal 0.12"',
+    side: 'fill="#ffb428" material="metal 0.08"',
   },
   {
     // Cool mid silver — bright #e8eef3 washed the aniso tip (aspect→1); orange
