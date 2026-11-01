@@ -4,8 +4,8 @@
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
 // Darker shell so lid bezel specular cannot read as chrome (§9.2).
-const SILVER = '#5c6168'
-const SHELL = 'matte'
+const SILVER = '#686d74'
+const SHELL = 'plastic 0.72'
 const FRONT = '#0e1014'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
@@ -122,8 +122,7 @@ function Base() {
   return (
     <layer x={STAGE.x} y={STAGE.groundY - TOP} width={W} height={D} origin={`${W / 2} 0`} rotateX="90" preserve-3d>
       <rect width={W} height={D} rx="24" fill={SILVER} material={SHELL} depth={T} stroke="none" />
-      {/* Darker front lip so the extruded front face cannot read as chrome. */}
-      <rect x="12" y={D - 14} width={W - 24} height="14" rx="6" fill={FRONT} material="matte" depth="4" z={TOP - 3} stroke="none" cast-shadow="false" />
+
       <layer x="0" y="0" width={W} height={D} z={TOP + 0.2} cast-shadow="false">
         <rect x={WELL_BOX.x} y={WELL_BOX.y} width={WELL_BOX.w} height={WELL_BOX.h} rx="8" fill={WELL} />
         <rect x={KB.x - GRILLE_W - 18} y={KB.y + 4} width={GRILLE_W} height={WELL_BOX.h - 8} rx="4" fill="#4a4c51" />
@@ -210,7 +209,7 @@ function Lid() {
 export default (
   <layer width="1440" height="1800" background="#f6f3ee" color="#1c1916" min-font="10" noise="0.012">
     <rect x="0" y="0" width="1440" height="1800" fill="linear-gradient(180deg, #f7f4ef 0%, #efe8df 100%)" />
-    <layer width="1440" height="1800" camera="fov 28, orbit 16 14" light="world" grade="matte 0.85">
+    <layer width="1440" height="1800" camera="fov 28, orbit 16 14" light="world" grade="matte 0.55">
       {/* Neutral key — warm hemi alone bounced chrome-orange on the hinge (§9.2). */}
       <light type="hemisphere" intensity="0.38" color="#e4e6ea" ground-color="#b0b4ba" />
       <light type="directional" intensity="0.07" color="#e4e6ea" x="120" y="-420" z="520" target="0 0 0" />

@@ -130,18 +130,17 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // darktick: stroke+mint still read as opaque RWB — clearer body, no stroke.
+    // Restore platerim mint+stroke after glassclear materials 4 regress.
     label: 'glass 0.06',
-    box: 'fill="#d8eee680" material="glass 0.06"',
-    sphere: 'fill="#eaf6f098" material="glass 0.06"',
+    box: 'fill="#c5ddd6a0" material="glass 0.06" stroke="2.5 #f4fffb outside"',
+    sphere: 'fill="#daf0eab8" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
-    // Distinct frost slab — same mint as clear looked milky-opaque (darktick A).
     label: 'glass 0.72',
-    box: 'fill="#9ebdb8cc" material="glass 0.72"',
-    sphere: 'fill="#c5d8d4d0" material="glass 0.72"',
+    box: 'fill="#c5ddd6a0" material="glass 0.72" stroke="2.5 #f4fffb outside"',
+    sphere: 'fill="#daf0eab8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
@@ -346,13 +345,13 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
             '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="40" shadow-opacity="0.5" />',
             // Softer contact — dual-blind still cites jagged metal-plate rim (§9.2).
             // Keep plate metalness ≤0.62 / r≥0.48 — brighter plate blew SSR >0.01.
-            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="168" shadow-opacity="0.26" />',
+            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="180" shadow-opacity="0.24" />',
           )
           .replace(
             '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#cfd3d8" material="finish metal, color #cfd3d8, roughness 0.58, metalness 0.42, clearcoat 0" />',
             // Cooler mid plate — #d8dde3 read as milky plastic (envfill dual-blind).
             // Keep metalness ≤0.62 / r≥0.48 for SSR checker.
-            '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="16" z="4" fill="#c2c8d0" material="finish metal, color #c2c8d0, roughness 0.56, metalness 0.48, clearcoat 0" />',
+            '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="18" z="2" fill="#cfd4da" material="finish metal, color #cfd4da, roughness 0.62, metalness 0.38, clearcoat 0" />',
           )
           .replace(
             '<sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#d8dee4" material="metal 0.12" />',
