@@ -115,11 +115,11 @@ const FINISHES: Finish[] = [
     side: 'fill="#f0f4f8" material="metal 0.8"',
   },
   {
-    // Solid gold metal — mirror read as hollow tinted bead (§9.2 glassgate).
+    // Brighter gold + satin sphere — platerim dual-blind near-black mirror.
     label: 'mirror',
-    box: 'fill="#ffb428" material="metal 0.08"',
-    sphere: 'fill="#ffc94a" material="metal 0.12"',
-    side: 'fill="#ffb428" material="metal 0.08"',
+    box: 'fill="#ffc040" material="metal 0.14"',
+    sphere: 'fill="#ffd56a" material="metal 0.22"',
+    side: 'fill="#ffc040" material="metal 0.14"',
   },
   {
     // Cool mid silver — bright #e8eef3 washed the aniso tip (aspect→1); orange
@@ -153,16 +153,18 @@ const FINISHES: Finish[] = [
     side: 'material="finish plastic, color #e0a33a, roughness 0.62, clearcoat 1"',
   },
   {
+    // Lift sphere albedo — platerim dual-blind near-black aniso spheres.
     label: 'anisotropy 0.9',
-    box: 'material="finish metal, color #c5c9ce, roughness 0.32, metalness 1, anisotropy 0.9"',
-    sphere: 'material="finish metal, color #e8eef3, roughness 0.32, metalness 1, anisotropy 0.9"',
-    side: 'material="finish metal, color #c5c9ce, roughness 0.32, metalness 1, anisotropy 0.9"',
+    box: 'fill="#d5dbe1" material="finish metal, color #d2d8de, roughness 0.36, metalness 1, anisotropy 0.9"',
+    sphere: 'fill="#f4f7fa" material="finish metal, color #f0f4f8, roughness 0.36, metalness 1, anisotropy 0.9"',
+    side: 'fill="#d5dbe1" material="finish metal, color #d2d8de, roughness 0.36, metalness 1, anisotropy 0.9"',
   },
   {
+    // Brighter sheen sphere — platerim dual-blind lost form on dark cream.
     label: 'sheen 0.85',
-    box: 'material="finish plastic, color #c45a6a, roughness 0.55, sheen 0.85"',
-    sphere: 'material="finish plastic, color #f4efe4, roughness 0.55, sheen 0.85"',
-    side: 'material="finish plastic, color #e0a33a, roughness 0.55, sheen 0.85"',
+    box: 'material="finish plastic, color #d46a78, roughness 0.50, sheen 0.85"',
+    sphere: 'material="finish plastic, color #fff6ea, roughness 0.48, sheen 0.9"',
+    side: 'material="finish plastic, color #e8b04a, roughness 0.50, sheen 0.85"',
   },
   {
     label: 'lamp',
@@ -344,7 +346,7 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
             '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="40" shadow-opacity="0.5" />',
             // Softer contact — dual-blind still cites jagged metal-plate rim (§9.2).
             // Keep plate metalness ≤0.62 / r≥0.48 — brighter plate blew SSR >0.01.
-            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="128" shadow-opacity="0.32" />',
+            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="148" shadow-opacity="0.28" />',
           )
           .replace(
             '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#cfd3d8" material="finish metal, color #cfd3d8, roughness 0.58, metalness 0.42, clearcoat 0" />',
