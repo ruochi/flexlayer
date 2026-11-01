@@ -138,6 +138,8 @@ function Base() {
           <p style="font-family:Inter; font-size:11px; font-weight:600; color:#b8bcc4">{k.label}</p>
         </layer>
       ))}
+      {/* In-mesh dark hinge rail — kills warm deck-edge specular without a 2D strip (§9.2). */}
+      <rect x="16" y="-1" width={W - 32} height="7" rx="3" fill="#1e2024" material="plastic 0.9" depth="5" z={TOP + 0.6} cast-shadow="false" />
       <rect x="70" y="-8" width={W - 140} height="18" rx="9" fill="#1a1b1e" material="plastic" depth="18" z={TOP - 3} cast-shadow="false" />
       <layer x={W - T / 2} y="0" width={T} height={D} origin={`${T / 2} 0`} rotateY="90" z="0.3" cast-shadow="false">
         <rect x={T / 2 - 4} y="214" width="8" height="30" rx="3" fill="#1c1d20" />
@@ -211,10 +213,9 @@ function Lid() {
 export default (
   <layer width="1440" height="1800" background="#f6f3ee" color="#1c1916" min-font="10" noise="0.012">
     <rect x="0" y="0" width="1440" height="1800" fill="linear-gradient(180deg, #f7f4ef 0%, #efe8df 100%)" />
-    <layer width="1440" height="1800" camera="fov 22, orbit 4 38" light="world" grade="matte 0.98">
-      {/* Near-overhead + flat deck; kill specular lip (§9.2). */}
-      <light type="hemisphere" intensity="0.72" color="#f2f0ec" ground-color="#c8c4be" />
-      <light type="directional" intensity="0.35" color="#fff8f0" x="0" y="-200" z="400" target="0 0 0" />
+    <layer width="1440" height="1800" camera="fov 22, orbit 2 42" light="world" grade="matte 0.98">
+      {/* More overhead foreshortens the deck lip; chromegold hemi (cooler lights hurt §9.2). */}
+      <light type="hemisphere" intensity="0.95" color="#fff8f0" ground-color="#d2ccc4" />
       <Lid />
       <Base />
       <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="140" shadow-opacity="0.08" />
