@@ -117,9 +117,9 @@ const FINISHES: Finish[] = [
   {
     // Hotter gold — cool desat twin of metal 0.8 under dual-blind (§9.2).
     label: 'mirror',
-    box: 'fill="#ffb428" material="mirror"',
-    sphere: 'fill="#ffb428" material="mirror"',
-    side: 'fill="#ffb428" material="mirror"',
+    box: 'fill="#ffc94a" material="mirror"',
+    sphere: 'fill="#ffc94a" material="mirror"',
+    side: 'fill="#ffc94a" material="mirror"',
   },
   {
     // Cool mid silver — bright #e8eef3 washed the aniso tip (aspect→1); orange
