@@ -4,8 +4,9 @@
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
 // Darker shell so lid bezel specular cannot read as chrome (§9.2).
-const SILVER = '#5f646b'
+const SILVER = '#565b62'
 const SHELL = 'plastic 0.845'
+const PAD_FILL = '#565b62'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 
@@ -127,8 +128,8 @@ function Base() {
         <rect x={WELL_BOX.x + WELL_BOX.w + 18} y={KB.y + 4} width={GRILLE_W} height={WELL_BOX.h - 8} rx="4" fill="#4a4c51" />
         <path d={grilleLeft} fill="#3c3e43" stroke="none" />
         <path d={grilleRight} fill="#3c3e43" stroke="none" />
-        <rect x={padX - 1.5} y={padY - 1.5} width={PAD.w + 3} height={PAD.h + 3} rx="13" fill="#6a6e75" />
-        <rect x={padX} y={padY} width={PAD.w} height={PAD.h} rx="12" fill="linear-gradient(180deg, #858b93 0%, #787e86 100%)" />
+        <rect x={padX - 1.5} y={padY - 1.5} width={PAD.w + 3} height={PAD.h + 3} rx="13" fill={PAD_FILL} />
+        <rect x={padX} y={padY} width={PAD.w} height={PAD.h} rx="12" fill={PAD_FILL} />
       </layer>
       <path d={keyPath} fill={KEY} material="plastic" depth="4" z={TOP + 1.6} stroke="none" cast-shadow="false" />
       {keyLegends().map((k) => (
@@ -207,13 +208,12 @@ function Lid() {
 export default (
   <layer width="1440" height="1800" background="#f6f3ee" color="#1c1916" min-font="10" noise="0.012">
     <rect x="0" y="0" width="1440" height="1800" fill="linear-gradient(180deg, #f7f4ef 0%, #efe8df 100%)" />
-    <layer width="1440" height="1800" camera="fov 28, orbit 22 18" light="world" grade="matte 0.85">
-      {/* Higher camera + heavy matte — front bevel/ghost rim read as chrome (§9.2). */}
-      <light type="hemisphere" intensity="0.7" color="#fff8f0" ground-color="#d2ccc4" />
-      <light type="directional" intensity="0.12" color="#fff5ea" x="120" y="-500" z="500" target="0 0 0" />
+    <layer width="1440" height="1800" camera="fov 26, orbit 24 20" light="world" grade="matte 0.92">
+      {/* Match pad to shell; kill key so no chrome lip (§9.2). */}
+      <light type="hemisphere" intensity="0.82" color="#fff8f0" ground-color="#d2ccc4" />
       <Lid />
       <Base />
-      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="80" shadow-opacity="0.24" />
+      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="88" shadow-opacity="0.2" />
     </layer>
     <layer x="80" y="66">
       <p style="font-family:Inter; font-size:13px; font-weight:700; letter-spacing:6.2px; color:#c88255">PRO PERFORMANCE · M4 MAX</p>

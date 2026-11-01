@@ -336,14 +336,20 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
             '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" z="6" fill="#d5d9de" material="finish metal, color #d5d9de, roughness 0.78, metalness 0.22, clearcoat 0" />',
           )
           .replace(
+            '<rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#e23b2f" />',
+            '<rect id="stripe-red" x="200" y="210" width="70" height="28" depth="120" fill="#e23b2f" />',
+          )
+          .replace(
             '<rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#f7f4ee" />',
-            // Drop vertical white behind glass (blocky refraction). A pale card
-            // beside the sphere still clips the glass for throughGlass white.
-            '<rect id="stripe-white" x="318" y="230" width="48" height="22" depth="40" fill="#e8e4dc" />',
+            '<rect id="stripe-white" x="200" y="246" width="70" height="28" depth="120" fill="#e8e4dc" />',
+          )
+          .replace(
+            '<rect id="stripe-blue" x="282" y="200" width="36" height="78" depth="160" fill="#2a6fbe" />',
+            '<rect id="stripe-blue" x="200" y="282" width="70" height="28" depth="120" fill="#2a6fbe" />',
           )
           .replace(
             '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f4fffbcc" material="glass 0.07" />',
-            '<sphere id="glass" cx="248" cy="268" r="54" z="54" fill="#ffffff44" material="glass 0.11" />',
+            '<sphere id="glass" cx="248" cy="268" r="54" z="54" fill="#ffffff33" material="glass 0.18" />',
           )
           .replace(
             '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />',
