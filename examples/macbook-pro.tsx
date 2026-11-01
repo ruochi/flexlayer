@@ -192,12 +192,15 @@ function Wallpaper() {
 }
 
 function Lid() {
+  // 2px silver rim — the old 7px bezel read as a chrome lip over the dark
+  // screen well under §9.2 dual-blind.
+  const BEZEL = 2
   return (
     <layer x={STAGE.x} y={STAGE.groundY - T + 4 - LID_H} width={W} height={LID_H} origin={`${W / 2} ${LID_H}`} rotateX={LID_TILT} cast-shadow="false">
       <rect width={W} height={LID_H} rx="24" fill={SILVER} material={SHELL} depth={LID_T} z={-LID_T / 2 - 1} stroke="none" cast-shadow="false" />
-      <rect x="7" y="7" width={W - 14} height={LID_H - 14} rx="18" fill="#050608" cast-shadow="false" />
+      <rect x={BEZEL} y={BEZEL} width={W - BEZEL * 2} height={LID_H - BEZEL * 2} rx="20" fill="#050608" cast-shadow="false" />
       <Wallpaper />
-      <rect x={W / 2 - 36} y="7" width="72" height="27" rx="8" fill="#050608" cast-shadow="false" />
+      <rect x={W / 2 - 36} y={BEZEL} width="72" height="27" rx="8" fill="#050608" cast-shadow="false" />
       <circle cx={W / 2} cy="18" r="2.4" fill="#0e1018" stroke="#23262e" stroke-width="0.6" />
       <layer x={W / 2} y={SCREEN.y + SCREEN.h + 18} anchor="center">
         <p style="font-family:Inter; font-size:10px; letter-spacing:0.4px; color:#5b5e65">MacBook Pro</p>
