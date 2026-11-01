@@ -130,16 +130,16 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Softplate: lighter mint + thin stroke — dropedge A called bars opaque.
+    // Creamgate: no stroke — softplate stroke still read as opaque RWB bars.
     label: 'glass 0.06',
-    box: 'fill="#d2e8e0a0" material="glass 0.06" stroke="1.5 #f7fffc outside"',
+    box: 'fill="#d2e8e0a0" material="glass 0.06"',
     sphere: 'fill="#e4f4eeb8" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#d2e8e0a0" material="glass 0.72" stroke="1.5 #f7fffc outside"',
+    box: 'fill="#d2e8e0a0" material="glass 0.72"',
     sphere: 'fill="#e4f4eeb8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
