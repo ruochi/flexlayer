@@ -11,7 +11,7 @@
       <rect id="stripe-white" x="192" y="18" width="24" height="34" depth="120" fill="#f7f4ee" />
       <rect id="stripe-blue" x="216" y="18" width="24" height="34" depth="120" fill="#2a6fbe" />
       <sphere id="sphere" cx="204" cy="72" r="30" z="30" fill="#f4fffbcc" material="glass 0.06" />
-      <circle id="side" cx="330" cy="78" r="26" depth="100" fill="#e0a33a" />
+      <sphere id="side" cx="330" cy="78" r="28" z="28" fill="#e0a33a" />
     </layer>
   </layer>
   <layer x="12" y="304" color="#1c1915"><p style="font-size:24px; color:#1c1915; fill:#1c1915">glass 0.06</p></layer>
