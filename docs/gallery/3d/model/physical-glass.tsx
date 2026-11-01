@@ -24,13 +24,14 @@ function stripe(color: string, x: number) {
 
 export default layer.create(
   <layer width={440} height={300} background="#241f1b">
-    <layer width={440} height={300} camera="fov 32, orbit 34 22, distance 860, at 220 210 0">
-      <ground y={220} rotateX={90} fill="#3a3f49" shadow-blur={48} shadow-opacity={0.28} />
+    {/* Pull in + raise aim — y=185 / tiny frame read as clipped under §9.2. */}
+    <layer width={440} height={300} camera="fov 30, orbit 28 18, distance 720, at 220 175 0">
+      <ground y={220} rotateX={90} fill="#3a3f49" shadow-blur={56} shadow-opacity={0.22} />
       <layer x={28} y={220} width={400} height={190} origin="200 0" rotateX={90} preserve-3d>
-        <model object={stripe('#e23b2f', -0.42)} unit={95} x={200} y={190} />
-        <model object={stripe('#f7f4ee', -0.12)} unit={95} x={200} y={190} />
-        <model object={stripe('#2a6fbe', 0.18)} unit={95} x={200} y={190} />
-        <model object={glass} unit={120} x={200} y={190} material="glass 0.08" />
+        <model object={stripe('#e23b2f', -0.42)} unit={110} x={200} y={190} />
+        <model object={stripe('#f7f4ee', -0.12)} unit={110} x={200} y={190} />
+        <model object={stripe('#2a6fbe', 0.18)} unit={110} x={200} y={190} />
+        <model object={glass} unit={150} x={200} y={190} material="glass 0.08" />
       </layer>
     </layer>
     <layer x={12} y={272}>
