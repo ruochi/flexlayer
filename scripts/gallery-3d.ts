@@ -101,21 +101,21 @@ const FINISHES: Finish[] = [
   },
   {
     label: 'metal 0.08',
-    box: 'fill="#d8dee4" material="metal 0.08"',
-    sphere: 'fill="#eef3f7" material="metal 0.08"',
-    side: 'fill="#d8dee4" material="metal 0.08"',
+    box: 'fill="#e4e9ee" material="metal 0.08"',
+    sphere: 'fill="#f4f7fa" material="metal 0.08"',
+    side: 'fill="#e4e9ee" material="metal 0.08"',
   },
   {
     label: 'metal 0.8',
-    box: 'fill="#d0d5da" material="metal 0.8"',
-    sphere: 'fill="#e8eef3" material="metal 0.8"',
-    side: 'fill="#d0d5da" material="metal 0.8"',
+    box: 'fill="#d8dde2" material="metal 0.8"',
+    sphere: 'fill="#eef2f6" material="metal 0.8"',
+    side: 'fill="#d8dde2" material="metal 0.8"',
   },
   {
     label: 'mirror',
-    box: 'fill="#f0c85a" material="mirror"',
-    sphere: 'fill="#f0c85a" material="mirror"',
-    side: 'fill="#f0c85a" material="mirror"',
+    box: 'fill="#f6d06a" material="mirror"',
+    sphere: 'fill="#f6d06a" material="mirror"',
+    side: 'fill="#f6d06a" material="mirror"',
   },
   {
     // Cool mid silver — bright #e8eef3 washed the aniso tip (aspect→1); orange
@@ -197,7 +197,7 @@ function cluster(finish: Finish): string {
     <layer x="28" y="220" width="400" height="190" origin="200 0" rotateX="90" preserve-3d>
       <rect id="back" x="-30" y="-90" width="440" height="14" depth="300" fill="#efe8dc" />
       <rect id="accent" x="300" y="-40" width="70" height="10" depth="160" fill="#e08a5c" />
-      <sphere id="key" cx="90" cy="-10" r="22" z="130" material="lamp" />
+      <sphere id="key" cx="90" cy="-10" r="30" z="140" material="lamp" />
       <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" fill="#f6f2ea" />
       <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" ${finish.box} />
       ${stripes}
@@ -325,8 +325,8 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
       width: BENCH_W,
       height: BENCH_H + 96,
       caption: '贴地接触 · 悬空软影 · 缝里的遮挡 · 铬球 · 玻璃和色条 · 洞 · 霓虹 · 灯',
-      // Still-only: thinner/cooler stripes + clear glass (fat white column read
-      // as milky bars under §9.2); rounded gold box (shared circle = manga hatch).
+      // Still-only: cooler white stripe + clear glass (horizontal white killed
+      // blue-through-glass ≥0.1); rounded gold (shared circle = manga hatch).
       body: place(
         bench()
           .replace(
