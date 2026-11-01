@@ -130,18 +130,19 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Unplate: keep rimstroke mint+stroke (clearer fills blew glass SSIM <0.6);
-    // sphere z still forward for stripe read.
+    // Glassmac: restore platerim mint+stroke (materials hit 6–8 there);
+    // sphere z48 so stripes sit behind (lightglass), not as milky body.
+    // Solid stroke needs color[+side] + stroke-width (width-first form warns).
     label: 'glass 0.06',
-    box: 'fill="#d2e8e0a0" material="glass 0.06" stroke="2 #f7fffc outside"',
-    sphere: 'fill="#e4f4eeb8" material="glass 0.06"',
+    box: 'fill="#c5ddd6a0" material="glass 0.06" stroke="#f4fffb outside" stroke-width="2.5"',
+    sphere: 'fill="#daf0eab8" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#d2e8e0a0" material="glass 0.72" stroke="2 #f7fffc outside"',
-    sphere: 'fill="#e4f4eeb8" material="glass 0.72"',
+    box: 'fill="#c5ddd6a0" material="glass 0.72" stroke="#f4fffb outside" stroke-width="2.5"',
+    sphere: 'fill="#daf0eab8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
@@ -192,7 +193,7 @@ function cluster(finish: Finish): string {
   const sphere = finish.lamp
     ? `<sphere id="sphere" cx="210" cy="78" r="16" z="120" ${finish.sphere} />`
     : finish.stripes
-      ? `<sphere id="sphere" cx="210" cy="70" r="30" z="56" ${finish.sphere} />`
+      ? `<sphere id="sphere" cx="210" cy="70" r="30" z="48" ${finish.sphere} />`
       : `<sphere id="sphere" cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
   // Gold accent sphere (not finish.side): metal cells used to paint two
   // identical chrome spheres and dual-blind called them inseparable clones
