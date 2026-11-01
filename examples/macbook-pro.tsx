@@ -12,13 +12,13 @@ const WELL = '#1a1c20'
 
 const W = 980
 const D = 670
-// Mid extrusion; tip camera more top-down so the front seam is foreshortened (§9.2).
-const T = 16
+// Near-flat deck — any tall front face reads as chrome lip (§9.2).
+const T = 4
 const TOP = T / 2
 
 const LID_H = 666
-const LID_T = 8
-const LID_TILT = 8
+const LID_T = 3
+const LID_TILT = 6
 
 const STAGE = { x: 310, groundY: 1044 }
 
@@ -209,12 +209,12 @@ function Lid() {
 export default (
   <layer width="1440" height="1800" background="#f6f3ee" color="#1c1916" min-font="10" noise="0.012">
     <rect x="0" y="0" width="1440" height="1800" fill="linear-gradient(180deg, #f7f4ef 0%, #efe8df 100%)" />
-    <layer width="1440" height="1800" camera="fov 24, orbit 8 32" light="world" grade="matte 0.95">
-      {/* Top-down foreshortens the front lip; soft ground hides jagged dashes (§9.2). */}
-      <light type="hemisphere" intensity="0.88" color="#fff8f0" ground-color="#d2ccc4" />
+    <layer width="1440" height="1800" camera="fov 22, orbit 4 38" light="world" grade="matte 0.98">
+      {/* Near-overhead + flat deck; kill specular lip (§9.2). */}
+      <light type="hemisphere" intensity="0.95" color="#fff8f0" ground-color="#d2ccc4" />
       <Lid />
       <Base />
-      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="110" shadow-opacity="0.16" />
+      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="120" shadow-opacity="0.12" />
     </layer>
     <layer x="80" y="66">
       <p style="font-family:Inter; font-size:13px; font-weight:700; letter-spacing:6.2px; color:#c88255">PRO PERFORMANCE · M4 MAX</p>
