@@ -10,7 +10,7 @@ import * as THREE from 'three'
 // dark shell with a flag sticking out.
 const glass = new THREE.Mesh(
   new THREE.SphereGeometry(0.55, 48, 32),
-  new THREE.MeshPhysicalMaterial({ color: '#ffffff', transmission: 1, roughness: 0.04, ior: 1.45, metalness: 0 }),
+  new THREE.MeshPhysicalMaterial({ color: '#ffffff', transmission: 1, roughness: 0.02, ior: 1.45, metalness: 0, thickness: 0.6 }),
 )
 glass.position.set(0, 0.55, 0.35)
 function stripe(color: string, x: number) {
@@ -28,10 +28,10 @@ export default layer.create(
     <layer width={440} height={300} camera="fov 30, orbit 28 18, distance 720, at 220 175 0">
       <ground y={220} rotateX={90} fill="#3a3f49" shadow-blur={56} shadow-opacity={0.22} />
       <layer x={28} y={220} width={400} height={190} origin="200 0" rotateX={90} preserve-3d>
-        <model object={stripe('#e23b2f', -0.42)} unit={110} x={200} y={190} />
-        <model object={stripe('#f7f4ee', -0.12)} unit={110} x={200} y={190} />
-        <model object={stripe('#2a6fbe', 0.18)} unit={110} x={200} y={190} />
-        <model object={glass} unit={150} x={200} y={190} material="glass 0.08" />
+        <model object={stripe('#ff3a2a', -0.42)} unit={110} x={200} y={190} />
+        <model object={stripe('#ffffff', -0.12)} unit={110} x={200} y={190} />
+        <model object={stripe('#1e7ae8', 0.18)} unit={110} x={200} y={190} />
+        <model object={glass} unit={150} x={200} y={190} material="glass 0.04" />
       </layer>
     </layer>
     <layer x={12} y={272}>

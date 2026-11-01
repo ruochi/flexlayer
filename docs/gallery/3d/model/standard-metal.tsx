@@ -7,7 +7,7 @@ import * as THREE from 'three'
 // Mid-silver + bounce cards; polishfill weak FILL left a matte cutout (§9.2).
 const mesh = new THREE.Mesh(
   new THREE.BoxGeometry(1, 1, 1),
-  new THREE.MeshStandardMaterial({ color: '#a8b0b8', metalness: 1, roughness: 0.08 }),
+  new THREE.MeshStandardMaterial({ color: '#b4bcc4', metalness: 1, roughness: 0.10 }),
 )
 
 export default layer.create(
@@ -25,7 +25,7 @@ export default layer.create(
       </layer>
     </layer>
     <layer x={12} y={272}>
-      <p style="font-size:19px; color:#b7aea2">Standard · metal 1 · rough 0.08</p>
+      <p style="font-size:19px; color:#b7aea2">Standard · metal 1 · rough 0.10</p>
     </layer>
   </layer>,
 )
