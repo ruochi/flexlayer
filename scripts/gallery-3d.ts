@@ -339,7 +339,8 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
           .replace(
             '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="40" shadow-opacity="0.5" />',
             // Softer contact — dual-blind still cites jagged metal-plate rim (§9.2).
-            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="72" shadow-opacity="0.34" />',
+            // Keep plate metalness ≤0.62 / r≥0.48 — brighter plate blew SSR >0.01.
+            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="96" shadow-opacity="0.36" />',
           )
           .replace(
             '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#cfd3d8" material="finish metal, color #cfd3d8, roughness 0.58, metalness 0.42, clearcoat 0" />',
