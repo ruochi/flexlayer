@@ -339,9 +339,11 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
     name: `3d-quality-${name}`,
     source: cell(name, bench(BENCH_CAMERA, `quality="${name}"`), BENCH_W, BENCH_H),
   }))
+  // Mid-warm page so SSR on polished flats picks up cream, not void. Sphere
+  // highlight gates stay intact because product_metal_lift skips spheres.
   const materials = FINISHES.map((finish) => ({
     name: `3d-mat-${finish.label.replace(/[^a-z0-9]+/gi, '-')}`,
-    source: cell(finish.label, cluster(finish), 440, 300),
+    source: cell(finish.label, cluster(finish), 440, 300, '#a89f92', '#1c1915'),
   }))
   const lights = lightsPlate().map((item) => ({
     name: `3d-light-${item.label.split(' ')[0]}`,
