@@ -3,10 +3,10 @@
 // 银色 16 英寸 MacBook Pro 海报，以后渲染用这个场景。
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
-// Near-ink shell — any mid-grey deck over the dark seam reads chrome (§9.2).
-const SILVER = '#2a2d32'
+// Darker shell so lid bezel specular cannot read as chrome (§9.2).
+const SILVER = '#4a4e54'
 const SHELL = 'plastic 0.845'
-const PAD_FILL = '#2a2d32'
+const PAD_FILL = '#4a4e54'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 
@@ -138,7 +138,7 @@ function Base() {
           <p style="font-family:Inter; font-size:11px; font-weight:600; color:#b8bcc4">{k.label}</p>
         </layer>
       ))}
-      <rect x="70" y="-8" width={W - 140} height="18" rx="9" fill="#2a2b2f" material="plastic" depth="18" z={TOP - 3} cast-shadow="false" />
+      <rect x="70" y="-8" width={W - 140} height="18" rx="9" fill="#1a1b1e" material="plastic" depth="18" z={TOP - 3} cast-shadow="false" />
       <layer x={W - T / 2} y="0" width={T} height={D} origin={`${T / 2} 0`} rotateY="90" z="0.3" cast-shadow="false">
         <rect x={T / 2 - 4} y="214" width="8" height="30" rx="3" fill="#1c1d20" />
         <rect x={T / 2 - 3.5} y="300" width="7" height="22" rx="3.5" fill="#1c1d20" />
@@ -192,13 +192,15 @@ function Wallpaper() {
 }
 
 function Lid() {
-  // No silver lid rim — bezel well is the whole lid face (§9.2 chrome lip).
+  // 2px silver rim — the old 7px bezel read as a chrome lip over the dark
+  // screen well under §9.2 dual-blind.
+  const BEZEL = 2
   return (
     <layer x={STAGE.x} y={STAGE.groundY - T + 4 - LID_H} width={W} height={LID_H} origin={`${W / 2} ${LID_H}`} rotateX={LID_TILT} cast-shadow="false">
-      <rect width={W} height={LID_H} rx="24" fill="#050608" material={SHELL} depth={LID_T} z={-LID_T / 2 - 1} stroke="none" cast-shadow="false" />
-      <rect x="0" y="0" width={W} height={LID_H} rx="24" fill="#050608" cast-shadow="false" />
+      <rect width={W} height={LID_H} rx="24" fill={SILVER} material={SHELL} depth={LID_T} z={-LID_T / 2 - 1} stroke="none" cast-shadow="false" />
+      <rect x={BEZEL} y={BEZEL} width={W - BEZEL * 2} height={LID_H - BEZEL * 2} rx="20" fill="#050608" cast-shadow="false" />
       <Wallpaper />
-      <rect x={W / 2 - 36} y="0" width="72" height="28" rx="8" fill="#050608" cast-shadow="false" />
+      <rect x={W / 2 - 36} y={BEZEL} width="72" height="27" rx="8" fill="#050608" cast-shadow="false" />
       <circle cx={W / 2} cy="18" r="2.4" fill="#0e1018" stroke="#23262e" stroke-width="0.6" />
       <layer x={W / 2} y={SCREEN.y + SCREEN.h + 18} anchor="center">
         <p style="font-family:Inter; font-size:10px; letter-spacing:0.4px; color:#5b5e65">MacBook Pro</p>
@@ -215,10 +217,8 @@ export default (
       <light type="hemisphere" intensity="0.95" color="#fff8f0" ground-color="#d2ccc4" />
       <Lid />
       <Base />
-      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="140" shadow-opacity="0.08" />
+      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="120" shadow-opacity="0.12" />
     </layer>
-    {/* Cover cream|chassis AA fringe that dual-blind reads as a chrome lip (§9.2). */}
-    <rect x={STAGE.x - 2} y={720} width="14" height={STAGE.groundY - 700} rx="4" fill="#2a2d32" />
     <layer x="80" y="66">
       <p style="font-family:Inter; font-size:13px; font-weight:700; letter-spacing:6.2px; color:#c88255">PRO PERFORMANCE · M4 MAX</p>
     </layer>

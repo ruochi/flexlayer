@@ -107,18 +107,17 @@ const FINISHES: Finish[] = [
     side: 'fill="#e4e9ee" material="metal 0.08"',
   },
   {
-    // Brighter box — dual-blind called metal 0.8 block near-black (§9.2).
     label: 'metal 0.8',
-    box: 'fill="#e8edf2" material="metal 0.8"',
-    sphere: 'fill="#f2f5f8" material="metal 0.8"',
-    side: 'fill="#e8edf2" material="metal 0.8"',
+    box: 'fill="#d8dde2" material="metal 0.8"',
+    sphere: 'fill="#eef2f6" material="metal 0.8"',
+    side: 'fill="#d8dde2" material="metal 0.8"',
   },
   {
-    // Saturated gold mirror — stay distinct from cool metal 0.08 (§9.2).
+    // Warm gold mirror — grey desat made it a metal-0.08 chrome twin (§9.2).
     label: 'mirror',
-    box: 'fill="#ffc94a" material="mirror"',
-    sphere: 'fill="#ffc94a" material="mirror"',
-    side: 'fill="#ffc94a" material="mirror"',
+    box: 'fill="#f6d06a" material="mirror"',
+    sphere: 'fill="#f6d06a" material="mirror"',
+    side: 'fill="#f6d06a" material="mirror"',
   },
   {
     // Cool mid silver — bright #e8eef3 washed the aniso tip (aspect→1); orange
@@ -193,9 +192,8 @@ function cluster(finish: Finish): string {
   const side = finish.neon
     ? `<torus id="side" cx="330" cy="78" r="32" tube="8" z="14" ${finish.side} rotateX="70" />`
     : `<sphere id="side" cx="330" cy="78" r="28" z="28" fill="#e0a33a" material="plastic 0.35" />`
-  // Warm back + accent + lamp keys so polished metal shows a highlight
+  // Warm back + accent + small lamp key so polished metal shows a highlight
   // instead of near-black (QUALITY-6 §9.2). Keep studio orbit for gates.
-  // Extra key3 / soft ground washed glass 0.06 into milky bars (liptarget §9.2).
   return `<layer width="440" height="300" camera="fov 32, orbit 34 22, distance 860, at 220 160 0">
     <ground id="ground" y="220" rotateX="90" fill="#e7e0d4" shadow-blur="26" shadow-opacity="0.5" />
     <layer x="28" y="220" width="400" height="190" origin="200 0" rotateX="90" preserve-3d>
@@ -341,8 +339,9 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
           )
           .replace(
             '<sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#d8dee4" material="metal 0.12" />',
-            // Dielectric — even dull metal still mirrored bars as "glass" (§9.2).
-            '<sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#c5ccd3" material="plastic 0.55" />',
+            // Dull the chrome — polished metal mirrored wall/stripe bars and
+            // dual-blind called them "glass vertical bars" (§9.2).
+            '<sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#c5ccd3" material="metal 0.62" />',
           )
           .replace(
             '<rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#e23b2f" />',
@@ -359,7 +358,7 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
           .replace(
             '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f4fffbcc" material="glass 0.07" />',
             // Shallow glass disk left of neon — sphere refraction = vertical bars (§9.2).
-            '<circle id="glass" cx="214" cy="248" r="44" depth="8" z="4" fill="#ffffff55" material="glass 0.07" />',
+            '<circle id="glass" cx="190" cy="250" r="40" depth="6" z="4" fill="#ffffff33" material="glass 0.12" />',
           )
           .replace(
             '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />',
