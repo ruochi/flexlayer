@@ -30,7 +30,7 @@ function bench(camera = BENCH_CAMERA, extra = ''): string {
       <rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#e23b2f" />
       <rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#f7f4ee" />
       <rect id="stripe-blue" x="282" y="200" width="36" height="78" depth="160" fill="#2a6fbe" />
-      <sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f4fffbcc" material="glass 0.07" />
+      <sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#e8f6f2a8" material="glass 0.08" />
       <circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />
       <layer x="400" y="230">
         <path id="hole" d="M0 0 H120 V84 H0 Z M28 18 V66 H92 V18 Z" depth="14" fill="#1f8a5b" material="plastic 0.3" />
@@ -130,18 +130,19 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Glassread: denser mint so the box reads (unwire A+B: RGB bars as body);
-    // thin soft edge (1.25) — glassmac 2.5 read as wire. Sphere z48 kept.
+    // Mintback: restore platerim mint (materials 6–8) with NO stroke —
+    // glassread thin edge still read as wire; denser fill did not help.
+    // Sphere z48 kept (stripes behind).
     label: 'glass 0.06',
-    box: 'fill="#b8d4ccc8" material="glass 0.06" stroke="#f7fffc outside" stroke-width="1.25"',
-    sphere: 'fill="#cfe8e0d0" material="glass 0.06"',
+    box: 'fill="#c5ddd6a0" material="glass 0.06"',
+    sphere: 'fill="#daf0eab8" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#b8d4ccc8" material="glass 0.72" stroke="#f7fffc outside" stroke-width="1.25"',
-    sphere: 'fill="#cfe8e0d0" material="glass 0.72"',
+    box: 'fill="#c5ddd6a0" material="glass 0.72"',
+    sphere: 'fill="#daf0eab8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
@@ -373,7 +374,7 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
             '<rect id="stripe-blue" x="178" y="272" width="70" height="28" depth="120" fill="#2a6fbe" />',
           )
           .replace(
-            '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f4fffbcc" material="glass 0.07" />',
+            '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#e8f6f2a8" material="glass 0.08" />',
             // Shallow glass disk left of neon — sphere refraction = vertical bars (§9.2).
             '<circle id="glass" cx="190" cy="250" r="40" depth="6" z="4" fill="#ffffff33" material="glass 0.12" />',
           )
