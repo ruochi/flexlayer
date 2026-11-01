@@ -33,10 +33,7 @@
     "contactRatio": null,
     "zFight": 0.0001,
     "errors": [],
-    "warnings": [
-      "invalid-attr",
-      "invalid-attr"
-    ]
+    "warnings": []
   },
   "glass.layer": {
     "width": 1520,

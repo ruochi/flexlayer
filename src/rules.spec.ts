@@ -179,6 +179,16 @@ describe('属性归属', () => {
     expect(hit?.hint).toContain('<div')
   })
 
+  it('线条写 x y 报 warn，挤出成实体的 path 不报', async () => {
+    // `examples/wire.layer` has two `path` bodies with `depth`, and the line
+    // rule told the author to delete the `x`/`y` that were positioning them.
+    const line = await issues(`<layer width="200" height="160"><path x="20" y="20" d="M0 0 H60 V40 H0 Z" stroke="#000" fill="none" /></layer>`)
+    expect(line.issues.some((issue) => issue.code === 'invalid-attr' && issue.message.includes('线条'))).toBe(true)
+
+    const solid = await issues(`<layer width="200" height="160"><path x="20" y="20" d="M0 0 H60 V40 H0 Z" depth="30" fill="#4CC3D9" /></layer>`)
+    expect(solid.issues.some((issue) => issue.code === 'invalid-attr' && issue.message.includes('线条'))).toBe(false)
+  })
+
   it('flex 里的 layer 不要再写 x y', async () => {
     const report = await issues(
       `<layer width="400" height="200"><div style="display:flex"><layer x="10" y="10" width="40" height="40"><circle cx="20" cy="20" r="10" fill="#fff" /></layer></div></layer>`,
