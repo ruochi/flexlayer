@@ -180,6 +180,9 @@ const FINISHES: Finish[] = [
 ]
 
 function cluster(finish: Finish): string {
+  // Slightly deeper than the glass box so columns refract instead of reading
+  // as the glass body (midgrey dual-blind). Farther wall stripes collapsed
+  // clear/frost edge+transmit gates.
   const stripes = finish.stripes
     ? `      <rect id="stripe-red" x="168" y="-8" width="28" height="40" depth="160" fill="#e23b2f" />
       <rect id="stripe-white" x="196" y="-8" width="28" height="40" depth="160" fill="#f7f4ee" />
