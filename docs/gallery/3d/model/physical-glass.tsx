@@ -2,8 +2,8 @@
 import { layer } from 'flexlayer'
 import * as THREE from 'three'
 
-// QUALITY-6 §E.2: transmission 1 → glass. Restore dropedge cream card + 0.08
-// after softplate (brighter card / 0.06) dual-blind model 5 milky RGB.
+// QUALITY-6 §E.2: dropedge cream card + glass 0.08 (unplate keeps model look;
+// engine tip is seam/plate softener only).
 const glass = new THREE.Mesh(
   new THREE.SphereGeometry(0.55, 48, 32),
   new THREE.MeshPhysicalMaterial({ color: '#ffffff', transmission: 1, roughness: 0.03, ior: 1.45, metalness: 0, thickness: 0.4 }),
