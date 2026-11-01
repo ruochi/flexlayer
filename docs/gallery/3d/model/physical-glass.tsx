@@ -8,7 +8,8 @@ const glass = new THREE.Mesh(
   new THREE.SphereGeometry(0.55, 48, 32),
   new THREE.MeshPhysicalMaterial({ color: '#ffffff', transmission: 1, roughness: 0.03, ior: 1.45, metalness: 0, thickness: 0.4 }),
 )
-glass.position.set(0, 0.55, 0.4)
+// Glassread: sit on the card so dual-blind stops calling transmission floating.
+glass.position.set(0, 0.48, 0.35)
 function stripe(color: string, x: number) {
   const mesh = new THREE.Mesh(
     new THREE.BoxGeometry(0.26, 1.25, 0.1),

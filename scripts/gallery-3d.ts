@@ -130,18 +130,18 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Unwire: drop solid glass stroke (glassmac B: wire frame on left);
-    // keep platerim mint + sphere z48 (stripes behind, not milky body).
+    // Glassread: denser mint so the box reads (unwire A+B: RGB bars as body);
+    // thin soft edge (1.25) — glassmac 2.5 read as wire. Sphere z48 kept.
     label: 'glass 0.06',
-    box: 'fill="#c5ddd6a0" material="glass 0.06"',
-    sphere: 'fill="#daf0eab8" material="glass 0.06"',
+    box: 'fill="#b8d4ccc8" material="glass 0.06" stroke="#f7fffc outside" stroke-width="1.25"',
+    sphere: 'fill="#cfe8e0d0" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#c5ddd6a0" material="glass 0.72"',
-    sphere: 'fill="#daf0eab8" material="glass 0.72"',
+    box: 'fill="#b8d4ccc8" material="glass 0.72" stroke="#f7fffc outside" stroke-width="1.25"',
+    sphere: 'fill="#cfe8e0d0" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
