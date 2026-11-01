@@ -130,18 +130,19 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Stronger teal body so the box reads as glass even when gate stripes sit
-    // beside the sphere (polishfill dual-blind materials 4).
+    // Light mint glass — deep teal hid the sphere (glassbody materials 4).
+    // Gate stripe footprint near the sphere (frost SSIM); no side columns
+    // stacked on the box (opaque RGB read).
     label: 'glass 0.06',
-    box: 'fill="#5a908888" material="glass 0.06"',
-    sphere: 'fill="#8ebcb4aa" material="glass 0.06"',
+    box: 'fill="#c5ddd6a0" material="glass 0.06"',
+    sphere: 'fill="#daf0eab8" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#5a908888" material="glass 0.72"',
-    sphere: 'fill="#8ebcb4aa" material="glass 0.72"',
+    box: 'fill="#c5ddd6a0" material="glass 0.72"',
+    sphere: 'fill="#daf0eab8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
@@ -180,13 +181,10 @@ const FINISHES: Finish[] = [
 ]
 
 function cluster(finish: Finish): string {
-  // Gate stripes near the sphere (SSIM) + thinner columns behind the glass box
-  // so the box refracts something instead of reading empty (polishfill).
+  // Exact gate footprint that held frost SSIM ≤0.3 (y=-8). Light mint glass
+  // body is the look lever — do not move stripes off the sphere again.
   const stripes = finish.stripes
-    ? `      <rect x="48" y="-52" width="14" height="70" depth="100" fill="#e23b2f" />
-      <rect x="66" y="-52" width="14" height="70" depth="100" fill="#f7f4ee" />
-      <rect x="84" y="-52" width="14" height="70" depth="100" fill="#2a6fbe" />
-      <rect id="stripe-red" x="168" y="-8" width="28" height="40" depth="160" fill="#e23b2f" />
+    ? `      <rect id="stripe-red" x="168" y="-8" width="28" height="40" depth="160" fill="#e23b2f" />
       <rect id="stripe-white" x="196" y="-8" width="28" height="40" depth="160" fill="#f7f4ee" />
       <rect id="stripe-blue" x="224" y="-8" width="28" height="40" depth="160" fill="#2a6fbe" />`
     : ''
@@ -345,7 +343,7 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
             '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="40" shadow-opacity="0.5" />',
             // Softer contact — dual-blind still cites jagged metal-plate rim (§9.2).
             // Keep plate metalness ≤0.62 / r≥0.48 — brighter plate blew SSR >0.01.
-            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="110" shadow-opacity="0.34" />',
+            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="128" shadow-opacity="0.32" />',
           )
           .replace(
             '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#cfd3d8" material="finish metal, color #cfd3d8, roughness 0.58, metalness 0.42, clearcoat 0" />',
