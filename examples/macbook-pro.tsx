@@ -5,8 +5,8 @@
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
 // Darker shell so lid bezel specular cannot read as chrome (§9.2).
 const SILVER = '#6e737a'
-const SHELL = 'plastic 0.845'
-const FRONT = '#2e3136'
+const SHELL = 'matte'
+const FRONT = '#1a1c20'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 
