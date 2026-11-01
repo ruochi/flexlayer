@@ -3,10 +3,10 @@
 // 银色 16 英寸 MacBook Pro 海报，以后渲染用这个场景。
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
-// Darker shell so lid bezel specular cannot read as chrome (§9.2).
-const SILVER = '#565b62'
+// Darker shell so lid/deck cannot read as a chrome lip over the seam (§9.2).
+const SILVER = '#3a3e44'
 const SHELL = 'plastic 0.845'
-const PAD_FILL = '#565b62'
+const PAD_FILL = '#3a3e44'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 
@@ -192,9 +192,8 @@ function Wallpaper() {
 }
 
 function Lid() {
-  // 2px silver rim — the old 7px bezel read as a chrome lip over the dark
-  // screen well under §9.2 dual-blind.
-  const BEZEL = 2
+  // 1px silver rim — dual-blind still called the 2px bezel a chrome lip (§9.2).
+  const BEZEL = 1
   return (
     <layer x={STAGE.x} y={STAGE.groundY - T + 4 - LID_H} width={W} height={LID_H} origin={`${W / 2} ${LID_H}`} rotateX={LID_TILT} cast-shadow="false">
       <rect width={W} height={LID_H} rx="24" fill={SILVER} material={SHELL} depth={LID_T} z={-LID_T / 2 - 1} stroke="none" cast-shadow="false" />
@@ -217,7 +216,7 @@ export default (
       <light type="hemisphere" intensity="0.95" color="#fff8f0" ground-color="#d2ccc4" />
       <Lid />
       <Base />
-      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="120" shadow-opacity="0.12" />
+      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="140" shadow-opacity="0.08" />
     </layer>
     <layer x="80" y="66">
       <p style="font-family:Inter; font-size:13px; font-weight:700; letter-spacing:6.2px; color:#c88255">PRO PERFORMANCE · M4 MAX</p>
