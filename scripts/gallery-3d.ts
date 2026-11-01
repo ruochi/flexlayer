@@ -115,11 +115,11 @@ const FINISHES: Finish[] = [
     side: 'fill="#f0f4f8" material="metal 0.8"',
   },
   {
-    // Brighter gold + satin sphere — platerim dual-blind near-black mirror.
+    // Brighter gold + satin sphere — unplate A near-black mirror sphere.
     label: 'mirror',
-    box: 'fill="#ffc040" material="metal 0.14"',
-    sphere: 'fill="#ffd56a" material="metal 0.22"',
-    side: 'fill="#ffc040" material="metal 0.14"',
+    box: 'fill="#ffc848" material="metal 0.16"',
+    sphere: 'fill="#ffe08a" material="metal 0.28"',
+    side: 'fill="#ffc848" material="metal 0.16"',
   },
   {
     // Cool mid silver — bright #e8eef3 washed the aniso tip (aspect→1); orange
