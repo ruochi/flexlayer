@@ -7,7 +7,7 @@ const SILVER = '#e8ecf2'
 // Product aluminum — dielectric, not chrome. Metalness >0 still grazed into a
 // bright chrome lip under dual-blind (§9.2); matte plastic + shade ceil keep
 // the front bevel near body midtones instead of a white stripe.
-const SHELL = 'finish plastic, color #bcc0c6, roughness 0.78, clearcoat 0'
+const SHELL = 'finish plastic, color #b8bcc2, roughness 0.8, clearcoat 0'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 

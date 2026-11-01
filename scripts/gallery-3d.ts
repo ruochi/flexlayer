@@ -320,12 +320,27 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
       height: BENCH_H + 96,
       caption: '贴地接触 · 悬空软影 · 缝里的遮挡 · 铬球 · 玻璃和色条 · 洞 · 霓虹 · 灯',
       // Still-only lift + softer plate — shared bench keeps manga hatchFlip
-      // and quality gold facetStripe (QUALITY-6 §9.2).
+      // and quality gold facetStripe (QUALITY-6 §9.2). Glass 0.14 + warmer
+      // stripe-white wash blocky window/stripe bars (dual-blind §9.2). Gold
+      // stays the extruded circle — a sphere blew facetStripe / floor dip.
       body: place(
-        bench().replace(
-          '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#cfd3d8" material="finish metal, color #cfd3d8, roughness 0.58, metalness 0.42, clearcoat 0" />',
-          '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" z="6" fill="#d5d9de" material="finish metal, color #d5d9de, roughness 0.78, metalness 0.22, clearcoat 0" />',
-        ),
+        bench()
+          .replace(
+            '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#cfd3d8" material="finish metal, color #cfd3d8, roughness 0.58, metalness 0.42, clearcoat 0" />',
+            '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" z="6" fill="#d5d9de" material="finish metal, color #d5d9de, roughness 0.78, metalness 0.22, clearcoat 0" />',
+          )
+          .replace(
+            '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f4fffbcc" material="glass 0.07" />',
+            '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f4fffbcc" material="glass 0.14" />',
+          )
+          .replace(
+            '<rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#f7f4ee" />',
+            '<rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#e2dbd0" />',
+          )
+          .replace(
+            '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />',
+            '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.45" />',
+          ),
         0,
         52,
       ),
