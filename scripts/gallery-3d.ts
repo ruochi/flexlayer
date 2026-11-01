@@ -130,16 +130,17 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Creamgate: no stroke — softplate stroke still read as opaque RWB bars.
+    // Rimstroke: restore thin stroke so the glass box does not vanish
+    // (creamgate B); keep light mint fills.
     label: 'glass 0.06',
-    box: 'fill="#d2e8e0a0" material="glass 0.06"',
+    box: 'fill="#d2e8e0a0" material="glass 0.06" stroke="2 #f7fffc outside"',
     sphere: 'fill="#e4f4eeb8" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#d2e8e0a0" material="glass 0.72"',
+    box: 'fill="#d2e8e0a0" material="glass 0.72" stroke="2 #f7fffc outside"',
     sphere: 'fill="#e4f4eeb8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
