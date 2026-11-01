@@ -194,14 +194,14 @@ function cluster(finish: Finish): string {
     : `<sphere id="side" cx="330" cy="78" r="28" z="28" fill="#e0a33a" material="plastic 0.35" />`
   // Warm back + accent + lamp keys so polished metal shows a highlight
   // instead of near-black (QUALITY-6 §9.2). Keep studio orbit for gates.
+  // Extra key3 / soft ground washed glass 0.06 into milky bars (liptarget §9.2).
   return `<layer width="440" height="300" camera="fov 32, orbit 34 22, distance 860, at 220 160 0">
-    <ground id="ground" y="220" rotateX="90" fill="#e7e0d4" shadow-blur="32" shadow-opacity="0.35" />
+    <ground id="ground" y="220" rotateX="90" fill="#e7e0d4" shadow-blur="26" shadow-opacity="0.5" />
     <layer x="28" y="220" width="400" height="190" origin="200 0" rotateX="90" preserve-3d>
       <rect id="back" x="-30" y="-90" width="440" height="14" depth="300" fill="#f4efe6" />
       <rect id="accent" x="280" y="-50" width="100" height="14" depth="180" fill="#f0a060" />
-      <sphere id="key" cx="90" cy="-10" r="42" z="170" material="lamp" />
-      <sphere id="key2" cx="300" cy="-30" r="30" z="140" material="lamp" />
-      <sphere id="key3" cx="200" cy="-50" r="22" z="150" material="lamp" />
+      <sphere id="key" cx="90" cy="-10" r="36" z="160" material="lamp" />
+      <sphere id="key2" cx="300" cy="-30" r="24" z="130" material="lamp" />
       <rect id="bounce" x="40" y="-70" width="200" height="8" depth="220" fill="#fff8f0" />
       <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" fill="#f6f2ea" />
       <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" ${finish.box} />
