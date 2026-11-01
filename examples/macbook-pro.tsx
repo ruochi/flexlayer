@@ -12,12 +12,13 @@ const WELL = '#1a1c20'
 
 const W = 980
 const D = 670
-const T = 30
+// Thin extrusion — a tall front face was reading as a chrome lip (§9.2).
+const T = 10
 const TOP = T / 2
 
 const LID_H = 666
-const LID_T = 10
-const LID_TILT = 15
+const LID_T = 6
+const LID_TILT = 12
 
 const STAGE = { x: 310, groundY: 1044 }
 
