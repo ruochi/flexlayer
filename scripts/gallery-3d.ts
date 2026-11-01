@@ -336,11 +336,13 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
           )
           .replace(
             '<rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#f7f4ee" />',
-            '<rect id="stripe-white" x="246" y="200" width="28" height="78" depth="160" fill="#b9b1a5" />',
+            // Thin pale edge-only white — wide cream bars read as blocky verticals
+            // through the glass under dual-blind (§9.2).
+            '<rect id="stripe-white" x="238" y="200" width="14" height="78" depth="160" fill="#a8a094" />',
           )
           .replace(
             '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f4fffbcc" material="glass 0.07" />',
-            '<sphere id="glass" cx="270" cy="268" r="58" z="58" fill="#f8fffc77" material="glass 0.05" />',
+            '<sphere id="glass" cx="278" cy="272" r="52" z="52" fill="#ffffff55" material="glass 0.04" />',
           )
           .replace(
             '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />',
