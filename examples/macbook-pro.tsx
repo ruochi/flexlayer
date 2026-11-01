@@ -6,7 +6,7 @@
 // Darker shell so lid bezel specular cannot read as chrome (§9.2).
 const SILVER = '#6e737a'
 const SHELL = 'matte'
-const FRONT = '#1a1c20'
+const FRONT = '#0c0e12'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 
@@ -139,7 +139,7 @@ function Base() {
           <p style="font-family:Inter; font-size:11px; font-weight:600; color:#b8bcc4">{k.label}</p>
         </layer>
       ))}
-      <rect x="70" y="-8" width={W - 140} height="18" rx="9" fill="#2a2b2f" material="plastic" depth="18" z={TOP - 3} cast-shadow="false" />
+      <rect x="70" y="-8" width={W - 140} height="18" rx="9" fill="#12141a" material="matte" depth="16" z={TOP - 3} cast-shadow="false" />
       <layer x={W - T / 2} y="0" width={T} height={D} origin={`${T / 2} 0`} rotateY="90" z="0.3" cast-shadow="false">
         <rect x={T / 2 - 4} y="214" width="8" height="30" rx="3" fill="#1c1d20" />
         <rect x={T / 2 - 3.5} y="300" width="7" height="22" rx="3.5" fill="#1c1d20" />
@@ -212,9 +212,9 @@ export default (
     <rect x="0" y="0" width="1440" height="1800" fill="linear-gradient(180deg, #f7f4ef 0%, #efe8df 100%)" />
     <layer width="1440" height="1800" camera="fov 28, orbit 16 14" light="world" grade="matte 0.85">
       {/* Neutral key — warm hemi alone bounced chrome-orange on the hinge (§9.2). */}
-      <light type="hemisphere" intensity="0.42" color="#e6e8ec" ground-color="#b8bcc2" />
-      <light type="directional" intensity="0.10" color="#e8eaee" x="120" y="-420" z="520" target="0 0 0" />
-      <light type="directional" intensity="0.06" color="#dfe3e8" x="-280" y="-200" z="400" target="0 0 0" />
+      <light type="hemisphere" intensity="0.36" color="#e2e4e8" ground-color="#aeb2b8" />
+      <light type="directional" intensity="0.07" color="#e2e4e8" x="120" y="-420" z="520" target="0 0 0" />
+      <light type="directional" intensity="0.04" color="#d6dae0" x="-280" y="-200" z="400" target="0 0 0" />
       <Lid />
       <Base />
       <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="100" shadow-opacity="0.30" />
