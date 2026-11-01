@@ -6,10 +6,10 @@
       <rect id="accent" x="300" y="-40" width="70" height="10" depth="160" fill="#e08a5c" />
       <sphere id="key" cx="90" cy="-10" r="22" z="130" material="lamp" />
       <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" fill="#f6f2ea" />
-      <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" fill="#d23b3b" />
+      <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" fill="#d23b3b" material="matte" />
       
-      <sphere id="sphere" cx="204" cy="72" r="30" z="30" fill="#f4f1ea" />
-      <circle id="side" cx="330" cy="78" r="26" depth="100" fill="#e0a33a" />
+      <sphere id="sphere" cx="204" cy="72" r="30" z="30" fill="#f4f1ea" material="matte" />
+      <sphere id="side" cx="330" cy="78" r="28" z="28" fill="#e0a33a" material="matte" />
     </layer>
   </layer>
   <layer x="12" y="304" color="#1c1915"><p style="font-size:24px; color:#1c1915; fill:#1c1915">matte</p></layer>

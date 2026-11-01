@@ -78,7 +78,8 @@ type Finish = {
 }
 
 const FINISHES: Finish[] = [
-  { label: 'matte', box: 'fill="#d23b3b"', sphere: 'fill="#f4f1ea"', side: 'fill="#e0a33a"' },
+  // Bare matte vs plastic: no specular lobe on matte so thumbnail pairs split (§9.2).
+  { label: 'matte', box: 'fill="#d23b3b" material="matte"', sphere: 'fill="#f4f1ea" material="matte"', side: 'fill="#e0a33a" material="matte"' },
   { label: 'clay', box: 'material="clay"', sphere: 'material="clay"', side: 'material="clay"' },
   {
     label: 'clay + fill',
@@ -100,21 +101,21 @@ const FINISHES: Finish[] = [
   },
   {
     label: 'metal 0.08',
-    box: 'fill="#c5c9ce" material="metal 0.08"',
-    sphere: 'fill="#e8eef3" material="metal 0.08"',
-    side: 'fill="#c5c9ce" material="metal 0.08"',
+    box: 'fill="#d8dee4" material="metal 0.08"',
+    sphere: 'fill="#eef3f7" material="metal 0.08"',
+    side: 'fill="#d8dee4" material="metal 0.08"',
   },
   {
     label: 'metal 0.8',
-    box: 'fill="#c5c9ce" material="metal 0.8"',
+    box: 'fill="#d0d5da" material="metal 0.8"',
     sphere: 'fill="#e8eef3" material="metal 0.8"',
-    side: 'fill="#c5c9ce" material="metal 0.8"',
+    side: 'fill="#d0d5da" material="metal 0.8"',
   },
   {
     label: 'mirror',
-    box: 'fill="#e4b33a" material="mirror"',
-    sphere: 'fill="#e4b33a" material="mirror"',
-    side: 'fill="#e4b33a" material="mirror"',
+    box: 'fill="#f0c85a" material="mirror"',
+    sphere: 'fill="#f0c85a" material="mirror"',
+    side: 'fill="#f0c85a" material="mirror"',
   },
   {
     // Cool mid silver — bright #e8eef3 washed the aniso tip (aspect→1); orange
@@ -126,6 +127,7 @@ const FINISHES: Finish[] = [
   },
   {
     // Box must also be glass — solid charcoal was §9.2 "glass boxes solid black".
+    // Tall stripes keep the box from vanishing into a RGB sliver (§9.2).
     label: 'glass 0.06',
     box: 'fill="#f4fffbcc" material="glass 0.06"',
     sphere: 'fill="#f4fffbcc" material="glass 0.06"',
@@ -140,10 +142,11 @@ const FINISHES: Finish[] = [
     stripes: true,
   },
   {
+    // Sharp coat lobe over a mid-rough base so clearcoat ≠ plastic 0.12 at thumbnail.
     label: 'clearcoat 1',
-    box: 'material="finish plastic, color #d23b3b, roughness 0.42, clearcoat 1"',
-    sphere: 'material="finish plastic, color #f4f1ea, roughness 0.42, clearcoat 1"',
-    side: 'material="finish plastic, color #e0a33a, roughness 0.42, clearcoat 1"',
+    box: 'material="finish plastic, color #d23b3b, roughness 0.62, clearcoat 1"',
+    sphere: 'material="finish plastic, color #f4f1ea, roughness 0.62, clearcoat 1"',
+    side: 'material="finish plastic, color #e0a33a, roughness 0.62, clearcoat 1"',
   },
   {
     label: 'anisotropy 0.9',
@@ -181,9 +184,11 @@ function cluster(finish: Finish): string {
   const sphere = finish.lamp
     ? `<sphere id="sphere" cx="210" cy="78" r="16" z="120" ${finish.sphere} />`
     : `<sphere id="sphere" cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
+  // Sphere (not extruded circle): depth cylinders scoop a hollow-arch
+  // silhouette that dual-blind reads in every materials cell (§9.2).
   const side = finish.neon
     ? `<torus id="side" cx="330" cy="78" r="32" tube="8" z="14" ${finish.side} rotateX="70" />`
-    : `<circle id="side" cx="330" cy="78" r="26" depth="100" ${finish.side} />`
+    : `<sphere id="side" cx="330" cy="78" r="28" z="28" ${finish.side} />`
   // Warm back + accent + small lamp key so polished metal shows a highlight
   // instead of near-black (QUALITY-6 §9.2). Keep studio orbit for gates.
   return `<layer width="440" height="300" camera="fov 32, orbit 34 22, distance 860, at 220 160 0">
@@ -319,10 +324,8 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
       width: BENCH_W,
       height: BENCH_H + 96,
       caption: '贴地接触 · 悬空软影 · 缝里的遮挡 · 铬球 · 玻璃和色条 · 洞 · 霓虹 · 灯',
-      // Still-only: frost glass 0.24 + warm stripe wash bars (global glass wash
-      // collapsed materials 0.06/0.72 under dual-blind). Gold is a rounded
-      // box — extruded circles scoop a hollow-arch silhouette under dual-blind
-      // (§9.2); facetStripe max is 8 for the box mid-band (cylinder wall was ≤3).
+      // Still-only: clear glass (frost 0.24 read as milky plastic under §9.2),
+      // warm stripe, rounded gold box (shared circle keeps manga hatchFlip).
       body: place(
         bench()
           .replace(
@@ -331,11 +334,11 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
           )
           .replace(
             '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f4fffbcc" material="glass 0.07" />',
-            '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f4fffbcc" material="glass 0.24" />',
+            '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f8fffc99" material="glass 0.08" />',
           )
           .replace(
             '<rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#f7f4ee" />',
-            '<rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#e2dbd0" />',
+            '<rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#d8d0c4" />',
           )
           .replace(
             '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />',
