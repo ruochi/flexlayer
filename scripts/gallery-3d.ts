@@ -130,18 +130,17 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Glassmac: restore platerim mint+stroke (materials hit 6–8 there);
-    // sphere z48 so stripes sit behind (lightglass), not as milky body.
-    // Solid stroke needs color[+side] + stroke-width (width-first form warns).
+    // Unwire: drop solid glass stroke (glassmac B: wire frame on left);
+    // keep platerim mint + sphere z48 (stripes behind, not milky body).
     label: 'glass 0.06',
-    box: 'fill="#c5ddd6a0" material="glass 0.06" stroke="#f4fffb outside" stroke-width="2.5"',
+    box: 'fill="#c5ddd6a0" material="glass 0.06"',
     sphere: 'fill="#daf0eab8" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#c5ddd6a0" material="glass 0.72" stroke="#f4fffb outside" stroke-width="2.5"',
+    box: 'fill="#c5ddd6a0" material="glass 0.72"',
     sphere: 'fill="#daf0eab8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
