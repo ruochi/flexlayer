@@ -14,7 +14,7 @@ import { layer } from 'flexlayer'
 export default layer.create(
   <layer width={440} height={300} background="#241f1b">
     <layer width={440} height={300} camera="fov 32, orbit 34 22, distance 860, at 220 210 0">
-      <ground y={220} rotateX={90} fill="#3a3f49" shadow-blur={40} shadow-opacity={0.36} />
+      <ground y={220} rotateX={90} fill="#3a3f49" shadow-blur={48} shadow-opacity={0.28} />
       <layer x={28} y={220} width={400} height={190} origin="200 0" rotateX={90} preserve-3d>
         <model src="box.glb" x="52" y="30" width="150" height="150" z="0" />
         <model src="diamond.glb" x="200" y="16" width="180" height="180" z="0" rotateY="-24" />
