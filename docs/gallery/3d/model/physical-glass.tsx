@@ -8,7 +8,7 @@ const glass = new THREE.Mesh(
   new THREE.SphereGeometry(0.55, 48, 32),
   new THREE.MeshPhysicalMaterial({ color: '#ffffff', transmission: 1, roughness: 0.03, ior: 1.45, metalness: 0, thickness: 0.4 }),
 )
-// Mintback: 0.42 overflowed canvas; keep glassread seat, stronger contact shadow.
+// Keep glassread seat — mintbars 0.45 overflowed canvas again.
 glass.position.set(0, 0.48, 0.35)
 function stripe(color: string, x: number) {
   const mesh = new THREE.Mesh(
@@ -27,7 +27,7 @@ card.position.set(0, 0.66, -0.28)
 export default layer.create(
   <layer width={440} height={300} background="#241f1b">
     <layer width={440} height={300} camera="fov 30, orbit 28 18, distance 720, at 220 175 0">
-      <ground y={220} rotateX={90} fill="#3a3f49" shadow-blur={64} shadow-opacity={0.34} />
+      <ground y={220} rotateX={90} fill="#3a3f49" shadow-blur={72} shadow-opacity={0.40} />
       <layer x={28} y={220} width={400} height={190} origin="200 0" rotateX={90} preserve-3d>
         <model object={card} unit={110} x={200} y={190} />
         <model object={stripe('#d94a3a', -0.4)} unit={110} x={200} y={190} />

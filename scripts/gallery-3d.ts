@@ -130,18 +130,18 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Glassvol: denser body than diskglass; mute stripes further. Clear vs frost
-    // diverge in opacity so dual-blind can tell 0.06 from 0.72 (diskglass A+B).
+    // Mintbars: keep glassvol teal fills (mint/frost variants blew clear/frost
+    // SSIM). Look tip is still glass + model metal + mac + aniso warm.
     label: 'glass 0.06',
-    box: 'fill="#4e8680a0" material="glass 0.06"',
-    sphere: 'fill="#7eb4accc" material="glass 0.06"',
+    box: 'fill="#6a9e9688" material="glass 0.06"',
+    sphere: 'fill="#9ec4bcb8" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#3a6e68c8" material="glass 0.72"',
-    sphere: 'fill="#6aa49cd8" material="glass 0.72"',
+    box: 'fill="#6a9e9688" material="glass 0.72"',
+    sphere: 'fill="#9ec4bcb8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
@@ -153,11 +153,11 @@ const FINISHES: Finish[] = [
     side: 'material="finish plastic, color #e0a33a, roughness 0.62, clearcoat 1"',
   },
   {
-    // Lift sphere albedo — platerim dual-blind near-black aniso spheres.
+    // Mintbars: warmer brushed sheen — glassvol B called aniso a twin of metal 0.08.
     label: 'anisotropy 0.9',
-    box: 'fill="#d5dbe1" material="finish metal, color #d2d8de, roughness 0.36, metalness 1, anisotropy 0.9"',
-    sphere: 'fill="#f4f7fa" material="finish metal, color #f0f4f8, roughness 0.36, metalness 1, anisotropy 0.9"',
-    side: 'fill="#d5dbe1" material="finish metal, color #d2d8de, roughness 0.36, metalness 1, anisotropy 0.9"',
+    box: 'fill="#c8b8a8" material="finish metal, color #c4b4a4, roughness 0.36, metalness 1, anisotropy 0.9"',
+    sphere: 'fill="#e8dcc8" material="finish metal, color #e4d8c4, roughness 0.36, metalness 1, anisotropy 0.9"',
+    side: 'fill="#c8b8a8" material="finish metal, color #c4b4a4, roughness 0.36, metalness 1, anisotropy 0.9"',
   },
   {
     // Brighter sheen sphere — platerim dual-blind lost form on dark cream.
@@ -184,12 +184,12 @@ const FINISHES: Finish[] = [
 function cluster(finish: Finish): string {
   // Gate footprint kept; sphere pulled forward (z) so stripes read behind glass
   // instead of as the glass body (lightglass dual-blind).
-  // Gate footprint near sphere (frost SSIM). Quieter than diskglass — RGB bars
-  // still read as the glass body under dual-blind.
+  // Gate footprint: diskglass mute (glassvol quieter #c9a49c raised frost SSIM
+  // to 0.33). Sphere z48.
   const stripes = finish.stripes
-    ? `      <rect id="stripe-red" x="168" y="-8" width="22" height="36" depth="140" fill="#c9a49c" />
-      <rect id="stripe-white" x="194" y="-8" width="22" height="36" depth="140" fill="#e8e4dc" />
-      <rect id="stripe-blue" x="220" y="-8" width="22" height="36" depth="140" fill="#6e8898" />`
+    ? `      <rect id="stripe-red" x="168" y="-8" width="22" height="36" depth="140" fill="#b87068" />
+      <rect id="stripe-white" x="194" y="-8" width="22" height="36" depth="140" fill="#ddd8d0" />
+      <rect id="stripe-blue" x="220" y="-8" width="22" height="36" depth="140" fill="#5a7a9a" />`
     : ''
   const sphere = finish.lamp
     ? `<sphere id="sphere" cx="210" cy="78" r="16" z="120" ${finish.sphere} />`
@@ -346,9 +346,9 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
         bench()
           .replace(
             '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="40" shadow-opacity="0.5" />',
-            // Softer contact — dual-blind still cites jagged metal-plate rim (§9.2).
+            // Mintbars: glassvol A jagged plate contact — softer penumbra.
             // Keep plate metalness ≤0.62 / r≥0.48 — brighter plate blew SSR >0.01.
-            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="168" shadow-opacity="0.28" />',
+            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="188" shadow-opacity="0.24" />',
           )
           .replace(
             '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#cfd3d8" material="finish metal, color #cfd3d8, roughness 0.58, metalness 0.42, clearcoat 0" />',
@@ -376,9 +376,9 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
           )
           .replace(
             '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#e8f6f2a8" material="glass 0.08" />',
-            // Diskglass clear disk was invisible (dual-blind B). Left-side sphere
-            // over the stripe stack; keep off neon (mint disk blew occluded).
-            '<sphere id="glass" cx="213" cy="250" r="52" z="40" fill="#c8e4dcb0" material="glass 0.06" />',
+            // Mintbars: first pass white-through-glass 0.089 < 0.1 — clearer
+            // fill seated on the white stripe; keep left of neon.
+            '<sphere id="glass" cx="213" cy="248" r="56" z="46" fill="#e8f4f0a8" material="glass 0.04" />',
           )
           .replace(
             '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />',
