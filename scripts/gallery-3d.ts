@@ -107,10 +107,11 @@ const FINISHES: Finish[] = [
     side: 'fill="#e4e9ee" material="metal 0.08"',
   },
   {
+    // Brighter box — dual-blind called metal 0.8 block near-black (§9.2).
     label: 'metal 0.8',
-    box: 'fill="#d8dde2" material="metal 0.8"',
-    sphere: 'fill="#eef2f6" material="metal 0.8"',
-    side: 'fill="#d8dde2" material="metal 0.8"',
+    box: 'fill="#e8edf2" material="metal 0.8"',
+    sphere: 'fill="#f2f5f8" material="metal 0.8"',
+    side: 'fill="#e8edf2" material="metal 0.8"',
   },
   {
     // Saturated gold mirror — stay distinct from cool metal 0.08 (§9.2).
@@ -340,9 +341,8 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
           )
           .replace(
             '<sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#d8dee4" material="metal 0.12" />',
-            // Dull the chrome — polished metal mirrored wall/stripe bars and
-            // dual-blind called them "glass vertical bars" (§9.2).
-            '<sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#c5ccd3" material="metal 0.45" />',
+            // Dielectric — even dull metal still mirrored bars as "glass" (§9.2).
+            '<sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#c5ccd3" material="plastic 0.55" />',
           )
           .replace(
             '<rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#e23b2f" />',
