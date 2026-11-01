@@ -130,18 +130,18 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Diskglass: denser tinted volume; mute gate stripes (tealglass A+B: saturated
-    // RGB bars read as the glass body). Sphere z48.
+    // Glassvol: denser body than diskglass; mute stripes further. Clear vs frost
+    // diverge in opacity so dual-blind can tell 0.06 from 0.72 (diskglass A+B).
     label: 'glass 0.06',
-    box: 'fill="#6a9e9688" material="glass 0.06"',
-    sphere: 'fill="#9ec4bcb8" material="glass 0.06"',
+    box: 'fill="#4e8680a0" material="glass 0.06"',
+    sphere: 'fill="#7eb4accc" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#6a9e9688" material="glass 0.72"',
-    sphere: 'fill="#9ec4bcb8" material="glass 0.72"',
+    box: 'fill="#3a6e68c8" material="glass 0.72"',
+    sphere: 'fill="#6aa49cd8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
@@ -184,11 +184,12 @@ const FINISHES: Finish[] = [
 function cluster(finish: Finish): string {
   // Gate footprint kept; sphere pulled forward (z) so stripes read behind glass
   // instead of as the glass body (lightglass dual-blind).
-  // Gate footprint near sphere (frost SSIM). Mute fills so stripes stay a cue.
+  // Gate footprint near sphere (frost SSIM). Quieter than diskglass — RGB bars
+  // still read as the glass body under dual-blind.
   const stripes = finish.stripes
-    ? `      <rect id="stripe-red" x="168" y="-8" width="22" height="36" depth="140" fill="#b87068" />
-      <rect id="stripe-white" x="194" y="-8" width="22" height="36" depth="140" fill="#ddd8d0" />
-      <rect id="stripe-blue" x="220" y="-8" width="22" height="36" depth="140" fill="#5a7a9a" />`
+    ? `      <rect id="stripe-red" x="168" y="-8" width="22" height="36" depth="140" fill="#c9a49c" />
+      <rect id="stripe-white" x="194" y="-8" width="22" height="36" depth="140" fill="#e8e4dc" />
+      <rect id="stripe-blue" x="220" y="-8" width="22" height="36" depth="140" fill="#6e8898" />`
     : ''
   const sphere = finish.lamp
     ? `<sphere id="sphere" cx="210" cy="78" r="16" z="120" ${finish.sphere} />`
@@ -375,13 +376,14 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
           )
           .replace(
             '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#e8f6f2a8" material="glass 0.08" />',
-            // Gate-safe shallow disk (mint disk blew neon occluded / through-glass).
-            '<circle id="glass" cx="190" cy="250" r="40" depth="6" z="4" fill="#ffffff66" material="glass 0.10" />',
+            // Diskglass clear disk was invisible (dual-blind B). Left-side sphere
+            // over the stripe stack; keep off neon (mint disk blew occluded).
+            '<sphere id="glass" cx="213" cy="250" r="52" z="40" fill="#c8e4dcb0" material="glass 0.06" />',
           )
           .replace(
             '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />',
-            // Solid seated block — hollow corners / halo gap under dual-blind (§9.2).
-            '<rect id="gold" x="744" y="88" width="76" height="98" depth="60" rx="10" fill="#e8a84a" material="plastic 0.55" />',
+            // Metal gold — plastic 0.55 read as dull olive with a stray lip (§9.2).
+            '<rect id="gold" x="744" y="88" width="76" height="98" depth="60" rx="10" fill="#e8b050" material="finish metal, color #e8b050, roughness 0.28, metalness 0.9" />',
           ),
         0,
         52,

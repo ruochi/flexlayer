@@ -7,7 +7,8 @@ import * as THREE from 'three'
 // Mid-silver + bounce cards; polishfill weak FILL left a matte cutout (§9.2).
 const mesh = new THREE.Mesh(
   new THREE.BoxGeometry(1, 1, 1),
-  new THREE.MeshStandardMaterial({ color: '#b4bcc4', metalness: 1, roughness: 0.10 }),
+  // Glassvol: brighter + smoother — diskglass B called rough 0.10 a matte cutout.
+  new THREE.MeshStandardMaterial({ color: '#c8ced6', metalness: 1, roughness: 0.05 }),
 )
 
 export default layer.create(
@@ -25,7 +26,7 @@ export default layer.create(
       </layer>
     </layer>
     <layer x={12} y={272}>
-      <p style="font-size:19px; color:#b7aea2">Standard · metal 1 · rough 0.10</p>
+      <p style="font-size:19px; color:#b7aea2">Standard · metal 1 · rough 0.05</p>
     </layer>
   </layer>,
 )

@@ -4,7 +4,7 @@
     "height": 640,
     "ground": true,
     "contactRatio": 1,
-    "zFight": 0.0003,
+    "zFight": 0.0002,
     "errors": [],
     "warnings": []
   },
@@ -42,7 +42,7 @@
     "width": 1520,
     "height": 1000,
     "ground": true,
-    "contactRatio": 0.849,
+    "contactRatio": 0.966,
     "zFight": 0,
     "errors": [],
     "warnings": []
@@ -78,7 +78,7 @@
     "width": 1400,
     "height": 760,
     "ground": true,
-    "contactRatio": 0.983,
+    "contactRatio": 0.981,
     "zFight": 0.0002,
     "errors": [],
     "warnings": []
@@ -87,7 +87,7 @@
     "width": 1760,
     "height": 820,
     "ground": true,
-    "contactRatio": 0.992,
+    "contactRatio": 1,
     "zFight": 0.0001,
     "errors": [],
     "warnings": []
@@ -96,7 +96,7 @@
     "width": 1640,
     "height": 800,
     "ground": true,
-    "contactRatio": 0.99,
+    "contactRatio": 0.998,
     "zFight": 0.0001,
     "errors": [],
     "warnings": []
@@ -105,8 +105,8 @@
     "width": 1400,
     "height": 760,
     "ground": true,
-    "contactRatio": 0.996,
-    "zFight": 0.0001,
+    "contactRatio": 1,
+    "zFight": 0.0003,
     "errors": [],
     "warnings": []
   },
