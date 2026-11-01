@@ -2,12 +2,12 @@
   <layer x="28" y="16"><p style="font-size:28px">静物 · studio · draft</p></layer>
   <layer x="28" y="600"><p style="font-size:18px; color:#b7aea2">贴地接触 · 悬空软影 · 缝里的遮挡 · 铬球 · 玻璃和色条 · 洞 · 霓虹 · 灯</p></layer>
   <layer x="0" y="52" width="880" height="540" camera="fov 30, orbit 28 34, distance 1100, at 500 600 0">
-    <ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="64" shadow-opacity="0.38" />
+    <ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="72" shadow-opacity="0.34" />
     <layer x="70" y="530" width="960" height="400" origin="480 0" rotateX="90" preserve-3d>
       <rect id="plinth" x="90" y="8" width="740" height="12" depth="170" rx="3" fill="#f6f2ea" />
       <rect id="red-box" x="70" y="48" width="190" height="130" depth="100" rx="18" fill="#d23b3b" material="plastic 0.28" />
       <rect id="white-box" x="276" y="40" width="150" height="140" depth="180" rx="12" fill="#f4f1ea" />
-      <rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" z="6" fill="#d5d9de" material="finish metal, color #d5d9de, roughness 0.78, metalness 0.22, clearcoat 0" />
+      <rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="14" z="6" fill="#d8dde3" material="finish metal, color #d8dde3, roughness 0.48, metalness 0.62, clearcoat 0" />
       <sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#c5ccd3" material="metal 0.45" />
       <sphere id="blue-float" cx="160" cy="200" r="34" z="140" fill="#2a6fbe" material="plastic 0.42" />
       <rect id="stripe-red" x="178" y="200" width="70" height="28" depth="120" fill="#e23b2f" />
