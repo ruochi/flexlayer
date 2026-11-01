@@ -130,19 +130,18 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Mintback: restore platerim mint (materials 6–8) with NO stroke —
-    // glassread thin edge still read as wire; denser fill did not help.
-    // Sphere z48 kept (stripes behind).
+    // Tealglass: glasstint tinted body (look peak) + near-sphere gate stripes
+    // (behind-box-only collapsed frost SSIM / edge ratio). Sphere z48.
     label: 'glass 0.06',
-    box: 'fill="#c5ddd6a0" material="glass 0.06"',
-    sphere: 'fill="#daf0eab8" material="glass 0.06"',
+    box: 'fill="#9ec4bc99" material="glass 0.06"',
+    sphere: 'fill="#b8d8d0aa" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#c5ddd6a0" material="glass 0.72"',
-    sphere: 'fill="#daf0eab8" material="glass 0.72"',
+    box: 'fill="#9ec4bc99" material="glass 0.72"',
+    sphere: 'fill="#b8d8d0aa" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
@@ -185,6 +184,7 @@ const FINISHES: Finish[] = [
 function cluster(finish: Finish): string {
   // Gate footprint kept; sphere pulled forward (z) so stripes read behind glass
   // instead of as the glass body (lightglass dual-blind).
+  // Gate footprint near sphere (frost SSIM). z48 so stripes sit behind glass.
   const stripes = finish.stripes
     ? `      <rect id="stripe-red" x="168" y="-8" width="28" height="40" depth="160" fill="#e23b2f" />
       <rect id="stripe-white" x="196" y="-8" width="28" height="40" depth="160" fill="#f7f4ee" />
