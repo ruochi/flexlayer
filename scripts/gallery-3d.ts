@@ -101,10 +101,11 @@ const FINISHES: Finish[] = [
     side: 'fill="#e0a33a" material="plastic 0.85"',
   },
   {
+    // Lift albedo — dual-blind still called metal 0.08 near-black (§9.2).
     label: 'metal 0.08',
-    box: 'fill="#e4e9ee" material="metal 0.08"',
-    sphere: 'fill="#f4f7fa" material="metal 0.08"',
-    side: 'fill="#e4e9ee" material="metal 0.08"',
+    box: 'fill="#eef3f7" material="metal 0.08"',
+    sphere: 'fill="#f8fafc" material="metal 0.08"',
+    side: 'fill="#eef3f7" material="metal 0.08"',
   },
   {
     // Brighter satin — dual-blind kept calling metal 0.8 near-black (§9.2).
@@ -114,11 +115,11 @@ const FINISHES: Finish[] = [
     side: 'fill="#f0f4f8" material="metal 0.8"',
   },
   {
-    // Saturated gold mirror — stay distinct from cool metal 0.08 (§9.2).
+    // Hotter gold — cool desat twin of metal 0.8 under dual-blind (§9.2).
     label: 'mirror',
-    box: 'fill="#ffc94a" material="mirror"',
-    sphere: 'fill="#ffc94a" material="mirror"',
-    side: 'fill="#ffc94a" material="mirror"',
+    box: 'fill="#ffb428" material="mirror"',
+    sphere: 'fill="#ffb428" material="mirror"',
+    side: 'fill="#ffb428" material="mirror"',
   },
   {
     // Cool mid silver — bright #e8eef3 washed the aniso tip (aspect→1); orange
