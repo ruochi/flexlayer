@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.17.5
+
+`check` no longer warns on `x`/`y` for a `path` or `polygon` with positive `depth`: those tags extrude into solids and the coordinates position the body, which is what `examples/wire.layer` was doing. The macbook poster scene was restaged — proportions, keyboard, Touch ID ring, material props around the chassis, and tighter edge-metric windows in `scripts/examples-metrics.mjs`.
+
 ## 0.17.4
 
 The 3D examples are measured now. `scripts/examples-gallery.mjs` renders all thirteen of them, writes the pictures beside the current build, and scores three things a picture alone hides: `contactRatio` (how much of each body's bottom edge sits in its own contact shadow), `zFight` (the share of neighbouring pixels whose luma combs at high contrast inside one owner), and the example's own `check`. Every example that writes a `<ground>` has to reach 0.8; `wire.layer` is the one plate deliberately in space and is not judged. `docs/gallery/examples/` holds the pictures and `examples-metrics.json`.
