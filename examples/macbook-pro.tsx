@@ -4,9 +4,9 @@
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
 // Darker shell so lid bezel specular cannot read as chrome (§9.2).
-const SILVER = '#646970'
+const SILVER = '#5e646c'
 const SHELL = 'matte'
-const FRONT = '#0c0e12'
+const FRONT = '#08090c'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 
@@ -217,7 +217,7 @@ export default (
       <light type="directional" intensity="0.04" color="#d6dae0" x="-280" y="-200" z="400" target="0 0 0" />
       <Lid />
       <Base />
-      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="155" shadow-opacity="0.24" />
+      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="168" shadow-opacity="0.22" />
     </layer>
     <layer x="80" y="66">
       <p style="font-family:Inter; font-size:13px; font-weight:700; letter-spacing:6.2px; color:#c88255">PRO PERFORMANCE · M4 MAX</p>
