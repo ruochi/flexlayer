@@ -345,13 +345,13 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
             '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="40" shadow-opacity="0.5" />',
             // Softer contact — dual-blind still cites jagged metal-plate rim (§9.2).
             // Keep plate metalness ≤0.62 / r≥0.48 — brighter plate blew SSR >0.01.
-            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="180" shadow-opacity="0.24" />',
+            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="128" shadow-opacity="0.32" />',
           )
           .replace(
             '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#cfd3d8" material="finish metal, color #cfd3d8, roughness 0.58, metalness 0.42, clearcoat 0" />',
             // Cooler mid plate — #d8dde3 read as milky plastic (envfill dual-blind).
             // Keep metalness ≤0.62 / r≥0.48 for SSR checker.
-            '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="18" z="2" fill="#cfd4da" material="finish metal, color #cfd4da, roughness 0.62, metalness 0.38, clearcoat 0" />',
+            '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="14" z="6" fill="#b8c0c8" material="finish metal, color #b8c0c8, roughness 0.50, metalness 0.62, clearcoat 0" />',
           )
           .replace(
             '<sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#d8dee4" material="metal 0.12" />',
