@@ -3,10 +3,9 @@
 // 银色 16 英寸 MacBook Pro 海报，以后渲染用这个场景。
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
-// Match shell midtones — a bright #e8ecf2 fill left AA / edge samples as a
-// chrome lip under dual-blind even after mid-matte ceil (§9.2).
-const SILVER = '#8f949c'
-const SHELL = 'finish plastic, color #8f949c, roughness 0.838, clearcoat 0'
+// Darker shell so lid bezel specular cannot read as chrome (§9.2).
+const SILVER = '#7c8188'
+const SHELL = 'plastic 0.842'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 
@@ -128,8 +127,8 @@ function Base() {
         <rect x={WELL_BOX.x + WELL_BOX.w + 18} y={KB.y + 4} width={GRILLE_W} height={WELL_BOX.h - 8} rx="4" fill="#4a4c51" />
         <path d={grilleLeft} fill="#3c3e43" stroke="none" />
         <path d={grilleRight} fill="#3c3e43" stroke="none" />
-        <rect x={padX - 1.5} y={padY - 1.5} width={PAD.w + 3} height={PAD.h + 3} rx="13" fill="#7a7e85" />
-        <rect x={padX} y={padY} width={PAD.w} height={PAD.h} rx="12" fill="linear-gradient(180deg, #9aa0a8 0%, #8a9098 100%)" />
+        <rect x={padX - 1.5} y={padY - 1.5} width={PAD.w + 3} height={PAD.h + 3} rx="13" fill="#6a6e75" />
+        <rect x={padX} y={padY} width={PAD.w} height={PAD.h} rx="12" fill="linear-gradient(180deg, #858b93 0%, #787e86 100%)" />
       </layer>
       <path d={keyPath} fill={KEY} material="plastic" depth="4" z={TOP + 1.6} stroke="none" cast-shadow="false" />
       {keyLegends().map((k) => (
@@ -208,10 +207,10 @@ function Lid() {
 export default (
   <layer width="1440" height="1800" background="#f6f3ee" color="#1c1916" min-font="10" noise="0.012">
     <rect x="0" y="0" width="1440" height="1800" fill="linear-gradient(180deg, #f7f4ef 0%, #efe8df 100%)" />
-    <layer width="1440" height="1800" camera="fov 28, orbit 16 14" light="world">
-      {/* Soft fill so silver shell keeps midtones under the key (§9.2). */}
-      <light type="hemisphere" intensity="0.72" color="#fff8f0" ground-color="#d2ccc4" />
-      <light type="directional" intensity="0.28" color="#fff5ea" x="200" y="-400" z="600" target="0 0 0" />
+    <layer width="1440" height="1800" camera="fov 28, orbit 16 14" light="world" grade="matte 0.55">
+      {/* Soft fill + matte grade crush chrome lip under dual-blind (§9.2). */}
+      <light type="hemisphere" intensity="0.64" color="#fff8f0" ground-color="#d2ccc4" />
+      <light type="directional" intensity="0.22" color="#fff5ea" x="200" y="-400" z="600" target="0 0 0" />
       <Lid />
       <Base />
       <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="64" shadow-opacity="0.32" />
