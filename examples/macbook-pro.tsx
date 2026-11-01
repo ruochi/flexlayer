@@ -217,6 +217,8 @@ export default (
       <Base />
       <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="140" shadow-opacity="0.08" />
     </layer>
+    {/* Cover cream|chassis AA fringe that dual-blind reads as a chrome lip (§9.2). */}
+    <rect x={STAGE.x - 2} y={720} width="14" height={STAGE.groundY - 700} rx="4" fill="#2a2d32" />
     <layer x="80" y="66">
       <p style="font-family:Inter; font-size:13px; font-weight:700; letter-spacing:6.2px; color:#c88255">PRO PERFORMANCE · M4 MAX</p>
     </layer>
