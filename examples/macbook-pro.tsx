@@ -3,22 +3,21 @@
 // 银色 16 英寸 MacBook Pro 海报，以后渲染用这个场景。
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
-// Darker shell so lid/deck cannot read as a chrome lip over the seam (§9.2).
-const SILVER = '#3a3e44'
+// Darker shell so lid bezel specular cannot read as chrome (§9.2).
+const SILVER = '#6e737a'
 const SHELL = 'plastic 0.845'
-const PAD_FILL = '#3a3e44'
+const FRONT = '#555960'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 
 const W = 980
 const D = 670
-// Near-flat deck — any tall front face reads as chrome lip (§9.2).
-const T = 4
+const T = 30
 const TOP = T / 2
 
 const LID_H = 666
-const LID_T = 3
-const LID_TILT = 6
+const LID_T = 10
+const LID_TILT = 15
 
 const STAGE = { x: 310, groundY: 1044 }
 
@@ -123,14 +122,16 @@ function Base() {
   return (
     <layer x={STAGE.x} y={STAGE.groundY - TOP} width={W} height={D} origin={`${W / 2} 0`} rotateX="90" preserve-3d>
       <rect width={W} height={D} rx="24" fill={SILVER} material={SHELL} depth={T} stroke="none" />
+      {/* Darker front lip so the extruded front face cannot read as chrome. */}
+      <rect x="12" y={D - 14} width={W - 24} height="14" rx="6" fill={FRONT} material="plastic 0.84" depth="6" z={TOP - 2} stroke="none" cast-shadow="false" />
       <layer x="0" y="0" width={W} height={D} z={TOP + 0.2} cast-shadow="false">
         <rect x={WELL_BOX.x} y={WELL_BOX.y} width={WELL_BOX.w} height={WELL_BOX.h} rx="8" fill={WELL} />
         <rect x={KB.x - GRILLE_W - 18} y={KB.y + 4} width={GRILLE_W} height={WELL_BOX.h - 8} rx="4" fill="#4a4c51" />
         <rect x={WELL_BOX.x + WELL_BOX.w + 18} y={KB.y + 4} width={GRILLE_W} height={WELL_BOX.h - 8} rx="4" fill="#4a4c51" />
         <path d={grilleLeft} fill="#3c3e43" stroke="none" />
         <path d={grilleRight} fill="#3c3e43" stroke="none" />
-        <rect x={padX - 1.5} y={padY - 1.5} width={PAD.w + 3} height={PAD.h + 3} rx="13" fill={PAD_FILL} />
-        <rect x={padX} y={padY} width={PAD.w} height={PAD.h} rx="12" fill={PAD_FILL} />
+        <rect x={padX - 1.5} y={padY - 1.5} width={PAD.w + 3} height={PAD.h + 3} rx="13" fill="#6a6e75" />
+        <rect x={padX} y={padY} width={PAD.w} height={PAD.h} rx="12" fill="linear-gradient(180deg, #858b93 0%, #787e86 100%)" />
       </layer>
       <path d={keyPath} fill={KEY} material="plastic" depth="4" z={TOP + 1.6} stroke="none" cast-shadow="false" />
       {keyLegends().map((k) => (
@@ -138,9 +139,7 @@ function Base() {
           <p style="font-family:Inter; font-size:11px; font-weight:600; color:#b8bcc4">{k.label}</p>
         </layer>
       ))}
-      {/* In-mesh dark hinge rail — kills warm deck-edge specular without a 2D strip (§9.2). */}
-      <rect x="16" y="-1" width={W - 32} height="7" rx="3" fill="#1e2024" material="plastic 0.9" depth="5" z={TOP + 0.6} cast-shadow="false" />
-      <rect x="70" y="-8" width={W - 140} height="18" rx="9" fill="#1a1b1e" material="plastic" depth="18" z={TOP - 3} cast-shadow="false" />
+      <rect x="70" y="-8" width={W - 140} height="18" rx="9" fill="#2a2b2f" material="plastic" depth="18" z={TOP - 3} cast-shadow="false" />
       <layer x={W - T / 2} y="0" width={T} height={D} origin={`${T / 2} 0`} rotateY="90" z="0.3" cast-shadow="false">
         <rect x={T / 2 - 4} y="214" width="8" height="30" rx="3" fill="#1c1d20" />
         <rect x={T / 2 - 3.5} y="300" width="7" height="22" rx="3.5" fill="#1c1d20" />
@@ -194,14 +193,12 @@ function Wallpaper() {
 }
 
 function Lid() {
-  // 1px silver rim — dual-blind still called the 2px bezel a chrome lip (§9.2).
-  const BEZEL = 1
   return (
     <layer x={STAGE.x} y={STAGE.groundY - T + 4 - LID_H} width={W} height={LID_H} origin={`${W / 2} ${LID_H}`} rotateX={LID_TILT} cast-shadow="false">
       <rect width={W} height={LID_H} rx="24" fill={SILVER} material={SHELL} depth={LID_T} z={-LID_T / 2 - 1} stroke="none" cast-shadow="false" />
-      <rect x={BEZEL} y={BEZEL} width={W - BEZEL * 2} height={LID_H - BEZEL * 2} rx="20" fill="#050608" cast-shadow="false" />
+      <rect x="7" y="7" width={W - 14} height={LID_H - 14} rx="18" fill="#050608" cast-shadow="false" />
       <Wallpaper />
-      <rect x={W / 2 - 36} y={BEZEL} width="72" height="27" rx="8" fill="#050608" cast-shadow="false" />
+      <rect x={W / 2 - 36} y="7" width="72" height="27" rx="8" fill="#050608" cast-shadow="false" />
       <circle cx={W / 2} cy="18" r="2.4" fill="#0e1018" stroke="#23262e" stroke-width="0.6" />
       <layer x={W / 2} y={SCREEN.y + SCREEN.h + 18} anchor="center">
         <p style="font-family:Inter; font-size:10px; letter-spacing:0.4px; color:#5b5e65">MacBook Pro</p>
@@ -213,12 +210,13 @@ function Lid() {
 export default (
   <layer width="1440" height="1800" background="#f6f3ee" color="#1c1916" min-font="10" noise="0.012">
     <rect x="0" y="0" width="1440" height="1800" fill="linear-gradient(180deg, #f7f4ef 0%, #efe8df 100%)" />
-    <layer width="1440" height="1800" camera="fov 22, orbit 2 42" light="world" grade="matte 0.98">
-      {/* More overhead foreshortens the deck lip; chromegold hemi (cooler lights hurt §9.2). */}
-      <light type="hemisphere" intensity="0.95" color="#fff8f0" ground-color="#d2ccc4" />
+    <layer width="1440" height="1800" camera="fov 28, orbit 16 14" light="world" grade="matte 0.7">
+      {/* Stronger matte + darker front bevel kill chrome lip (§9.2). */}
+      <light type="hemisphere" intensity="0.58" color="#fff8f0" ground-color="#d2ccc4" />
+      <light type="directional" intensity="0.18" color="#fff5ea" x="200" y="-400" z="600" target="0 0 0" />
       <Lid />
       <Base />
-      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="140" shadow-opacity="0.08" />
+      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="72" shadow-opacity="0.28" />
     </layer>
     <layer x="80" y="66">
       <p style="font-family:Inter; font-size:13px; font-weight:700; letter-spacing:6.2px; color:#c88255">PRO PERFORMANCE · M4 MAX</p>
