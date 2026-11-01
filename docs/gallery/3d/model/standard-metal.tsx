@@ -7,7 +7,8 @@ import * as THREE from 'three'
 // mapping cell stays honest; lift albedo / soften roughness for §9.2 look.
 const mesh = new THREE.Mesh(
   new THREE.BoxGeometry(1, 1, 1),
-  new THREE.MeshStandardMaterial({ color: '#eceff3', metalness: 1, roughness: 0.18 }),
+  // rough 0.14 sits under shade polished floor (0.15); brighter albedo for §9.2.
+  new THREE.MeshStandardMaterial({ color: '#f2f5f9', metalness: 1, roughness: 0.14 }),
 )
 
 export default layer.create(
@@ -20,7 +21,7 @@ export default layer.create(
       </layer>
     </layer>
     <layer x={12} y={272}>
-      <p style="font-size:19px; color:#b7aea2">Standard · metal 1 · rough 0.18</p>
+      <p style="font-size:19px; color:#b7aea2">Standard · metal 1 · rough 0.14</p>
     </layer>
   </layer>,
 )
