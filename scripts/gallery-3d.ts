@@ -130,18 +130,18 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Tealglass: glasstint tinted body (look peak) + near-sphere gate stripes
-    // (behind-box-only collapsed frost SSIM / edge ratio). Sphere z48.
+    // Diskglass: denser tinted volume; mute gate stripes (tealglass A+B: saturated
+    // RGB bars read as the glass body). Sphere z48.
     label: 'glass 0.06',
-    box: 'fill="#9ec4bc99" material="glass 0.06"',
-    sphere: 'fill="#b8d8d0aa" material="glass 0.06"',
+    box: 'fill="#6a9e9688" material="glass 0.06"',
+    sphere: 'fill="#9ec4bcb8" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#9ec4bc99" material="glass 0.72"',
-    sphere: 'fill="#b8d8d0aa" material="glass 0.72"',
+    box: 'fill="#6a9e9688" material="glass 0.72"',
+    sphere: 'fill="#9ec4bcb8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
@@ -184,11 +184,11 @@ const FINISHES: Finish[] = [
 function cluster(finish: Finish): string {
   // Gate footprint kept; sphere pulled forward (z) so stripes read behind glass
   // instead of as the glass body (lightglass dual-blind).
-  // Gate footprint near sphere (frost SSIM). z48 so stripes sit behind glass.
+  // Gate footprint near sphere (frost SSIM). Mute fills so stripes stay a cue.
   const stripes = finish.stripes
-    ? `      <rect id="stripe-red" x="168" y="-8" width="28" height="40" depth="160" fill="#e23b2f" />
-      <rect id="stripe-white" x="196" y="-8" width="28" height="40" depth="160" fill="#f7f4ee" />
-      <rect id="stripe-blue" x="224" y="-8" width="28" height="40" depth="160" fill="#2a6fbe" />`
+    ? `      <rect id="stripe-red" x="168" y="-8" width="22" height="36" depth="140" fill="#b87068" />
+      <rect id="stripe-white" x="194" y="-8" width="22" height="36" depth="140" fill="#ddd8d0" />
+      <rect id="stripe-blue" x="220" y="-8" width="22" height="36" depth="140" fill="#5a7a9a" />`
     : ''
   const sphere = finish.lamp
     ? `<sphere id="sphere" cx="210" cy="78" r="16" z="120" ${finish.sphere} />`
@@ -375,8 +375,8 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
           )
           .replace(
             '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#e8f6f2a8" material="glass 0.08" />',
-            // Shallow glass disk left of neon — sphere refraction = vertical bars (§9.2).
-            '<circle id="glass" cx="190" cy="250" r="40" depth="6" z="4" fill="#ffffff33" material="glass 0.12" />',
+            // Gate-safe shallow disk (mint disk blew neon occluded / through-glass).
+            '<circle id="glass" cx="190" cy="250" r="40" depth="6" z="4" fill="#ffffff66" material="glass 0.10" />',
           )
           .replace(
             '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />',
