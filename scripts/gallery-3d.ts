@@ -195,9 +195,10 @@ function cluster(finish: Finish): string {
   return `<layer width="440" height="300" camera="fov 32, orbit 34 22, distance 860, at 220 160 0">
     <ground id="ground" y="220" rotateX="90" fill="#e7e0d4" shadow-blur="26" shadow-opacity="0.5" />
     <layer x="28" y="220" width="400" height="190" origin="200 0" rotateX="90" preserve-3d>
-      <rect id="back" x="-30" y="-90" width="440" height="14" depth="300" fill="#efe8dc" />
-      <rect id="accent" x="300" y="-40" width="70" height="10" depth="160" fill="#e08a5c" />
-      <sphere id="key" cx="90" cy="-10" r="30" z="140" material="lamp" />
+      <rect id="back" x="-30" y="-90" width="440" height="14" depth="300" fill="#f4efe6" />
+      <rect id="accent" x="280" y="-50" width="100" height="14" depth="180" fill="#f0a060" />
+      <sphere id="key" cx="90" cy="-10" r="34" z="150" material="lamp" />
+      <sphere id="key2" cx="320" cy="-20" r="18" z="110" material="lamp" />
       <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" fill="#f6f2ea" />
       <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" ${finish.box} />
       ${stripes}
@@ -335,11 +336,11 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
           )
           .replace(
             '<rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#f7f4ee" />',
-            '<rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#c8bfb0" />',
+            '<rect id="stripe-white" x="246" y="200" width="28" height="78" depth="160" fill="#b9b1a5" />',
           )
           .replace(
             '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f4fffbcc" material="glass 0.07" />',
-            '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f8fffc88" material="glass 0.06" />',
+            '<sphere id="glass" cx="270" cy="268" r="58" z="58" fill="#f8fffc77" material="glass 0.05" />',
           )
           .replace(
             '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />',

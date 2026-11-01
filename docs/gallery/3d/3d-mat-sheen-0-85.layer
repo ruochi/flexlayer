@@ -2,9 +2,10 @@
   <layer x="0" y="0" width="440" height="300" camera="fov 32, orbit 34 22, distance 860, at 220 160 0">
     <ground id="ground" y="220" rotateX="90" fill="#e7e0d4" shadow-blur="26" shadow-opacity="0.5" />
     <layer x="28" y="220" width="400" height="190" origin="200 0" rotateX="90" preserve-3d>
-      <rect id="back" x="-30" y="-90" width="440" height="14" depth="300" fill="#efe8dc" />
-      <rect id="accent" x="300" y="-40" width="70" height="10" depth="160" fill="#e08a5c" />
-      <sphere id="key" cx="90" cy="-10" r="30" z="140" material="lamp" />
+      <rect id="back" x="-30" y="-90" width="440" height="14" depth="300" fill="#f4efe6" />
+      <rect id="accent" x="280" y="-50" width="100" height="14" depth="180" fill="#f0a060" />
+      <sphere id="key" cx="90" cy="-10" r="34" z="150" material="lamp" />
+      <sphere id="key2" cx="320" cy="-20" r="18" z="110" material="lamp" />
       <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" fill="#f6f2ea" />
       <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" material="finish plastic, color #c45a6a, roughness 0.55, sheen 0.85" />
       
