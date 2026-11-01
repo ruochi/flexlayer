@@ -6,7 +6,7 @@
 // Darker shell so lid bezel specular cannot read as chrome (§9.2).
 const SILVER = '#6e737a'
 const SHELL = 'plastic 0.845'
-const FRONT = '#555960'
+const FRONT = '#3a3e44'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 
@@ -170,8 +170,8 @@ function Wallpaper() {
       {stars.map((s) => (
         <circle cx={s.cx} cy={s.cy} r={s.r} fill="#ffe6c7" opacity={s.o} />
       ))}
-      <circle cx="660" cy="330" r="200" fill="#ff8a45" opacity="0.22" blur="36" />
-      <circle cx="660" cy="330" r="110" fill="radial-gradient(circle at 42% 38%, #fff7dd 0%, #ffd28a 30%, #ff9a4e 64%, #e55934 100%)" />
+      <circle cx="660" cy="330" r="200" fill="#ff8a45" opacity="0.08" blur="36" />
+      <circle cx="660" cy="330" r="90" fill="radial-gradient(circle at 42% 38%, #ffe8c8 0%, #f0b878 40%, #d47850 100%)" opacity="0.55" />
       <rect x="0" y="0" width={SCREEN.w} height="26" fill="#040408" opacity="0.5" />
       <layer x="20" y="6">
         <div style="display:flex; gap:13px; align-items:center">
