@@ -4,7 +4,7 @@
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
 // Darker shell so lid bezel specular cannot read as chrome (§9.2).
-const SILVER = '#6e737a'
+const SILVER = '#646970'
 const SHELL = 'matte'
 const FRONT = '#0c0e12'
 const KEY = '#2e3138'
@@ -139,7 +139,7 @@ function Base() {
           <p style="font-family:Inter; font-size:11px; font-weight:600; color:#b8bcc4">{k.label}</p>
         </layer>
       ))}
-      <rect x="70" y="-8" width={W - 140} height="18" rx="9" fill="#12141a" material="matte" depth="16" z={TOP - 3} cast-shadow="false" />
+      <rect x="70" y="-8" width={W - 140} height="18" rx="9" fill="#0a0b0e" material="matte" depth="10" z={TOP - 5} cast-shadow="false" />
       <layer x={W - T / 2} y="0" width={T} height={D} origin={`${T / 2} 0`} rotateY="90" z="0.3" cast-shadow="false">
         <rect x={T / 2 - 4} y="214" width="8" height="30" rx="3" fill="#1c1d20" />
         <rect x={T / 2 - 3.5} y="300" width="7" height="22" rx="3.5" fill="#1c1d20" />

@@ -345,7 +345,7 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
             '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="40" shadow-opacity="0.5" />',
             // Softer contact — dual-blind still cites jagged metal-plate rim (§9.2).
             // Keep plate metalness ≤0.62 / r≥0.48 — brighter plate blew SSR >0.01.
-            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="128" shadow-opacity="0.32" />',
+            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="140" shadow-opacity="0.30" />',
           )
           .replace(
             '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#cfd3d8" material="finish metal, color #cfd3d8, roughness 0.58, metalness 0.42, clearcoat 0" />',
@@ -357,7 +357,7 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
             '<sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#d8dee4" material="metal 0.12" />',
             // Dull the chrome — polished metal mirrored wall/stripe bars and
             // dual-blind called them "glass vertical bars" (§9.2).
-            '<sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#c5ccd3" material="metal 0.45" />',
+            '<sphere id="chrome" cx="590" cy="148" r="48" z="52" fill="#c5ccd3" material="metal 0.45" />',
           )
           .replace(
             '<rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#e23b2f" />',
