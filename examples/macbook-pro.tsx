@@ -4,8 +4,9 @@
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
 const SILVER = '#e8ecf2'
-// Product aluminum; clearcoat off (wet chrome lip read).
-const SHELL = 'finish metal, color #bcc0c5, roughness 0.94, metalness 0.08, clearcoat 0'
+// Product aluminum — dielectric, not chrome. Metalness >0 still grazed into a
+// bright chrome lip under dual-blind (§9.2); plastic finish keeps silver midtones.
+const SHELL = 'finish plastic, color #c5c9ce, roughness 0.62, clearcoat 0'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 
