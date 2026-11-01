@@ -50,14 +50,14 @@ const EDGE_WINDOWS = [
   // Pixel windows follow the current examples/macbook-pro.tsx framing; move
   // them with the stage. Keep the chord off the front-left corner (corner arc
   // variance is not the lip).
-  { name: 'base-front', y0: 1150, y1: 1215, x0: 460, x1: 560 },
-  { name: 'base-right', y0: 1060, y1: 1180, x0: 1140, x1: 1200 },
+  { name: 'base-front', y0: 1040, y1: 1085, x0: 480, x1: 580 },
+  { name: 'base-right', y0: 985, y1: 1060, x0: 1020, x1: 1075 },
   // Short chords on the silver bezel — a full-width lid-top row crosses the
   // wallpaper and looks like a dashed bevel. Thin lids skip crease bevel
   // (QUALITY-5 §1.4), so these windows often return null; that is fine —
   // worstEdgeSd only grades rows that resolve to a mid-tone bevel chord.
-  { name: 'lid-top', y0: 470, y1: 500, x0: 520, x1: 680 },
-  { name: 'lid-side', y0: 560, y1: 800, x0: 1195, x1: 1230 },
+  { name: 'lid-top', y0: 445, y1: 475, x0: 520, x1: 680 },
+  { name: 'lid-side', y0: 520, y1: 760, x0: 1105, x1: 1135 },
 ]
 
 function rowMean(samples) {
@@ -103,16 +103,16 @@ function bestEdgeInWindow(rgba, width, win) {
  * Inside the left speaker grille, clear of its rounded ends. Perspective
  * slants the strip, so the left and right bounds move with y.
  */
-const SPEAKER = { y0: 1003, y1: 1050, x0: 428, x1: 470, slope: -1.36 }
+const SPEAKER = { y0: 916, y1: 956, x0: 430, x1: 471, slope: -1.48 }
 const inSpeaker = (x, y) =>
   y >= SPEAKER.y0 &&
   y <= SPEAKER.y1 &&
-  x >= SPEAKER.x0 + 3 + (y - SPEAKER.y0) * SPEAKER.slope &&
-  x <= SPEAKER.x1 - 3 + (y - SPEAKER.y0) * SPEAKER.slope
+  x >= SPEAKER.x0 + (y - SPEAKER.y0) * SPEAKER.slope &&
+  x <= SPEAKER.x1 + (y - SPEAKER.y0) * SPEAKER.slope
 /** Palm rests either side of the trackpad, clear of its border and the lip. */
 const PALM = [
-  { x0: 250, y0: 1125, x1: 425, y1: 1200 },
-  { x0: 915, y0: 1125, x1: 1110, y1: 1200 },
+  { x0: 350, y0: 985, x1: 440, y1: 1020 },
+  { x0: 840, y0: 1023, x1: 955, y1: 1060 },
 ]
 
 function round(value, digits = 4) {
