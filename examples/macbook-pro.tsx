@@ -138,8 +138,6 @@ function Base() {
           <p style="font-family:Inter; font-size:11px; font-weight:600; color:#b8bcc4">{k.label}</p>
         </layer>
       ))}
-      {/* Dark hinge lip — bright deck edge over the seam reads chrome (§9.2). */}
-      <rect x="24" y="-2" width={W - 48} height="10" rx="4" fill="#1c1e22" material="plastic" depth="6" z={TOP + 0.4} cast-shadow="false" />
       <rect x="70" y="-8" width={W - 140} height="18" rx="9" fill="#1a1b1e" material="plastic" depth="18" z={TOP - 3} cast-shadow="false" />
       <layer x={W - T / 2} y="0" width={T} height={D} origin={`${T / 2} 0`} rotateY="90" z="0.3" cast-shadow="false">
         <rect x={T / 2 - 4} y="214" width="8" height="30" rx="3" fill="#1c1d20" />
@@ -194,13 +192,14 @@ function Wallpaper() {
 }
 
 function Lid() {
-  // No silver lid rim — bezel well is the whole lid face (§9.2 chrome lip).
+  // 1px silver rim — dual-blind still called the 2px bezel a chrome lip (§9.2).
+  const BEZEL = 1
   return (
     <layer x={STAGE.x} y={STAGE.groundY - T + 4 - LID_H} width={W} height={LID_H} origin={`${W / 2} ${LID_H}`} rotateX={LID_TILT} cast-shadow="false">
-      <rect width={W} height={LID_H} rx="24" fill="#050608" material={SHELL} depth={LID_T} z={-LID_T / 2 - 1} stroke="none" cast-shadow="false" />
-      <rect x="0" y="0" width={W} height={LID_H} rx="24" fill="#050608" cast-shadow="false" />
+      <rect width={W} height={LID_H} rx="24" fill={SILVER} material={SHELL} depth={LID_T} z={-LID_T / 2 - 1} stroke="none" cast-shadow="false" />
+      <rect x={BEZEL} y={BEZEL} width={W - BEZEL * 2} height={LID_H - BEZEL * 2} rx="20" fill="#050608" cast-shadow="false" />
       <Wallpaper />
-      <rect x={W / 2 - 36} y="0" width="72" height="28" rx="8" fill="#050608" cast-shadow="false" />
+      <rect x={W / 2 - 36} y={BEZEL} width="72" height="27" rx="8" fill="#050608" cast-shadow="false" />
       <circle cx={W / 2} cy="18" r="2.4" fill="#0e1018" stroke="#23262e" stroke-width="0.6" />
       <layer x={W / 2} y={SCREEN.y + SCREEN.h + 18} anchor="center">
         <p style="font-family:Inter; font-size:10px; letter-spacing:0.4px; color:#5b5e65">MacBook Pro</p>
@@ -214,15 +213,12 @@ export default (
     <rect x="0" y="0" width="1440" height="1800" fill="linear-gradient(180deg, #f7f4ef 0%, #efe8df 100%)" />
     <layer width="1440" height="1800" camera="fov 22, orbit 4 38" light="world" grade="matte 0.98">
       {/* Near-overhead + flat deck; kill specular lip (§9.2). */}
-      <light type="hemisphere" intensity="0.95" color="#fff8f0" ground-color="#d2ccc4" />
+      <light type="hemisphere" intensity="0.72" color="#f2f0ec" ground-color="#c8c4be" />
+      <light type="directional" intensity="0.35" color="#fff8f0" x="0" y="-200" z="400" target="0 0 0" />
       <Lid />
       <Base />
       <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="140" shadow-opacity="0.08" />
     </layer>
-    {/* Cover cream|chassis AA fringe (edge ~x305) that dual-blind reads as chrome (§9.2). */}
-    <rect x={STAGE.x - 14} y="720" width="28" height={STAGE.groundY - 700} rx="4" fill="#3a3e44" />
-    {/* Warm specular on the deck edge over the hinge (~y965, Y~180) reads as chrome lip. */}
-    <rect x={STAGE.x + 60} y="952" width={W - 80} height="28" rx="6" fill="#2a2d32" />
     <layer x="80" y="66">
       <p style="font-family:Inter; font-size:13px; font-weight:700; letter-spacing:6.2px; color:#c88255">PRO PERFORMANCE · M4 MAX</p>
     </layer>
