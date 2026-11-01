@@ -19,7 +19,7 @@ export function cell(body: JSX.Element, caption: string) {
   return layer.create(
     <layer width={440} height={300} background="#241f1b">
       <layer width={440} height={300} camera={CAMERA}>
-        <ground y={FLOOR} rotateX={90} fill="#3a3f49" shadow-blur={48} shadow-opacity={0.28} />
+        <ground y={FLOOR} rotateX={90} fill="#3a3f49" shadow-blur={64} shadow-opacity={0.18} />
         {body}
       </layer>
       <layer x={12} y={272}>
