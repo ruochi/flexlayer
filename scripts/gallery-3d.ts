@@ -130,17 +130,17 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Restore platerim mint+stroke after glassclear materials 4 regress.
+    // Softplate: lighter mint + thin stroke — dropedge A called bars opaque.
     label: 'glass 0.06',
-    box: 'fill="#c5ddd6a0" material="glass 0.06" stroke="2.5 #f4fffb outside"',
-    sphere: 'fill="#daf0eab8" material="glass 0.06"',
+    box: 'fill="#d2e8e0a0" material="glass 0.06" stroke="1.5 #f7fffc outside"',
+    sphere: 'fill="#e4f4eeb8" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#c5ddd6a0" material="glass 0.72" stroke="2.5 #f4fffb outside"',
-    sphere: 'fill="#daf0eab8" material="glass 0.72"',
+    box: 'fill="#d2e8e0a0" material="glass 0.72" stroke="1.5 #f7fffc outside"',
+    sphere: 'fill="#e4f4eeb8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
@@ -191,7 +191,7 @@ function cluster(finish: Finish): string {
   const sphere = finish.lamp
     ? `<sphere id="sphere" cx="210" cy="78" r="16" z="120" ${finish.sphere} />`
     : finish.stripes
-      ? `<sphere id="sphere" cx="210" cy="70" r="30" z="48" ${finish.sphere} />`
+      ? `<sphere id="sphere" cx="210" cy="70" r="30" z="56" ${finish.sphere} />`
       : `<sphere id="sphere" cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
   // Gold accent sphere (not finish.side): metal cells used to paint two
   // identical chrome spheres and dual-blind called them inseparable clones
@@ -345,13 +345,13 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
             '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="40" shadow-opacity="0.5" />',
             // Softer contact — dual-blind still cites jagged metal-plate rim (§9.2).
             // Keep plate metalness ≤0.62 / r≥0.48 — brighter plate blew SSR >0.01.
-            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="140" shadow-opacity="0.30" />',
+            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="168" shadow-opacity="0.28" />',
           )
           .replace(
             '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#cfd3d8" material="finish metal, color #cfd3d8, roughness 0.58, metalness 0.42, clearcoat 0" />',
-            // Cooler mid plate — #d8dde3 read as milky plastic (envfill dual-blind).
-            // Keep metalness ≤0.62 / r≥0.48 for SSR checker.
-            '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="14" z="6" fill="#b8c0c8" material="finish metal, color #b8c0c8, roughness 0.50, metalness 0.62, clearcoat 0" />',
+            // Softplate: keep platerim metal (dull tip blew SSR 0.02); rounder
+            // + slight z lift for contact stairs. Keep metalness ≤0.62 / r≥0.48.
+            '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="16" z="8" fill="#b8c0c8" material="finish metal, color #b8c0c8, roughness 0.50, metalness 0.62, clearcoat 0" />',
           )
           .replace(
             '<sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#d8dee4" material="metal 0.12" />',
