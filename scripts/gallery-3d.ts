@@ -130,18 +130,18 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Box must also be glass — solid charcoal was §9.2 "glass boxes solid black".
-    // Tall stripes keep the box from vanishing into a RGB sliver (§9.2).
+    // Cool tinted glass body — #f4fffbcc vanished on cream (envfill dual-blind).
+    // Stripes sit behind the box so they refract, not read as solid RGB slabs.
     label: 'glass 0.06',
-    box: 'fill="#f4fffbcc" material="glass 0.06"',
-    sphere: 'fill="#f4fffbcc" material="glass 0.06"',
+    box: 'fill="#9ec4bc99" material="glass 0.06"',
+    sphere: 'fill="#b8d8d0aa" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#f4fffbcc" material="glass 0.72"',
-    sphere: 'fill="#f4fffbcc" material="glass 0.72"',
+    box: 'fill="#9ec4bc99" material="glass 0.72"',
+    sphere: 'fill="#b8d8d0aa" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
@@ -180,13 +180,13 @@ const FINISHES: Finish[] = [
 ]
 
 function cluster(finish: Finish): string {
-  // Slightly deeper than the glass box so columns refract instead of reading
-  // as the glass body (midgrey dual-blind). Farther wall stripes collapsed
-  // clear/frost edge+transmit gates.
+  // Behind the glass box (x overlaps 28–148, y toward the back wall) so clear
+  // glass refracts columns. Side-of-box stripes read as solid RGB slabs
+  // (envfill dual-blind). Depth kept short of the far-wall tip that blew SSIM.
   const stripes = finish.stripes
-    ? `      <rect id="stripe-red" x="168" y="-8" width="28" height="40" depth="160" fill="#e23b2f" />
-      <rect id="stripe-white" x="196" y="-8" width="28" height="40" depth="160" fill="#f7f4ee" />
-      <rect id="stripe-blue" x="224" y="-8" width="28" height="40" depth="160" fill="#2a6fbe" />`
+    ? `      <rect id="stripe-red" x="48" y="-48" width="24" height="70" depth="120" fill="#e23b2f" />
+      <rect id="stripe-white" x="74" y="-48" width="24" height="70" depth="120" fill="#f7f4ee" />
+      <rect id="stripe-blue" x="100" y="-48" width="24" height="70" depth="120" fill="#2a6fbe" />`
     : ''
   const sphere = finish.lamp
     ? `<sphere id="sphere" cx="210" cy="78" r="16" z="120" ${finish.sphere} />`
@@ -347,8 +347,9 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
           )
           .replace(
             '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#cfd3d8" material="finish metal, color #cfd3d8, roughness 0.58, metalness 0.42, clearcoat 0" />',
-            // Higher metalness — dual-blind called the plate milky/opaque glass (§9.2).
-            '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="14" z="6" fill="#d8dde3" material="finish metal, color #d8dde3, roughness 0.48, metalness 0.62, clearcoat 0" />',
+            // Cooler mid plate — #d8dde3 read as milky plastic (envfill dual-blind).
+            // Keep metalness ≤0.62 / r≥0.48 for SSR checker.
+            '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="14" z="6" fill="#b8c0c8" material="finish metal, color #b8c0c8, roughness 0.50, metalness 0.62, clearcoat 0" />',
           )
           .replace(
             '<sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#d8dee4" material="metal 0.12" />',
