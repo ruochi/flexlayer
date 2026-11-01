@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.17.6
+
+The macbook poster drops the arch and neon backdrop. Desk props now read as product accessories — Bluetooth speaker, mug, Pencil, AirTag, AirPods case, and a three.js brilliant-cut diamond on a matte stand — each carrying a different finish. Edge and grille metric windows in `examples-metrics.mjs` follow the new framing.
+
 ## 0.17.5
 
 `check` no longer warns on `x`/`y` for a `path` or `polygon` with positive `depth`: those tags extrude into solids and the coordinates position the body, which is what `examples/wire.layer` was doing. The macbook poster scene was restaged — proportions, keyboard, Touch ID ring, material props around the chassis, and tighter edge-metric windows in `scripts/examples-metrics.mjs`.
