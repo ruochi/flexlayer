@@ -107,10 +107,11 @@ const FINISHES: Finish[] = [
     side: 'fill="#e4e9ee" material="metal 0.08"',
   },
   {
+    // Brighter satin — dual-blind kept calling metal 0.8 near-black (§9.2).
     label: 'metal 0.8',
-    box: 'fill="#d8dde2" material="metal 0.8"',
-    sphere: 'fill="#eef2f6" material="metal 0.8"',
-    side: 'fill="#d8dde2" material="metal 0.8"',
+    box: 'fill="#f0f4f8" material="metal 0.8"',
+    sphere: 'fill="#f7f9fb" material="metal 0.8"',
+    side: 'fill="#f0f4f8" material="metal 0.8"',
   },
   {
     // Saturated gold mirror — stay distinct from cool metal 0.08 (§9.2).
