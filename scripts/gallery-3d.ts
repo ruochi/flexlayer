@@ -82,9 +82,10 @@ const FINISHES: Finish[] = [
   { label: 'matte', box: 'fill="#d23b3b" material="matte"', sphere: 'fill="#f4f1ea" material="matte"', side: 'fill="#e0a33a" material="matte"' },
   { label: 'clay', box: 'material="clay"', sphere: 'material="clay"', side: 'material="clay"' },
   {
+    // Distinct sphere hue — identical blues merged under §9.2 dual-blind.
     label: 'clay + fill',
     box: 'fill="#2a6fbe" material="clay"',
-    sphere: 'fill="#2a6fbe" material="clay"',
+    sphere: 'fill="#f4f1ea" material="clay"',
     side: 'fill="#e0a33a" material="clay"',
   },
   {
@@ -112,6 +113,7 @@ const FINISHES: Finish[] = [
     side: 'fill="#d8dde2" material="metal 0.8"',
   },
   {
+    // Warm gold mirror — grey desat made it a metal-0.08 chrome twin (§9.2).
     label: 'mirror',
     box: 'fill="#f6d06a" material="mirror"',
     sphere: 'fill="#f6d06a" material="mirror"',
@@ -336,6 +338,12 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
             '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" z="6" fill="#d5d9de" material="finish metal, color #d5d9de, roughness 0.78, metalness 0.22, clearcoat 0" />',
           )
           .replace(
+            '<sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#d8dee4" material="metal 0.12" />',
+            // Dull the chrome — polished metal mirrored wall/stripe bars and
+            // dual-blind called them "glass vertical bars" (§9.2).
+            '<sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#c5ccd3" material="metal 0.45" />',
+          )
+          .replace(
             '<rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#e23b2f" />',
             '<rect id="stripe-red" x="178" y="200" width="70" height="28" depth="120" fill="#e23b2f" />',
           )
@@ -354,8 +362,8 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
           )
           .replace(
             '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />',
-            // Seat on the plinth — prior y=120 left a halo gap under dual-blind (§9.2).
-            '<rect id="gold" x="744" y="96" width="72" height="90" depth="48" rx="16" fill="#e0a33a" material="plastic 0.45" />',
+            // Solid seated block — hollow corners / halo gap under dual-blind (§9.2).
+            '<rect id="gold" x="744" y="88" width="76" height="98" depth="60" rx="10" fill="#e8a84a" material="plastic 0.55" />',
           ),
         0,
         52,
