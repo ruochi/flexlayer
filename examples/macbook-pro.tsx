@@ -6,7 +6,7 @@
 // Darker shell so lid bezel specular cannot read as chrome (§9.2).
 const SILVER = '#6e737a'
 const SHELL = 'plastic 0.845'
-const FRONT = '#3a3e44'
+const FRONT = '#555960'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 

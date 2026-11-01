@@ -339,11 +339,12 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
           .replace(
             '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="40" shadow-opacity="0.5" />',
             // Softer contact — dual-blind still cites jagged metal-plate rim (§9.2).
-            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="64" shadow-opacity="0.38" />',
+            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="72" shadow-opacity="0.34" />',
           )
           .replace(
             '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#cfd3d8" material="finish metal, color #cfd3d8, roughness 0.58, metalness 0.42, clearcoat 0" />',
-            '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" z="6" fill="#d5d9de" material="finish metal, color #d5d9de, roughness 0.78, metalness 0.22, clearcoat 0" />',
+            // Higher metalness — dual-blind called the plate milky/opaque glass (§9.2).
+            '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="14" z="6" fill="#d8dde3" material="finish metal, color #d8dde3, roughness 0.48, metalness 0.62, clearcoat 0" />',
           )
           .replace(
             '<sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#d8dee4" material="metal 0.12" />',
