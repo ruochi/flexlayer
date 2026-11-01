@@ -353,7 +353,8 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
           )
           .replace(
             '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />',
-            '<rect id="gold" x="744" y="120" width="72" height="66" depth="56" rx="14" fill="#e0a33a" material="plastic 0.4" />',
+            // Seat on the plinth — prior y=120 left a halo gap under dual-blind (§9.2).
+            '<rect id="gold" x="744" y="96" width="72" height="90" depth="48" rx="16" fill="#e0a33a" material="plastic 0.45" />',
           ),
         0,
         52,
