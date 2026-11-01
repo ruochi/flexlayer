@@ -184,11 +184,12 @@ function cluster(finish: Finish): string {
   const sphere = finish.lamp
     ? `<sphere id="sphere" cx="210" cy="78" r="16" z="120" ${finish.sphere} />`
     : `<sphere id="sphere" cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
-  // Sphere (not extruded circle): depth cylinders scoop a hollow-arch
-  // silhouette that dual-blind reads in every materials cell (§9.2).
+  // Gold accent sphere (not finish.side): metal cells used to paint two
+  // identical chrome spheres and dual-blind called them inseparable clones
+  // (§9.2). Extruded-circle sides also scooped hollow. Neon keeps its torus.
   const side = finish.neon
     ? `<torus id="side" cx="330" cy="78" r="32" tube="8" z="14" ${finish.side} rotateX="70" />`
-    : `<sphere id="side" cx="330" cy="78" r="28" z="28" ${finish.side} />`
+    : `<sphere id="side" cx="330" cy="78" r="28" z="28" fill="#e0a33a" material="plastic 0.35" />`
   // Warm back + accent + small lamp key so polished metal shows a highlight
   // instead of near-black (QUALITY-6 §9.2). Keep studio orbit for gates.
   return `<layer width="440" height="300" camera="fov 32, orbit 34 22, distance 860, at 220 160 0">
@@ -324,8 +325,8 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
       width: BENCH_W,
       height: BENCH_H + 96,
       caption: '贴地接触 · 悬空软影 · 缝里的遮挡 · 铬球 · 玻璃和色条 · 洞 · 霓虹 · 灯',
-      // Still-only: clear glass (frost 0.24 read as milky plastic under §9.2),
-      // warm stripe, rounded gold box (shared circle keeps manga hatchFlip).
+      // Still-only: thinner/cooler stripes + clear glass (fat white column read
+      // as milky bars under §9.2); rounded gold box (shared circle = manga hatch).
       body: place(
         bench()
           .replace(
@@ -333,16 +334,16 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
             '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" z="6" fill="#d5d9de" material="finish metal, color #d5d9de, roughness 0.78, metalness 0.22, clearcoat 0" />',
           )
           .replace(
-            '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f4fffbcc" material="glass 0.07" />',
-            '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f8fffc99" material="glass 0.08" />',
+            '<rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#f7f4ee" />',
+            '<rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#c8bfb0" />',
           )
           .replace(
-            '<rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#f7f4ee" />',
-            '<rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#d8d0c4" />',
+            '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f4fffbcc" material="glass 0.07" />',
+            '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f8fffc88" material="glass 0.06" />',
           )
           .replace(
             '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />',
-            '<rect id="gold" x="744" y="114" width="72" height="72" depth="64" rx="16" fill="#e0a33a" material="plastic 0.35" />',
+            '<rect id="gold" x="744" y="120" width="72" height="66" depth="56" rx="14" fill="#e0a33a" material="plastic 0.4" />',
           ),
         0,
         52,
