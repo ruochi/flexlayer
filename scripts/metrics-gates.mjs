@@ -164,10 +164,12 @@ export const GATES = {
   stillEmptyFloorMax: 0.25,
   stillBlueTopGapMin: 40,
   /**
-   * Circumferential neighbour jump on the still-life gold cylinder wall
-   * (mid-band, silhouettes excluded). QUALITY-4 §3.3 asks ≤ 3.
+   * Circumferential neighbour jump on the still-life gold body (mid-band,
+   * silhouettes excluded). QUALITY-4 §3.3 asked ≤ 3 on the extruded-circle
+   * wall; QUALITY-6 §9.2 replaced that circle with a rounded box so dual-blind
+   * stops reading a scooped hollow shell — box mid-band jumps land ≤ 8.
    */
-  stillGoldFacetMax: 3,
+  stillGoldFacetMax: 8,
   /** QUALITY-4 §4.4: metal / mirror / brushed / anisotropy body floor. */
   materialDarkFloorMin: 35,
   /**

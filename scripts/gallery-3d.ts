@@ -320,8 +320,9 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
       height: BENCH_H + 96,
       caption: '贴地接触 · 悬空软影 · 缝里的遮挡 · 铬球 · 玻璃和色条 · 洞 · 霓虹 · 灯',
       // Still-only: frost glass 0.24 + warm stripe wash bars (global glass wash
-      // collapsed materials 0.06/0.72 under dual-blind). Gold stays the stock
-      // extruded circle — foot/box/sphere all blew facetStripe >3.
+      // collapsed materials 0.06/0.72 under dual-blind). Gold is a rounded
+      // box — extruded circles scoop a hollow-arch silhouette under dual-blind
+      // (§9.2); facetStripe max is 8 for the box mid-band (cylinder wall was ≤3).
       body: place(
         bench()
           .replace(
@@ -335,6 +336,10 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
           .replace(
             '<rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#f7f4ee" />',
             '<rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#e2dbd0" />',
+          )
+          .replace(
+            '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />',
+            '<rect id="gold" x="744" y="114" width="72" height="72" depth="64" rx="16" fill="#e0a33a" material="plastic 0.35" />',
           ),
         0,
         52,
