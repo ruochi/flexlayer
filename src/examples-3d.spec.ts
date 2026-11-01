@@ -117,7 +117,11 @@ describe('材质粗糙度', () => {
   async function highlight(cell: string): Promise<number> {
     const source = readFileSync(join(root, 'docs', 'gallery', '3d', `${cell}.layer`), 'utf8')
     const painted = await renderLayer(source, { baseDir: join(root, 'docs', 'gallery', '3d'), format: 'rgba', meshCache: false })
-    const ink = painted.report?.elements?.find((el) => el.tag === 'sphere')?.ink
+    // Prefer id="sphere" — the materials cluster also has a lamp `key` sphere
+    // that would otherwise win a tag-only find and pin every cell at ~569.
+    const ink =
+      painted.report?.elements?.find((el) => el.id === 'sphere')?.ink ??
+      painted.report?.elements?.find((el) => el.tag === 'sphere')?.ink
     if (!ink) return 0
     let area = 0
     for (let y = Math.ceil(ink.y); y < Math.floor(ink.y + ink.height); y++) {
