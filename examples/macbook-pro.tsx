@@ -7,7 +7,7 @@ const SILVER = '#e8ecf2'
 // Product aluminum — dielectric, not chrome. Metalness >0 still grazed into a
 // bright chrome lip under dual-blind (§9.2); matte plastic + shade ceil keep
 // the front bevel near body midtones instead of a white stripe.
-const SHELL = 'finish plastic, color #9ea3ab, roughness 0.835, clearcoat 0'
+const SHELL = 'finish plastic, color #8f949c, roughness 0.838, clearcoat 0'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 
@@ -211,8 +211,8 @@ export default (
     <rect x="0" y="0" width="1440" height="1800" fill="linear-gradient(180deg, #f7f4ef 0%, #efe8df 100%)" />
     <layer width="1440" height="1800" camera="fov 28, orbit 16 14" light="world">
       {/* Soft fill so silver shell keeps midtones under the key (§9.2). */}
-      <light type="hemisphere" intensity="0.85" color="#fff8f0" ground-color="#d2ccc4" />
-      <light type="directional" intensity="0.45" color="#fff5ea" x="200" y="-400" z="600" target="0 0 0" />
+      <light type="hemisphere" intensity="0.72" color="#fff8f0" ground-color="#d2ccc4" />
+      <light type="directional" intensity="0.28" color="#fff5ea" x="200" y="-400" z="600" target="0 0 0" />
       <Lid />
       <Base />
       <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="64" shadow-opacity="0.32" />
