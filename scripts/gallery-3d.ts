@@ -130,18 +130,18 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Cool tinted glass body — #f4fffbcc vanished on cream (envfill dual-blind).
-    // Stripes sit behind the box so they refract, not read as solid RGB slabs.
+    // Stronger teal body so the box reads as glass even when gate stripes sit
+    // beside the sphere (polishfill dual-blind materials 4).
     label: 'glass 0.06',
-    box: 'fill="#9ec4bc99" material="glass 0.06"',
-    sphere: 'fill="#b8d8d0aa" material="glass 0.06"',
+    box: 'fill="#5a908888" material="glass 0.06"',
+    sphere: 'fill="#8ebcb4aa" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#9ec4bc99" material="glass 0.72"',
-    sphere: 'fill="#b8d8d0aa" material="glass 0.72"',
+    box: 'fill="#5a908888" material="glass 0.72"',
+    sphere: 'fill="#8ebcb4aa" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
@@ -180,10 +180,13 @@ const FINISHES: Finish[] = [
 ]
 
 function cluster(finish: Finish): string {
-  // Gate footprint (near sphere) that held frost SSIM ≤0.3 + clear edge ≥12.
-  // Tinted glass box keeps its own body so side columns are not the only read.
+  // Gate stripes near the sphere (SSIM) + thinner columns behind the glass box
+  // so the box refracts something instead of reading empty (polishfill).
   const stripes = finish.stripes
-    ? `      <rect id="stripe-red" x="168" y="-8" width="28" height="40" depth="160" fill="#e23b2f" />
+    ? `      <rect x="48" y="-52" width="14" height="70" depth="100" fill="#e23b2f" />
+      <rect x="66" y="-52" width="14" height="70" depth="100" fill="#f7f4ee" />
+      <rect x="84" y="-52" width="14" height="70" depth="100" fill="#2a6fbe" />
+      <rect id="stripe-red" x="168" y="-8" width="28" height="40" depth="160" fill="#e23b2f" />
       <rect id="stripe-white" x="196" y="-8" width="28" height="40" depth="160" fill="#f7f4ee" />
       <rect id="stripe-blue" x="224" y="-8" width="28" height="40" depth="160" fill="#2a6fbe" />`
     : ''
