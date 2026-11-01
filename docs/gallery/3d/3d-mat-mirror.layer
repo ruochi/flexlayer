@@ -9,7 +9,7 @@
       <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" fill="#f0c85a" material="mirror" />
       
       <sphere id="sphere" cx="204" cy="72" r="30" z="30" fill="#f0c85a" material="mirror" />
-      <sphere id="side" cx="330" cy="78" r="28" z="28" fill="#f0c85a" material="mirror" />
+      <sphere id="side" cx="330" cy="78" r="28" z="28" fill="#e0a33a" material="plastic 0.35" />
     </layer>
   </layer>
   <layer x="12" y="304" color="#1c1915"><p style="font-size:24px; color:#1c1915; fill:#1c1915">mirror</p></layer>
