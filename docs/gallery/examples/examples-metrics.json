@@ -42,7 +42,7 @@
     "width": 1520,
     "height": 1000,
     "ground": true,
-    "contactRatio": 0.964,
+    "contactRatio": 0.966,
     "zFight": 0,
     "errors": [],
     "warnings": []
@@ -79,7 +79,7 @@
     "height": 760,
     "ground": true,
     "contactRatio": 0.981,
-    "zFight": 0.0002,
+    "zFight": 0.0001,
     "errors": [],
     "warnings": []
   },

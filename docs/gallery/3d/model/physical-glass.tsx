@@ -27,13 +27,13 @@ card.position.set(0, 0.66, -0.28)
 export default layer.create(
   <layer width={440} height={300} background="#241f1b">
     <layer width={440} height={300} camera="fov 30, orbit 28 18, distance 720, at 220 175 0">
-      <ground y={220} rotateX={90} fill="#3a3f49" shadow-blur={72} shadow-opacity={0.40} />
+      <ground y={220} rotateX={90} fill="#3a3f49" shadow-blur={80} shadow-opacity={0.42} />
       <layer x={28} y={220} width={400} height={190} origin="200 0" rotateX={90} preserve-3d>
         <model object={card} unit={110} x={200} y={190} />
         <model object={stripe('#d94a3a', -0.4)} unit={110} x={200} y={190} />
         <model object={stripe('#f4f0e8', -0.1)} unit={110} x={200} y={190} />
         <model object={stripe('#3a7ec8', 0.2)} unit={110} x={200} y={190} />
-        <model object={glass} unit={150} x={200} y={190} material="glass 0.08" />
+        <model object={glass} unit={160} x={200} y={190} material="glass 0.08" />
       </layer>
     </layer>
     <layer x={12} y={272}>
