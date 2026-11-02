@@ -340,8 +340,8 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
       title: '静物 · studio · draft',
       width: BENCH_W,
       height: BENCH_H + 96,
-      // Horzmild: keep desksoft page; mute cream floor so wall-top AA vs page is quieter.
-      background: '#38322c',
+      // Seamallow: mid-warm page between desksoft and floor cream — quieter wall-top AA.
+      background: '#4a453e',
       caption: '贴地接触 · 悬空软影 · 缝里的遮挡 · 铬球 · 玻璃和色条 · 洞 · 霓虹 · 灯',
       // Still-only: cooler white stripe + clear glass (horizontal white killed
       // blue-through-glass ≥0.1); rounded gold (shared circle = manga hatch).
