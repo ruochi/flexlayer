@@ -697,7 +697,11 @@ export function checkChildAttrs(node: LayerNode, parent: 'layer' | 'flex', path:
         ),
       )
     }
-    if (isLineTag(node.tag) && positioned) {
+    // A `path` or `polygon` with a positive `depth` is a solid, not a line: its
+    // x/y move the extruded body, exactly as they move a rect. The line rule
+    // fired on `examples/wire.layer`'s two extruded paths and told the author to
+    // delete attributes the renderer was using.
+    if (isLineTag(node.tag) && positioned && !solidDepth(node.tag, attrs.depth)) {
       out.push(
         flagged(
           'warn',
