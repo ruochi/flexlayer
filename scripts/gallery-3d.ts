@@ -340,6 +340,8 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
       title: '静物 · studio · draft',
       width: BENCH_W,
       height: BENCH_H + 96,
+      // Pagesoft: lift dark page so wall-top AA fringe has less contrast for A.
+      background: '#2c2722',
       caption: '贴地接触 · 悬空软影 · 缝里的遮挡 · 铬球 · 玻璃和色条 · 洞 · 霓虹 · 灯',
       // Still-only: cooler white stripe + clear glass (horizontal white killed
       // blue-through-glass ≥0.1); rounded gold (shared circle = manga hatch).
@@ -360,8 +362,9 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
           )
           .replace(
             '<sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#d8dee4" material="metal 0.12" />',
-            // Macstair: mildly duller chrome halo (keep plate SSR-safe).
-            '<sphere id="chrome" cx="590" cy="148" r="48" z="52" fill="#bdc5cd" material="metal 0.48" />',
+            // Dull the chrome — polished metal mirrored wall/stripe bars and
+            // dual-blind called them "glass vertical bars" (§9.2).
+            '<sphere id="chrome" cx="590" cy="148" r="48" z="52" fill="#c5ccd3" material="metal 0.45" />',
           )
           .replace(
             '<rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#e23b2f" />',
