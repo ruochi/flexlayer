@@ -2,22 +2,23 @@
 import { layer } from 'flexlayer'
 import * as THREE from 'three'
 
-// Seampale: seamallow A called transmission sphere murky/solid — clearer glass.
+// Metfix: boxyaw A called a harsh opaque lower wedge on the transmission
+// sphere — thinner clearer shell, lift off the stripe card a touch.
 const glass = new THREE.Mesh(
   new THREE.SphereGeometry(0.55, 48, 32),
   new THREE.MeshPhysicalMaterial({
-    color: '#f5fffb',
+    color: '#f8fffc',
     transmission: 1,
     roughness: 0,
-    ior: 1.45,
+    ior: 1.4,
     metalness: 0,
-    thickness: 0.55,
-    attenuationColor: '#e8f6f0',
-    attenuationDistance: 1.2,
+    thickness: 0.35,
+    attenuationColor: '#f2faf6',
+    attenuationDistance: 2.0,
   }),
 )
 // Keep glassread seat — mintbars 0.45 overflowed canvas again.
-glass.position.set(0, 0.48, 0.35)
+glass.position.set(0, 0.55, 0.42)
 function stripe(color: string, x: number) {
   const mesh = new THREE.Mesh(
     new THREE.BoxGeometry(0.26, 1.25, 0.1),
@@ -41,7 +42,7 @@ export default layer.create(
         <model object={stripe('#d94a3a', -0.4)} unit={110} x={200} y={190} />
         <model object={stripe('#f4f0e8', -0.1)} unit={110} x={200} y={190} />
         <model object={stripe('#3a7ec8', 0.2)} unit={110} x={200} y={190} />
-        <model object={glass} unit={160} x={200} y={190} material="glass 0.04" />
+        <model object={glass} unit={155} x={200} y={190} material="glass 0.03" />
       </layer>
     </layer>
     <layer x={12} y={272}>
