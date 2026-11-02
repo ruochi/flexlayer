@@ -2,11 +2,19 @@
 import { layer } from 'flexlayer'
 import * as THREE from 'three'
 
-// QUALITY-6 §E.2: dropedge cream card + glass 0.08 (unplate keeps model look;
-// engine tip is seam/plate softener only).
+// Seampale: seamallow A called transmission sphere murky/solid — clearer glass.
 const glass = new THREE.Mesh(
   new THREE.SphereGeometry(0.55, 48, 32),
-  new THREE.MeshPhysicalMaterial({ color: '#ffffff', transmission: 1, roughness: 0.03, ior: 1.45, metalness: 0, thickness: 0.4 }),
+  new THREE.MeshPhysicalMaterial({
+    color: '#f5fffb',
+    transmission: 1,
+    roughness: 0,
+    ior: 1.45,
+    metalness: 0,
+    thickness: 0.55,
+    attenuationColor: '#e8f6f0',
+    attenuationDistance: 1.2,
+  }),
 )
 // Keep glassread seat — mintbars 0.45 overflowed canvas again.
 glass.position.set(0, 0.48, 0.35)
@@ -33,7 +41,7 @@ export default layer.create(
         <model object={stripe('#d94a3a', -0.4)} unit={110} x={200} y={190} />
         <model object={stripe('#f4f0e8', -0.1)} unit={110} x={200} y={190} />
         <model object={stripe('#3a7ec8', 0.2)} unit={110} x={200} y={190} />
-        <model object={glass} unit={160} x={200} y={190} material="glass 0.08" />
+        <model object={glass} unit={160} x={200} y={190} material="glass 0.04" />
       </layer>
     </layer>
     <layer x={12} y={272}>
