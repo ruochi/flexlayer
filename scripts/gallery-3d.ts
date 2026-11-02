@@ -252,7 +252,7 @@ function lightScene(light: string, extra = ''): string {
     <layer x="28" y="${LIGHT_SCENE_FLOOR}" width="400" height="190" origin="200 0" rotateX="90" preserve-3d>
       <rect id="red" x="30" y="34" width="120" height="86" depth="72" rx="12" fill="#d23b3b" material="plastic 0.3" />
       <rect id="matte" x="168" y="26" width="96" height="96" depth="60" rx="8" fill="#f4f1ea" material="matte" />
-      <sphere id="ball" cx="330" cy="78" r="46" z="46" fill="#c5c9ce" material="metal 0.2" />
+      <sphere id="ball" cx="330" cy="78" r="46" z="46" fill="#e4eaf0" material="metal 0.38" />
     </layer>
   </layer>`
 }
@@ -392,9 +392,11 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
       ),
     }),
   }
+  // Rest5: mid-warm page like still — dark #241f1b made camera/shade wall fringe loud for A.
+  // Rest5: mid-warm page like still — dark #241f1b made camera/shade wall fringe loud for A.
   const shading = (['studio', 'toon', 'technical', 'manga'] as const).map((name) => ({
     name: `3d-shade-${name}`,
-    source: cell(name, bench(BENCH_CAMERA, `shading="${name}"`), BENCH_W, BENCH_H),
+    source: cell(name, bench(BENCH_CAMERA, `shading="${name}"`), BENCH_W, BENCH_H, '#4a453e'),
   }))
   const quality = (['draft', 'final'] as const).map((name) => ({
     name: `3d-quality-${name}`,
@@ -418,7 +420,7 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
   ]
   const cameraCells = cameras.map((item) => ({
     name: `3d-cam-${item.file}`,
-    source: cell(item.label, bench(item.camera), BENCH_W, BENCH_H),
+    source: cell(item.label, bench(item.camera), BENCH_W, BENCH_H, '#4a453e'),
   }))
   const linesPlate: Plate = {
     name: '3d-lines',
