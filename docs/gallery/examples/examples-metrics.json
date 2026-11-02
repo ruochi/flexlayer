@@ -79,7 +79,7 @@
     "height": 760,
     "ground": true,
     "contactRatio": 0.981,
-    "zFight": 0.0001,
+    "zFight": 0.0002,
     "errors": [],
     "warnings": []
   },

@@ -23,7 +23,7 @@ export default layer.create(
         <rect x="250" y="-45" width="140" height="12" depth="180" fill="#e87838" />
         <rect x="30" y="-30" width="100" height="10" depth="160" fill="#4a8fd0" />
         <rect x="80" y="-55" width="160" height="8" depth="200" fill="#fff4ea" />
-        <model object={mesh} unit={135} x={200} y={190} />
+        <model object={mesh} unit={135} x={200} y={190} material="finish metal, color #e8eef4, roughness 0.06, metalness 1" />
       </layer>
     </layer>
     <layer x={12} y={272}>
