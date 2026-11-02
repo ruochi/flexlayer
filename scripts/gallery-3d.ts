@@ -360,9 +360,8 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
           )
           .replace(
             '<sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#d8dee4" material="metal 0.12" />',
-            // Dull the chrome — polished metal mirrored wall/stripe bars and
-            // dual-blind called them "glass vertical bars" (§9.2).
-            '<sphere id="chrome" cx="590" cy="148" r="48" z="52" fill="#c5ccd3" material="metal 0.45" />',
+            // Macstair: mildly duller chrome halo (keep plate SSR-safe).
+            '<sphere id="chrome" cx="590" cy="148" r="48" z="52" fill="#bdc5cd" material="metal 0.48" />',
           )
           .replace(
             '<rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#e23b2f" />',
