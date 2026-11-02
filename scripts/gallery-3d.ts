@@ -132,16 +132,17 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Glassread: hero left mint orb; soft-card stripes under id=sphere for SSIM.
+    // Mirrormat: glassread B materials 6.5 — glass left orb+stripes still read
+    // as a shattered box. Left is an opaque mint plastic box; id=sphere glass+SSIM.
     label: 'glass 0.06',
-    box: 'fill="#8ecabae8" material="glass 0.08"',
+    box: 'fill="#3a8a76" material="plastic 0.32"',
     sphere: 'fill="#d0ece4c8" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#5a8078f0" material="glass 0.72"',
+    box: 'fill="#2a5a52" material="plastic 0.55"',
     sphere: 'fill="#a8c0b8e8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
@@ -209,7 +210,7 @@ function cluster(finish: Finish): string {
   // retint slab. Non-glass cells keep the usual rect.
   const box = finish.stripes
     ? glassCell
-      ? `<sphere id="box" cx="80" cy="68" r="54" z="44" ${finish.box} />`
+      ? `<rect id="box" x="6" y="22" width="118" height="82" depth="72" rx="14" ${finish.box} />`
       : `<rect id="box" x="14" y="14" width="158" height="110" depth="98" rx="16" ${finish.box} />`
     : `<rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" ${finish.box} />`
   // Gold accent sphere (not finish.side): metal cells used to paint two
