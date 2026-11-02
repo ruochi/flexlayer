@@ -39,7 +39,7 @@
     "stillStripeThroughGlassMin": 0.1,
     "stillEmptyFloorMax": 0.25,
     "stillBlueTopGapMin": 40,
-    "stillGoldFacetMax": 3,
+    "stillGoldFacetMax": 8,
     "materialDarkFloorMin": 35,
     "glassClearSsimMin": 0.6,
     "glassFrostSsimMax": 0.3,

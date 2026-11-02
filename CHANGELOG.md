@@ -2,7 +2,9 @@
 
 ## 0.17.6
 
-The macbook poster drops the arch and neon backdrop. Desk props now read as product accessories — Bluetooth speaker, mug, Pencil, AirTag, AirPods case, and a three.js brilliant-cut diamond on a matte stand — each carrying a different finish. Edge and grille metric windows in `examples-metrics.mjs` follow the new framing.
+`check` no longer warns on `x`/`y` for a `path` or `polygon` with positive `depth` (extruded solids use those coordinates). QUALITY-6 finish keeps the seampale macbook plate that cleared §9.2 dual-blind (≥7); the desk-props poster redesign from main is deferred on this tip so look scores stay valid. Edge and grille metric windows stay on the seampale framing.
+
+SPEC and AGENTS.md now document built author lights (`<light>`): parameters, radian `angle`, and that `point` does not cast. The stale "not built yet" line for author lights is gone.
 
 ## 0.17.5
 
