@@ -1,5 +1,5 @@
 <layer width="440" height="332" background="#241f1b" color="#f4efe6" font-family="ChillDuanSans" min-font="16" safe="0">
-  <layer x="0" y="0" width="440" height="300" camera="fov 32, orbit 34 22, distance 860, at 220 160 0">
+  <layer x="0" y="0" width="440" height="300" camera="fov 30, orbit 32 20, distance 800, at 220 155 0">
     <ground id="ground" y="220" rotateX="90" fill="#e7e0d4" shadow-blur="32" shadow-opacity="0.35" />
     <layer x="28" y="220" width="400" height="190" origin="200 0" rotateX="90" preserve-3d>
       <rect id="back" x="-30" y="-90" width="440" height="14" depth="300" fill="#f4efe6" />
