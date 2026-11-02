@@ -8,10 +8,10 @@
       <sphere id="key2" cx="300" cy="-30" r="30" z="140" material="lamp" />
       <rect id="bounce" x="40" y="-70" width="200" height="8" depth="220" fill="#fff8f0" />
       <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" fill="#f6f2ea" />
-      <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" fill="#f4f1ea" />
+      <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" fill="#1c242c" />
       
-      <sphere id="sphere" cx="204" cy="72" r="30" z="30" fill="#f4f1ea" />
-      <torus id="side" cx="330" cy="78" r="32" tube="8" z="14" material="neon" rotateX="70" />
+      <sphere id="sphere" cx="204" cy="72" r="30" z="30" fill="#1c242c" />
+      <torus id="side" cx="325" cy="74" r="36" tube="10" z="16" fill="#48f0ff" material="neon" rotateX="70" />
     </layer>
   </layer>
   <layer x="12" y="304" color="#1c1915"><p style="font-size:24px; color:#1c1915; fill:#1c1915">neon</p></layer>
