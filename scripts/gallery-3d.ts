@@ -101,7 +101,8 @@ const FINISHES: Finish[] = [
     side: 'fill="#e0a33a" material="plastic 0.85"',
   },
   {
-    // Lift albedo — dual-blind still called metal 0.08 near-black (§9.2).
+    // Bright albedo for sphere mirror-pair gates; chalky flat lids are fixed
+    // in shade flat_metal FILL (metglass), not by darkening this cell.
     label: 'metal 0.08',
     box: 'fill="#eef3f7" material="metal 0.08"',
     sphere: 'fill="#f8fafc" material="metal 0.08"',
@@ -206,6 +207,8 @@ function cluster(finish: Finish): string {
   // Warm back + accent + lamp keys so polished metal shows a highlight
   // instead of near-black (QUALITY-6 §9.2). Keep studio orbit for gates.
   // Fillmild: drop key3 — third lamp read as wall/halo cluster under §9.2 B.
+  // Fillmild framing (860). Closer pulls blew glass SSIM; dual-blind empty
+  // cells are a look tip, not a gate lever.
   return `<layer width="440" height="300" camera="fov 32, orbit 34 22, distance 860, at 220 160 0">
     <ground id="ground" y="220" rotateX="90" fill="#e7e0d4" shadow-blur="32" shadow-opacity="0.35" />
     <layer x="28" y="220" width="400" height="190" origin="200 0" rotateX="90" preserve-3d>
