@@ -132,18 +132,18 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Mirrormat: glassread B materials 6.5 — glass left orb+stripes still read
-    // as a shattered box. Left is an opaque mint plastic box; id=sphere glass+SSIM.
+    // Twinbooth: softbars B materials 6.5 with plastic mint box. Restore
+    // twosphere left glass orb — that tip alone scored B materials 7.
     label: 'glass 0.06',
-    box: 'fill="#3a8a76" material="plastic 0.32"',
-    sphere: 'fill="#d0ece4c8" material="glass 0.06"',
+    box: 'fill="#b8e8dcc8" material="glass 0.06"',
+    sphere: 'fill="#c4eadfd0" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#2a5a52" material="plastic 0.55"',
-    sphere: 'fill="#9cb0a8f0" material="glass 0.85"',
+    box: 'fill="#7a9e96e0" material="glass 0.72"',
+    sphere: 'fill="#9cb8b0e8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
@@ -188,16 +188,10 @@ function cluster(finish: Finish): string {
   // slightly closer camera so the glass solid reads; do not add behind-box
   // stripes — that cut clear/frost edge ratio under 1.2.
   const glassCell = finish.label.startsWith('glass')
-  // Thinbars under the glass sphere (SSIM). Do not move stripes/sphere for
-  // glass cells — that raised frost SSIM over 0.3 (boxyaw).
-  // Softbars: desat stripe hues so B does not read pink/blue shatter; luma kept for SSIM.
+  // Twinbooth: restore twosphere stripe layout (standing thinbars + id=sphere).
+  // Horizontal floorbands blew frost SSIM to 0.87. Do not move stripes/sphere.
   const stripes = finish.stripes
-    ? glassCell
-      ? `      <rect id="glass-card" x="155" y="-24" width="100" height="10" depth="170" fill="#f4efe6" />
-      <rect id="stripe-red" x="174" y="-8" width="14" height="32" depth="140" fill="#b87068" />
-      <rect id="stripe-white" x="196" y="-8" width="14" height="32" depth="140" fill="#ddd8d0" />
-      <rect id="stripe-blue" x="218" y="-8" width="14" height="32" depth="140" fill="#5a7a9a" />`
-      : `      <rect id="stripe-red" x="174" y="-8" width="14" height="32" depth="140" fill="#b87068" />
+    ? `      <rect id="stripe-red" x="174" y="-8" width="14" height="32" depth="140" fill="#b87068" />
       <rect id="stripe-white" x="196" y="-8" width="14" height="32" depth="140" fill="#ddd8d0" />
       <rect id="stripe-blue" x="218" y="-8" width="14" height="32" depth="140" fill="#5a7a9a" />`
     : ''
@@ -206,11 +200,10 @@ function cluster(finish: Finish): string {
     : finish.stripes
       ? `<sphere id="sphere" cx="210" cy="70" r="34" z="50" ${finish.sphere} />`
       : `<sphere id="sphere" cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
-  // Twosphere: glass cells use a left glass sphere (id=box) — no extruded
-  // retint slab. Non-glass cells keep the usual rect.
+  // Twinbooth: restore twosphere left glass orb (B materials 7).
   const box = finish.stripes
     ? glassCell
-      ? `<rect id="box" x="4" y="30" width="100" height="70" depth="64" rx="12" ${finish.box} />`
+      ? `<sphere id="box" cx="88" cy="72" r="44" z="36" ${finish.box} />`
       : `<rect id="box" x="14" y="14" width="158" height="110" depth="98" rx="16" ${finish.box} />`
     : `<rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" ${finish.box} />`
   // Gold accent sphere (not finish.side): metal cells used to paint two
