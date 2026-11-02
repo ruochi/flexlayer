@@ -132,19 +132,18 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Boxyaw: boxveil B still read the mint face as a teal stripe beside
-    // pink/blue bars. Squatter yawed box so top+side read as a solid; stripes
-    // stay under the sphere only (SSIM).
+    // Glassmass: metfix A+B materials 6 — yawed mint nearly vanished. Larger
+    // denser box, milder yaw; sphere fill denser so the disk still reads.
     label: 'glass 0.06',
-    box: 'fill="#4a9a86f0" material="glass 0.06"',
-    sphere: 'fill="#cef0e8c8" material="glass 0.06"',
+    box: 'fill="#3d8a76f5" material="glass 0.06"',
+    sphere: 'fill="#b8e4d8d0" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#3a6a60f0" material="glass 0.72"',
-    sphere: 'fill="#a8c4bce8" material="glass 0.72"',
+    box: 'fill="#2a5a52f5" material="glass 0.72"',
+    sphere: 'fill="#8eb0a8e8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
@@ -201,11 +200,11 @@ function cluster(finish: Finish): string {
     : finish.stripes
       ? `<sphere id="sphere" cx="210" cy="70" r="34" z="50" ${finish.sphere} />`
       : `<sphere id="sphere" cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
-  // Glass: yawed squat box left of thinbars so mint volume ≠ another stripe
-  // (boxveil B). Sphere/stripes stay on the SSIM seat.
+  // Glassmass: bigger mint mass left of thinbars; mild yaw for top/side without
+  // shrinking the silhouette to a sliver (metfix materials 6).
   const box = finish.stripes
     ? glassCell
-      ? `<rect id="box" x="-4" y="38" width="120" height="64" depth="120" rx="16" rotateY="-28" ${finish.box} />`
+      ? `<rect id="box" x="0" y="22" width="148" height="88" depth="110" rx="18" rotateY="-18" ${finish.box} />`
       : `<rect id="box" x="14" y="14" width="158" height="110" depth="98" rx="16" ${finish.box} />`
     : `<rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" ${finish.box} />`
   // Gold accent sphere (not finish.side): metal cells used to paint two
@@ -403,8 +402,10 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
           )
           .replace(
             '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#d8ebe6a0" material="glass 0.06" />',
-            // Thinbars: clearer mint, r56 so white stripe still reads through.
-            '<sphere id="glass" cx="213" cy="248" r="56" z="46" fill="#f2f7f4a4" material="glass 0.03" />',
+            // Glassmass: metform A+B still 6 — glass muddled red/blue clip
+            // through-lines. Seat on white stripe only; denser shell so the
+            // outline reads as one solid (white-through-glass still ≥0.1).
+            '<sphere id="glass" cx="213" cy="250" r="48" z="40" fill="#c8e4d8c8" material="glass 0.08" />',
           )
           .replace(
             '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />',

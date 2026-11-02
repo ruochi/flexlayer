@@ -8,11 +8,11 @@
       <sphere id="key2" cx="300" cy="-30" r="30" z="140" material="lamp" />
       <rect id="bounce" x="40" y="-70" width="200" height="8" depth="220" fill="#fff8f0" />
       <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" fill="#f6f2ea" />
-      <rect id="box" x="-4" y="38" width="120" height="64" depth="120" rx="16" rotateY="-28" fill="#4a9a86f0" material="glass 0.06" />
+      <rect id="box" x="0" y="22" width="148" height="88" depth="110" rx="18" rotateY="-18" fill="#3d8a76f5" material="glass 0.06" />
             <rect id="stripe-red" x="174" y="-8" width="14" height="32" depth="140" fill="#b87068" />
       <rect id="stripe-white" x="196" y="-8" width="14" height="32" depth="140" fill="#ddd8d0" />
       <rect id="stripe-blue" x="218" y="-8" width="14" height="32" depth="140" fill="#5a7a9a" />
-      <sphere id="sphere" cx="210" cy="70" r="34" z="50" fill="#cef0e8c8" material="glass 0.06" />
+      <sphere id="sphere" cx="210" cy="70" r="34" z="50" fill="#b8e4d8d0" material="glass 0.06" />
       <sphere id="side" cx="330" cy="78" r="28" z="28" fill="#e0a33a" material="plastic 0.35" />
     </layer>
   </layer>
