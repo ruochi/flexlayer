@@ -12,7 +12,7 @@ import * as THREE from 'three'
  * model y up, so `y` is the floor line and the geometry rises from y=0 in its
  * own space: every mesh here is built from its base upward.
  */
-export const CAMERA = 'fov 32, orbit 34 22, distance 860, at 220 210 0'
+export const CAMERA = 'fov 32, orbit 34 22, distance 780, at 220 210 0'
 export const FLOOR = 220
 
 export function cell(body: JSX.Element, caption: string) {

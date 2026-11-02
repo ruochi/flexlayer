@@ -32,7 +32,7 @@ box.position.set(0.7, 0.5, 0)
 
 export default layer.create(
   <layer width={440} height={300} background="#241f1b">
-    <layer width={440} height={300} camera="fov 32, orbit 34 22, distance 860, at 220 210 0">
+    <layer width={440} height={300} camera="fov 32, orbit 34 22, distance 780, at 220 210 0">
       <ground y={220} rotateX={90} fill="#3a3f49" shadow-blur={48} shadow-opacity={0.28} />
       <layer x={28} y={220} width={400} height={190} origin="200 0" rotateX={90} preserve-3d>
         <model object={box} unit={80} x={200} y={190} />

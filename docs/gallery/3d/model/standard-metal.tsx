@@ -18,7 +18,7 @@ export default layer.create(
     <layer
       width={440}
       height={300}
-      camera="fov 34, orbit 38 24, distance 870, at 220 198 0"
+      camera="fov 34, orbit 38 24, distance 850, at 220 198 0"
       light="world"
       quality="final"
     >

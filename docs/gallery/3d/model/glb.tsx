@@ -14,7 +14,7 @@ import { layer } from 'flexlayer'
 export default layer.create(
   <layer width={440} height={300} background="#241f1b">
     {/* Metshine: yawback A called the diamond coarse — closer + larger diamond. */}
-    <layer width={440} height={300} camera="fov 30, orbit 32 20, distance 780, at 220 205 0" light="world">
+    <layer width={440} height={300} camera="fov 30, orbit 32 20, distance 700, at 220 205 0" light="world">
       <light type="hemisphere" intensity="0.4" color="#e8eef4" ground-color="#3a4048" />
       <light type="directional" intensity="0.7" color="#ffffff" x="-160" y="-380" z="480" target="0 0 0" />
       <ground y={220} rotateX={90} fill="#3a3f49" shadow-blur={48} shadow-opacity={0.28} />

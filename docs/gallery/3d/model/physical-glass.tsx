@@ -38,7 +38,7 @@ export default layer.create(
     <layer
       width={440}
       height={300}
-      camera="fov 30, orbit 28 18, distance 740, at 220 175 0"
+      camera="fov 30, orbit 28 18, distance 680, at 220 175 0"
       light="world"
       quality="final"
     >
@@ -50,7 +50,7 @@ export default layer.create(
         <model object={stripe('#d94a3a', -0.4)} unit={110} x={200} y={190} />
         <model object={stripe('#f4f0e8', -0.1)} unit={110} x={200} y={190} />
         <model object={stripe('#3a7ec8', 0.2)} unit={110} x={200} y={190} />
-        <model object={glass} unit={148} x={200} y={190} material="glass 0.08" />
+        <model object={glass} unit={158} x={200} y={190} material="glass 0.08" />
       </layer>
     </layer>
     <layer x={12} y={272}>
