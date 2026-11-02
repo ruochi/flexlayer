@@ -4,9 +4,9 @@
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
 // Darker shell so lid bezel specular cannot read as chrome (§9.2).
-const SILVER = '#5e646c'
+const SILVER = '#585e66'
 const SHELL = 'matte'
-const FRONT = '#08090c'
+const FRONT = '#050608'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 
@@ -123,7 +123,7 @@ function Base() {
     <layer x={STAGE.x} y={STAGE.groundY - TOP} width={W} height={D} origin={`${W / 2} 0`} rotateX="90" preserve-3d>
       <rect width={W} height={D} rx="24" fill={SILVER} material={SHELL} depth={T} stroke="none" />
       {/* Darker front lip so the extruded front face cannot read as chrome. */}
-      <rect x="12" y={D - 14} width={W - 24} height="14" rx="6" fill={FRONT} material="plastic 0.84" depth="6" z={TOP - 2} stroke="none" cast-shadow="false" />
+      <rect x="12" y={D - 12} width={W - 24} height="12" rx="5" fill={FRONT} material="plastic 0.9" depth="4" z={TOP - 2} stroke="none" cast-shadow="false" />
       <layer x="0" y="0" width={W} height={D} z={TOP + 0.2} cast-shadow="false">
         <rect x={WELL_BOX.x} y={WELL_BOX.y} width={WELL_BOX.w} height={WELL_BOX.h} rx="8" fill={WELL} />
         <rect x={KB.x - GRILLE_W - 18} y={KB.y + 4} width={GRILLE_W} height={WELL_BOX.h - 8} rx="4" fill="#4a4c51" />
@@ -217,7 +217,7 @@ export default (
       <light type="directional" intensity="0.04" color="#d6dae0" x="-280" y="-200" z="400" target="0 0 0" />
       <Lid />
       <Base />
-      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="190" shadow-opacity="0.18" />
+      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="200" shadow-opacity="0.16" />
     </layer>
     <layer x="80" y="66">
       <p style="font-family:Inter; font-size:13px; font-weight:700; letter-spacing:6.2px; color:#c88255">PRO PERFORMANCE · M4 MAX</p>

@@ -9,11 +9,11 @@
       <sphere id="key3" cx="200" cy="-50" r="22" z="150" material="lamp" />
       <rect id="bounce" x="40" y="-70" width="200" height="8" depth="220" fill="#fff8f0" />
       <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" fill="#f6f2ea" />
-      <rect id="box" x="18" y="18" width="145" height="100" depth="85" rx="14" fill="#8aa8a0d8" material="glass 0.72" />
-            <rect id="stripe-red" x="168" y="-8" width="22" height="36" depth="140" fill="#b87068" />
-      <rect id="stripe-white" x="194" y="-8" width="22" height="36" depth="140" fill="#ddd8d0" />
-      <rect id="stripe-blue" x="220" y="-8" width="22" height="36" depth="140" fill="#5a7a9a" />
-      <sphere id="sphere" cx="210" cy="70" r="32" z="48" fill="#a8c4bce8" material="glass 0.72" />
+      <rect id="box" x="18" y="18" width="145" height="100" depth="85" rx="14" fill="#8aa8a0e0" material="glass 0.72" />
+            <rect id="stripe-red" x="174" y="-8" width="14" height="32" depth="140" fill="#b87068" />
+      <rect id="stripe-white" x="196" y="-8" width="14" height="32" depth="140" fill="#ddd8d0" />
+      <rect id="stripe-blue" x="218" y="-8" width="14" height="32" depth="140" fill="#5a7a9a" />
+      <sphere id="sphere" cx="210" cy="70" r="34" z="50" fill="#a8c4bce8" material="glass 0.72" />
       <sphere id="side" cx="330" cy="78" r="28" z="28" fill="#e0a33a" material="plastic 0.35" />
     </layer>
   </layer>
