@@ -6,7 +6,6 @@
       <rect id="accent" x="280" y="-50" width="100" height="14" depth="180" fill="#f0a060" />
       <sphere id="key" cx="90" cy="-10" r="42" z="170" material="lamp" />
       <sphere id="key2" cx="300" cy="-30" r="30" z="140" material="lamp" />
-      <sphere id="key3" cx="200" cy="-50" r="22" z="150" material="lamp" />
       <rect id="bounce" x="40" y="-70" width="200" height="8" depth="220" fill="#fff8f0" />
       <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" fill="#f6f2ea" />
       <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" fill="#c8b8a8" material="finish metal, color #c4b4a4, roughness 0.36, metalness 1, anisotropy 0.9" />
