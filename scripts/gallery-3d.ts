@@ -108,7 +108,8 @@ const FINISHES: Finish[] = [
     side: 'fill="#eef3f7" material="metal 0.08"',
   },
   {
-    // Brighter satin — dual-blind kept calling metal 0.8 near-black (§9.2).
+    // Thinbars: keep bright satin (cooler #dce6f0 inverted metal rough area /
+    // sharpness gates). Dual-blind chrome twin is on the still chrome sphere.
     label: 'metal 0.8',
     box: 'fill="#f0f4f8" material="metal 0.8"',
     sphere: 'fill="#f7f9fb" material="metal 0.8"',
@@ -130,16 +131,16 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Boxfront layout + mintgate fills (denser/z56 blew clear SSIM 0.49 / frost 0.66).
+    // Thinbars: denser mint volume; keep saturated hue, thinner bars so glass leads.
     label: 'glass 0.06',
-    box: 'fill="#c5ddd6a0" material="glass 0.06"',
-    sphere: 'fill="#daf0eab8" material="glass 0.06"',
+    box: 'fill="#b8d4ccc0" material="glass 0.06"',
+    sphere: 'fill="#cef0e8c8" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#8aa8a0d8" material="glass 0.72"',
+    box: 'fill="#8aa8a0e0" material="glass 0.72"',
     sphere: 'fill="#a8c4bce8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
@@ -181,17 +182,17 @@ const FINISHES: Finish[] = [
 ]
 
 function cluster(finish: Finish): string {
-  // Boxfront: larger left glass box (over-stripe box blew clear/frost SSIM).
-  // Diskglass saturated stripes + mintgate sphere footprint.
+  // Thinbars: saturated hue (frost SSIM) but width 14 so mint volume leads
+  // (boxfront A+B still RGB-bar glass). Keep left large box + sphere r32 z48.
   const stripes = finish.stripes
-    ? `      <rect id="stripe-red" x="168" y="-8" width="22" height="36" depth="140" fill="#b87068" />
-      <rect id="stripe-white" x="194" y="-8" width="22" height="36" depth="140" fill="#ddd8d0" />
-      <rect id="stripe-blue" x="220" y="-8" width="22" height="36" depth="140" fill="#5a7a9a" />`
+    ? `      <rect id="stripe-red" x="174" y="-8" width="14" height="32" depth="140" fill="#b87068" />
+      <rect id="stripe-white" x="196" y="-8" width="14" height="32" depth="140" fill="#ddd8d0" />
+      <rect id="stripe-blue" x="218" y="-8" width="14" height="32" depth="140" fill="#5a7a9a" />`
     : ''
   const sphere = finish.lamp
     ? `<sphere id="sphere" cx="210" cy="78" r="16" z="120" ${finish.sphere} />`
     : finish.stripes
-      ? `<sphere id="sphere" cx="210" cy="70" r="32" z="48" ${finish.sphere} />`
+      ? `<sphere id="sphere" cx="210" cy="70" r="34" z="50" ${finish.sphere} />`
       : `<sphere id="sphere" cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
   const box = finish.stripes
     ? `<rect id="box" x="18" y="18" width="145" height="100" depth="85" rx="14" ${finish.box} />`
@@ -368,7 +369,8 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
           )
           .replace(
             '<rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#f7f4ee" />',
-            '<rect id="stripe-white" x="178" y="236" width="70" height="28" depth="120" fill="#e8e4dc" />',
+            // Brighten so through-glass white hue stays ≥0.1 under clear mint.
+            '<rect id="stripe-white" x="178" y="236" width="70" height="28" depth="120" fill="#f4f0e8" />',
           )
           .replace(
             '<rect id="stripe-blue" x="282" y="200" width="36" height="78" depth="160" fill="#2a6fbe" />',
@@ -376,8 +378,8 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
           )
           .replace(
             '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#d8ebe6a0" material="glass 0.06" />',
-            // Mintgate: clearer left sphere over stripes; keep off neon.
-            '<sphere id="glass" cx="213" cy="248" r="56" z="46" fill="#e8f4f0a8" material="glass 0.04" />',
+            // Thinbars: clearer mint, r56 so white stripe still reads through.
+            '<sphere id="glass" cx="213" cy="248" r="56" z="46" fill="#f2f7f4a4" material="glass 0.03" />',
           )
           .replace(
             '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />',
