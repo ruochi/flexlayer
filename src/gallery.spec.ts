@@ -44,7 +44,7 @@ describe('效果图覆盖', () => {
     const bench = read('3d-shade-studio.layer')
     expect(bench).toContain('material="neon"')
     expect(bench).toContain('material="lamp"')
-    expect(bench).toContain('material="glass 0.07"')
+    expect(bench).toContain('material="glass 0.06"')
     for (const name of ['studio', 'toon', 'technical', 'manga']) {
       expect(read(`3d-shade-${name}.layer`)).toContain(`shading="${name}"`)
     }
