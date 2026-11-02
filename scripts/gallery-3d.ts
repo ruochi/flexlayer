@@ -305,9 +305,8 @@ function lines(): string {
   // visible. Framing keeps left/right empty ≤ 15% and empty-below ≤ 25%.
   // Technical shading avoids studio specular blow-past of overexposureMax.
   // Rest5b: matte cream fills — bare fill read as brushed diagonal banding for A.
-  // Rest5c/d: fill-less ground at y=620 (opaque cream → ground-seam gate).
-  // Rest5d: drop the board (y 20→55) so soft contact reads closer without burial.
-  // Elbow halo 8→3 (banded halo).
+  // Rest5d: fill-less ground at y=620; board y=55 (further drop broke hidden-line
+  // mask ≥0.9). Elbow halo 8→3. Rest5e leaves lines seating; tips manga gold + camera glass.
   return `<layer width="1180" height="516" camera="fov 36, orbit 28 18, distance 1060, at 560 340 0" shading="technical">
     <ground id="ground" y="620" rotateX="90" shadow-blur="70" shadow-opacity="0.28" />
     <layer x="40" y="55" width="1100" height="580" rotateX="38" preserve-3d>
@@ -398,25 +397,21 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
     }),
   }
   // Rest5: mid-warm page like still — dark #241f1b made camera/shade wall fringe loud for A.
-  // Rest5d: closed plastic gold box on studio/toon/technical + quality + camera.
-  // Manga keeps the extruded circle so hatchFlipEngine stays on the engine baseline.
-  // Rest5d: sphere — extruded circle read hollow/inverted (B); flat box blew contactMax 0.75.
+  // Rest5d/e: plastic gold sphere — extruded circle read hollow/inverted (B);
+  // flat box blew contactMax 0.75. Rest5e: manga gets the sphere too; rebake
+  // engine-baseline/3d-shade-manga.png so hatchFlipEngine stays ≤0.02.
   const GOLD_SPHERE =
     '<sphere id="gold" cx="780" cy="150" r="42" z="42" fill="#e8b050" material="plastic 0.28" />'
   const GOLD_CIRCLE =
     '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />'
-  const withGoldBox = (body: string) => body.replace(GOLD_CIRCLE, GOLD_SPHERE)
-  const shading = (['studio', 'toon', 'technical', 'manga'] as const).map((name) => {
-    let body = bench(BENCH_CAMERA, `shading="${name}"`)
-    if (name !== 'manga') body = withGoldBox(body)
-    return {
-      name: `3d-shade-${name}`,
-      source: cell(name, body, BENCH_W, BENCH_H, '#4a453e'),
-    }
-  })
+  const withGoldSphere = (body: string) => body.replace(GOLD_CIRCLE, GOLD_SPHERE)
+  const shading = (['studio', 'toon', 'technical', 'manga'] as const).map((name) => ({
+    name: `3d-shade-${name}`,
+    source: cell(name, withGoldSphere(bench(BENCH_CAMERA, `shading="${name}"`)), BENCH_W, BENCH_H, '#4a453e'),
+  }))
   const quality = (['draft', 'final'] as const).map((name) => ({
     name: `3d-quality-${name}`,
-    source: cell(name, withGoldBox(bench(BENCH_CAMERA, `quality="${name}"`)), BENCH_W, BENCH_H),
+    source: cell(name, withGoldSphere(bench(BENCH_CAMERA, `quality="${name}"`)), BENCH_W, BENCH_H),
   }))
   // Dark page for sphere highlightArea monotonicity (examples-3d / gallery
   // pair gates). Box silver comes from sphere-excluded flat_metal lift.
@@ -435,13 +430,20 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
     { label: 'aperture 14', camera: `${BENCH_CAMERA}, aperture 14`, file: 'dof' },
   ]
   const cameraCells = cameras.map((item) => {
-    // Rest5d: plastic gold box (not metal — jagged rim); no rest5c softener (B stairs).
-    let body = withGoldBox(bench(item.camera))
+    // Rest5d/e: gold sphere; no rest5c softener (B stairs).
+    let body = withGoldSphere(bench(item.camera))
     // Rest5b: B side orbit (62 22) read blue-float as hanging with no contact.
     if (item.file === 'side') {
       body = body.replace(
         '<sphere id="blue-float" cx="160" cy="200" r="34" z="140" fill="#2a6fbe" material="plastic 0.42" />',
         '<sphere id="blue-float" cx="165" cy="118" r="34" z="50" fill="#2a6fbe" material="plastic 0.42" />',
+      )
+    }
+    // Rest5e: B high/side glass read as RGB streak / muddy smear through stripes.
+    if (item.file === 'high' || item.file === 'side') {
+      body = body.replace(
+        '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#d8ebe6a0" material="glass 0.06" />',
+        '<sphere id="glass" cx="250" cy="250" r="52" z="52" fill="#f4f8f6cc" material="glass 0.04" />',
       )
     }
     return {
