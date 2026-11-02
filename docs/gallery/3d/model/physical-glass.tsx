@@ -10,7 +10,7 @@ const glass = new THREE.Mesh(
   new THREE.MeshPhysicalMaterial({
     color: '#f4fffa',
     transmission: 1,
-    roughness: 0.06,
+    roughness: 0.10,
     ior: 1.45,
     metalness: 0,
     thickness: 0.45,
@@ -18,7 +18,7 @@ const glass = new THREE.Mesh(
     attenuationDistance: 1.6,
   }),
 )
-glass.position.set(0, 0.62, 0.55)
+glass.position.set(0, 0.68, 0.58)
 function stripe(color: string, x: number) {
   const mesh = new THREE.Mesh(
     new THREE.BoxGeometry(0.26, 1.25, 0.1),
@@ -50,7 +50,7 @@ export default layer.create(
         <model object={stripe('#d94a3a', -0.4)} unit={110} x={200} y={190} />
         <model object={stripe('#f4f0e8', -0.1)} unit={110} x={200} y={190} />
         <model object={stripe('#3a7ec8', 0.2)} unit={110} x={200} y={190} />
-        <model object={glass} unit={148} x={200} y={190} material="glass 0.08" />
+        <model object={glass} unit={148} x={200} y={190} material="glass 0.12" />
       </layer>
     </layer>
     <layer x={12} y={272}>
