@@ -3,9 +3,9 @@
 // 银色 16 英寸 MacBook Pro 海报，以后渲染用这个场景。
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
-// Seamallow: keep notick + desksoft silver; restore pagesoft cream (mid page no mac gain).
-const SILVER = '#454b53'
-const LID_SILVER = '#454b53'
+// Seampale: keep pagesoft cream + seamallow contact; slight darker silver for A lip.
+const SILVER = '#424850'
+const LID_SILVER = '#424850'
 const SHELL = 'matte'
 const FRONT = '#030406'
 const KEY = '#2e3138'
