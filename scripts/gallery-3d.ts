@@ -135,15 +135,15 @@ const FINISHES: Finish[] = [
     // Glassmass: metfix A+B materials 6 — yawed mint nearly vanished. Larger
     // denser box, milder yaw; sphere fill denser so the disk still reads.
     label: 'glass 0.06',
-    box: 'fill="#3d8a76f2" material="glass 0.06"',
-    sphere: 'fill="#b8e4d8d0" material="glass 0.06"',
+    box: 'fill="#449884f0" material="glass 0.06"',
+    sphere: 'fill="#c4eadfd0" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#2a5a52f2" material="glass 0.72"',
-    sphere: 'fill="#8eb0a8e8" material="glass 0.72"',
+    box: 'fill="#355a52f0" material="glass 0.72"',
+    sphere: 'fill="#9cb8b0e8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
@@ -176,10 +176,9 @@ const FINISHES: Finish[] = [
   },
   {
     label: 'neon',
-    // Matclose: metshine A+B neon = shapeless cyan blob. Larger glowing torus.
-    box: 'fill="#1a2228"',
-    sphere: 'fill="#1a2228"',
-    side: 'fill="#40f0ff" material="neon"',
+    box: 'fill="#f4f1ea"',
+    sphere: 'fill="#f4f1ea"',
+    side: 'material="neon"',
     neon: true,
   },
 ]
@@ -201,27 +200,24 @@ function cluster(finish: Finish): string {
     : finish.stripes
       ? `<sphere id="sphere" cx="210" cy="70" r="34" z="50" ${finish.sphere} />`
       : `<sphere id="sphere" cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
-  // Yawback: squat hard-yaw box left of thinbars (boxyaw B materials 7);
-  // glassmass fat -18 yaw read as RGB fragments again.
+  // Yawrest: restore yawback squat hard-yaw (matclose closer/denser regressed).
   const box = finish.stripes
     ? glassCell
-      ? `<rect id="box" x="-18" y="34" width="124" height="68" depth="118" rx="16" rotateY="-30" ${finish.box} />`
+      ? `<rect id="box" x="-4" y="38" width="120" height="64" depth="120" rx="16" rotateY="-28" ${finish.box} />`
       : `<rect id="box" x="14" y="14" width="158" height="110" depth="98" rx="16" ${finish.box} />`
     : `<rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" ${finish.box} />`
   // Gold accent sphere (not finish.side): metal cells used to paint two
   // identical chrome spheres and dual-blind called them inseparable clones
   // (§9.2). Extruded-circle sides also scooped hollow. Neon keeps its torus.
   const side = finish.neon
-    ? `<torus id="side" cx="320" cy="72" r="40" tube="12" z="20" ${finish.side} rotateX="70" />`
+    ? `<torus id="side" cx="330" cy="78" r="32" tube="8" z="14" ${finish.side} rotateX="70" />`
     : `<sphere id="side" cx="330" cy="78" r="28" z="28" fill="#e0a33a" material="plastic 0.35" />`
   // Warm back + accent + lamp keys so polished metal shows a highlight
   // instead of near-black (QUALITY-6 §9.2). Keep studio orbit for gates.
   // Fillmild: drop key3 — third lamp read as wall/halo cluster under §9.2 B.
   // Fillmild framing (860). Closer pulls blew glass SSIM; dual-blind empty
   // cells are a look tip, not a gate lever.
-  // Matclose: metshine A materials 6 — samples too small. Pull in to 800;
-  // glass SSIM must stay clear≥0.6 frost≤0.3.
-  return `<layer width="440" height="300" camera="fov 30, orbit 32 20, distance 800, at 220 155 0">
+  return `<layer width="440" height="300" camera="fov 32, orbit 34 22, distance 860, at 220 160 0">
     <ground id="ground" y="220" rotateX="90" fill="#e7e0d4" shadow-blur="32" shadow-opacity="0.35" />
     <layer x="28" y="220" width="400" height="190" origin="200 0" rotateX="90" preserve-3d>
       <rect id="back" x="-30" y="-90" width="440" height="14" depth="300" fill="#f4efe6" />
