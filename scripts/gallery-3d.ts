@@ -409,9 +409,10 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
     name: `3d-shade-${name}`,
     source: cell(name, withGoldSphere(bench(BENCH_CAMERA, `shading="${name}"`)), BENCH_W, BENCH_H, '#4a453e'),
   }))
-  // Rest5f/g: clearer glass. Rest5g quality: A still saw RGB vertical streaks —
-  // slide glass off the stripe stack and mute the stripes to near-cream so
-  // refraction cannot paint red/blue bars into the sphere.
+  // Rest5f–h: clearer glass. Rest5g slid glass off RGB stripes (A quality 8) but
+  // cream-muted stripes + glass over empty floor made B read muddy grey (6).
+  // Rest5h: seat glass on the white box (clear refraction), restore pastel
+  // stripes for draft/final chroma without putting saturated bars through glass.
   const CLEAR_GLASS =
     '<sphere id="glass" cx="250" cy="250" r="52" z="52" fill="#f4f8f6cc" material="glass 0.04" />'
   const BENCH_GLASS =
@@ -421,15 +422,18 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
     withClearGlass(body)
       .replace(
         '<sphere id="glass" cx="250" cy="250" r="52" z="52" fill="#f4f8f6cc" material="glass 0.04" />',
-        '<sphere id="glass" cx="360" cy="290" r="48" z="48" fill="#f7faf8d0" material="glass 0.03" />',
+        // Keep off the white-box specular (cy155 blew draft overexposure) and
+        // off the saturated stripe stack. Clearer mint + pastel stripes so the
+        // sphere refracts color instead of reading muddy grey over empty floor.
+        '<sphere id="glass" cx="330" cy="275" r="50" z="50" fill="#c8e8dca0" material="glass 0.03" />',
       )
       .replace(
         '<rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#e23b2f" />',
-        '<rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#e8e0d4" />',
+        '<rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#c87870" />',
       )
       .replace(
         '<rect id="stripe-blue" x="282" y="200" width="36" height="78" depth="160" fill="#2a6fbe" />',
-        '<rect id="stripe-blue" x="282" y="200" width="36" height="78" depth="160" fill="#d8d2c6" />',
+        '<rect id="stripe-blue" x="282" y="200" width="36" height="78" depth="160" fill="#5a7eae" />',
       )
   const quality = (['draft', 'final'] as const).map((name) => ({
     name: `3d-quality-${name}`,
