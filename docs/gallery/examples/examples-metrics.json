@@ -102,7 +102,7 @@
     "width": 1400,
     "height": 760,
     "ground": true,
-    "contactRatio": 1,
+    "contactRatio": 0.973,
     "zFight": 0.0003,
     "errors": [],
     "warnings": []
