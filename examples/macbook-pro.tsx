@@ -3,9 +3,9 @@
 // 银色 16 英寸 MacBook Pro 海报，以后渲染用这个场景。
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
-// Creamrest: undo bez9page muted page (A/B mac 5/4); keep pagesoft bezel 9.
-const SILVER = '#4e545c'
-const LID_SILVER = '#484e56'
+// Desksoft: keep notick; mild darker silver so cream|shell AA lip is less bright.
+const SILVER = '#454b53'
+const LID_SILVER = '#454b53'
 const SHELL = 'matte'
 const FRONT = '#030406'
 const KEY = '#2e3138'
@@ -219,7 +219,7 @@ export default (
       <light type="directional" intensity="0.03" color="#d6dae0" x="-280" y="-200" z="400" target="0 0 0" />
       <Lid />
       <Base />
-      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="230" shadow-opacity="0.13" />
+      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="250" shadow-opacity="0.12" />
     </layer>
     <layer x="80" y="66">
       <p style="font-family:Inter; font-size:13px; font-weight:700; letter-spacing:6.2px; color:#c88255">PRO PERFORMANCE · M4 MAX</p>
