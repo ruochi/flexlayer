@@ -132,17 +132,17 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Glassmass: metfix A+B materials 6 — yawed mint nearly vanished. Larger
-    // denser box, milder yaw; sphere fill denser so the disk still reads.
+    // Glassfix: keep glassopaq near-opaque mint BOX (plastic broke SSIM).
+    // Model tip is physical-glass jag + Standard lid; materials stay glassopaq.
     label: 'glass 0.06',
-    box: 'fill="#2f7a66fa" material="glass 0.06"',
+    box: 'fill="#2f7a66" material="glass 0.06"',
     sphere: 'fill="#c4eadfd0" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#1e4a44fa" material="glass 0.72"',
+    box: 'fill="#1e4a44" material="glass 0.72"',
     sphere: 'fill="#9cb8b0e8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
@@ -200,7 +200,7 @@ function cluster(finish: Finish): string {
     : finish.stripes
       ? `<sphere id="sphere" cx="210" cy="70" r="34" z="50" ${finish.sphere} />`
       : `<sphere id="sphere" cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
-  // Glassopaq: thicker front, mild yaw; near-opaque mint via engine retint.
+  // Glassfix: materials stay glassopaq; model tip is physical-glass + Standard.
   const box = finish.stripes
     ? glassCell
       ? `<rect id="box" x="0" y="28" width="130" height="78" depth="100" rx="14" rotateY="-14" ${finish.box} />`

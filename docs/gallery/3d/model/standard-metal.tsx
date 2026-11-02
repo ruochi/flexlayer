@@ -8,7 +8,7 @@ import * as THREE from 'three'
 // less lamp blow, mild yaw so bounce cards read in the mirror.
 const mesh = new THREE.Mesh(
   new THREE.BoxGeometry(1, 1, 1),
-  new THREE.MeshStandardMaterial({ color: '#ced6e0', metalness: 1, roughness: 0.02 }),
+  new THREE.MeshStandardMaterial({ color: '#d4dce6', metalness: 1, roughness: 0.015 }),
 )
 mesh.rotation.y = 0.40
 mesh.rotation.x = -0.08
@@ -34,7 +34,7 @@ export default layer.create(
         <rect x="250" y="-45" width="140" height="12" depth="180" fill="#e87838" />
         <rect x="30" y="-30" width="100" height="10" depth="160" fill="#3a90e0" />
         <rect x="80" y="-55" width="160" height="8" depth="200" fill="#fff6ee" />
-        <model object={mesh} unit={118} x={200} y={188} material="finish metal, color #c2ccd6, roughness 0.02, metalness 1" />
+        <model object={mesh} unit={118} x={200} y={188} material="finish metal, color #c8d2dc, roughness 0.015, metalness 1" />
       </layer>
     </layer>
     <layer x={12} y={272}>
