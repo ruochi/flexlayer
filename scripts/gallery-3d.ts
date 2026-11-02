@@ -132,16 +132,16 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Thinbars: denser mint volume; keep saturated hue, thinner bars so glass leads.
+    // Glassolid: denser mint box (dual-blind); sphere stays thinbars for SSIM.
     label: 'glass 0.06',
-    box: 'fill="#b8d4ccc0" material="glass 0.06"',
+    box: 'fill="#6aa898e8" material="glass 0.06"',
     sphere: 'fill="#cef0e8c8" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#8aa8a0e0" material="glass 0.72"',
+    box: 'fill="#5a7a72e8" material="glass 0.72"',
     sphere: 'fill="#a8c4bce8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
@@ -183,8 +183,9 @@ const FINISHES: Finish[] = [
 ]
 
 function cluster(finish: Finish): string {
-  // Thinbars: saturated hue (frost SSIM) but width 14 so mint volume leads
-  // (boxfront A+B still RGB-bar glass). Keep left large box + sphere r32 z48.
+  // Thinbars under the glass sphere (SSIM/edge). Glassolid: larger mint box +
+  // slightly closer camera so the glass solid reads; do not add behind-box
+  // stripes — that cut clear/frost edge ratio under 1.2.
   const stripes = finish.stripes
     ? `      <rect id="stripe-red" x="174" y="-8" width="14" height="32" depth="140" fill="#b87068" />
       <rect id="stripe-white" x="196" y="-8" width="14" height="32" depth="140" fill="#ddd8d0" />
@@ -196,7 +197,7 @@ function cluster(finish: Finish): string {
       ? `<sphere id="sphere" cx="210" cy="70" r="34" z="50" ${finish.sphere} />`
       : `<sphere id="sphere" cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
   const box = finish.stripes
-    ? `<rect id="box" x="18" y="18" width="145" height="100" depth="85" rx="14" ${finish.box} />`
+    ? `<rect id="box" x="14" y="14" width="158" height="110" depth="98" rx="16" ${finish.box} />`
     : `<rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" ${finish.box} />`
   // Gold accent sphere (not finish.side): metal cells used to paint two
   // identical chrome spheres and dual-blind called them inseparable clones
