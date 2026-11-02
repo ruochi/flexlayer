@@ -308,7 +308,8 @@ function lightsPlate(): { label: string; body: string }[] {
     },
     {
       // Fill the 4×2 grid — empty bottom-right read as unfinished (boxyaw A lights 6.8).
-      label: 'point 冷白',
+      // First token must be unique (point 红色 already owns 3d-light-point).
+      label: 'coolpoint 冷白',
       body: lightScene('<light type="point" x="340" y="50" z="120" intensity="10" distance="420" color="#b8d8ff" />'),
     },
     {
