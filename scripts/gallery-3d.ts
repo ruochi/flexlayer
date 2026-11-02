@@ -30,7 +30,7 @@ function bench(camera = BENCH_CAMERA, extra = ''): string {
       <rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#e23b2f" />
       <rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#f7f4ee" />
       <rect id="stripe-blue" x="282" y="200" width="36" height="78" depth="160" fill="#2a6fbe" />
-      <sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#e8f6f2a8" material="glass 0.08" />
+      <sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#d8ebe6a0" material="glass 0.06" />
       <circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />
       <layer x="400" y="230">
         <path id="hole" d="M0 0 H120 V84 H0 Z M28 18 V66 H92 V18 Z" depth="14" fill="#1f8a5b" material="plastic 0.3" />
@@ -130,18 +130,18 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Mintbars: keep glassvol teal fills (mint/frost variants blew clear/frost
-    // SSIM). Look tip is still glass + model metal + mac + aniso warm.
+    // Mintgate: platerim mint (materials peak 8) + diskglass SATURATED stripes
+    // (quiet #c9a49c raised frost SSIM). Frost denser than clear.
     label: 'glass 0.06',
-    box: 'fill="#6a9e9688" material="glass 0.06"',
-    sphere: 'fill="#9ec4bcb8" material="glass 0.06"',
+    box: 'fill="#c5ddd6a0" material="glass 0.06"',
+    sphere: 'fill="#daf0eab8" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#6a9e9688" material="glass 0.72"',
-    sphere: 'fill="#9ec4bcb8" material="glass 0.72"',
+    box: 'fill="#8aa8a0d8" material="glass 0.72"',
+    sphere: 'fill="#a8c4bce8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
@@ -184,8 +184,8 @@ const FINISHES: Finish[] = [
 function cluster(finish: Finish): string {
   // Gate footprint kept; sphere pulled forward (z) so stripes read behind glass
   // instead of as the glass body (lightglass dual-blind).
-  // Gate footprint: diskglass mute (glassvol quieter #c9a49c raised frost SSIM
-  // to 0.33). Sphere z48.
+  // Diskglass saturated mute (required for frost SSIM). Sphere r32 z48 — mint
+  // volume leads the bars (mintbars A+B materials 4).
   const stripes = finish.stripes
     ? `      <rect id="stripe-red" x="168" y="-8" width="22" height="36" depth="140" fill="#b87068" />
       <rect id="stripe-white" x="194" y="-8" width="22" height="36" depth="140" fill="#ddd8d0" />
@@ -194,7 +194,7 @@ function cluster(finish: Finish): string {
   const sphere = finish.lamp
     ? `<sphere id="sphere" cx="210" cy="78" r="16" z="120" ${finish.sphere} />`
     : finish.stripes
-      ? `<sphere id="sphere" cx="210" cy="70" r="30" z="48" ${finish.sphere} />`
+      ? `<sphere id="sphere" cx="210" cy="70" r="32" z="48" ${finish.sphere} />`
       : `<sphere id="sphere" cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
   // Gold accent sphere (not finish.side): metal cells used to paint two
   // identical chrome spheres and dual-blind called them inseparable clones
@@ -348,7 +348,7 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
             '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="40" shadow-opacity="0.5" />',
             // Mintbars: glassvol A jagged plate contact — softer penumbra.
             // Keep plate metalness ≤0.62 / r≥0.48 — brighter plate blew SSR >0.01.
-            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="188" shadow-opacity="0.24" />',
+            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="200" shadow-opacity="0.22" />',
           )
           .replace(
             '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#cfd3d8" material="finish metal, color #cfd3d8, roughness 0.58, metalness 0.42, clearcoat 0" />',
@@ -375,9 +375,8 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
             '<rect id="stripe-blue" x="178" y="272" width="70" height="28" depth="120" fill="#2a6fbe" />',
           )
           .replace(
-            '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#e8f6f2a8" material="glass 0.08" />',
-            // Mintbars: first pass white-through-glass 0.089 < 0.1 — clearer
-            // fill seated on the white stripe; keep left of neon.
+            '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#d8ebe6a0" material="glass 0.06" />',
+            // Mintgate: clearer left sphere over stripes; keep off neon.
             '<sphere id="glass" cx="213" cy="248" r="56" z="46" fill="#e8f4f0a8" material="glass 0.04" />',
           )
           .replace(
