@@ -132,17 +132,18 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Opaqleft: densorb B materials 6.5 — left glass orb + chroma bars read as
-    // shattered slivers. Opaque mint plastic left; id=sphere glass for SSIM.
+    // Twinsame: opaqleft B materials 6.5 (grey bars = B&W shatter). Restore
+    // exact twosphere left glass orb — that tip alone scored B materials 7.
+    // Keep brightbooth Physical (B model 7 on densorb).
     label: 'glass 0.06',
-    box: 'fill="#3a8a76" material="plastic 0.32"',
+    box: 'fill="#b8e8dcc8" material="glass 0.06"',
     sphere: 'fill="#c4eadfd0" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#2a5a52" material="plastic 0.55"',
+    box: 'fill="#7a9e96e0" material="glass 0.72"',
     sphere: 'fill="#9cb8b0e8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
@@ -188,15 +189,9 @@ function cluster(finish: Finish): string {
   // slightly closer camera so the glass solid reads; do not add behind-box
   // stripes — that cut clear/frost edge ratio under 1.2.
   const glassCell = finish.label.startsWith('glass')
-  // Opaqleft: glass cells use near-grey luma bars (high contrast for SSIM,
-  // no pink/blue shatter read). Non-glass stripe cells keep soft chroma.
+  // Twinsame: exact twosphere stripe layout (soft chroma thinbars + id=sphere).
   const stripes = finish.stripes
-    ? glassCell
-      ? `      <rect id="glass-card" x="155" y="-24" width="100" height="10" depth="170" fill="#f4efe6" />
-      <rect id="stripe-red" x="174" y="-8" width="14" height="32" depth="140" fill="#5a564e" />
-      <rect id="stripe-white" x="196" y="-8" width="14" height="32" depth="140" fill="#f0ebe3" />
-      <rect id="stripe-blue" x="218" y="-8" width="14" height="32" depth="140" fill="#2e2c28" />`
-      : `      <rect id="stripe-red" x="174" y="-8" width="14" height="32" depth="140" fill="#b87068" />
+    ? `      <rect id="stripe-red" x="174" y="-8" width="14" height="32" depth="140" fill="#b87068" />
       <rect id="stripe-white" x="196" y="-8" width="14" height="32" depth="140" fill="#ddd8d0" />
       <rect id="stripe-blue" x="218" y="-8" width="14" height="32" depth="140" fill="#5a7a9a" />`
     : ''
@@ -205,10 +200,10 @@ function cluster(finish: Finish): string {
     : finish.stripes
       ? `<sphere id="sphere" cx="210" cy="70" r="34" z="50" ${finish.sphere} />`
       : `<sphere id="sphere" cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
-  // Opaqleft: large opaque mint plastic box (not a vanishing glass orb).
+  // Twinsame: exact twosphere left glass orb (B materials 7).
   const box = finish.stripes
     ? glassCell
-      ? `<rect id="box" x="4" y="24" width="118" height="82" depth="72" rx="14" ${finish.box} />`
+      ? `<sphere id="box" cx="88" cy="72" r="44" z="36" ${finish.box} />`
       : `<rect id="box" x="14" y="14" width="158" height="110" depth="98" rx="16" ${finish.box} />`
     : `<rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" ${finish.box} />`
   // Gold accent sphere (not finish.side): metal cells used to paint two

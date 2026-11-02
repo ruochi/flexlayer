@@ -8,11 +8,10 @@
       <sphere id="key2" cx="300" cy="-30" r="30" z="140" material="lamp" />
       <rect id="bounce" x="40" y="-70" width="200" height="8" depth="220" fill="#fff8f0" />
       <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" fill="#f6f2ea" />
-      <rect id="box" x="4" y="24" width="118" height="82" depth="72" rx="14" fill="#3a8a76" material="plastic 0.32" />
-            <rect id="glass-card" x="155" y="-24" width="100" height="10" depth="170" fill="#f4efe6" />
-      <rect id="stripe-red" x="174" y="-8" width="14" height="32" depth="140" fill="#5a564e" />
-      <rect id="stripe-white" x="196" y="-8" width="14" height="32" depth="140" fill="#f0ebe3" />
-      <rect id="stripe-blue" x="218" y="-8" width="14" height="32" depth="140" fill="#2e2c28" />
+      <sphere id="box" cx="88" cy="72" r="44" z="36" fill="#b8e8dcc8" material="glass 0.06" />
+            <rect id="stripe-red" x="174" y="-8" width="14" height="32" depth="140" fill="#b87068" />
+      <rect id="stripe-white" x="196" y="-8" width="14" height="32" depth="140" fill="#ddd8d0" />
+      <rect id="stripe-blue" x="218" y="-8" width="14" height="32" depth="140" fill="#5a7a9a" />
       <sphere id="sphere" cx="210" cy="70" r="34" z="50" fill="#c4eadfd0" material="glass 0.06" />
       <sphere id="side" cx="330" cy="78" r="28" z="28" fill="#e0a33a" material="plastic 0.35" />
     </layer>
