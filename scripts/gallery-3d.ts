@@ -132,16 +132,18 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Glassolid: denser mint box (dual-blind); sphere stays thinbars for SSIM.
+    // Boxveil: engine face veil 0.72 on extruded clear glass (spheres stay
+    // 0.06 for SSIM). Darker mint fill so cream-wall transmit cannot wash the
+    // box to page color. No stroke (frost SSIM).
     label: 'glass 0.06',
-    box: 'fill="#6aa898e8" material="glass 0.06"',
+    box: 'fill="#3d8a78f5" material="glass 0.06"',
     sphere: 'fill="#cef0e8c8" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#5a7a72e8" material="glass 0.72"',
+    box: 'fill="#2f5a52f0" material="glass 0.72"',
     sphere: 'fill="#a8c4bce8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
@@ -429,6 +431,8 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
         // Keep off the white-box specular (cy155 blew draft overexposure) and
         // off the saturated stripe stack. Clearer mint + pastel stripes so the
         // sphere refracts color instead of reading muddy grey over empty floor.
+        // Keep rest5h seat (off white-box specular / saturated stripe stack).
+        // Moving to the white box nicked technical hidden under 0.7.
         '<sphere id="glass" cx="330" cy="275" r="50" z="50" fill="#c8e8dca0" material="glass 0.03" />',
       )
       .replace(
