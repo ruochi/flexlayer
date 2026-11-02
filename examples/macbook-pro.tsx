@@ -3,10 +3,9 @@
 // 银色 16 英寸 MacBook Pro 海报，以后渲染用这个场景。
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
-// Edgethin: thin mid-dark EDGE rim (3px) — full charcoal RIM regressed A/B.
-const EDGE = '#3a4048'
+// Unrim: drop EDGE rim (edgethin A mac 5); wider dark bezel vs cream page AA.
 const SILVER = '#4e545c'
-const LID_SILVER = '#4e545c'
+const LID_SILVER = '#484e56'
 const SHELL = 'matte'
 const FRONT = '#030406'
 const KEY = '#2e3138'
@@ -123,8 +122,7 @@ const padY = D - 30 - PAD.h
 function Base() {
   return (
     <layer x={STAGE.x} y={STAGE.groundY - TOP} width={W} height={D} origin={`${W / 2} 0`} rotateX="90" preserve-3d>
-      <rect width={W} height={D} rx="24" fill={EDGE} material="matte" depth={T} stroke="none" />
-      <rect x="3" y="3" width={W - 6} height={D - 6} rx="22" fill={SILVER} material={SHELL} depth={T - 1} z={0.5} stroke="none" />
+      <rect width={W} height={D} rx="24" fill={SILVER} material={SHELL} depth={T} stroke="none" />
       {/* Flush dark front strip — extruded plastic lip read as chrome band (§9.2). */}
       <rect x="24" y={D - 8} width={W - 48} height="8" rx="3" fill={FRONT} material="matte" depth="2" z={TOP - 1} stroke="none" cast-shadow="false" />
       <layer x="0" y="0" width={W} height={D} z={TOP + 0.2} cast-shadow="false">
@@ -198,10 +196,9 @@ function Wallpaper() {
 function Lid() {
   return (
     <layer x={STAGE.x} y={STAGE.groundY - T + 4 - LID_H} width={W} height={LID_H} origin={`${W / 2} ${LID_H}`} rotateX={LID_TILT} cast-shadow="false">
-      <rect width={W} height={LID_H} rx="24" fill={EDGE} material="matte" depth={LID_T} z={-LID_T / 2 - 1} stroke="none" cast-shadow="false" />
-      <rect x="3" y="3" width={W - 6} height={LID_H - 6} rx="22" fill={LID_SILVER} material={SHELL} depth={LID_T - 1} z={-LID_T / 2} stroke="none" cast-shadow="false" />
-      {/* Wider dark bezel so silver rim AA against cream page is thinner. */}
-      <rect x="10" y="10" width={W - 20} height={LID_H - 20} rx="16" fill="#050608" cast-shadow="false" />
+      <rect width={W} height={LID_H} rx="24" fill={LID_SILVER} material={SHELL} depth={LID_T} z={-LID_T / 2 - 1} stroke="none" cast-shadow="false" />
+      {/* Unrim: push dark bezel out so silver|cream AA rim is thinner (B chrome lip). */}
+      <rect x="14" y="14" width={W - 28} height={LID_H - 28} rx="14" fill="#050608" cast-shadow="false" />
       <Wallpaper />
       <rect x={W / 2 - 36} y="7" width="72" height="27" rx="8" fill="#050608" cast-shadow="false" />
       <circle cx={W / 2} cy="18" r="2.4" fill="#0e1018" stroke="#23262e" stroke-width="0.6" />
@@ -213,7 +210,7 @@ function Lid() {
 }
 
 export default (
-  <layer width="1440" height="1800" background="#f6f3ee" color="#1c1916" min-font="10" noise="0.014">
+  <layer width="1440" height="1800" background="#f6f3ee" color="#1c1916" min-font="10" noise="0.018">
     <rect x="0" y="0" width="1440" height="1800" fill="linear-gradient(180deg, #f7f4ef 0%, #efe8df 100%)" />
     <layer width="1440" height="1800" camera="fov 28, orbit 16 14" light="world" grade="matte 0.85">
       {/* Neutral key — warm hemi alone bounced chrome-orange on the hinge (§9.2). */}
