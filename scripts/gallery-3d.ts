@@ -303,7 +303,13 @@ function lightsPlate(): { label: string; body: string }[] {
     },
     {
       label: 'ambient 弱白光',
-      body: lightScene('<light type="ambient" intensity="0.5" color="#ffffff" />'),
+      // Metfix: above 0.5 so ambient ≠ no-light; stay under overexposureMax 0.005.
+      body: lightScene('<light type="ambient" intensity="0.62" color="#ffffff" />'),
+    },
+    {
+      // Fill the 4×2 grid — empty bottom-right read as unfinished (boxyaw A lights 6.8).
+      label: 'point 冷白',
+      body: lightScene('<light type="point" x="340" y="50" z="120" intensity="10" distance="420" color="#b8d8ff" />'),
     },
     {
       label: '不写灯（对照）',
