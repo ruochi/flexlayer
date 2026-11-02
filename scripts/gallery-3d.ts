@@ -132,18 +132,17 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Twosphere: glassrest B materials 6.5 — extruded mint box always a
-    // faceted teal slab under retint. Left subject is a 2nd glass sphere
-    // (round = transmit); id=sphere stays for SSIM stripes.
+    // Brightbooth: glassclean B materials 6.5 on same twosphere PNG (variance).
+    // Larger denser left glass orb so it reads as one solid, not slivers.
     label: 'glass 0.06',
-    box: 'fill="#b8e8dcc8" material="glass 0.06"',
+    box: 'fill="#9ed4c4e0" material="glass 0.06"',
     sphere: 'fill="#c4eadfd0" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#7a9e96e0" material="glass 0.72"',
+    box: 'fill="#6a9088e8" material="glass 0.72"',
     sphere: 'fill="#9cb8b0e8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
@@ -205,7 +204,7 @@ function cluster(finish: Finish): string {
   // retint slab. Non-glass cells keep the usual rect.
   const box = finish.stripes
     ? glassCell
-      ? `<sphere id="box" cx="88" cy="72" r="44" z="36" ${finish.box} />`
+      ? `<sphere id="box" cx="86" cy="70" r="50" z="40" ${finish.box} />`
       : `<rect id="box" x="14" y="14" width="158" height="110" depth="98" rx="16" ${finish.box} />`
     : `<rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" ${finish.box} />`
   // Gold accent sphere (not finish.side): metal cells used to paint two
