@@ -1,4 +1,4 @@
-<layer width="880" height="572" background="#241f1b" color="#f4efe6" font-family="ChillDuanSans" min-font="16" safe="0">
+<layer width="880" height="572" background="#4a453e" color="#f4efe6" font-family="ChillDuanSans" min-font="16" safe="0">
   <layer x="0" y="0" width="880" height="540" camera="fov 30, orbit 28 34, distance 1100, at 500 600 0">
     <ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="40" shadow-opacity="0.5" />
     <layer x="70" y="530" width="960" height="400" origin="480 0" rotateX="90" preserve-3d>
