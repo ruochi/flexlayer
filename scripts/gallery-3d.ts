@@ -304,15 +304,16 @@ function lines(): string {
   // plate, and a tube that crosses another body so halo / crossings are
   // visible. Framing keeps left/right empty ≤ 15% and empty-below ≤ 25%.
   // Technical shading avoids studio specular blow-past of overexposureMax.
+  // Rest5b: matte cream fills — bare fill read as brushed diagonal banding for A.
   return `<layer width="1180" height="516" camera="fov 36, orbit 28 18, distance 1060, at 560 310 0" shading="technical">
     <layer x="40" y="20" width="1100" height="580" rotateX="38" preserve-3d>
-      <rect id="box" x="40" y="70" width="260" height="200" depth="110" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
-      <cylinder id="piercing" cx="170" cy="170" r="52" height="320" fill="#e7d3a8" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
-      <rect id="round-box" x="400" y="80" width="210" height="160" depth="96" rx="26" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" rotateY="-26" />
-      <cylinder id="rim" cx="720" cy="175" r="48" height="230" rx="14" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
-      <sphere id="ball" cx="960" cy="190" r="68" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
+      <rect id="box" x="40" y="70" width="260" height="200" depth="110" fill="#f4efe6" material="matte" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
+      <cylinder id="piercing" cx="170" cy="170" r="52" height="320" fill="#ebe3d6" material="matte" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
+      <rect id="round-box" x="400" y="80" width="210" height="160" depth="96" rx="26" fill="#f4efe6" material="matte" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" rotateY="-26" />
+      <cylinder id="rim" cx="720" cy="175" r="48" height="230" rx="14" fill="#f4efe6" material="matte" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
+      <sphere id="ball" cx="960" cy="190" r="68" fill="#f4efe6" material="matte" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
       <layer x="380" y="320">
-        <path id="hole-plate" d="M0 0 H180 V120 H0 Z M45 28 V92 H135 V28 Z" depth="28" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
+        <path id="hole-plate" d="M0 0 H180 V120 H0 Z M45 28 V92 H135 V28 Z" depth="28" fill="#f4efe6" material="matte" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
       </layer>
       <tube id="elbow" x="60" y="380" d="M0 16 H220 V160" r="16" fill="none" stroke="#1c1915" stroke-width="3 2 1.9" halo="8" />
     </layer>
@@ -418,10 +419,20 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
     { label: 'orbit 62 22', camera: 'fov 30, orbit 62 22, distance 1040, at 550 580 0', file: 'side' },
     { label: 'aperture 14', camera: `${BENCH_CAMERA}, aperture 14`, file: 'dof' },
   ]
-  const cameraCells = cameras.map((item) => ({
-    name: `3d-cam-${item.file}`,
-    source: cell(item.label, bench(item.camera), BENCH_W, BENCH_H, '#4a453e'),
-  }))
+  const cameraCells = cameras.map((item) => {
+    let body = bench(item.camera)
+    // Rest5b: B side orbit (62 22) read blue-float as hanging with no contact.
+    if (item.file === 'side') {
+      body = body.replace(
+        '<sphere id="blue-float" cx="160" cy="200" r="34" z="140" fill="#2a6fbe" material="plastic 0.42" />',
+        '<sphere id="blue-float" cx="165" cy="118" r="34" z="50" fill="#2a6fbe" material="plastic 0.42" />',
+      )
+    }
+    return {
+      name: `3d-cam-${item.file}`,
+      source: cell(item.label, body, BENCH_W, BENCH_H, '#4a453e'),
+    }
+  })
   const linesPlate: Plate = {
     name: '3d-lines',
     source: page({
