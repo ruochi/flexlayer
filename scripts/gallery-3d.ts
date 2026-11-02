@@ -132,17 +132,17 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Glassfix: keep glassopaq near-opaque mint BOX (plastic broke SSIM).
-    // Model tip is physical-glass jag + Standard lid; materials stay glassopaq.
+    // Mintface: glassfix B materials 6.5 — yawed dark teal box reads as a
+    // faceted shard. Face-on, larger, lighter mint; sphere stays for SSIM.
     label: 'glass 0.06',
-    box: 'fill="#2f7a66" material="glass 0.06"',
+    box: 'fill="#5aab96" material="glass 0.06"',
     sphere: 'fill="#c4eadfd0" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#1e4a44" material="glass 0.72"',
+    box: 'fill="#3d7a70" material="glass 0.72"',
     sphere: 'fill="#9cb8b0e8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
@@ -200,10 +200,10 @@ function cluster(finish: Finish): string {
     : finish.stripes
       ? `<sphere id="sphere" cx="210" cy="70" r="34" z="50" ${finish.sphere} />`
       : `<sphere id="sphere" cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
-  // Glassfix: materials stay glassopaq; model tip is physical-glass + Standard.
+  // Mintface: face-on rounded mint (no yaw facets); match non-glass box scale.
   const box = finish.stripes
     ? glassCell
-      ? `<rect id="box" x="0" y="28" width="130" height="78" depth="100" rx="14" rotateY="-14" ${finish.box} />`
+      ? `<rect id="box" x="10" y="16" width="150" height="100" depth="88" rx="18" ${finish.box} />`
       : `<rect id="box" x="14" y="14" width="158" height="110" depth="98" rx="16" ${finish.box} />`
     : `<rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" ${finish.box} />`
   // Gold accent sphere (not finish.side): metal cells used to paint two
