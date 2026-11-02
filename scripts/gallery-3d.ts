@@ -305,7 +305,12 @@ function lines(): string {
   // visible. Framing keeps left/right empty ≤ 15% and empty-below ≤ 25%.
   // Technical shading avoids studio specular blow-past of overexposureMax.
   // Rest5b: matte cream fills — bare fill read as brushed diagonal banding for A.
+  // Rest5c: fill-less ground for contact shadows (A float). An opaque ground at
+  // the board feet either buried the RX 38 stage or forced an RX 90 floor seat
+  // that broke hole-paper / contour gates and overexposure. No fill → shadows
+  // only, no buried-in-ground. Elbow halo 8→3 (banded halo).
   return `<layer width="1180" height="516" camera="fov 36, orbit 28 18, distance 1060, at 560 310 0" shading="technical">
+    <ground id="ground" y="620" rotateX="90" shadow-blur="70" shadow-opacity="0.28" />
     <layer x="40" y="20" width="1100" height="580" rotateX="38" preserve-3d>
       <rect id="box" x="40" y="70" width="260" height="200" depth="110" fill="#f4efe6" material="matte" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
       <cylinder id="piercing" cx="170" cy="170" r="52" height="320" fill="#ebe3d6" material="matte" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
@@ -315,7 +320,7 @@ function lines(): string {
       <layer x="380" y="320">
         <path id="hole-plate" d="M0 0 H180 V120 H0 Z M45 28 V92 H135 V28 Z" depth="28" fill="#f4efe6" material="matte" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
       </layer>
-      <tube id="elbow" x="60" y="380" d="M0 16 H220 V160" r="16" fill="none" stroke="#1c1915" stroke-width="3 2 1.9" halo="8" />
+      <tube id="elbow" x="60" y="380" d="M0 16 H220 V160" r="16" fill="none" stroke="#1c1915" stroke-width="3 2 1.9" halo="3" />
     </layer>
   </layer>`
 }
@@ -394,7 +399,6 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
     }),
   }
   // Rest5: mid-warm page like still — dark #241f1b made camera/shade wall fringe loud for A.
-  // Rest5: mid-warm page like still — dark #241f1b made camera/shade wall fringe loud for A.
   const shading = (['studio', 'toon', 'technical', 'manga'] as const).map((name) => ({
     name: `3d-shade-${name}`,
     source: cell(name, bench(BENCH_CAMERA, `shading="${name}"`), BENCH_W, BENCH_H, '#4a453e'),
@@ -421,11 +425,24 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
   ]
   const cameraCells = cameras.map((item) => {
     let body = bench(item.camera)
+      // Rest5c: softer floor penumbra (B stair shadow); gold box not arched cylinder.
+      .replace(
+        '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="40" shadow-opacity="0.5" />',
+        '<ground id="ground" y="530" rotateX="90" fill="#d8d0c4" shadow-blur="120" shadow-opacity="0.22" />',
+      )
+      .replace(
+        '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />',
+        '<rect id="gold" x="744" y="88" width="76" height="98" depth="60" rx="10" fill="#e8b050" material="finish metal, color #e8b050, roughness 0.28, metalness 0.9" />',
+      )
     // Rest5b: B side orbit (62 22) read blue-float as hanging with no contact.
     if (item.file === 'side') {
       body = body.replace(
         '<sphere id="blue-float" cx="160" cy="200" r="34" z="140" fill="#2a6fbe" material="plastic 0.42" />',
         '<sphere id="blue-float" cx="165" cy="118" r="34" z="50" fill="#2a6fbe" material="plastic 0.42" />',
+      ).replace(
+        // Rest5c: clearer glass on side — B called cube a smeared stack.
+        '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#d8ebe6a0" material="glass 0.06" />',
+        '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f2f7f4a0" material="glass 0.03" />',
       )
     }
     return {
