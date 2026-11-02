@@ -305,13 +305,12 @@ function lines(): string {
   // visible. Framing keeps left/right empty ≤ 15% and empty-below ≤ 25%.
   // Technical shading avoids studio specular blow-past of overexposureMax.
   // Rest5b: matte cream fills — bare fill read as brushed diagonal banding for A.
-  // Rest5c: fill-less ground for contact shadows (A float). An opaque ground at
-  // the board feet either buried the RX 38 stage or forced an RX 90 floor seat
-  // that broke hole-paper / contour gates and overexposure. No fill → shadows
-  // only, no buried-in-ground. Elbow halo 8→3 (banded halo).
-  return `<layer width="1180" height="516" camera="fov 36, orbit 28 18, distance 1060, at 560 310 0" shading="technical">
+  // Rest5c/d: fill-less ground at y=620 (opaque cream → ground-seam gate).
+  // Rest5d: drop the board (y 20→55) so soft contact reads closer without burial.
+  // Elbow halo 8→3 (banded halo).
+  return `<layer width="1180" height="516" camera="fov 36, orbit 28 18, distance 1060, at 560 340 0" shading="technical">
     <ground id="ground" y="620" rotateX="90" shadow-blur="70" shadow-opacity="0.28" />
-    <layer x="40" y="20" width="1100" height="580" rotateX="38" preserve-3d>
+    <layer x="40" y="55" width="1100" height="580" rotateX="38" preserve-3d>
       <rect id="box" x="40" y="70" width="260" height="200" depth="110" fill="#f4efe6" material="matte" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
       <cylinder id="piercing" cx="170" cy="170" r="52" height="320" fill="#ebe3d6" material="matte" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
       <rect id="round-box" x="400" y="80" width="210" height="160" depth="96" rx="26" fill="#f4efe6" material="matte" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" rotateY="-26" />
@@ -399,13 +398,25 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
     }),
   }
   // Rest5: mid-warm page like still — dark #241f1b made camera/shade wall fringe loud for A.
-  const shading = (['studio', 'toon', 'technical', 'manga'] as const).map((name) => ({
-    name: `3d-shade-${name}`,
-    source: cell(name, bench(BENCH_CAMERA, `shading="${name}"`), BENCH_W, BENCH_H, '#4a453e'),
-  }))
+  // Rest5d: closed plastic gold box on studio/toon/technical + quality + camera.
+  // Manga keeps the extruded circle so hatchFlipEngine stays on the engine baseline.
+  // Rest5d: sphere — extruded circle read hollow/inverted (B); flat box blew contactMax 0.75.
+  const GOLD_SPHERE =
+    '<sphere id="gold" cx="780" cy="150" r="42" z="42" fill="#e8b050" material="plastic 0.28" />'
+  const GOLD_CIRCLE =
+    '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />'
+  const withGoldBox = (body: string) => body.replace(GOLD_CIRCLE, GOLD_SPHERE)
+  const shading = (['studio', 'toon', 'technical', 'manga'] as const).map((name) => {
+    let body = bench(BENCH_CAMERA, `shading="${name}"`)
+    if (name !== 'manga') body = withGoldBox(body)
+    return {
+      name: `3d-shade-${name}`,
+      source: cell(name, body, BENCH_W, BENCH_H, '#4a453e'),
+    }
+  })
   const quality = (['draft', 'final'] as const).map((name) => ({
     name: `3d-quality-${name}`,
-    source: cell(name, bench(BENCH_CAMERA, `quality="${name}"`), BENCH_W, BENCH_H),
+    source: cell(name, withGoldBox(bench(BENCH_CAMERA, `quality="${name}"`)), BENCH_W, BENCH_H),
   }))
   // Dark page for sphere highlightArea monotonicity (examples-3d / gallery
   // pair gates). Box silver comes from sphere-excluded flat_metal lift.
@@ -424,25 +435,13 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
     { label: 'aperture 14', camera: `${BENCH_CAMERA}, aperture 14`, file: 'dof' },
   ]
   const cameraCells = cameras.map((item) => {
-    let body = bench(item.camera)
-      // Rest5c: softer floor penumbra (B stair shadow); gold box not arched cylinder.
-      .replace(
-        '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="40" shadow-opacity="0.5" />',
-        '<ground id="ground" y="530" rotateX="90" fill="#d8d0c4" shadow-blur="120" shadow-opacity="0.22" />',
-      )
-      .replace(
-        '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />',
-        '<rect id="gold" x="744" y="88" width="76" height="98" depth="60" rx="10" fill="#e8b050" material="finish metal, color #e8b050, roughness 0.28, metalness 0.9" />',
-      )
+    // Rest5d: plastic gold box (not metal — jagged rim); no rest5c softener (B stairs).
+    let body = withGoldBox(bench(item.camera))
     // Rest5b: B side orbit (62 22) read blue-float as hanging with no contact.
     if (item.file === 'side') {
       body = body.replace(
         '<sphere id="blue-float" cx="160" cy="200" r="34" z="140" fill="#2a6fbe" material="plastic 0.42" />',
         '<sphere id="blue-float" cx="165" cy="118" r="34" z="50" fill="#2a6fbe" material="plastic 0.42" />',
-      ).replace(
-        // Rest5c: clearer glass on side — B called cube a smeared stack.
-        '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#d8ebe6a0" material="glass 0.06" />',
-        '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f2f7f4a0" material="glass 0.03" />',
       )
     }
     return {
