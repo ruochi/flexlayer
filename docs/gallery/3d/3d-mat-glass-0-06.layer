@@ -8,7 +8,7 @@
       <sphere id="key2" cx="300" cy="-30" r="30" z="140" material="lamp" />
       <rect id="bounce" x="40" y="-70" width="200" height="8" depth="220" fill="#fff8f0" />
       <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" fill="#f6f2ea" />
-      <rect id="box" x="-8" y="34" width="126" height="68" depth="122" rx="16" rotateY="-28" fill="#3a8a76f5" material="glass 0.06" />
+      <rect id="box" x="0" y="28" width="130" height="78" depth="100" rx="14" rotateY="-14" fill="#2f7a66fa" material="glass 0.06" />
             <rect id="stripe-red" x="174" y="-8" width="14" height="32" depth="140" fill="#b87068" />
       <rect id="stripe-white" x="196" y="-8" width="14" height="32" depth="140" fill="#ddd8d0" />
       <rect id="stripe-blue" x="218" y="-8" width="14" height="32" depth="140" fill="#5a7a9a" />
