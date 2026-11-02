@@ -3,11 +3,12 @@
 // 银色 16 英寸 MacBook Pro 海报，以后渲染用这个场景。
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
-// Maclip: darker shell — macfringe still read chrome lip / cut-out halo.
-const SILVER = '#424850'
-const LID_SILVER = '#3a4048'
+// Macmid: keep maclip wider bezel + flush lip; restore macfringe shell brightness
+// (maclip dark shell cut A to 5 while B hit 7).
+const SILVER = '#4e545c'
+const LID_SILVER = '#484e56'
 const SHELL = 'matte'
-const FRONT = '#020304'
+const FRONT = '#030406'
 const KEY = '#2e3138'
 const WELL = '#1a1c20'
 
@@ -176,14 +177,14 @@ function Wallpaper() {
       <rect x="0" y="0" width={SCREEN.w} height="26" fill="#040408" opacity="0.5" />
       <layer x="20" y="6">
         <div style="display:flex; gap:13px; align-items:center">
-          <p style="font-family:Inter; font-size:10px; font-weight:700; color:#ffffffaa">Finder</p>
+          <p style="font-family:Inter; font-size:10px; font-weight:700; color:#ffffffdd">Finder</p>
           {['File', 'Edit', 'View', 'Go', 'Window', 'Help'].map((t) => (
-            <p style="font-family:Inter; font-size:10px; color:#ffffff88">{t}</p>
+            <p style="font-family:Inter; font-size:10px; color:#ffffffb0">{t}</p>
           ))}
         </div>
       </layer>
       <layer x={SCREEN.w - 20} y="6" anchor="top-right">
-        <p style="font-family:Inter; font-size:10px; font-weight:700; color:#ffffffaa">9:41</p>
+        <p style="font-family:Inter; font-size:10px; font-weight:700; color:#ffffffdd">9:41</p>
       </layer>
       <rect x={dockX} y={SCREEN.h - 66} width={dockW} height="54" rx="17" fill="#08080d" opacity="0.66" />
       {dock.map((c, i) => (
@@ -198,12 +199,12 @@ function Lid() {
     <layer x={STAGE.x} y={STAGE.groundY - T + 4 - LID_H} width={W} height={LID_H} origin={`${W / 2} ${LID_H}`} rotateX={LID_TILT} cast-shadow="false">
       <rect width={W} height={LID_H} rx="24" fill={LID_SILVER} material={SHELL} depth={LID_T} z={-LID_T / 2 - 1} stroke="none" cast-shadow="false" />
       {/* Wider dark bezel so silver rim AA against cream page is thinner. */}
-      <rect x="10" y="10" width={W - 20} height={LID_H - 20} rx="16" fill="#020304" cast-shadow="false" />
+      <rect x="9" y="9" width={W - 18} height={LID_H - 18} rx="17" fill="#050608" cast-shadow="false" />
       <Wallpaper />
-      <rect x={W / 2 - 36} y="7" width="72" height="27" rx="8" fill="#020304" cast-shadow="false" />
-      <circle cx={W / 2} cy="18" r="2.4" fill="#0e1018" stroke="#1a1c22" stroke-width="0.5" />
+      <rect x={W / 2 - 36} y="7" width="72" height="27" rx="8" fill="#050608" cast-shadow="false" />
+      <circle cx={W / 2} cy="18" r="2.4" fill="#0e1018" stroke="#23262e" stroke-width="0.6" />
       <layer x={W / 2} y={SCREEN.y + SCREEN.h + 18} anchor="center">
-        <p style="font-family:Inter; font-size:10px; letter-spacing:0.4px; color:#4a4e55">MacBook Pro</p>
+        <p style="font-family:Inter; font-size:10px; letter-spacing:0.4px; color:#5b5e65">MacBook Pro</p>
       </layer>
     </layer>
   )
@@ -214,12 +215,12 @@ export default (
     <rect x="0" y="0" width="1440" height="1800" fill="linear-gradient(180deg, #f7f4ef 0%, #efe8df 100%)" />
     <layer width="1440" height="1800" camera="fov 28, orbit 16 14" light="world" grade="matte 0.85">
       {/* Neutral key — warm hemi alone bounced chrome-orange on the hinge (§9.2). */}
-      <light type="hemisphere" intensity="0.28" color="#e2e4e8" ground-color="#aeb2b8" />
-      <light type="directional" intensity="0.04" color="#e2e4e8" x="120" y="-420" z="520" target="0 0 0" />
-      <light type="directional" intensity="0.025" color="#d6dae0" x="-280" y="-200" z="400" target="0 0 0" />
+      <light type="hemisphere" intensity="0.32" color="#e2e4e8" ground-color="#aeb2b8" />
+      <light type="directional" intensity="0.05" color="#e2e4e8" x="120" y="-420" z="520" target="0 0 0" />
+      <light type="directional" intensity="0.03" color="#d6dae0" x="-280" y="-200" z="400" target="0 0 0" />
       <Lid />
       <Base />
-      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="240" shadow-opacity="0.12" />
+      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="230" shadow-opacity="0.13" />
     </layer>
     <layer x="80" y="66">
       <p style="font-family:Inter; font-size:13px; font-weight:700; letter-spacing:6.2px; color:#c88255">PRO PERFORMANCE · M4 MAX</p>
