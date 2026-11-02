@@ -3,7 +3,7 @@
 // 银色 16 英寸 MacBook Pro 海报，以后渲染用这个场景。
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
-// Unrim: drop EDGE rim (edgethin A mac 5); wider dark bezel vs cream page AA.
+// Bez9page: restore pagesoft bezel 9; mute cream page so silver|page AA is less bright.
 const SILVER = '#4e545c'
 const LID_SILVER = '#484e56'
 const SHELL = 'matte'
@@ -197,8 +197,8 @@ function Lid() {
   return (
     <layer x={STAGE.x} y={STAGE.groundY - T + 4 - LID_H} width={W} height={LID_H} origin={`${W / 2} ${LID_H}`} rotateX={LID_TILT} cast-shadow="false">
       <rect width={W} height={LID_H} rx="24" fill={LID_SILVER} material={SHELL} depth={LID_T} z={-LID_T / 2 - 1} stroke="none" cast-shadow="false" />
-      {/* Unrim: push dark bezel out so silver|cream AA rim is thinner (B chrome lip). */}
-      <rect x="14" y="14" width={W - 28} height={LID_H - 28} rx="14" fill="#050608" cast-shadow="false" />
+      {/* Pagesoft bezel 9 — unrim 14px dropped A/B mac to 5. */}
+      <rect x="9" y="9" width={W - 18} height={LID_H - 18} rx="17" fill="#050608" cast-shadow="false" />
       <Wallpaper />
       <rect x={W / 2 - 36} y="7" width="72" height="27" rx="8" fill="#050608" cast-shadow="false" />
       <circle cx={W / 2} cy="18" r="2.4" fill="#0e1018" stroke="#23262e" stroke-width="0.6" />
@@ -210,8 +210,8 @@ function Lid() {
 }
 
 export default (
-  <layer width="1440" height="1800" background="#f6f3ee" color="#1c1916" min-font="10" noise="0.018">
-    <rect x="0" y="0" width="1440" height="1800" fill="linear-gradient(180deg, #f7f4ef 0%, #efe8df 100%)" />
+  <layer width="1440" height="1800" background="#efe8df" color="#1c1916" min-font="10" noise="0.018">
+    <rect x="0" y="0" width="1440" height="1800" fill="linear-gradient(180deg, #f0ebe3 0%, #e4ddd2 100%)" />
     <layer width="1440" height="1800" camera="fov 28, orbit 16 14" light="world" grade="matte 0.85">
       {/* Neutral key — warm hemi alone bounced chrome-orange on the hinge (§9.2). */}
       <light type="hemisphere" intensity="0.32" color="#e2e4e8" ground-color="#aeb2b8" />
@@ -219,7 +219,7 @@ export default (
       <light type="directional" intensity="0.03" color="#d6dae0" x="-280" y="-200" z="400" target="0 0 0" />
       <Lid />
       <Base />
-      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="230" shadow-opacity="0.13" />
+      <ground y={STAGE.groundY} rotateX="90" fill="#e4ddd2" shadow-blur="230" shadow-opacity="0.13" />
     </layer>
     <layer x="80" y="66">
       <p style="font-family:Inter; font-size:13px; font-weight:700; letter-spacing:6.2px; color:#c88255">PRO PERFORMANCE · M4 MAX</p>
