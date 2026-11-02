@@ -9,7 +9,7 @@
       <sphere id="key3" cx="200" cy="-50" r="22" z="150" material="lamp" />
       <rect id="bounce" x="40" y="-70" width="200" height="8" depth="220" fill="#fff8f0" />
       <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" fill="#f6f2ea" />
-      <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" fill="#8aa8a0d8" material="glass 0.72" />
+      <rect id="box" x="18" y="18" width="145" height="100" depth="85" rx="14" fill="#8aa8a0d8" material="glass 0.72" />
             <rect id="stripe-red" x="168" y="-8" width="22" height="36" depth="140" fill="#b87068" />
       <rect id="stripe-white" x="194" y="-8" width="22" height="36" depth="140" fill="#ddd8d0" />
       <rect id="stripe-blue" x="220" y="-8" width="22" height="36" depth="140" fill="#5a7a9a" />

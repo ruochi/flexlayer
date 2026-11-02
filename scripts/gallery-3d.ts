@@ -130,8 +130,7 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Mintgate: platerim mint (materials peak 8) + diskglass SATURATED stripes
-    // (quiet #c9a49c raised frost SSIM). Frost denser than clear.
+    // Boxfront layout + mintgate fills (denser/z56 blew clear SSIM 0.49 / frost 0.66).
     label: 'glass 0.06',
     box: 'fill="#c5ddd6a0" material="glass 0.06"',
     sphere: 'fill="#daf0eab8" material="glass 0.06"',
@@ -182,10 +181,8 @@ const FINISHES: Finish[] = [
 ]
 
 function cluster(finish: Finish): string {
-  // Gate footprint kept; sphere pulled forward (z) so stripes read behind glass
-  // instead of as the glass body (lightglass dual-blind).
-  // Diskglass saturated mute (required for frost SSIM). Sphere r32 z48 — mint
-  // volume leads the bars (mintbars A+B materials 4).
+  // Boxfront: larger left glass box (over-stripe box blew clear/frost SSIM).
+  // Diskglass saturated stripes + mintgate sphere footprint.
   const stripes = finish.stripes
     ? `      <rect id="stripe-red" x="168" y="-8" width="22" height="36" depth="140" fill="#b87068" />
       <rect id="stripe-white" x="194" y="-8" width="22" height="36" depth="140" fill="#ddd8d0" />
@@ -196,6 +193,9 @@ function cluster(finish: Finish): string {
     : finish.stripes
       ? `<sphere id="sphere" cx="210" cy="70" r="32" z="48" ${finish.sphere} />`
       : `<sphere id="sphere" cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
+  const box = finish.stripes
+    ? `<rect id="box" x="18" y="18" width="145" height="100" depth="85" rx="14" ${finish.box} />`
+    : `<rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" ${finish.box} />`
   // Gold accent sphere (not finish.side): metal cells used to paint two
   // identical chrome spheres and dual-blind called them inseparable clones
   // (§9.2). Extruded-circle sides also scooped hollow. Neon keeps its torus.
@@ -214,7 +214,7 @@ function cluster(finish: Finish): string {
       <sphere id="key3" cx="200" cy="-50" r="22" z="150" material="lamp" />
       <rect id="bounce" x="40" y="-70" width="200" height="8" depth="220" fill="#fff8f0" />
       <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" fill="#f6f2ea" />
-      <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" ${finish.box} />
+      ${box}
       ${stripes}
       ${sphere}
       ${side}
@@ -348,7 +348,7 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
             '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="40" shadow-opacity="0.5" />',
             // Mintbars: glassvol A jagged plate contact — softer penumbra.
             // Keep plate metalness ≤0.62 / r≥0.48 — brighter plate blew SSR >0.01.
-            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="200" shadow-opacity="0.22" />',
+            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="210" shadow-opacity="0.20" />',
           )
           .replace(
             '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#cfd3d8" material="finish metal, color #cfd3d8, roughness 0.58, metalness 0.42, clearcoat 0" />',
