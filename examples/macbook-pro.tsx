@@ -3,7 +3,7 @@
 // 银色 16 英寸 MacBook Pro 海报，以后渲染用这个场景。
 // npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png
 // 机身 980 × 670 × 30，屏幕盖 980 × 666 × 10，按 2.755 px/mm 换算。
-// Desksoft: keep notick; mild darker silver so cream|shell AA lip is less bright.
+// Horzmild: keep notick + desksoft silver; mid cream page (between pagesoft and bez9page).
 const SILVER = '#454b53'
 const LID_SILVER = '#454b53'
 const SHELL = 'matte'
@@ -210,8 +210,8 @@ function Lid() {
 }
 
 export default (
-  <layer width="1440" height="1800" background="#f6f3ee" color="#1c1916" min-font="10" noise="0.018">
-    <rect x="0" y="0" width="1440" height="1800" fill="linear-gradient(180deg, #f7f4ef 0%, #efe8df 100%)" />
+  <layer width="1440" height="1800" background="#f0ebe4" color="#1c1916" min-font="10" noise="0.018">
+    <rect x="0" y="0" width="1440" height="1800" fill="linear-gradient(180deg, #f3efe8 0%, #e9e2d7 100%)" />
     <layer width="1440" height="1800" camera="fov 28, orbit 16 14" light="world" grade="matte 0.85">
       {/* Neutral key — warm hemi alone bounced chrome-orange on the hinge (§9.2). */}
       <light type="hemisphere" intensity="0.32" color="#e2e4e8" ground-color="#aeb2b8" />
@@ -219,7 +219,7 @@ export default (
       <light type="directional" intensity="0.03" color="#d6dae0" x="-280" y="-200" z="400" target="0 0 0" />
       <Lid />
       <Base />
-      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="250" shadow-opacity="0.12" />
+      <ground y={STAGE.groundY} rotateX="90" fill="#e9e2d7" shadow-blur="250" shadow-opacity="0.12" />
     </layer>
     <layer x="80" y="66">
       <p style="font-family:Inter; font-size:13px; font-weight:700; letter-spacing:6.2px; color:#c88255">PRO PERFORMANCE · M4 MAX</p>

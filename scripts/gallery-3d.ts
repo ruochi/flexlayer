@@ -340,7 +340,7 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
       title: '静物 · studio · draft',
       width: BENCH_W,
       height: BENCH_H + 96,
-      // Desksoft: lift page again — notick A still cited wall-top hairline.
+      // Horzmild: keep desksoft page; mute cream floor so wall-top AA vs page is quieter.
       background: '#38322c',
       caption: '贴地接触 · 悬空软影 · 缝里的遮挡 · 铬球 · 玻璃和色条 · 洞 · 霓虹 · 灯',
       // Still-only: cooler white stripe + clear glass (horizontal white killed
@@ -349,10 +349,8 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
         bench()
           .replace(
             '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="40" shadow-opacity="0.5" />',
-            // Mintbars: glassvol A jagged plate contact — softer penumbra.
-            // Keep plate metalness ≤0.62 / r≥0.48 — brighter plate blew SSR >0.01.
-            // Macmid: slightly softer contact under plate (maclip B speckles).
-            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="225" shadow-opacity="0.18" />',
+            // Horzmild: darker cream floor — bright #e7e0d4 against dark page reads as hairline.
+            '<ground id="ground" y="530" rotateX="90" fill="#d5cec3" shadow-blur="225" shadow-opacity="0.18" />',
           )
           .replace(
             '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#cfd3d8" material="finish metal, color #cfd3d8, roughness 0.58, metalness 0.42, clearcoat 0" />',
