@@ -305,11 +305,11 @@ function lines(): string {
   // visible. Framing keeps left/right empty ≤ 15% and empty-below ≤ 25%.
   // Technical shading avoids studio specular blow-past of overexposureMax.
   // Rest5b: matte cream fills — bare fill read as brushed diagonal banding for A.
-  // Rest5d: fill-less ground at y=620; board y=55 (further drop broke hidden-line
-  // mask ≥0.9). Elbow halo 8→3. Rest5e leaves lines seating; tips manga gold + camera glass.
-  return `<layer width="1180" height="516" camera="fov 36, orbit 28 18, distance 1060, at 560 340 0" shading="technical">
-    <ground id="ground" y="620" rotateX="90" shadow-blur="70" shadow-opacity="0.28" />
-    <layer x="40" y="55" width="1100" height="580" rotateX="38" preserve-3d>
+  // Rest5f: drop the fill-less ground. Detached ground shadows made B call float
+  // (rest5e lines A 8 / B 6); pre-ground tips scored lines ≥7. Board back at y=20.
+  // Elbow halo 8→3 (banded halo).
+  return `<layer width="1180" height="516" camera="fov 36, orbit 28 18, distance 1060, at 560 310 0" shading="technical">
+    <layer x="40" y="20" width="1100" height="580" rotateX="38" preserve-3d>
       <rect id="box" x="40" y="70" width="260" height="200" depth="110" fill="#f4efe6" material="matte" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
       <cylinder id="piercing" cx="170" cy="170" r="52" height="320" fill="#ebe3d6" material="matte" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
       <rect id="round-box" x="400" y="80" width="210" height="160" depth="96" rx="26" fill="#f4efe6" material="matte" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" rotateY="-26" />
@@ -409,9 +409,16 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
     name: `3d-shade-${name}`,
     source: cell(name, withGoldSphere(bench(BENCH_CAMERA, `shading="${name}"`)), BENCH_W, BENCH_H, '#4a453e'),
   }))
+  // Rest5f: B final glass read as RGB vertical bands through the stripes — same
+  // clearer glass treatment as rest5e high/side camera.
+  const CLEAR_GLASS =
+    '<sphere id="glass" cx="250" cy="250" r="52" z="52" fill="#f4f8f6cc" material="glass 0.04" />'
+  const BENCH_GLASS =
+    '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#d8ebe6a0" material="glass 0.06" />'
+  const withClearGlass = (body: string) => body.replace(BENCH_GLASS, CLEAR_GLASS)
   const quality = (['draft', 'final'] as const).map((name) => ({
     name: `3d-quality-${name}`,
-    source: cell(name, withGoldSphere(bench(BENCH_CAMERA, `quality="${name}"`)), BENCH_W, BENCH_H),
+    source: cell(name, withClearGlass(withGoldSphere(bench(BENCH_CAMERA, `quality="${name}"`))), BENCH_W, BENCH_H),
   }))
   // Dark page for sphere highlightArea monotonicity (examples-3d / gallery
   // pair gates). Box silver comes from sphere-excluded flat_metal lift.
@@ -439,13 +446,8 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
         '<sphere id="blue-float" cx="165" cy="118" r="34" z="50" fill="#2a6fbe" material="plastic 0.42" />',
       )
     }
-    // Rest5e: B high/side glass read as RGB streak / muddy smear through stripes.
-    if (item.file === 'high' || item.file === 'side') {
-      body = body.replace(
-        '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#d8ebe6a0" material="glass 0.06" />',
-        '<sphere id="glass" cx="250" cy="250" r="52" z="52" fill="#f4f8f6cc" material="glass 0.04" />',
-      )
-    }
+    // Rest5e/f: clearer glass on every camera cell (B final/high RGB streak).
+    body = withClearGlass(body)
     return {
       name: `3d-cam-${item.file}`,
       source: cell(item.label, body, BENCH_W, BENCH_H, '#4a453e'),
