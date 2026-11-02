@@ -132,18 +132,18 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
-    // Boxveil: engine face veil 0.72 on extruded clear glass (spheres stay
-    // 0.06 for SSIM). Darker mint fill so cream-wall transmit cannot wash the
-    // box to page color. No stroke (frost SSIM).
+    // Boxyaw: boxveil B still read the mint face as a teal stripe beside
+    // pink/blue bars. Squatter yawed box so top+side read as a solid; stripes
+    // stay under the sphere only (SSIM).
     label: 'glass 0.06',
-    box: 'fill="#3d8a78f5" material="glass 0.06"',
+    box: 'fill="#4a9a86f0" material="glass 0.06"',
     sphere: 'fill="#cef0e8c8" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#2f5a52f0" material="glass 0.72"',
+    box: 'fill="#3a6a60f0" material="glass 0.72"',
     sphere: 'fill="#a8c4bce8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
@@ -188,6 +188,9 @@ function cluster(finish: Finish): string {
   // Thinbars under the glass sphere (SSIM/edge). Glassolid: larger mint box +
   // slightly closer camera so the glass solid reads; do not add behind-box
   // stripes — that cut clear/frost edge ratio under 1.2.
+  const glassCell = finish.label.startsWith('glass')
+  // Thinbars under the glass sphere (SSIM). Do not move stripes/sphere for
+  // glass cells — that raised frost SSIM over 0.3 (boxyaw).
   const stripes = finish.stripes
     ? `      <rect id="stripe-red" x="174" y="-8" width="14" height="32" depth="140" fill="#b87068" />
       <rect id="stripe-white" x="196" y="-8" width="14" height="32" depth="140" fill="#ddd8d0" />
@@ -198,8 +201,12 @@ function cluster(finish: Finish): string {
     : finish.stripes
       ? `<sphere id="sphere" cx="210" cy="70" r="34" z="50" ${finish.sphere} />`
       : `<sphere id="sphere" cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
+  // Glass: yawed squat box left of thinbars so mint volume ≠ another stripe
+  // (boxveil B). Sphere/stripes stay on the SSIM seat.
   const box = finish.stripes
-    ? `<rect id="box" x="14" y="14" width="158" height="110" depth="98" rx="16" ${finish.box} />`
+    ? glassCell
+      ? `<rect id="box" x="-4" y="38" width="120" height="64" depth="120" rx="16" rotateY="-28" ${finish.box} />`
+      : `<rect id="box" x="14" y="14" width="158" height="110" depth="98" rx="16" ${finish.box} />`
     : `<rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" ${finish.box} />`
   // Gold accent sphere (not finish.side): metal cells used to paint two
   // identical chrome spheres and dual-blind called them inseparable clones
