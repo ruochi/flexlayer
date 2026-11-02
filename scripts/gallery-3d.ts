@@ -143,7 +143,7 @@ const FINISHES: Finish[] = [
   {
     label: 'glass 0.72',
     box: 'fill="#2a5a52" material="plastic 0.55"',
-    sphere: 'fill="#a8c0b8e8" material="glass 0.72"',
+    sphere: 'fill="#9cb0a8f0" material="glass 0.85"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
@@ -190,7 +190,7 @@ function cluster(finish: Finish): string {
   const glassCell = finish.label.startsWith('glass')
   // Thinbars under the glass sphere (SSIM). Do not move stripes/sphere for
   // glass cells — that raised frost SSIM over 0.3 (boxyaw).
-  // Glassread: cream card behind proven SSIM stripes (soft pastels broke frost SSIM).
+  // Softbars: desat stripe hues so B does not read pink/blue shatter; luma kept for SSIM.
   const stripes = finish.stripes
     ? glassCell
       ? `      <rect id="glass-card" x="155" y="-24" width="100" height="10" depth="170" fill="#f4efe6" />
@@ -210,7 +210,7 @@ function cluster(finish: Finish): string {
   // retint slab. Non-glass cells keep the usual rect.
   const box = finish.stripes
     ? glassCell
-      ? `<rect id="box" x="6" y="22" width="118" height="82" depth="72" rx="14" ${finish.box} />`
+      ? `<rect id="box" x="4" y="30" width="100" height="70" depth="64" rx="12" ${finish.box} />`
       : `<rect id="box" x="14" y="14" width="158" height="110" depth="98" rx="16" ${finish.box} />`
     : `<rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" ${finish.box} />`
   // Gold accent sphere (not finish.side): metal cells used to paint two
