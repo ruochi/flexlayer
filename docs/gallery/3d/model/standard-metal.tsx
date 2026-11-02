@@ -18,7 +18,7 @@ export default layer.create(
     <layer
       width={440}
       height={300}
-      camera="fov 34, orbit 38 24, distance 880, at 220 198 0"
+      camera="fov 34, orbit 38 24, distance 850, at 220 198 0"
       light="world"
       quality="final"
     >
@@ -34,7 +34,7 @@ export default layer.create(
         <rect x="250" y="-45" width="140" height="12" depth="180" fill="#c87848" />
         <rect x="30" y="-30" width="100" height="10" depth="160" fill="#4a8fd0" />
         <rect x="80" y="-55" width="160" height="8" depth="200" fill="#f0ebe4" />
-        <model object={mesh} unit={118} x={200} y={188} material="finish metal, color #b8c4d0, roughness 0.02, metalness 1" />
+        <model object={mesh} unit={122} x={200} y={188} material="finish metal, color #b8c4d0, roughness 0.02, metalness 1" />
       </layer>
     </layer>
     <layer x={12} y={272}>

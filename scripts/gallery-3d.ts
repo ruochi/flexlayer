@@ -135,15 +135,15 @@ const FINISHES: Finish[] = [
     // Glassmass: metfix A+B materials 6 — yawed mint nearly vanished. Larger
     // denser box, milder yaw; sphere fill denser so the disk still reads.
     label: 'glass 0.06',
-    box: 'fill="#3d8a76f5" material="glass 0.06"',
-    sphere: 'fill="#b8e4d8d0" material="glass 0.06"',
+    box: 'fill="#449884f0" material="glass 0.06"',
+    sphere: 'fill="#c4eadfd0" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#2a5a52f5" material="glass 0.72"',
-    sphere: 'fill="#8eb0a8e8" material="glass 0.72"',
+    box: 'fill="#355a52f0" material="glass 0.72"',
+    sphere: 'fill="#9cb8b0e8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
@@ -200,11 +200,11 @@ function cluster(finish: Finish): string {
     : finish.stripes
       ? `<sphere id="sphere" cx="210" cy="70" r="34" z="50" ${finish.sphere} />`
       : `<sphere id="sphere" cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
-  // Glassmass: bigger mint mass left of thinbars; mild yaw for top/side without
-  // shrinking the silhouette to a sliver (metfix materials 6).
+  // Yawback: squat hard-yaw box left of thinbars (boxyaw B materials 7);
+  // glassmass fat -18 yaw read as RGB fragments again.
   const box = finish.stripes
     ? glassCell
-      ? `<rect id="box" x="0" y="22" width="148" height="88" depth="110" rx="18" rotateY="-18" ${finish.box} />`
+      ? `<rect id="box" x="-4" y="38" width="120" height="64" depth="120" rx="16" rotateY="-28" ${finish.box} />`
       : `<rect id="box" x="14" y="14" width="158" height="110" depth="98" rx="16" ${finish.box} />`
     : `<rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" ${finish.box} />`
   // Gold accent sphere (not finish.side): metal cells used to paint two
@@ -402,10 +402,10 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
           )
           .replace(
             '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#d8ebe6a0" material="glass 0.06" />',
-            // Glassmass: metform A+B still 6 — glass muddled red/blue clip
-            // through-lines. Seat on white stripe only; denser shell so the
-            // outline reads as one solid (white-through-glass still ≥0.1).
-            '<sphere id="glass" cx="213" cy="250" r="48" z="40" fill="#c8e4d8c8" material="glass 0.08" />',
+            // Yawback: glassmass B still 6 — hard vertical red bars through
+            // glass (clear transmit). Seat on white stripe only, smaller so
+            // red/blue stay out of the disk; mid frost kills column bars.
+            '<sphere id="glass" cx="213" cy="250" r="40" z="36" fill="#d4ebe4c0" material="glass 0.16" />',
           )
           .replace(
             '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />',
