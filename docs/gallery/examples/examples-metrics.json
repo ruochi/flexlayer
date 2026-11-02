@@ -39,7 +39,7 @@
     "width": 1520,
     "height": 1000,
     "ground": true,
-    "contactRatio": 0.845,
+    "contactRatio": 0.966,
     "zFight": 0,
     "errors": [],
     "warnings": []
@@ -48,7 +48,7 @@
     "width": 1280,
     "height": 760,
     "ground": true,
-    "contactRatio": 0.896,
+    "contactRatio": 0.945,
     "zFight": 0.0001,
     "errors": [],
     "warnings": []
@@ -57,7 +57,7 @@
     "width": 640,
     "height": 470,
     "ground": true,
-    "contactRatio": 1,
+    "contactRatio": 0.93,
     "zFight": 0,
     "errors": [],
     "warnings": []
@@ -67,7 +67,7 @@
     "height": 1080,
     "ground": true,
     "contactRatio": 0.978,
-    "zFight": 0,
+    "zFight": 0.0001,
     "errors": [],
     "warnings": []
   },
@@ -75,7 +75,7 @@
     "width": 1400,
     "height": 760,
     "ground": true,
-    "contactRatio": 0.983,
+    "contactRatio": 0.981,
     "zFight": 0.0001,
     "errors": [],
     "warnings": []
@@ -84,7 +84,7 @@
     "width": 1760,
     "height": 820,
     "ground": true,
-    "contactRatio": 0.992,
+    "contactRatio": 1,
     "zFight": 0.0001,
     "errors": [],
     "warnings": []
@@ -93,8 +93,8 @@
     "width": 1640,
     "height": 800,
     "ground": true,
-    "contactRatio": 0.99,
-    "zFight": 0,
+    "contactRatio": 0.998,
+    "zFight": 0.0001,
     "errors": [],
     "warnings": []
   },
@@ -102,8 +102,8 @@
     "width": 1400,
     "height": 760,
     "ground": true,
-    "contactRatio": 0.996,
-    "zFight": 0.0001,
+    "contactRatio": 0.973,
+    "zFight": 0.0003,
     "errors": [],
     "warnings": []
   },
@@ -111,7 +111,7 @@
     "width": 960,
     "height": 640,
     "ground": true,
-    "contactRatio": 0.948,
+    "contactRatio": 1,
     "zFight": 0,
     "errors": [],
     "warnings": []

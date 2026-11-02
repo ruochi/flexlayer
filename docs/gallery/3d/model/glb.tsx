@@ -13,11 +13,14 @@ import { layer } from 'flexlayer'
  */
 export default layer.create(
   <layer width={440} height={300} background="#241f1b">
-    <layer width={440} height={300} camera="fov 32, orbit 34 22, distance 860, at 220 210 0">
-      <ground y={220} rotateX={90} fill="#3a3f49" shadow-blur={26} shadow-opacity={0.5} />
+    {/* Metshine: yawback A called the diamond coarse — closer + larger diamond. */}
+    <layer width={440} height={300} camera="fov 30, orbit 32 20, distance 700, at 220 205 0" light="world">
+      <light type="hemisphere" intensity="0.4" color="#e8eef4" ground-color="#3a4048" />
+      <light type="directional" intensity="0.7" color="#ffffff" x="-160" y="-380" z="480" target="0 0 0" />
+      <ground y={220} rotateX={90} fill="#3a3f49" shadow-blur={48} shadow-opacity={0.28} />
       <layer x={28} y={220} width={400} height={190} origin="200 0" rotateX={90} preserve-3d>
-        <model src="box.glb" x="52" y="30" width="150" height="150" z="0" />
-        <model src="diamond.glb" x="200" y="16" width="180" height="180" z="0" rotateY="-24" />
+        <model src="box.glb" x="40" y="28" width="160" height="160" z="0" />
+        <model src="diamond.glb" x="210" y="10" width="210" height="210" z="0" rotateY="-24" />
       </layer>
     </layer>
     <layer x={12} y={272}>

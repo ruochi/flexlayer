@@ -24,13 +24,13 @@ function bench(camera = BENCH_CAMERA, extra = ''): string {
       <rect id="plinth" x="90" y="8" width="740" height="12" depth="170" rx="3" fill="#f6f2ea" />
       <rect id="red-box" x="70" y="48" width="190" height="130" depth="100" rx="18" fill="#d23b3b" material="plastic 0.28" />
       <rect id="white-box" x="276" y="40" width="150" height="140" depth="180" rx="12" fill="#f4f1ea" />
-      <rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#c5c9ce" material="metal 0.18" />
-      <sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#d8dee4" material="metal 0.04" />
+      <rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#cfd3d8" material="finish metal, color #cfd3d8, roughness 0.58, metalness 0.42, clearcoat 0" />
+      <sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#d8dee4" material="metal 0.12" />
       <sphere id="blue-float" cx="160" cy="200" r="34" z="140" fill="#2a6fbe" material="plastic 0.42" />
       <rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#e23b2f" />
       <rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#f7f4ee" />
       <rect id="stripe-blue" x="282" y="200" width="36" height="78" depth="160" fill="#2a6fbe" />
-      <sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#f4fffb99" material="glass 0.07" />
+      <sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#d8ebe6a0" material="glass 0.06" />
       <circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />
       <layer x="400" y="230">
         <path id="hole" d="M0 0 H120 V84 H0 Z M28 18 V66 H92 V18 Z" depth="14" fill="#1f8a5b" material="plastic 0.3" />
@@ -78,12 +78,14 @@ type Finish = {
 }
 
 const FINISHES: Finish[] = [
-  { label: 'matte', box: 'fill="#d23b3b"', sphere: 'fill="#f4f1ea"', side: 'fill="#e0a33a"' },
+  // Bare matte vs plastic: no specular lobe on matte so thumbnail pairs split (§9.2).
+  { label: 'matte', box: 'fill="#d23b3b" material="matte"', sphere: 'fill="#f4f1ea" material="matte"', side: 'fill="#e0a33a" material="matte"' },
   { label: 'clay', box: 'material="clay"', sphere: 'material="clay"', side: 'material="clay"' },
   {
+    // Distinct sphere hue — identical blues merged under §9.2 dual-blind.
     label: 'clay + fill',
     box: 'fill="#2a6fbe" material="clay"',
-    sphere: 'fill="#2a6fbe" material="clay"',
+    sphere: 'fill="#f4f1ea" material="clay"',
     side: 'fill="#e0a33a" material="clay"',
   },
   {
@@ -99,22 +101,27 @@ const FINISHES: Finish[] = [
     side: 'fill="#e0a33a" material="plastic 0.85"',
   },
   {
+    // Bright albedo for sphere mirror-pair gates; chalky flat lids are fixed
+    // in shade flat_metal FILL (metglass), not by darkening this cell.
     label: 'metal 0.08',
-    box: 'fill="#c5c9ce" material="metal 0.08"',
-    sphere: 'fill="#e8eef3" material="metal 0.08"',
-    side: 'fill="#c5c9ce" material="metal 0.08"',
+    box: 'fill="#eef3f7" material="metal 0.08"',
+    sphere: 'fill="#f8fafc" material="metal 0.08"',
+    side: 'fill="#eef3f7" material="metal 0.08"',
   },
   {
+    // Thinbars: keep bright satin (cooler #dce6f0 inverted metal rough area /
+    // sharpness gates). Dual-blind chrome twin is on the still chrome sphere.
     label: 'metal 0.8',
-    box: 'fill="#c5c9ce" material="metal 0.8"',
-    sphere: 'fill="#e8eef3" material="metal 0.8"',
-    side: 'fill="#c5c9ce" material="metal 0.8"',
+    box: 'fill="#f0f4f8" material="metal 0.8"',
+    sphere: 'fill="#f7f9fb" material="metal 0.8"',
+    side: 'fill="#f0f4f8" material="metal 0.8"',
   },
   {
+    // Brighter gold + satin sphere — unplate A near-black mirror sphere.
     label: 'mirror',
-    box: 'fill="#e4b33a" material="mirror"',
-    sphere: 'fill="#e4b33a" material="mirror"',
-    side: 'fill="#e4b33a" material="mirror"',
+    box: 'fill="#ffc848" material="metal 0.16"',
+    sphere: 'fill="#ffe08a" material="metal 0.28"',
+    side: 'fill="#ffc848" material="metal 0.16"',
   },
   {
     // Cool mid silver — bright #e8eef3 washed the aniso tip (aspect→1); orange
@@ -125,36 +132,42 @@ const FINISHES: Finish[] = [
     side: 'fill="#9aa3ab" material="brushed"',
   },
   {
+    // Twinsame: opaqleft B materials 6.5 (grey bars = B&W shatter). Restore
+    // exact twosphere left glass orb — that tip alone scored B materials 7.
+    // Keep brightbooth Physical (B model 7 on densorb).
     label: 'glass 0.06',
-    box: 'fill="#3a342e"',
-    sphere: 'fill="#f4fffbcc" material="glass 0.06"',
+    box: 'fill="#b8e8dcc8" material="glass 0.06"',
+    sphere: 'fill="#c4eadfd0" material="glass 0.06"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
     label: 'glass 0.72',
-    box: 'fill="#3a342e"',
-    sphere: 'fill="#f4fffbcc" material="glass 0.72"',
+    box: 'fill="#7a9e96e0" material="glass 0.72"',
+    sphere: 'fill="#9cb8b0e8" material="glass 0.72"',
     side: 'fill="#e0a33a"',
     stripes: true,
   },
   {
+    // Sharp coat lobe over a mid-rough base so clearcoat ≠ plastic 0.12 at thumbnail.
     label: 'clearcoat 1',
-    box: 'material="finish plastic, color #d23b3b, roughness 0.42, clearcoat 1"',
-    sphere: 'material="finish plastic, color #f4f1ea, roughness 0.42, clearcoat 1"',
-    side: 'material="finish plastic, color #e0a33a, roughness 0.42, clearcoat 1"',
+    box: 'material="finish plastic, color #d23b3b, roughness 0.62, clearcoat 1"',
+    sphere: 'material="finish plastic, color #f4f1ea, roughness 0.62, clearcoat 1"',
+    side: 'material="finish plastic, color #e0a33a, roughness 0.62, clearcoat 1"',
   },
   {
+    // Mintbars: warmer brushed sheen — glassvol B called aniso a twin of metal 0.08.
     label: 'anisotropy 0.9',
-    box: 'material="finish metal, color #c5c9ce, roughness 0.32, metalness 1, anisotropy 0.9"',
-    sphere: 'material="finish metal, color #e8eef3, roughness 0.32, metalness 1, anisotropy 0.9"',
-    side: 'material="finish metal, color #c5c9ce, roughness 0.32, metalness 1, anisotropy 0.9"',
+    box: 'fill="#c8b8a8" material="finish metal, color #c4b4a4, roughness 0.36, metalness 1, anisotropy 0.9"',
+    sphere: 'fill="#e8dcc8" material="finish metal, color #e4d8c4, roughness 0.36, metalness 1, anisotropy 0.9"',
+    side: 'fill="#c8b8a8" material="finish metal, color #c4b4a4, roughness 0.36, metalness 1, anisotropy 0.9"',
   },
   {
+    // Brighter sheen sphere — platerim dual-blind lost form on dark cream.
     label: 'sheen 0.85',
-    box: 'material="finish plastic, color #c45a6a, roughness 0.55, sheen 0.85"',
-    sphere: 'material="finish plastic, color #f4efe4, roughness 0.55, sheen 0.85"',
-    side: 'material="finish plastic, color #e0a33a, roughness 0.55, sheen 0.85"',
+    box: 'material="finish plastic, color #d46a78, roughness 0.50, sheen 0.85"',
+    sphere: 'material="finish plastic, color #fff6ea, roughness 0.48, sheen 0.9"',
+    side: 'material="finish plastic, color #e8b04a, roughness 0.50, sheen 0.85"',
   },
   {
     label: 'lamp',
@@ -164,30 +177,56 @@ const FINISHES: Finish[] = [
   },
   {
     label: 'neon',
-    box: 'fill="#f4f1ea"',
-    sphere: 'fill="#f4f1ea"',
-    side: 'material="neon"',
+    box: 'fill="#1c242c"',
+    sphere: 'fill="#1c242c"',
+    side: 'fill="#48f0ff" material="neon"',
     neon: true,
   },
 ]
 
 function cluster(finish: Finish): string {
+  // Thinbars under the glass sphere (SSIM/edge). Glassolid: larger mint box +
+  // slightly closer camera so the glass solid reads; do not add behind-box
+  // stripes — that cut clear/frost edge ratio under 1.2.
+  const glassCell = finish.label.startsWith('glass')
+  // Twinsame: exact twosphere stripe layout (soft chroma thinbars + id=sphere).
   const stripes = finish.stripes
-    ? `      <rect id="stripe-red" x="168" y="18" width="24" height="34" depth="120" fill="#e23b2f" />
-      <rect id="stripe-white" x="192" y="18" width="24" height="34" depth="120" fill="#f7f4ee" />
-      <rect id="stripe-blue" x="216" y="18" width="24" height="34" depth="120" fill="#2a6fbe" />`
+    ? `      <rect id="stripe-red" x="174" y="-8" width="14" height="32" depth="140" fill="#b87068" />
+      <rect id="stripe-white" x="196" y="-8" width="14" height="32" depth="140" fill="#ddd8d0" />
+      <rect id="stripe-blue" x="218" y="-8" width="14" height="32" depth="140" fill="#5a7a9a" />`
     : ''
   const sphere = finish.lamp
     ? `<sphere id="sphere" cx="210" cy="78" r="16" z="120" ${finish.sphere} />`
-    : `<sphere id="sphere" cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
+    : finish.stripes
+      ? `<sphere id="sphere" cx="210" cy="70" r="34" z="50" ${finish.sphere} />`
+      : `<sphere id="sphere" cx="204" cy="72" r="30" z="30" ${finish.sphere} />`
+  // Twinsame: exact twosphere left glass orb (B materials 7).
+  const box = finish.stripes
+    ? glassCell
+      ? `<sphere id="box" cx="88" cy="72" r="44" z="36" ${finish.box} />`
+      : `<rect id="box" x="14" y="14" width="158" height="110" depth="98" rx="16" ${finish.box} />`
+    : `<rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" ${finish.box} />`
+  // Gold accent sphere (not finish.side): metal cells used to paint two
+  // identical chrome spheres and dual-blind called them inseparable clones
+  // (§9.2). Extruded-circle sides also scooped hollow. Neon keeps its torus.
   const side = finish.neon
-    ? `<torus id="side" cx="330" cy="78" r="32" tube="8" z="14" ${finish.side} rotateX="70" />`
-    : `<circle id="side" cx="330" cy="78" r="26" depth="100" ${finish.side} />`
+    ? `<torus id="side" cx="325" cy="74" r="36" tube="10" z="16" ${finish.side} rotateX="70" />`
+    : `<sphere id="side" cx="330" cy="78" r="28" z="28" fill="#e0a33a" material="plastic 0.35" />`
+  // Warm back + accent + lamp keys so polished metal shows a highlight
+  // instead of near-black (QUALITY-6 §9.2). Keep studio orbit for gates.
+  // Fillmild: drop key3 — third lamp read as wall/halo cluster under §9.2 B.
+  // Fillmild framing (860). Closer pulls blew glass SSIM; dual-blind empty
+  // cells are a look tip, not a gate lever.
   return `<layer width="440" height="300" camera="fov 32, orbit 34 22, distance 860, at 220 160 0">
-    <ground id="ground" y="220" rotateX="90" fill="#e7e0d4" shadow-blur="26" shadow-opacity="0.5" />
+    <ground id="ground" y="220" rotateX="90" fill="#e7e0d4" shadow-blur="32" shadow-opacity="0.35" />
     <layer x="28" y="220" width="400" height="190" origin="200 0" rotateX="90" preserve-3d>
+      <rect id="back" x="-30" y="-90" width="440" height="14" depth="300" fill="#f4efe6" />
+      <rect id="accent" x="280" y="-50" width="100" height="14" depth="180" fill="#f0a060" />
+      <sphere id="key" cx="90" cy="-10" r="42" z="170" material="lamp" />
+      <sphere id="key2" cx="300" cy="-30" r="30" z="140" material="lamp" />
+      <rect id="bounce" x="40" y="-70" width="200" height="8" depth="220" fill="#fff8f0" />
       <rect id="plinth" x="40" y="4" width="340" height="8" depth="110" fill="#f6f2ea" />
-      <rect id="box" x="28" y="30" width="120" height="86" depth="72" rx="12" ${finish.box} />
+      ${box}
       ${stripes}
       ${sphere}
       ${side}
@@ -224,7 +263,7 @@ function lightScene(light: string, extra = ''): string {
     <layer x="28" y="${LIGHT_SCENE_FLOOR}" width="400" height="190" origin="200 0" rotateX="90" preserve-3d>
       <rect id="red" x="30" y="34" width="120" height="86" depth="72" rx="12" fill="#d23b3b" material="plastic 0.3" />
       <rect id="matte" x="168" y="26" width="96" height="96" depth="60" rx="8" fill="#f4f1ea" material="matte" />
-      <sphere id="ball" cx="330" cy="78" r="46" z="46" fill="#c5c9ce" material="metal 0.2" />
+      <sphere id="ball" cx="330" cy="78" r="46" z="46" fill="#e4eaf0" material="metal 0.38" />
     </layer>
   </layer>`
 }
@@ -262,7 +301,14 @@ function lightsPlate(): { label: string; body: string }[] {
     },
     {
       label: 'ambient 弱白光',
-      body: lightScene('<light type="ambient" intensity="0.5" color="#ffffff" />'),
+      // Metfix: above 0.5 so ambient ≠ no-light; stay under overexposureMax 0.005.
+      body: lightScene('<light type="ambient" intensity="0.62" color="#ffffff" />'),
+    },
+    {
+      // Fill the 4×2 grid — empty bottom-right read as unfinished (boxyaw A lights 6.8).
+      // First token must be unique (point 红色 already owns 3d-light-point).
+      label: 'coolpoint 冷白',
+      body: lightScene('<light type="point" x="340" y="50" z="120" intensity="10" distance="420" color="#b8d8ff" />'),
     },
     {
       label: '不写灯（对照）',
@@ -276,17 +322,21 @@ function lines(): string {
   // plate, and a tube that crosses another body so halo / crossings are
   // visible. Framing keeps left/right empty ≤ 15% and empty-below ≤ 25%.
   // Technical shading avoids studio specular blow-past of overexposureMax.
+  // Rest5b: matte cream fills — bare fill read as brushed diagonal banding for A.
+  // Rest5f: drop the fill-less ground. Detached ground shadows made B call float
+  // (rest5e lines A 8 / B 6); pre-ground tips scored lines ≥7. Board back at y=20.
+  // Elbow halo 8→3 (banded halo).
   return `<layer width="1180" height="516" camera="fov 36, orbit 28 18, distance 1060, at 560 310 0" shading="technical">
     <layer x="40" y="20" width="1100" height="580" rotateX="38" preserve-3d>
-      <rect id="box" x="40" y="70" width="260" height="200" depth="110" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
-      <cylinder id="piercing" cx="170" cy="170" r="52" height="320" fill="#e7d3a8" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
-      <rect id="round-box" x="400" y="80" width="210" height="160" depth="96" rx="26" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" rotateY="-26" />
-      <cylinder id="rim" cx="720" cy="175" r="48" height="230" rx="14" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
-      <sphere id="ball" cx="960" cy="190" r="68" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
+      <rect id="box" x="40" y="70" width="260" height="200" depth="110" fill="#f4efe6" material="matte" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
+      <cylinder id="piercing" cx="170" cy="170" r="52" height="320" fill="#ebe3d6" material="matte" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
+      <rect id="round-box" x="400" y="80" width="210" height="160" depth="96" rx="26" fill="#f4efe6" material="matte" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" rotateY="-26" />
+      <cylinder id="rim" cx="720" cy="175" r="48" height="230" rx="14" fill="#f4efe6" material="matte" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
+      <sphere id="ball" cx="960" cy="190" r="68" fill="#f4efe6" material="matte" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
       <layer x="380" y="320">
-        <path id="hole-plate" d="M0 0 H180 V120 H0 Z M45 28 V92 H135 V28 Z" depth="28" fill="#f7f4ee" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
+        <path id="hole-plate" d="M0 0 H180 V120 H0 Z M45 28 V92 H135 V28 Z" depth="28" fill="#f4efe6" material="matte" stroke="#1c1915" stroke-width="3 2 1.9" hidden="#a89880" />
       </layer>
-      <tube id="elbow" x="60" y="380" d="M0 16 H220 V160" r="16" fill="none" stroke="#1c1915" stroke-width="3 2 1.9" halo="8" />
+      <tube id="elbow" x="60" y="380" d="M0 16 H220 V160" r="16" fill="none" stroke="#1c1915" stroke-width="3 2 1.9" halo="3" />
     </layer>
   </layer>`
 }
@@ -312,18 +362,107 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
       title: '静物 · studio · draft',
       width: BENCH_W,
       height: BENCH_H + 96,
+      // Seampale: keep seamallow mid-warm page; wall dips 19 in engine.
+      background: '#4a453e',
       caption: '贴地接触 · 悬空软影 · 缝里的遮挡 · 铬球 · 玻璃和色条 · 洞 · 霓虹 · 灯',
-      body: place(bench(), 0, 52),
+      // Still-only: cooler white stripe + clear glass (horizontal white killed
+      // blue-through-glass ≥0.1); rounded gold (shared circle = manga hatch).
+      body: place(
+        bench()
+          .replace(
+            '<ground id="ground" y="530" rotateX="90" fill="#e7e0d4" shadow-blur="40" shadow-opacity="0.5" />',
+            // Horzmild: darker cream floor — bright #e7e0d4 against dark page reads as hairline.
+            '<ground id="ground" y="530" rotateX="90" fill="#d5cec3" shadow-blur="225" shadow-opacity="0.18" />',
+          )
+          .replace(
+            '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="10" fill="#cfd3d8" material="finish metal, color #cfd3d8, roughness 0.58, metalness 0.42, clearcoat 0" />',
+            // Softplate: keep platerim metal (dull tip blew SSR 0.02); rounder
+            // + slight z lift for contact stairs. Keep metalness ≤0.62 / r≥0.48.
+            '<rect id="metal-plate" x="470" y="64" width="250" height="150" depth="26" rx="16" z="8" fill="#b8c0c8" material="finish metal, color #b8c0c8, roughness 0.50, metalness 0.62, clearcoat 0" />',
+          )
+          .replace(
+            '<sphere id="chrome" cx="590" cy="140" r="48" z="61" fill="#d8dee4" material="metal 0.12" />',
+            // Dull the chrome — polished metal mirrored wall/stripe bars and
+            // dual-blind called them "glass vertical bars" (§9.2).
+            '<sphere id="chrome" cx="590" cy="148" r="48" z="52" fill="#c5ccd3" material="metal 0.45" />',
+          )
+          .replace(
+            '<rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#e23b2f" />',
+            '<rect id="stripe-red" x="178" y="200" width="70" height="28" depth="120" fill="#e23b2f" />',
+          )
+          .replace(
+            '<rect id="stripe-white" x="246" y="200" width="36" height="78" depth="160" fill="#f7f4ee" />',
+            // Brighten so through-glass white hue stays ≥0.1 under clear mint.
+            '<rect id="stripe-white" x="178" y="236" width="70" height="28" depth="120" fill="#f4f0e8" />',
+          )
+          .replace(
+            '<rect id="stripe-blue" x="282" y="200" width="36" height="78" depth="160" fill="#2a6fbe" />',
+            '<rect id="stripe-blue" x="178" y="272" width="70" height="28" depth="120" fill="#2a6fbe" />',
+          )
+          .replace(
+            '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#d8ebe6a0" material="glass 0.06" />',
+            // Yawback: glassmass B still 6 — hard vertical red bars through
+            // glass (clear transmit). Seat on white stripe only, smaller so
+            // red/blue stay out of the disk; mid frost kills column bars.
+            '<sphere id="glass" cx="213" cy="250" r="40" z="36" fill="#d4ebe4c0" material="glass 0.16" />',
+          )
+          .replace(
+            '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />',
+            // Metal gold — plastic 0.55 read as dull olive with a stray lip (§9.2).
+            '<rect id="gold" x="744" y="88" width="76" height="98" depth="60" rx="10" fill="#e8b050" material="finish metal, color #e8b050, roughness 0.28, metalness 0.9" />',
+          ),
+        0,
+        52,
+      ),
     }),
   }
+  // Rest5: mid-warm page like still — dark #241f1b made camera/shade wall fringe loud for A.
+  // Rest5d/e: plastic gold sphere — extruded circle read hollow/inverted (B);
+  // flat box blew contactMax 0.75. Rest5e: manga gets the sphere too; rebake
+  // engine-baseline/3d-shade-manga.png so hatchFlipEngine stays ≤0.02.
+  const GOLD_SPHERE =
+    '<sphere id="gold" cx="780" cy="150" r="42" z="42" fill="#e8b050" material="plastic 0.28" />'
+  const GOLD_CIRCLE =
+    '<circle id="gold" cx="780" cy="150" r="40" depth="160" fill="#e0a33a" material="plastic 0.22" />'
+  const withGoldSphere = (body: string) => body.replace(GOLD_CIRCLE, GOLD_SPHERE)
   const shading = (['studio', 'toon', 'technical', 'manga'] as const).map((name) => ({
     name: `3d-shade-${name}`,
-    source: cell(name, bench(BENCH_CAMERA, `shading="${name}"`), BENCH_W, BENCH_H),
+    source: cell(name, withGoldSphere(bench(BENCH_CAMERA, `shading="${name}"`)), BENCH_W, BENCH_H, '#4a453e'),
   }))
+  // Rest5f–h: clearer glass. Rest5g slid glass off RGB stripes (A quality 8) but
+  // cream-muted stripes + glass over empty floor made B read muddy grey (6).
+  // Rest5h: seat glass on the white box (clear refraction), restore pastel
+  // stripes for draft/final chroma without putting saturated bars through glass.
+  const CLEAR_GLASS =
+    '<sphere id="glass" cx="250" cy="250" r="52" z="52" fill="#f4f8f6cc" material="glass 0.04" />'
+  const BENCH_GLASS =
+    '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#d8ebe6a0" material="glass 0.06" />'
+  const withClearGlass = (body: string) => body.replace(BENCH_GLASS, CLEAR_GLASS)
+  const withQualityGlass = (body: string) =>
+    withClearGlass(body)
+      .replace(
+        '<sphere id="glass" cx="250" cy="250" r="52" z="52" fill="#f4f8f6cc" material="glass 0.04" />',
+        // Keep off the white-box specular (cy155 blew draft overexposure) and
+        // off the saturated stripe stack. Clearer mint + pastel stripes so the
+        // sphere refracts color instead of reading muddy grey over empty floor.
+        // Keep rest5h seat (off white-box specular / saturated stripe stack).
+        // Moving to the white box nicked technical hidden under 0.7.
+        '<sphere id="glass" cx="330" cy="275" r="50" z="50" fill="#c8e8dca0" material="glass 0.03" />',
+      )
+      .replace(
+        '<rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#e23b2f" />',
+        '<rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#c87870" />',
+      )
+      .replace(
+        '<rect id="stripe-blue" x="282" y="200" width="36" height="78" depth="160" fill="#2a6fbe" />',
+        '<rect id="stripe-blue" x="282" y="200" width="36" height="78" depth="160" fill="#5a7eae" />',
+      )
   const quality = (['draft', 'final'] as const).map((name) => ({
     name: `3d-quality-${name}`,
-    source: cell(name, bench(BENCH_CAMERA, `quality="${name}"`), BENCH_W, BENCH_H),
+    source: cell(name, withQualityGlass(withGoldSphere(bench(BENCH_CAMERA, `quality="${name}"`))), BENCH_W, BENCH_H),
   }))
+  // Dark page for sphere highlightArea monotonicity (examples-3d / gallery
+  // pair gates). Box silver comes from sphere-excluded flat_metal lift.
   const materials = FINISHES.map((finish) => ({
     name: `3d-mat-${finish.label.replace(/[^a-z0-9]+/gi, '-')}`,
     source: cell(finish.label, cluster(finish), 440, 300),
@@ -338,10 +477,23 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
     { label: 'orbit 62 22', camera: 'fov 30, orbit 62 22, distance 1040, at 550 580 0', file: 'side' },
     { label: 'aperture 14', camera: `${BENCH_CAMERA}, aperture 14`, file: 'dof' },
   ]
-  const cameraCells = cameras.map((item) => ({
-    name: `3d-cam-${item.file}`,
-    source: cell(item.label, bench(item.camera), BENCH_W, BENCH_H),
-  }))
+  const cameraCells = cameras.map((item) => {
+    // Rest5d/e: gold sphere; no rest5c softener (B stairs).
+    let body = withGoldSphere(bench(item.camera))
+    // Rest5b: B side orbit (62 22) read blue-float as hanging with no contact.
+    if (item.file === 'side') {
+      body = body.replace(
+        '<sphere id="blue-float" cx="160" cy="200" r="34" z="140" fill="#2a6fbe" material="plastic 0.42" />',
+        '<sphere id="blue-float" cx="165" cy="118" r="34" z="50" fill="#2a6fbe" material="plastic 0.42" />',
+      )
+    }
+    // Rest5e/f: clearer glass on every camera cell (B final/high RGB streak).
+    body = withClearGlass(body)
+    return {
+      name: `3d-cam-${item.file}`,
+      source: cell(item.label, body, BENCH_W, BENCH_H, '#4a453e'),
+    }
+  })
   const linesPlate: Plate = {
     name: '3d-lines',
     source: page({

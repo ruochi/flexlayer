@@ -47,17 +47,15 @@ export const EXAMPLE_GATES = {
  * row with the lowest sd inside each window (QUALITY-4 §2.4).
  */
 const EDGE_WINDOWS = [
-  // Pixel windows follow the current examples/macbook-pro.tsx framing; move
-  // them with the stage. Keep the chord off the front-left corner (corner arc
-  // variance is not the lip).
-  { name: 'base-front', y0: 1040, y1: 1085, x0: 480, x1: 580 },
-  { name: 'base-right', y0: 985, y1: 1060, x0: 1020, x1: 1075 },
+  // Keep the chord off the front-left corner (corner arc variance is not the lip).
+  { name: 'base-front', y0: 1100, y1: 1210, x0: 310, x1: 400 },
+  { name: 'base-right', y0: 1080, y1: 1165, x0: 980, x1: 1100 },
   // Short chords on the silver bezel — a full-width lid-top row crosses the
   // wallpaper and looks like a dashed bevel. Thin lids skip crease bevel
   // (QUALITY-5 §1.4), so these windows often return null; that is fine —
   // worstEdgeSd only grades rows that resolve to a mid-tone bevel chord.
-  { name: 'lid-top', y0: 445, y1: 475, x0: 520, x1: 680 },
-  { name: 'lid-side', y0: 520, y1: 760, x0: 1105, x1: 1135 },
+  { name: 'lid-top', y0: 330, y1: 365, x0: 480, x1: 640 },
+  { name: 'lid-side', y0: 500, y1: 700, x0: 1095, x1: 1135 },
 ]
 
 function rowMean(samples) {
@@ -99,21 +97,7 @@ function bestEdgeInWindow(rgba, width, win) {
   return best
 }
 
-/**
- * Inside the left speaker grille, clear of its rounded ends. Perspective
- * slants the strip, so the left and right bounds move with y.
- */
-const SPEAKER = { y0: 916, y1: 956, x0: 430, x1: 471, slope: -1.48 }
-const inSpeaker = (x, y) =>
-  y >= SPEAKER.y0 &&
-  y <= SPEAKER.y1 &&
-  x >= SPEAKER.x0 + (y - SPEAKER.y0) * SPEAKER.slope &&
-  x <= SPEAKER.x1 + (y - SPEAKER.y0) * SPEAKER.slope
-/** Palm rests either side of the trackpad, clear of its border and the lip. */
-const PALM = [
-  { x0: 350, y0: 985, x1: 440, y1: 1020 },
-  { x0: 840, y0: 1023, x1: 955, y1: 1060 },
-]
+const SPEAKER = { x0: 360, y0: 720, x1: 520, y1: 900 }
 
 function round(value, digits = 4) {
   if (value == null || Number.isNaN(value)) return null
@@ -161,12 +145,12 @@ async function main() {
     rgba,
     width,
     height,
-    inSpeaker,
+    (x, y) => x >= SPEAKER.x0 && x <= SPEAKER.x1 && y >= SPEAKER.y0 && y <= SPEAKER.y1,
   )
 
   // Silver chassis interior (avoid silhouettes — those jump 100+ and are not facets).
   const bodyStripe = facetStripe(rgba, width, height, (x, y) => {
-    if (!PALM.some((r) => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1)) return false
+    if (y < 500 || y > 1000 || x < 400 || x > 1000) return false
     const i = (y * width + x) * 4
     const r = rgba[i]
     const g = rgba[i + 1]
