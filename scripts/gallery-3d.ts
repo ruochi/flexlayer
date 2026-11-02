@@ -409,16 +409,31 @@ function buildPlates(): { sheet: string; title: string; cols: number; cells: Pla
     name: `3d-shade-${name}`,
     source: cell(name, withGoldSphere(bench(BENCH_CAMERA, `shading="${name}"`)), BENCH_W, BENCH_H, '#4a453e'),
   }))
-  // Rest5f: B final glass read as RGB vertical bands through the stripes — same
-  // clearer glass treatment as rest5e high/side camera.
+  // Rest5f/g: clearer glass. Rest5g quality: A still saw RGB vertical streaks —
+  // slide glass off the stripe stack and mute the stripes to near-cream so
+  // refraction cannot paint red/blue bars into the sphere.
   const CLEAR_GLASS =
     '<sphere id="glass" cx="250" cy="250" r="52" z="52" fill="#f4f8f6cc" material="glass 0.04" />'
   const BENCH_GLASS =
     '<sphere id="glass" cx="264" cy="268" r="58" z="58" fill="#d8ebe6a0" material="glass 0.06" />'
   const withClearGlass = (body: string) => body.replace(BENCH_GLASS, CLEAR_GLASS)
+  const withQualityGlass = (body: string) =>
+    withClearGlass(body)
+      .replace(
+        '<sphere id="glass" cx="250" cy="250" r="52" z="52" fill="#f4f8f6cc" material="glass 0.04" />',
+        '<sphere id="glass" cx="360" cy="290" r="48" z="48" fill="#f7faf8d0" material="glass 0.03" />',
+      )
+      .replace(
+        '<rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#e23b2f" />',
+        '<rect id="stripe-red" x="210" y="200" width="36" height="78" depth="160" fill="#e8e0d4" />',
+      )
+      .replace(
+        '<rect id="stripe-blue" x="282" y="200" width="36" height="78" depth="160" fill="#2a6fbe" />',
+        '<rect id="stripe-blue" x="282" y="200" width="36" height="78" depth="160" fill="#d8d2c6" />',
+      )
   const quality = (['draft', 'final'] as const).map((name) => ({
     name: `3d-quality-${name}`,
-    source: cell(name, withClearGlass(withGoldSphere(bench(BENCH_CAMERA, `quality="${name}"`))), BENCH_W, BENCH_H),
+    source: cell(name, withQualityGlass(withGoldSphere(bench(BENCH_CAMERA, `quality="${name}"`))), BENCH_W, BENCH_H),
   }))
   // Dark page for sphere highlightArea monotonicity (examples-3d / gallery
   // pair gates). Box silver comes from sphere-excluded flat_metal lift.
