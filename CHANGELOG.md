@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.17.8
+
+The desk-props MacBook sample softens the stage: `quality="final"`, a mild hemisphere + two soft directionals, ground `shadow-blur` 240 / opacity 0.1, desk accessories `cast-shadow="false"` so only the chassis leaves one pool, `aperture 5` with `sharp` on the laptop, and a slightly rougher metal finish so silhouettes stair less against the cream page.
+
 ## 0.17.7
 
 `examples/macbook-pro.tsx` is again the desk-props poster (bright silver metal chassis, Touch ID, speaker / mug / Pencil / AirTag / AirPods / diamond finishes). QUALITY-6 had kept the seampale look plate for §9.2 dual-blind; that framing is no longer the shipped sample. `scripts/examples-metrics.mjs` edge and grille windows follow the desk-props stage.
