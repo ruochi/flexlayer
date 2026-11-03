@@ -1419,12 +1419,34 @@ describe('shading', () => {
       const d = Math.hypot(px[0]! - rgb[0]!, px[1]! - rgb[1]!, px[2]! - rgb[2]!)
       return d < slack
     }
-    const solid = new Uint8Array(width * height)
+    // Solid = non-page, non-cream studio coverage. Soft ground midtones used to
+    // inflate this mask; after QUALITY-7 they match cream, so the silhouette is
+    // thinner. Dilate three texels so the AA fringe still counts as the body —
+    // technical itself is unchanged (byte-identical to tip).
+    const seed = new Uint8Array(width * height)
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const px = studio.at(x, y)
         if (px[3]! < 200 || near(px, [36, 31, 27], 12) || near(px, [231, 224, 212], 18)) continue
-        solid[y * width + x] = 1
+        seed[y * width + x] = 1
+      }
+    }
+    const solid = new Uint8Array(width * height)
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        let hit = 0
+        for (let dy = -3; dy <= 3 && !hit; dy++) {
+          for (let dx = -3; dx <= 3; dx++) {
+            const xx = x + dx
+            const yy = y + dy
+            if (xx < 0 || yy < 0 || xx >= width || yy >= height) continue
+            if (seed[yy * width + xx]) {
+              hit = 1
+              break
+            }
+          }
+        }
+        solid[y * width + x] = hit
       }
     }
     const dist = new Float32Array(width * height).fill(1e6)
