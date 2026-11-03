@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.17.8
+
+`<circle depth>` (Z-axis cylinder) no longer renders as a hollow cup: side walls were wound inward and back-face culling dropped the shell. Sides are flipped outward so a grounded circle is a solid cylinder, same idea as `<rect depth>` as a box. Desk-props MacBook sample keeps real-scale accessories, full shadows, and a solid diamond plinth.
+
 ## 0.17.7
 
 `examples/macbook-pro.tsx` is again the desk-props poster (bright silver metal chassis, Touch ID, speaker / mug / Pencil / AirTag / AirPods / diamond finishes). QUALITY-6 had kept the seampale look plate for §9.2 dual-blind; that framing is no longer the shipped sample. `scripts/examples-metrics.mjs` edge and grille windows follow the desk-props stage.

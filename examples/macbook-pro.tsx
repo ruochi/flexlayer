@@ -239,7 +239,7 @@ const MUG = { cx: 1365, cy: 230, r: 106, h: 250 }
 const PENCIL = { cx: 720, cy: 800, r: 12, len: 380, turn: -2 }
 const POD = { x: 1260, y: 820, w: 160, d: 57, h: 119 }
 const TAG = { cx: 1000, cy: 810, r: 42, h: 21 }
-// 展台要比钻石腰棱宽、高一点，否则亭部盖住柱身，底下只剩一圈黑边，像半拉空的环。
+// 展台比钻石腰棱宽一点，柱身才露得出实心侧面。
 const GEM = { x: 430, y: 820, r: 28, stand: 52, standR: 36 }
 
 // 明亮式切工：八面冠部压在八面亭部上，台面朝上，尖朝下。单位半径 1。
@@ -285,12 +285,9 @@ function Props() {
       {/* 右前：竖放的 AirPods Pro 盒，偏右避开掌托取样区 */}
       <rect x={POD.x} y={POD.y} width={POD.w} height={POD.d} depth={POD.h} rx="24" z={POD.h / 2} fill="#f4f3ef" material="plastic 0.12" rotate="-6" />
       <rect x={POD.x - 0.6} y={POD.y - 0.6} width={POD.w + 1.2} height={POD.d + 1.2} depth="1.4" rx="24" round="z" z={POD.h * 0.72} fill="#c9c9c4" material="plastic 0.3" rotate="-6" />
-      {/* 左前：钻石尖朝下立在黑色绒面展台上。外层抬高 + cylinder，与音箱同一套；
-          顶盖单独一块不透明圆片，避免玻璃亭部嵌进顶面读成半拉空的白缺口。 */}
-      <layer x={GEM.x} y={GEM.y} width="0" height="0" z={GEM.stand / 2} preserve-3d>
-        <cylinder cx="0" cy="0" r={GEM.standR} height={GEM.stand} rx="4" rotateX="90" fill="#2a2c32" material="matte" />
-      </layer>
-      <cylinder cx={GEM.x} cy={GEM.y} r={GEM.standR - 1} height="3" rx="1" z={GEM.stand + 1} rotateX="90" fill="#35383f" material="matte" />
+      {/* 左前：钻石尖朝下立在黑色绒面展台上。circle depth 即实心 Z 轴圆柱；顶盖略亮，钻石抬高，避免玻璃嵌顶。 */}
+      <circle cx={GEM.x} cy={GEM.y} r={GEM.standR} depth={GEM.stand} z={GEM.stand / 2} fill="#2a2c32" material="matte" />
+      <circle cx={GEM.x} cy={GEM.y} r={GEM.standR - 1} depth="3" z={GEM.stand + 1.5} fill="#35383f" material="matte" />
       <model object={diamond} unit={GEM.r} x={GEM.x} y={GEM.y} z={GEM.stand + 4 + GEM.r * 0.95} material="glass 0.06" />
     </layer>
   )

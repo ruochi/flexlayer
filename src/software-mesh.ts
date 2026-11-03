@@ -329,7 +329,54 @@ function buildBox(node: MeshLayoutNode) {
 function buildCylinder(node: MeshLayoutNode) {
   if (node.mesh.type !== 'cylinder') return null
   const { tx, ty } = place(node)
-  return buildCylinderMesh(node.mesh.axis === 'z', node.mesh.r, node.mesh.height, node.mesh.rx, node.mesh.rims, tx, ty)
+  const mesh = buildCylinderMesh(node.mesh.axis === 'z', node.mesh.r, node.mesh.height, node.mesh.rx, node.mesh.rims, tx, ty)
+  // Native axis-Z cylinders (`<circle depth>`) wind side walls inward, so
+  // back-face culling drops the shell and the body reads as a hollow cup.
+  // Caps already face outward — only flip radial sides.
+  if (mesh && node.mesh.axis === 'z') outwardAxisZCylinderSides(mesh)
+  return mesh
+}
+
+/** Flip inward side windings / normals on a Z-up cylinder. Caps stay as-is. */
+export function outwardAxisZCylinderSides(mesh: {
+  positions: Float32Array
+  normals: Float32Array
+  indices: Uint32Array
+}): void {
+  const { positions: p, normals: n, indices: idx } = mesh
+  const flippedVert = new Uint8Array(p.length / 3)
+  for (let t = 0; t < idx.length; t += 3) {
+    const ia = idx[t]!
+    const ib = idx[t + 1]!
+    const ic = idx[t + 2]!
+    const ax = p[ia * 3]!, ay = p[ia * 3 + 1]!, az = p[ia * 3 + 2]!
+    const bx = p[ib * 3]!, by = p[ib * 3 + 1]!, bz = p[ib * 3 + 2]!
+    const cx = p[ic * 3]!, cy = p[ic * 3 + 1]!, cz = p[ic * 3 + 2]!
+    const ux = bx - ax, uy = by - ay, uz = bz - az
+    const vx = cx - ax, vy = cy - ay, vz = cz - az
+    const nx = uy * vz - uz * vy
+    const ny = uz * vx - ux * vz
+    const nz = ux * vy - uy * vx
+    const len = Math.hypot(nx, ny, nz) || 1
+    // Caps face ±Z; leave them. Side walls are radial in XY.
+    if (Math.abs(nz / len) > 0.55) continue
+    const mx = (ax + bx + cx) / 3
+    const my = (ay + by + cy) / 3
+    const radial = Math.hypot(mx, my) || 1
+    const outward = (nx / len) * (mx / radial) + (ny / len) * (my / radial)
+    if (outward >= 0) continue
+    idx[t + 1] = ic
+    idx[t + 2] = ib
+    flippedVert[ia] = 1
+    flippedVert[ib] = 1
+    flippedVert[ic] = 1
+  }
+  for (let i = 0; i < flippedVert.length; i++) {
+    if (!flippedVert[i]) continue
+    // Side verts: negate the radial normal. Keep a tiny ±Z fillet component.
+    n[i * 3] = -n[i * 3]!
+    n[i * 3 + 1] = -n[i * 3 + 1]!
+  }
 }
 
 function buildTorus(node: MeshLayoutNode) {
