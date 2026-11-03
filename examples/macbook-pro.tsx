@@ -124,9 +124,9 @@ function Base() {
         <rect x={padX - 1.5} y={padY - 1.5} width={PAD.w + 3} height={PAD.h + 3} rx="13" fill="#8f9298" />
         <rect x={padX} y={padY} width={PAD.w} height={PAD.h} rx="12" fill="linear-gradient(180deg, #d0d3d7 0%, #c3c6cb 100%)" />
       </layer>
-      <path d={keyPath} fill={KEY} material="plastic" depth="4" z={TOP + 1.6} stroke="none" cast-shadow="false" />
+      <path d={keyPath} fill={KEY} material="plastic" depth="4" z={TOP + 1.6} stroke="none" />
       {/* 转轴：黑色的转轴盖，左右收在机身圆角里 */}
-      <rect x={CORNER + 24} y="-8" width={W - 2 * CORNER - 48} height="18" rx="9" fill="#2a2b2f" material="plastic" depth="18" z={TOP - 3} cast-shadow="false" />
+      <rect x={CORNER + 24} y="-8" width={W - 2 * CORNER - 48} height="18" rx="9" fill="#2a2b2f" material="plastic" depth="18" z={TOP - 3} />
       {/* 右侧接口：雷雳、HDMI、SDXC。层的 x 横跨机身厚度，y 沿进深 */}
       <layer x={W - T / 2} y="0" width={T} height={D} origin={`${T / 2} 0`} rotateY="90" z="0.3" cast-shadow="false">
         <rect x={T / 2 - 4} y="150" width="8" height="24" rx="4" fill="#1c1d20" />
@@ -206,8 +206,9 @@ function Wallpaper() {
 
 function Lid() {
   return (
-    <layer x={STAGE.x} y={STAGE.groundY - T + 4 - LID_H} width={W} height={LID_H} origin={`${W / 2} ${LID_H}`} rotateX={LID_TILT} cast-shadow="false">
-      <rect width={W} height={LID_H} rx={CORNER} round="z" fill={SILVER} material={SHELL} depth={LID_T} z={-LID_T / 2 - 1} stroke="none" cast-shadow="false" />
+    <layer x={STAGE.x} y={STAGE.groundY - T + 4 - LID_H} width={W} height={LID_H} origin={`${W / 2} ${LID_H}`} rotateX={LID_TILT}>
+      <rect width={W} height={LID_H} rx={CORNER} round="z" fill={SILVER} material={SHELL} depth={LID_T} z={-LID_T / 2 - 1} stroke="none" />
+      {/* 屏幕玻璃贴在盖内侧，不再单独投一圈影 */}
       <rect x={GLASS_INSET} y={GLASS_INSET} width={W - 2 * GLASS_INSET} height={LID_H - 2 * GLASS_INSET} rx={CORNER - GLASS_INSET} fill="#050608" cast-shadow="false" />
       <Wallpaper />
       <circle cx={W / 2} cy={SCREEN.y + 10} r="2.4" fill="#0e1018" stroke="#23262e" stroke-width="0.6" />
@@ -282,7 +283,7 @@ function Props() {
       <cylinder cx={TAG.cx} cy={TAG.cy} r={TAG.r} height={TAG.h} rx="6" z={TAG.h / 2} rotateX="90" fill="#f4f3ef" material="plastic 0.2" />
       {/* 右前：竖放的 AirPods Pro 盒，偏右避开掌托取样区 */}
       <rect x={POD.x} y={POD.y} width={POD.w} height={POD.d} depth={POD.h} rx="24" z={POD.h / 2} fill="#f4f3ef" material="plastic 0.12" rotate="-6" />
-      <rect x={POD.x - 0.6} y={POD.y - 0.6} width={POD.w + 1.2} height={POD.d + 1.2} depth="1.4" rx="24" round="z" z={POD.h * 0.72} fill="#c9c9c4" material="plastic 0.3" rotate="-6" cast-shadow="false" />
+      <rect x={POD.x - 0.6} y={POD.y - 0.6} width={POD.w + 1.2} height={POD.d + 1.2} depth="1.4" rx="24" round="z" z={POD.h * 0.72} fill="#c9c9c4" material="plastic 0.3" rotate="-6" />
       {/* 左前：钻石尖朝下立在黑色绒面展台上，深色底衬出玻璃 */}
       <circle cx={GEM.x} cy={GEM.y} r={GEM.r * 0.7} depth={GEM.stand} z={GEM.stand / 2} fill="#202126" material="matte" />
       <model object={diamond} unit={GEM.r} x={GEM.x} y={GEM.y} z={GEM.stand + GEM.r * 0.95} material="glass 0.06" />
@@ -297,7 +298,7 @@ export default (
       <Lid />
       <Base />
       <Props />
-      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="36" shadow-opacity="0.34" />
+      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="42" shadow-opacity="0.42" />
     </layer>
     <layer x="80" y="66">
       <p style="font-family:Inter; font-size:13px; font-weight:700; letter-spacing:6.2px; color:#c88255">PRO PERFORMANCE · M4 MAX</p>
