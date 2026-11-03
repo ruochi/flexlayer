@@ -1,8 +1,12 @@
 # Changelog
 
+## 0.17.7
+
+`examples/macbook-pro.tsx` is again the desk-props poster (bright silver metal chassis, Touch ID, speaker / mug / Pencil / AirTag / AirPods / diamond finishes). QUALITY-6 had kept the seampale look plate for §9.2 dual-blind; that framing is no longer the shipped sample. `scripts/examples-metrics.mjs` edge and grille windows follow the desk-props stage.
+
 ## 0.17.6
 
-`check` no longer warns on `x`/`y` for a `path` or `polygon` with positive `depth` (extruded solids use those coordinates). QUALITY-6 finish keeps the seampale macbook plate that cleared §9.2 dual-blind (≥7); the desk-props poster redesign from main is deferred on this tip so look scores stay valid. Edge and grille metric windows stay on the seampale framing.
+`check` no longer warns on `x`/`y` for a `path` or `polygon` with positive `depth` (extruded solids use those coordinates). QUALITY-6 finish kept the seampale macbook plate that cleared §9.2 dual-blind (≥7); the desk-props poster redesign from main was deferred on that tip so look scores stayed valid. Restored in 0.17.7.
 
 SPEC and AGENTS.md now document built author lights (`<light>`): parameters, radian `angle`, and that `point` does not cast. The stale "not built yet" line for author lights is gone.
 
