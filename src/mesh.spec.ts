@@ -9,8 +9,10 @@ import { parseGlb, solidBoxGlb } from './glb.js'
 import { BOX_EDGES, roundedBoxGeometry } from './mesh-round.js'
 import { bevelFewFaces, bevelRadius } from './mesh-bevel.js'
 import { MATCAP_DEFAULTS, MATCAP_NAMES } from './matcaps.js'
+import { buildCylinderMesh } from './rasterize-native.js'
 import { checkLayer, renderLayer } from './render.js'
 import { tessellateSvgPath } from './path.js'
+import { outwardAxisZCylinderSides } from './software-mesh.js'
 import { boxBottom, boxRight } from './types.js'
 
 const dir = mkdtempSync(join(tmpdir(), 'flexlayer-mesh-'))
@@ -1159,6 +1161,59 @@ describe('网格绘制', () => {
     expect(capInset).toBeGreaterThan(8)
     expect(sideInset).toBeGreaterThan(8)
   })
+
+  it('circle depth（Z 轴圆柱）侧面法线朝外，落地是实心柱而不是空壳', async () => {
+    const raw = buildCylinderMesh(true, 48, 60, 0, [], 0, 0)
+    expect(raw).toBeTruthy()
+    const mesh = {
+      positions: new Float32Array(raw!.positions),
+      normals: new Float32Array(raw!.normals),
+      indices: new Uint32Array(raw!.indices),
+    }
+    outwardAxisZCylinderSides(mesh)
+    let outward = 0
+    let inward = 0
+    const { positions: p, indices: idx } = mesh
+    for (let t = 0; t < idx.length; t += 3) {
+      const ia = idx[t]! * 3
+      const ib = idx[t + 1]! * 3
+      const ic = idx[t + 2]! * 3
+      const ax = p[ia]!, ay = p[ia + 1]!, az = p[ia + 2]!
+      const bx = p[ib]!, by = p[ib + 1]!, bz = p[ib + 2]!
+      const cx = p[ic]!, cy = p[ic + 1]!, cz = p[ic + 2]!
+      const ux = bx - ax, uy = by - ay, uz = bz - az
+      const vx = cx - ax, vy = cy - ay, vz = cz - az
+      const nx = uy * vz - uz * vy
+      const ny = uz * vx - ux * vz
+      const nz = ux * vy - uy * vx
+      const len = Math.hypot(nx, ny, nz) || 1
+      if (Math.abs(nz / len) > 0.55) continue
+      const mx = (ax + bx + cx) / 3
+      const my = (ay + by + cy) / 3
+      const radial = Math.hypot(mx, my) || 1
+      const dot = (nx / len) * (mx / radial) + (ny / len) * (my / radial)
+      if (dot > 0.3) outward++
+      else if (dot < -0.3) inward++
+    }
+    expect(outward).toBeGreaterThan(100)
+    expect(inward).toBe(0)
+
+    // Mid-height side of a grounded circle depth should be the fill, not the floor.
+    const { png } = await renderLayer(`
+      <layer width="480" height="320" background="#efe8df" camera="fov 26, orbit 14 24, distance 780, at 240 230 0">
+        <ground y="240" rotateX="90" fill="#efe8df" shadow-blur="20" />
+        <layer x="0" y="240" width="480" height="220" origin="240 0" rotateX="90" preserve-3d>
+          <circle cx="240" cy="110" r="56" depth="72" z="36" fill="#202126" material="matte" />
+        </layer>
+      </layer>
+    `)
+    const body = await pixelAt(png, 240, 186)
+    // Solid charcoal body — not the beige floor showing through a hollow shell.
+    expect(body[0]).toBeLessThan(80)
+    expect(body[1]).toBeLessThan(85)
+    expect(body[2]).toBeLessThan(95)
+    expect((body[0]! + body[1]! + body[2]!) / 3).toBeLessThan(90)
+  }, 30000)
 
   it('五星和细挤出按厚度的 1/40 收棱，尖角往里让', () => {
     const prism = (depth: number) => {
