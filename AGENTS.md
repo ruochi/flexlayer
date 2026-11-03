@@ -99,7 +99,7 @@ Combine two or three per picture. A cover usually needs one strong type treatmen
 </layer>
 ```
 - `shading` on that same layer is `studio` when omitted, or `toon`, `technical`, or `manga`. It covers every solid under the camera. An authored `stroke` still wins.
-- `quality` is `draft` when omitted. Draft and final use the same shadow map. `quality="final"` does not widen it. Where the map is already a penumbra it mixes a 4-tap ray, then adds one diffuse bounce, a reflection where metalness is above 0.5 and roughness is below 0.12, and a glass tint of up to three refraction steps. An open face is not darkened by a hemisphere occlusion. Baked finishes stay baked.
+- `quality` is `draft` when omitted. Draft shades 1 spp; `final` shades a 4× SSAA grid then box-filters. Both use the same shadow map (prefiltered soft plate on the map path). `quality="final"` does not widen the map. Where the map is already a penumbra it mixes a 4-tap ray, then adds one diffuse bounce, a reflection where metalness is above 0.5 and roughness is below 0.12, and a glass tint of up to three refraction steps. An open face is not darkened by a hemisphere occlusion. Baked finishes stay baked. Toon / technical / manga stay 1 spp.
 - `flexlayer pick scene.tsx --at x,y` hits a layout box. The ray form `pick --positions --indices --from --dir` still returns a triangle index.
 
 ### Checks and programs
