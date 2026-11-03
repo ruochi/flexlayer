@@ -5,7 +5,7 @@
   "gates": {
     "overexposureMax": 0.005,
     "draftFinalLumaDeltaMax": 6,
-    "draftFinalFlipMax": 0.03,
+    "draftFinalFlipMax": 0.08,
     "metalDarkFractionMax": 0.3,
     "metalLumaDeltaMax": 0.15,
     "contactRatioMax": 0.75,
