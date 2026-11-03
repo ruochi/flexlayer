@@ -8,7 +8,7 @@ import * as THREE from 'three'
 // 真机是平顶、竖直侧壁、俯视四角中等圆角，棱上只有很小的倒角：
 // 所以圆角只给竖直的四条棱（round="z"），顶面和底面的折棱交给屏幕尺度倒角。
 const SILVER = '#c6c9ce'
-const SHELL = 'metal'
+const SHELL = 'finish metal, color #c6c9ce, roughness 0.38, metalness 0.92'
 const KEY = '#1f2024'
 const WELL = '#060607'
 
@@ -110,7 +110,7 @@ const padY = D - 28 - PAD.h
 
 function Base() {
   return (
-    <layer x={STAGE.x} y={STAGE.groundY - TOP} width={W} height={D} origin={`${W / 2} 0`} rotateX="90" preserve-3d>
+    <layer x={STAGE.x} y={STAGE.groundY - TOP} width={W} height={D} origin={`${W / 2} 0`} rotateX="90" preserve-3d sharp="true">
       <rect width={W} height={D} rx={CORNER} round="z" fill={SILVER} material={SHELL} depth={T} stroke="none" />
       <layer x="0" y="0" width={W} height={D} z={TOP + 0.2} cast-shadow="false">
         <rect x={WELL_BOX.x} y={WELL_BOX.y} width={WELL_BOX.w} height={WELL_BOX.h} rx="8" fill={WELL} />
@@ -206,7 +206,7 @@ function Wallpaper() {
 
 function Lid() {
   return (
-    <layer x={STAGE.x} y={STAGE.groundY - T + 4 - LID_H} width={W} height={LID_H} origin={`${W / 2} ${LID_H}`} rotateX={LID_TILT} cast-shadow="false">
+    <layer x={STAGE.x} y={STAGE.groundY - T + 4 - LID_H} width={W} height={LID_H} origin={`${W / 2} ${LID_H}`} rotateX={LID_TILT} cast-shadow="false" sharp="true">
       <rect width={W} height={LID_H} rx={CORNER} round="z" fill={SILVER} material={SHELL} depth={LID_T} z={-LID_T / 2 - 1} stroke="none" cast-shadow="false" />
       <rect x={GLASS_INSET} y={GLASS_INSET} width={W - 2 * GLASS_INSET} height={LID_H - 2 * GLASS_INSET} rx={CORNER - GLASS_INSET} fill="#050608" cast-shadow="false" />
       <Wallpaper />
@@ -256,29 +256,29 @@ function Props() {
     <layer x="0" y={STAGE.groundY} width={FLOOR.w} height={FLOOR.h} origin={`${FLOOR.w / 2} 0`} rotateX="90" preserve-3d>
       {/* 左后：圆柱蓝牙音箱。布面机身上下倒圆，拉丝铝顶盖，顶上一颗暖色指示灯 */}
       <layer x={SPEAKER.cx} y={SPEAKER.cy} width="0" height="0" z={SPEAKER.h / 2} preserve-3d>
-        <cylinder cx="0" cy="0" r={SPEAKER.r} height={SPEAKER.h} rx="14" rotateX="90" fill="#3b3e45" material="matte" />
+        <cylinder cx="0" cy="0" r={SPEAKER.r} height={SPEAKER.h} rx="14" rotateX="90" fill="#3b3e45" material="matte" cast-shadow="false" />
       </layer>
-      <circle cx={SPEAKER.cx} cy={SPEAKER.cy} r={SPEAKER.r - 16} depth="2" z={SPEAKER.h + 1} fill="#b9bcc2" material="brushed" />
-      <sphere cx={SPEAKER.cx} cy={SPEAKER.cy + SPEAKER.r - 24} r="4" z={SPEAKER.h + 2} fill="#ff9a52" material="lamp" />
+      <circle cx={SPEAKER.cx} cy={SPEAKER.cy} r={SPEAKER.r - 16} depth="2" z={SPEAKER.h + 1} fill="#b9bcc2" material="brushed" cast-shadow="false" />
+      <sphere cx={SPEAKER.cx} cy={SPEAKER.cy + SPEAKER.r - 24} r="4" z={SPEAKER.h + 2} fill="#ff9a52" material="lamp" cast-shadow="false" />
       {/* 右前：陶瓷马克杯，杯把朝外，是竖起来的圆环，一半埋在杯壁里 */}
-      <path d={cupPath(MUG.cx, MUG.cy, MUG.r, 6)} fill-rule="evenodd" depth={MUG.h} z={MUG.h / 2} fill="#c96a45" material="clay" stroke="none" />
+      <path d={cupPath(MUG.cx, MUG.cy, MUG.r, 6)} fill-rule="evenodd" depth={MUG.h} z={MUG.h / 2} fill="#c96a45" material="clay" stroke="none" cast-shadow="false" />
       {/* 同一个元素上 rotateX 会吞掉 z，所以抬高写在外层 */}
       <layer x={MUG.cx + MUG.r + 8} y={MUG.cy} width="0" height="0" z={MUG.h / 2 + 4} preserve-3d>
-        <torus cx="0" cy="0" r="24" tube="6" rotateX="90" fill="#c96a45" material="clay" />
+        <torus cx="0" cy="0" r="24" tube="6" rotateX="90" fill="#c96a45" material="clay" cast-shadow="false" />
       </layer>
       {/* 正前：Apple Pencil 斜躺在机身前面，笔尖一小段灰色 */}
       <layer x={PENCIL.cx} y={PENCIL.cy} width="0" height="0" rotate={PENCIL.turn} preserve-3d>
-        <cylinder cx="0" cy="0" r={PENCIL.r} height={PENCIL.len} rx="4" z={PENCIL.r} fill="#f4f3ef" material="plastic 0.3" rotate="90" />
-        <cylinder cx={-PENCIL.len / 2 - 9} cy="0" r={PENCIL.r - 3} height="18" z={PENCIL.r} fill="#8e9096" material="plastic 0.5" rotate="90" />
+        <cylinder cx="0" cy="0" r={PENCIL.r} height={PENCIL.len} rx="4" z={PENCIL.r} fill="#f4f3ef" material="plastic 0.3" rotate="90" cast-shadow="false" />
+        <cylinder cx={-PENCIL.len / 2 - 9} cy="0" r={PENCIL.r - 3} height="18" z={PENCIL.r} fill="#8e9096" material="plastic 0.5" rotate="90" cast-shadow="false" />
       </layer>
       {/* 右前，笔尖旁：AirTag 白面朝上，圆口倒圆。挤出的薄圆片顶面会读成黑片，所以用带 rx 的圆柱 */}
-      <cylinder cx="1267" cy="1075" r="46" height="13" rx="5" z="6" rotateX="90" fill="#f4f3ef" material="plastic 0.2" />
+      <cylinder cx="1267" cy="1075" r="46" height="13" rx="5" z="6" rotateX="90" fill="#f4f3ef" material="plastic 0.2" cast-shadow="false" />
       {/* 右后：竖放的 AirPods 盒，四面大圆角，盖缝一道浅灰 */}
-      <rect x={POD.x} y={POD.y} width={POD.w} height={POD.d} depth={POD.h} rx="26" z={POD.h / 2} fill="#f4f3ef" material="plastic 0.12" rotate="-14" />
+      <rect x={POD.x} y={POD.y} width={POD.w} height={POD.d} depth={POD.h} rx="26" z={POD.h / 2} fill="#f4f3ef" material="plastic 0.12" rotate="-14" cast-shadow="false" />
       <rect x={POD.x - 0.6} y={POD.y - 0.6} width={POD.w + 1.2} height={POD.d + 1.2} depth="1.4" rx="26" round="z" z={POD.h * 0.72} fill="#c9c9c4" material="plastic 0.3" rotate="-14" cast-shadow="false" />
       {/* 左前：钻石尖朝下立在黑色绒面展台上，深色底衬出玻璃 */}
-      <circle cx={GEM.x} cy={GEM.y} r={GEM.r * 0.7} depth={GEM.stand} z={GEM.stand / 2} fill="#202126" material="matte" />
-      <model object={diamond} unit={GEM.r} x={GEM.x} y={GEM.y} z={GEM.stand + GEM.r * 0.95} material="glass 0.06" />
+      <circle cx={GEM.x} cy={GEM.y} r={GEM.r * 0.7} depth={GEM.stand} z={GEM.stand / 2} fill="#202126" material="matte" cast-shadow="false" />
+      <model object={diamond} unit={GEM.r} x={GEM.x} y={GEM.y} z={GEM.stand + GEM.r * 0.95} material="glass 0.06" cast-shadow="false" />
     </layer>
   )
 }
@@ -286,11 +286,14 @@ function Props() {
 export default (
   <layer width="1440" height="1800" background="#f6f3ee" color="#1c1916" min-font="10" noise="0.012">
     <rect x="0" y="0" width="1440" height="1800" fill="linear-gradient(180deg, #f7f4ef 0%, #efe8df 100%)" />
-    <layer width="1440" height="1800" camera={CAMERA}>
+    <layer width="1440" height="1800" camera={`${CAMERA}, aperture 5`} quality="final" light="world" filter="blur(0.4px)">
+      <light type="hemisphere" intensity="0.62" color="#f2f3f6" ground-color="#d5d1c9" />
+      <light type="directional" intensity="0.32" color="#ffffff" x="120" y="-460" z="760" target="720 1000 0" />
+      <light type="directional" intensity="0.28" color="#e8ecf2" x="-300" y="-120" z="420" target="720 1000 0" />
       <Lid />
       <Base />
       <Props />
-      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="36" shadow-opacity="0.34" />
+      <ground y={STAGE.groundY} rotateX="90" fill="#efe8df" shadow-blur="260" shadow-opacity="0.08" />
     </layer>
     <layer x="80" y="66">
       <p style="font-family:Inter; font-size:13px; font-weight:700; letter-spacing:6.2px; color:#c88255">PRO PERFORMANCE · M4 MAX</p>
