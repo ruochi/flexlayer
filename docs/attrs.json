@@ -150,7 +150,7 @@
     "example": "final",
     "layerOnly": true,
     "htmlUsesStyle": false,
-    "note": "draft is the default. Both grades use one sample per output pixel and the same shadow map. final adds one diffuse bounce, a reflection when metalness is above 0.5 and roughness is below 0.12, and a glass tint of up to three refraction steps. In the penumbra it mixes a 4-tap ray. It does not widen the map",
+    "note": "draft is the default (1 spp). final shades a 4× SSAA grid then box-filters; toon/technical/manga stay 1 spp. Both grades share the same shadow map (prefiltered soft plate on the map path). final also adds one diffuse bounce, a reflection when metalness is above 0.5 and roughness is below 0.12, and a glass tint of up to three refraction steps. In the penumbra it mixes a 4-tap ray. It does not widen the map",
     "misplacedHint": "Write quality on a layer, for example <layer camera=\"900\" quality=\"final\">"
   },
   {
