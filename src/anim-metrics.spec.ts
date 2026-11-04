@@ -73,7 +73,7 @@ describe('contactEdgeJitter', () => {
   // A body is found by fill colour; make a red one.
   const RED = { name: 'body', test: (r: number, g: number, b: number) => r > 120 && r - g > 60 && r - b > 60 }
 
-  function bodyFrame(edgeY: number): Frame {
+  function bodyFrame(edgeY: number, core = 40): Frame {
     const Y = new Float32Array(W * H)
     const rgba = new Uint8ClampedArray(W * H * 4)
     for (let y = 0; y < H; y++) {
@@ -89,7 +89,7 @@ describe('contactEdgeJitter', () => {
           rgba[p * 4] = 231
           rgba[p * 4 + 1] = 224
           rgba[p * 4 + 2] = 212
-          Y[p] = y < edgeY + 3 ? 40 : 220
+          Y[p] = y < edgeY + 3 ? core : 220
         }
         rgba[p * 4 + 3] = 255
       }
@@ -107,6 +107,28 @@ describe('contactEdgeJitter', () => {
     const frames = [bodyFrame(6), bodyFrame(9), bodyFrame(6), bodyFrame(9)]
     const r = contactEdgeJitter(frames, [RED])
     expect(r.worst).toBeGreaterThan(ANIM_GATES.contactJitterMax)
+  })
+
+  it('does not call a wandering shadow core a moving edge', () => {
+    // The §7.2 orbit regression, in miniature. The edge stays at row 6 for every
+    // frame, but the shadow core under the body changes depth as the light
+    // grazes it — 40, 90, 55, 100 luma. A midpoint threshold recomputed per
+    // frame from that core walks ±30 counts, which on this 3 px ramp slid the
+    // crossing by a whole pixel and read as a jump. The gradient centroid keeps
+    // the ramp's position and reports the residual depth sensitivity instead.
+    const frames = [bodyFrame(6, 40), bodyFrame(6, 90), bodyFrame(6, 55), bodyFrame(6, 100)]
+    const r = contactEdgeJitter(frames, [RED])
+    expect(r.worst).toBeLessThan(1)
+  })
+
+  it('reads the same edge position whatever the core depth', () => {
+    // The depth sensitivity the previous test bounds is a pull, not a walk: a
+    // deeper core drags the centroid toward itself, but only by a fraction of
+    // the ramp. Held at one depth the answer is identical.
+    const shallow = contactEdgeJitter([bodyFrame(6, 90), bodyFrame(7, 90), bodyFrame(8, 90)], [RED])
+    const deep = contactEdgeJitter([bodyFrame(6, 40), bodyFrame(7, 40), bodyFrame(8, 40)], [RED])
+    expect(shallow.worst).toBeLessThan(0.5)
+    expect(deep.worst).toBeLessThan(0.5)
   })
 })
 

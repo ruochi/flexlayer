@@ -225,12 +225,29 @@ export function temporalFlicker(frames, step = 4) {
  * number then reports the camera's motion, not the renderer.
  *
  * What the eye actually sees as jitter is the edge *moving*: one frame it sits
- * at y, the next it has jumped two pixels. So this tracks the edge itself. For
- * each frame it finds, along each column under the body, the row where luma
- * crosses the midpoint between the shadow's darkest row and the open floor, and
- * records the sub-pixel crossing by linear interpolation. The series is that
- * crossing averaged across columns, and `worst` is its second difference in
- * pixels — a smooth slide scores near zero, a jump scores its size.
+ * at y, the next it has jumped two pixels. So this tracks the edge itself, as
+ * the centroid of the vertical luma gradient along each column under the body,
+ * averaged across columns. `worst` is how far that series departs from a smooth
+ * slide — a smooth arc scores near zero, a jump scores its size.
+ *
+ * ## Why a gradient centroid and not a midpoint crossing
+ *
+ * The first version crossed the ramp at `(darkest + floor) / 2`, recomputed per
+ * frame from the strip's own minimum. That minimum is not stable: on the §7.2
+ * orbit the sphere's contact core wanders between 90 and 105 luma as the light
+ * grazes it, so the threshold moved ±7 counts between neighbouring frames. The
+ * ramp below the sphere is only 3–4 px tall, and a 7-count threshold step on a
+ * 70-count ramp is a ~0.4 px shift — which the metric reported as a 4 px jump.
+ * Measured that way the QUALITY-7 C2 warm shadow ink scored 3.97 while the same
+ * geometry with black ink scored 1.85, though the two edges sit in the same
+ * place: the tint only changed how much the core wandered.
+ *
+ * A gradient centroid weights every row by |Δluma| and has no threshold to step.
+ * Across the orbit it reads 0.67 px with the warm ink and 0.72 px with black,
+ * and it still separates the real defects (a build whose contact band genuinely
+ * tore scores 1.6 px, against 0.5–0.7 for good ones). A steepest-row argmax was
+ * tried as well and rejected: the argmax hops between adjacent rows, which put
+ * the orbit back at 2.3–2.5 px.
  */
 export function contactEdgeJitter(frames, tracks) {
   const perFrame = trackedBands(frames, tracks)
@@ -242,8 +259,7 @@ export function contactEdgeJitter(frames, tracks) {
         return
       }
       const { width, height, Y } = frame
-      // The darkest row under the body and the open floor above it give the two
-      // ends of the ramp; the crossing sits at the midpoint.
+      // A ramp has to exist at all, or there is no edge to locate.
       let dark = Infinity
       let lit = -Infinity
       for (let y = band.y0; y < Math.min(height, band.y1 + 10); y++) {
@@ -257,21 +273,22 @@ export function contactEdgeJitter(frames, tracks) {
         series[index].push(NaN)
         return
       }
-      const mid = (dark + lit) / 2
-      const crossings = []
+      // Walk down from the body's bottom edge into the open floor. `weight` is
+      // the absolute luma step between the row above and this one, so the
+      // centroid lands in the middle of the ramp however tall or dark it is.
+      const centroids = []
       for (let x = band.x0; x <= band.x1; x++) {
-        // Walk down from the body's bottom edge to the open floor and take the
-        // first upward crossing of the midpoint.
+        let moment = 0
+        let weight = 0
         for (let y = Math.max(1, band.y0 - 4); y < Math.min(height - 1, band.y1 + 16); y++) {
-          const a = Y[(y - 1) * width + x]
-          const b = Y[y * width + x]
-          if (a < mid && b >= mid) {
-            crossings.push(y - 1 + (mid - a) / Math.max(1e-6, b - a))
-            break
-          }
+          const step = Math.abs(Y[y * width + x] - Y[(y - 1) * width + x])
+          moment += (y - 0.5) * step
+          weight += step
         }
+        // A column with almost no ramp carries no edge position, only noise.
+        if (weight > 30) centroids.push(moment / weight)
       }
-      series[index].push(crossings.length > 0 ? crossings.reduce((s, v) => s + v, 0) / crossings.length : NaN)
+      series[index].push(centroids.length > 0 ? centroids.reduce((s, v) => s + v, 0) / centroids.length : NaN)
     })
   })
   // The edge slides steadily as the camera orbits, so what has to stay small is

@@ -109,6 +109,11 @@ jobs:
           # The manga hatch is compared against the legacy raster, which stays in
           # the private renderer repo so no retired output is published here.
           FLEXLAYER_LEGACY_REFERENCE: ${{ github.workspace }}/vendor/flexlayer-render/docs/quality/legacy-reference
+      - name: animation metrics
+        # Contact-edge jitter and flicker across the 3D animation set. These need
+        # the real addon and only show up over a frame sequence, so they cannot
+        # live in the unit suite.
+        run: npx tsx scripts/anim-metrics.mjs --check
       - name: gallery sheets
         run: npm run gallery:3d
       - uses: actions/upload-artifact@v4
