@@ -216,7 +216,7 @@ function Lid() {
   )
 }
 
-// 桌上的配件，各用一种 finish：HomePod mini 布面（matte），马克杯（釉面：plastic + clearcoat），六角铅笔
+// 桌上的配件，各用一种 finish：HomePod mini 布面（matte），马克杯（奶油釉面 + 侧面贴图），六角铅笔
 // （漆面 plastic、木头 matte、铝箍 metal、橡皮 matte），AirTag（白 plastic + 不锈钢 metal），
 // AirPods Pro 盒（白色注塑：plastic 0.3 + 薄 clearcoat），钻石（glass）。
 // 和机身同一块地。y 是进深，往镜头为正；z 是离地高度。尺寸按机身同一比例，约 2.64 px/mm：
@@ -225,21 +225,98 @@ function Lid() {
 // 模型都用低面数 lathe 和六棱柱，不拖慢渲染。
 const FLOOR = { w: 1440, h: 1300 }
 
-// 空心杯：外圆减内圆，挤出成杯壁。
-function cupPath(cx: number, cy: number, r: number, wall: number) {
-  const ring = (rr: number) => `M ${cx - rr} ${cy} a ${rr} ${rr} 0 1 0 ${2 * rr} 0 a ${rr} ${rr} 0 1 0 ${-2 * rr} 0 Z`
-  return `${ring(r)} ${ring(r - wall)}`
-}
-
 // 机身占 floor 上 x∈[290,1230]、y∈[0,656]。
 const SPEAKER = { x: 30, y: -60, r: 129 }
-const MUG = { cx: 1462, cy: 330, r: 106, h: 250 }
+// turn：印花朝镜头偏中心，把手在右侧露出。
+const MUG = { cx: 1462, cy: 330, r: 106, turn: -42 }
 const PENCIL = { x: 860, y: 1060, r: 11, turn: -26 }
 const TAG = { x: 1110, y: 1205, r: 42, turn: 0 }
 const POD = { x: 1530, y: 1130, w: 160, d: 57, h: 119, turn: 18 }
 const GEM = { x: 560, y: 1250, r: 36, turn: 32 }
 
 const mat = (color: string, roughness: number, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness })
+
+/** 马克杯外壁卷标（lathe 只有外轮廓时，v 从底到口）。奶油釉 + 中腰印花带。 */
+function mugWrapMap() {
+  const w = 768
+  const h = 384
+  const rgba = new Uint8ClampedArray(w * h * 4)
+  const clamp = (n: number) => Math.max(0, Math.min(255, n | 0))
+  const hash = (x: number, y: number) => {
+    const n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453
+    return n - Math.floor(n)
+  }
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const u = x / w
+      const v = y / (h - 1)
+      const speck = (hash(x, y) - 0.5) * 5
+      // 素釉底
+      let r = 242 + speck
+      let g = 235 + speck * 0.9
+      let b = 224 + speck * 0.75
+      // 中腰印花带（深蓝）
+      const bandLo = 0.38
+      const bandHi = 0.68
+      if (v > bandLo && v < bandHi) {
+        const edge = Math.min((v - bandLo) / 0.03, (bandHi - v) / 0.03, 1)
+        const t = Math.max(0, Math.min(1, edge))
+        // 徽标在 u≈0.5（-X）；杯子再 yaw，使这一面转向镜头
+        const dx = (u - 0.5) * 0.95
+        const dy = (v - 0.53) * 2.1
+        const rad2 = dx * dx + dy * dy
+        const inBadge = rad2 < 0.055
+        const inRing = rad2 < 0.078 && rad2 > 0.048
+        const rail = (Math.abs(v - 0.4) < 0.014 || Math.abs(v - 0.66) < 0.014) && Math.abs(u - 0.5) > 0.14
+        let br = 48
+        let bg = 62
+        let bb = 82
+        if (rail) {
+          br = 220
+          bg = 210
+          bb = 196
+        }
+        if (inRing) {
+          br = 240
+          bg = 234
+          bb = 222
+        }
+        if (inBadge) {
+          br = 250
+          bg = 246
+          bb = 238
+          const cup = Math.abs(dx) < 0.08 && dy > -0.055 && dy < 0.085
+          const lip = Math.abs(dx) < 0.095 && Math.abs(dy - 0.085) < 0.014
+          const handle = dx > 0.055 && dx < 0.12 && Math.abs(dy) < 0.055
+          if (cup || lip || handle) {
+            br = 36
+            bg = 46
+            bb = 60
+          }
+        }
+        r = r * (1 - t) + br * t
+        g = g * (1 - t) + bg * t
+        b = b * (1 - t) + bb * t
+      }
+      // 底脚略深一点
+      if (v < 0.08) {
+        const t = 1 - v / 0.08
+        r -= 10 * t
+        g -= 10 * t
+        b -= 12 * t
+      }
+      const i = (y * w + x) * 4
+      rgba[i] = clamp(r)
+      rgba[i + 1] = clamp(g)
+      rgba[i + 2] = clamp(b)
+      rgba[i + 3] = 255
+    }
+  }
+  const map = new THREE.DataTexture(rgba, w, h)
+  map.flipY = false
+  map.needsUpdate = true
+  return map
+}
 
 /**
  * 在 three 里按 y 向上建模。这里整体转到地面层的 z 向上，并让最低点落在 z=0，
@@ -262,6 +339,81 @@ function seated(parts: [THREE.BufferGeometry, THREE.Material][], tilt?: THREE.Eu
 }
 
 const lathe = (pts: [number, number][], seg = 28) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg)
+
+// 马克杯：外壁车削（带贴图）+ 内壁深色 + 粗 C 形把手。半径约 1，高约 2.35。
+// 印花在 u=0.5（-X，朝舞台中心）；把手在 +X（朝外）。
+const mug = (() => {
+  const H = 2.35
+  const outer: [number, number][] = [
+    [0, 0],
+    [0.7, 0],
+    [0.9, 0.035],
+    [0.97, 0.1],
+    [1.0, 0.26],
+    [0.995, 0.85],
+    [0.99, 1.65],
+    [1.0, 2.12],
+    [1.03, 2.26],
+    [1.0, H],
+    [0.92, H],
+  ]
+  const body = lathe(outer, 48)
+  const glaze = new THREE.MeshPhysicalMaterial({
+    color: '#ffffff',
+    roughness: 0.28,
+    metalness: 0,
+    clearcoat: 0.78,
+    clearcoatRoughness: 0.16,
+    map: mugWrapMap(),
+  })
+  // 内壁：略矮一圈，深咖啡釉，开口读得出厚度
+  const inner = lathe(
+    [
+      [0, 0.16],
+      [0.55, 0.16],
+      [0.82, 0.2],
+      [0.9, 0.4],
+      [0.905, 1.65],
+      [0.9, 2.2],
+      [0.88, H - 0.02],
+      [0, H - 0.02],
+    ],
+    36,
+  )
+  const liner = new THREE.MeshStandardMaterial({ color: '#3a342e', roughness: 0.72, metalness: 0 })
+  // C 形把手：两端略伸进杯壁，中段更粗；截面压扁
+  const handlePath = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0.88, 1.88, 0),
+    new THREE.Vector3(1.18, 2.05, 0),
+    new THREE.Vector3(1.52, 1.72, 0),
+    new THREE.Vector3(1.58, 1.25, 0),
+    new THREE.Vector3(1.52, 0.78, 0),
+    new THREE.Vector3(1.18, 0.42, 0),
+    new THREE.Vector3(0.88, 0.5, 0),
+  ])
+  const handle = new THREE.TubeGeometry(handlePath, 48, 0.175, 16, false)
+  handle.scale(1, 1, 0.82)
+  handle.computeVertexNormals()
+  // 根部两颗圆角衔接，盖住管子切口
+  const stubMat = new THREE.MeshPhysicalMaterial({
+    color: '#f0e9e0',
+    roughness: 0.32,
+    metalness: 0,
+    clearcoat: 0.7,
+    clearcoatRoughness: 0.2,
+  })
+  const stubTop = new THREE.SphereGeometry(0.22, 16, 12)
+  stubTop.translate(0.93, 1.88, 0)
+  const stubBot = new THREE.SphereGeometry(0.22, 16, 12)
+  stubBot.translate(0.93, 0.5, 0)
+  return seated([
+    [body, glaze],
+    [inner, liner],
+    [handle, stubMat],
+    [stubTop, stubMat],
+    [stubBot, stubMat],
+  ])
+})()
 
 // AirTag：两片鼓面。下面是不锈钢，只有中心一小圈挨地，边缘翘起；上面是白色鼓面。半径 1。
 const airtag = seated([
@@ -320,18 +472,13 @@ const diamond = (() => {
 })()
 
 function Props() {
-  const mugHandle = { r: 55, tube: 14 }
   return (
     <layer x="0" y={STAGE.groundY} width={FLOOR.w} height={FLOOR.h} origin={`${FLOOR.w / 2} 0`} rotateX="90" preserve-3d>
       {/* 左后：HomePod mini */}
       <model object={homepod} unit={SPEAKER.r} x={SPEAKER.x} y={SPEAKER.y} />
-      {/* 右侧中段：陶瓷马克杯，杯把转向后方，侧面露出半圈 */}
-      <path d={cupPath(MUG.cx, MUG.cy, MUG.r, 8)} fill-rule="evenodd" depth={MUG.h} z={MUG.h / 2} fill="#c96a45" material="finish plastic, color #c96a45, roughness 0.45, clearcoat 1" stroke="none" />
-      {/* 同一个元素上 rotateX 会吞掉 z，所以抬高写在外层 */}
-      <layer x={MUG.cx} y={MUG.cy} width="0" height="0" rotate="-115" preserve-3d>
-        <layer x={MUG.r + 10} y="0" width="0" height="0" z={MUG.h / 2 + 6} preserve-3d>
-          <torus cx="0" cy="0" r={mugHandle.r} tube={mugHandle.tube} rotateX="90" fill="#c96a45" material="finish plastic, color #c96a45, roughness 0.45, clearcoat 1" />
-        </layer>
+      {/* 右侧中段：奶油釉马克杯，印花朝舞台中心，C 形把手朝外 */}
+      <layer x={MUG.cx} y={MUG.cy} width="0" height="0" rotate={MUG.turn} preserve-3d>
+        <model object={mug} unit={MUG.r} x="0" y="0" />
       </layer>
       {/* 前沿：铅笔斜放，笔尖指向左前的钻石 */}
       <layer x={PENCIL.x} y={PENCIL.y} width="0" height="0" rotate={PENCIL.turn} preserve-3d>
