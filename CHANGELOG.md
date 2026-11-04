@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.17.9
+
+The MacBook poster's desk props are real low-poly models now instead of primitives: a lathe-built HomePod mini, a two-dome AirTag with only its centre touching the floor, a hexagonal pencil with faceted flat sides, and a brilliant-cut diamond lying on one pavilion facet. The mug is glazed (`plastic` with `clearcoat 1`) and its handle turns behind the body. `seated()` drops each model's lowest point to `z=0`, so a `<model>` no longer needs a hand-computed height.
+
 ## 0.17.8
 
 `<circle depth>` (Z-axis cylinder) no longer renders as a hollow cup: side walls were wound inward and back-face culling dropped the shell. Sides are flipped outward so a grounded circle is a solid cylinder, same idea as `<rect depth>` as a box. Desk-props MacBook sample keeps real-scale accessories, full shadows, and a solid diamond plinth.

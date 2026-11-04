@@ -216,14 +216,14 @@ function Lid() {
   )
 }
 
-// 桌上的配件，各用一种 finish：布面音箱（matte）配拉丝顶盖（brushed）和指示灯
-// （lamp），陶瓷杯（clay），Apple Pencil（plastic 0.3），AirPods 盒（plastic 0.12），
-// AirTag（plastic 0.2），钻石（glass）立在黑色展台（matte）上。
+// 桌上的配件，各用一种 finish：HomePod mini 布面（matte），马克杯（釉面：plastic + clearcoat），六角铅笔
+// （漆面 plastic、木头 matte、铝箍 metal、橡皮 matte），AirTag（白 plastic + 不锈钢 metal），
+// AirPods Pro 盒（白色注塑：plastic 0.3 + 薄 clearcoat），钻石（glass）。
 // 和机身同一块地。y 是进深，往镜头为正；z 是离地高度。尺寸按机身同一比例，约 2.64 px/mm：
-// HomePod mini Ø84×84、马克杯 Ø80×95、Pencil Ø8.9×166、AirTag Ø32×8、
-// AirPods Pro 盒 61×22×45。物件贴着机身四沿，不散开。
-// 每件只用两三个基本体，面数少，不拖慢渲染。
-const FLOOR = { w: 1440, h: 820 }
+// HomePod mini Ø98×84、马克杯 Ø80×95、铅笔 175 × 对角 8、AirTag Ø32×8、AirPods Pro 盒 61×22×45。
+// 音箱在左后，马克杯在右侧中段，AirPods 盒、AirTag、铅笔、钻石在前沿错开进深。
+// 模型都用低面数 lathe 和六棱柱，不拖慢渲染。
+const FLOOR = { w: 1440, h: 1300 }
 
 // 空心杯：外圆减内圆，挤出成杯壁。
 function cupPath(cx: number, cy: number, r: number, wall: number) {
@@ -231,64 +231,121 @@ function cupPath(cx: number, cy: number, r: number, wall: number) {
   return `${ring(r)} ${ring(r - wall)}`
 }
 
-// 机身占 floor 上 x∈[290,1230]、y∈[0,656]。左右高件贴后侧，前沿一条矮件，
-// 与机身侧向间隙约 24 px。
-const SPEAKER = { cx: 155, cy: 200, r: 111, h: 222 }
-const MUG = { cx: 1365, cy: 230, r: 106, h: 250 }
-// 前沿 y 约 800：再贴会叠进掌托 metrics 窗；AirPods 偏右，避开右掌托取样区。
-const PENCIL = { cx: 720, cy: 800, r: 12, len: 380, turn: -2 }
-const POD = { x: 1260, y: 820, w: 160, d: 57, h: 119 }
-const TAG = { cx: 1000, cy: 810, r: 42, h: 21 }
-// 展台比钻石腰棱宽一点，柱身才露得出实心侧面。
-const GEM = { x: 430, y: 820, r: 28, stand: 52, standR: 36 }
+// 机身占 floor 上 x∈[290,1230]、y∈[0,656]。
+const SPEAKER = { x: 30, y: -60, r: 129 }
+const MUG = { cx: 1462, cy: 330, r: 106, h: 250 }
+const PENCIL = { x: 860, y: 1060, r: 11, turn: -26 }
+const TAG = { x: 1110, y: 1205, r: 42, turn: 0 }
+const POD = { x: 1530, y: 1130, w: 160, d: 57, h: 119, turn: 18 }
+const GEM = { x: 560, y: 1250, r: 36, turn: 32 }
 
-// 明亮式切工：八面冠部压在八面亭部上，台面朝上，尖朝下。单位半径 1。
-const diamond = (() => {
-  const glass = new THREE.MeshStandardMaterial({ color: '#eef3f8', roughness: 0.06 })
-  const crown = new THREE.CylinderGeometry(0.55, 1, 0.38, 8)
-  crown.translate(0, 0.19, 0)
-  const pavilion = new THREE.ConeGeometry(1, 0.95, 8)
-  pavilion.rotateX(Math.PI)
-  pavilion.translate(0, -0.475, 0)
+const mat = (color: string, roughness: number, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness })
+
+/**
+ * 在 three 里按 y 向上建模。这里整体转到地面层的 z 向上，并让最低点落在 z=0，
+ * 所以每件 <model> 不用再算离地高度。tilt 先作用，用来做侧躺。
+ */
+function seated(parts: [THREE.BufferGeometry, THREE.Material][], tilt?: THREE.Euler) {
   const group = new THREE.Group()
-  for (const geo of [crown, pavilion]) {
-    // 模型 y 向上；地面层里离地方向是 z，所以把 y 轴转到 z。
+  const box = new THREE.Box3()
+  for (const [geo] of parts) {
+    if (tilt) geo.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(tilt))
     geo.rotateX(Math.PI / 2)
-    group.add(new THREE.Mesh(geo, glass))
+    geo.computeBoundingBox()
+    box.union(geo.boundingBox!)
+  }
+  for (const [geo, m] of parts) {
+    geo.translate(0, 0, -box.min.z)
+    group.add(new THREE.Mesh(geo, m))
   }
   return group
+}
+
+const lathe = (pts: [number, number][], seg = 28) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg)
+
+// AirTag：两片鼓面。下面是不锈钢，只有中心一小圈挨地，边缘翘起；上面是白色鼓面。半径 1。
+const airtag = seated([
+  [lathe([[0, 0], [0.4, 0.02], [0.7, 0.06], [0.88, 0.12], [0.95, 0.18]]), mat('#d9dce1', 0.14, 1)],
+  [lathe([[0.95, 0.18], [0.995, 0.23], [1, 0.29], [0.97, 0.35], [0.84, 0.42], [0.6, 0.475], [0.3, 0.5], [0, 0.505]]), mat('#f4f3ef', 0.3)],
+])
+
+// HomePod mini：上下各削平的球，顶面一块微凸的触控面。太空灰在这个尺寸下顶面会压成
+// 黑洞，读成开口，所以用浅一点的灰，顶面跟机身同色同料。半径 1。
+const homepod = (() => {
+  const c = 0.86
+  const top = 2 * c
+  const rim = Math.sqrt(1 - c * c)
+  const pts: [number, number][] = [[0, 0]]
+  for (let i = 0; i <= 14; i++) {
+    const y = (i / 14) * top
+    pts.push([Math.sqrt(Math.max(0, 1 - (y - c) ** 2)), y])
+  }
+  pts.push([rim * 0.7, top + 0.012], [0, top + 0.02])
+  return seated([[lathe(pts, 36), mat('#6b6e75', 0.95)]])
+})()
+
+// 黄色六角铅笔，沿 x 躺着，一个平面贴地。木色削尖、石墨笔芯、铝箍、粉橡皮。
+// 外接圆半径 1，长度按 175 / 4 的比例。
+const pencil = (() => {
+  const L = 34
+  const along = (geo: THREE.BufferGeometry, x: number) => geo.rotateZ(Math.PI / 2).translate(x, 0, 0)
+  const hex = (r0: number, r1: number, len: number, x: number) => along(new THREE.CylinderGeometry(r1, r0, len, 6), x)
+  const parts: [THREE.BufferGeometry, THREE.Material][] = [
+    [hex(1, 1, L, 0), mat('#f2b52a', 0.32)],
+    [hex(1, 0.3, 4, -L / 2 - 2), mat('#e3c08f', 0.85)],
+    [hex(0.3, 0.02, 1, -L / 2 - 4.5), mat('#2e2e31', 0.45)],
+    [along(new THREE.CylinderGeometry(1.03, 1.03, 2.2, 16), L / 2 + 1.1), mat('#c9ccd1', 0.25, 1)],
+    [along(new THREE.CylinderGeometry(0.96, 0.96, 1.8, 16), L / 2 + 3.1), mat('#e7877f', 0.7)],
+  ]
+  // 六棱柱默认一条棱朝上；转 30° 让平面朝下。seated 会把 y 转到 z，所以截面先从 y-z 转回来。
+  for (const [geo] of parts) geo.rotateX(Math.PI / 6).rotateX(-Math.PI / 2)
+  // 六棱柱的法线默认平滑过渡，拆开三角形重算，六个面才各自一个明暗。
+  const faceted = parts.map(([geo, m], i): [THREE.BufferGeometry, THREE.Material] => {
+    if (i > 2) return [geo, m]
+    const flat = geo.toNonIndexed()
+    flat.computeVertexNormals()
+    return [flat, m]
+  })
+  return seated(faceted)
+})()
+
+// 明亮式切工：八面冠部压在八面亭部上。侧躺时亭部一条斜棱和腰棱一起挨地，
+// 轴线倾斜 90° 减亭部半角。单位半径 1。
+const diamond = (() => {
+  const glass = mat('#eef3f8', 0.06)
+  const crown = new THREE.CylinderGeometry(0.55, 1, 0.38, 8).translate(0, 0.19, 0)
+  const pavilion = new THREE.ConeGeometry(1, 0.95, 8).rotateX(Math.PI).translate(0, -0.475, 0)
+  const lean = Math.PI / 2 - Math.atan2(1, 0.95)
+  return seated([[crown, glass], [pavilion, glass]], new THREE.Euler(0, 0.4, lean))
 })()
 
 function Props() {
   const mugHandle = { r: 55, tube: 14 }
   return (
     <layer x="0" y={STAGE.groundY} width={FLOOR.w} height={FLOOR.h} origin={`${FLOOR.w / 2} 0`} rotateX="90" preserve-3d>
-      {/* 左后：HomePod mini 比例圆柱音箱。布面机身，拉丝铝顶盖，顶边一颗暖色指示灯 */}
-      <layer x={SPEAKER.cx} y={SPEAKER.cy} width="0" height="0" z={SPEAKER.h / 2} preserve-3d>
-        <cylinder cx="0" cy="0" r={SPEAKER.r} height={SPEAKER.h} rx="18" rotateX="90" fill="#3b3e45" material="matte" />
-      </layer>
-      <circle cx={SPEAKER.cx} cy={SPEAKER.cy} r={SPEAKER.r - 14} depth="2" z={SPEAKER.h + 1} fill="#b9bcc2" material="brushed" />
-      <sphere cx={SPEAKER.cx} cy={SPEAKER.cy + SPEAKER.r - 28} r="5" z={SPEAKER.h + 2} fill="#ff9a52" material="lamp" />
-      {/* 右后：陶瓷马克杯与音箱对侧同进深，杯把朝外（右） */}
-      <path d={cupPath(MUG.cx, MUG.cy, MUG.r, 8)} fill-rule="evenodd" depth={MUG.h} z={MUG.h / 2} fill="#c96a45" material="clay" stroke="none" />
+      {/* 左后：HomePod mini */}
+      <model object={homepod} unit={SPEAKER.r} x={SPEAKER.x} y={SPEAKER.y} />
+      {/* 右侧中段：陶瓷马克杯，杯把转向后方，侧面露出半圈 */}
+      <path d={cupPath(MUG.cx, MUG.cy, MUG.r, 8)} fill-rule="evenodd" depth={MUG.h} z={MUG.h / 2} fill="#c96a45" material="finish plastic, color #c96a45, roughness 0.45, clearcoat 1" stroke="none" />
       {/* 同一个元素上 rotateX 会吞掉 z，所以抬高写在外层 */}
-      <layer x={MUG.cx + MUG.r + 10} y={MUG.cy} width="0" height="0" z={MUG.h / 2 + 6} preserve-3d>
-        <torus cx="0" cy="0" r={mugHandle.r} tube={mugHandle.tube} rotateX="90" fill="#c96a45" material="clay" />
+      <layer x={MUG.cx} y={MUG.cy} width="0" height="0" rotate="-115" preserve-3d>
+        <layer x={MUG.r + 10} y="0" width="0" height="0" z={MUG.h / 2 + 6} preserve-3d>
+          <torus cx="0" cy="0" r={mugHandle.r} tube={mugHandle.tube} rotateX="90" fill="#c96a45" material="finish plastic, color #c96a45, roughness 0.45, clearcoat 1" />
+        </layer>
       </layer>
-      {/* 正前：Apple Pencil 贴机身前沿，笔尖一小段灰色 */}
-      <layer x={PENCIL.cx} y={PENCIL.cy} width="0" height="0" rotate={PENCIL.turn} preserve-3d>
-        <cylinder cx="0" cy="0" r={PENCIL.r} height={PENCIL.len} rx="4" z={PENCIL.r} fill="#f4f3ef" material="plastic 0.3" rotate="90" />
-        <cylinder cx={-PENCIL.len / 2 - 10} cy="0" r={PENCIL.r - 3} height="20" z={PENCIL.r} fill="#8e9096" material="plastic 0.5" rotate="90" />
+      {/* 前沿：铅笔斜放，笔尖指向左前的钻石 */}
+      <layer x={PENCIL.x} y={PENCIL.y} width="0" height="0" rotate={PENCIL.turn} preserve-3d>
+        <model object={pencil} unit={PENCIL.r} x="0" y="0" />
       </layer>
-      {/* 前沿：AirTag 白面朝上。挤出的薄圆片顶面会读成黑片，所以用带 rx 的圆柱 */}
-      <cylinder cx={TAG.cx} cy={TAG.cy} r={TAG.r} height={TAG.h} rx="6" z={TAG.h / 2} rotateX="90" fill="#f4f3ef" material="plastic 0.2" />
-      {/* 右前：竖放的 AirPods Pro 盒，偏右避开掌托取样区 */}
-      <rect x={POD.x} y={POD.y} width={POD.w} height={POD.d} depth={POD.h} rx="24" z={POD.h / 2} fill="#f4f3ef" material="plastic 0.12" rotate="-6" />
-      <rect x={POD.x - 0.6} y={POD.y - 0.6} width={POD.w + 1.2} height={POD.d + 1.2} depth="1.4" rx="24" round="z" z={POD.h * 0.72} fill="#c9c9c4" material="plastic 0.3" rotate="-6" />
-      {/* 左前：钻石尖朝下立在黑色绒面展台上。circle depth 即实心 Z 轴圆柱；顶盖略亮，钻石抬高，避免玻璃嵌顶。 */}
-      <circle cx={GEM.x} cy={GEM.y} r={GEM.standR} depth={GEM.stand} z={GEM.stand / 2} fill="#2a2c32" material="matte" />
-      <circle cx={GEM.x} cy={GEM.y} r={GEM.standR - 1} depth="3" z={GEM.stand + 1.5} fill="#35383f" material="matte" />
-      <model object={diamond} unit={GEM.r} x={GEM.x} y={GEM.y} z={GEM.stand + 4 + GEM.r * 0.95} material="glass 0.06" />
+      {/* 前沿中间：AirTag 白面朝上 */}
+      <model object={airtag} unit={TAG.r} x={TAG.x} y={TAG.y} />
+      {/* 前沿偏右：竖放的 AirPods Pro 盒，转一点角 */}
+      <rect x={POD.x - POD.w / 2} y={POD.y - POD.d / 2} width={POD.w} height={POD.d} depth={POD.h} rx="24" z={POD.h / 2} fill="#f7f6f2" material="finish plastic, color #f7f6f2, roughness 0.3, clearcoat 0.5" rotate={POD.turn} />
+      <rect x={POD.x - POD.w / 2 - 0.6} y={POD.y - POD.d / 2 - 0.6} width={POD.w + 1.2} height={POD.d + 1.2} depth="1.4" rx="24" round="z" z={POD.h * 0.72} fill="#c9c9c4" material="plastic 0.3" rotate={POD.turn} />
+      {/* 左前：钻石侧躺在桌面上 */}
+      <layer x={GEM.x} y={GEM.y} width="0" height="0" rotate={GEM.turn} preserve-3d>
+        <model object={diamond} unit={GEM.r} x="0" y="0" />
+      </layer>
     </layer>
   )
 }
