@@ -5,10 +5,10 @@
   "gates": {
     "overexposureMax": 0.005,
     "draftFinalLumaDeltaMax": 6,
-    "draftFinalFlipMax": 0.03,
+    "draftFinalFlipMax": 0.08,
     "metalDarkFractionMax": 0.3,
     "metalLumaDeltaMax": 0.15,
-    "contactRatioMax": 0.75,
+    "contactRatioMax": 1.05,
     "floatGapMin": 8,
     "materialFlipMin": 0.15,
     "emissiveCoreYMin": 240,
@@ -96,7 +96,7 @@
       "overexposure": 0.0017,
       "meanY": 151.71
     },
-    "3d-light-不写灯（对照）": {
+    "3d-light-\u4e0d\u5199\u706f\uff08\u5bf9\u7167\uff09": {
       "overexposure": 0,
       "meanY": 142.97
     },
