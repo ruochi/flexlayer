@@ -62,7 +62,15 @@ jobs:
       - name: build unlimited
         working-directory: renderer
         shell: bash
-        run: npx napi build dist/unlimited --platform --release --features unlimited
+        run: |
+          npx napi build dist/unlimited --platform --release --features unlimited
+          # napi resolves the output dir against the crate root, which is not
+          # always the working directory. Report where the files landed so the
+          # next step can require them by absolute path.
+          echo "--- dist/unlimited"
+          ls -la dist/unlimited || true
+          echo "--- crate root"
+          ls -la *.node index.js 2>/dev/null || true
       - name: record the commit and the engine string
         working-directory: renderer
         shell: bash
@@ -74,16 +82,22 @@ jobs:
           # binary rather than from a guess.
           node -e "
             const fs = require('fs');
+            const path = require('path');
             const commit = '$commit';
             const dirty = $dirty > 0;
-            // napi writes index.js next to the addon it just built; the
-            // unlimited channel lands in dist/unlimited.
-            for (const [dir, out] of [['.', 'build-entry.json'], ['dist/unlimited', 'build-entry-unlimited.json']]) {
-              const n = require(dir + '/index.js');
+            // Load the addon directly rather than through a generated index.js:
+            // napi's output directory is not reliably the working directory, so
+            // a relative require can miss the file it just wrote.
+            const channels = [
+              ['flexlayer-render.' + (process.platform === 'darwin' ? 'darwin-arm64' : process.platform === 'win32' ? 'win32-x64-msvc' : 'linux-x64-gnu') + '.node', 'build-entry.json'],
+              [path.join('dist', 'unlimited', 'flexlayer-render.' + (process.platform === 'darwin' ? 'darwin-arm64' : process.platform === 'win32' ? 'win32-x64-msvc' : 'linux-x64-gnu') + '.node'), 'build-entry-unlimited.json'],
+            ];
+            for (const [file, out] of channels) {
+              const n = require(path.resolve(process.cwd(), file));
               const entry = { commit, dirty };
               if (typeof n.engine === 'function') entry.engine = n.engine();
               fs.writeFileSync(out, JSON.stringify(entry, null, 2));
-              console.log(out, JSON.stringify(entry));
+              console.log(out, file, JSON.stringify(entry));
             }
           "
       - uses: actions/upload-artifact@v4
