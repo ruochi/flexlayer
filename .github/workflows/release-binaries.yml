@@ -54,6 +54,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libfreetype6-dev libfontconfig1-dev
+      # Record the tree state before anything is built: `dist/unlimited/` holds
+      # tracked artifacts that the unlimited build overwrites, so asking git
+      # afterwards would always report a dirty tree.
+      - name: record the source commit
+        working-directory: renderer
+        shell: bash
+        run: |
+          git rev-parse HEAD > "$RUNNER_TEMP/render-commit.txt"
+          if [ -n "$(git status --porcelain)" ]; then echo 'dirty' > "$RUNNER_TEMP/render-dirty.txt"; fi
+          cat "$RUNNER_TEMP/render-commit.txt"
       # Both release channels are built from the same checkout so the capped
       # and the uncapped addons always name the same commit.
       - name: build capped
@@ -74,12 +84,12 @@ jobs:
           ls -la dist/unlimited || true
           echo "--- crate root"
           ls -la *.node index.js 2>/dev/null || true
-      - name: record the commit and the engine string
+      - name: record the engine string
         working-directory: renderer
         shell: bash
         run: |
-          commit=$(git rev-parse HEAD)
-          dirty=$(git status --porcelain | wc -l | tr -d ' ')
+          commit=$(cat "$RUNNER_TEMP/render-commit.txt")
+          dirty=$(test -f "$RUNNER_TEMP/render-dirty.txt" && echo 1 || echo 0)
           # The engine string is what the loaded addon reports about itself; the
           # addon job compares it with this manifest, so it has to come from the
           # binary rather than from a guess.
