@@ -24,7 +24,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          # macos-14 arm64 is what the public binary ships from, but the label
+          # is rejected on some plans; macos-latest resolves to the same arm64
+          # image and keeps the matrix runnable everywhere.
+          - os: macos-latest
             addon: flexlayer-render.darwin-arm64.node
           - os: ubuntu-latest
             addon: flexlayer-render.linux-x64-gnu.node
