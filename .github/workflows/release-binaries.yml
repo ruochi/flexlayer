@@ -42,12 +42,27 @@ jobs:
         with:
           node-version: 20
       - uses: dtolnay/rust-toolchain@1.88.0
-      - name: build
+      # skia-bindings links -lfreetype -lfontconfig and the ubuntu images no
+      # longer ship the -dev packages; without these the linux addon fails at
+      # the link step, which is what broke the first run of this workflow.
+      - name: skia system libs
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfreetype6-dev libfontconfig1-dev
+      # Both release channels are built from the same checkout so the capped
+      # and the uncapped addons always name the same commit.
+      - name: build capped
         working-directory: renderer
         shell: bash
         run: |
           npm ci
           npx napi build --platform --release
+      - name: build unlimited
+        working-directory: renderer
+        shell: bash
+        run: npx napi build dist/unlimited --platform --release --features unlimited
       - name: record the commit and the engine string
         working-directory: renderer
         shell: bash
@@ -58,18 +73,30 @@ jobs:
           # addon job compares it with this manifest, so it has to come from the
           # binary rather than from a guess.
           node -e "
-            const n = require('./index.cjs');
-            const out = { commit: '$commit', dirty: $dirty > 0 };
-            if (typeof n.engine === 'function') out.engine = n.engine();
-            require('fs').writeFileSync('build-entry.json', JSON.stringify(out, null, 2));
+            const fs = require('fs');
+            const commit = '$commit';
+            const dirty = $dirty > 0;
+            for (const [dir, out] of [['.', 'build-entry.json'], ['dist/unlimited', 'build-entry-unlimited.json']]) {
+              const n = require('./' + (dir === '.' ? 'index.cjs' : dir + '/index.cjs'));
+              const entry = { commit, dirty };
+              if (typeof n.engine === 'function') entry.engine = n.engine();
+              fs.writeFileSync(out, JSON.stringify(entry, null, 2));
+              console.log(out, JSON.stringify(entry));
+            }
           "
-          cat build-entry.json
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.addon }}
           path: |
             renderer/${{ matrix.addon }}
             renderer/build-entry.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unlimited-${{ matrix.addon }}
+          path: |
+            renderer/dist/unlimited/${{ matrix.addon }}
+            renderer/build-entry-unlimited.json
           if-no-files-found: error
 
   # Collects the three artifacts into one BUILD.json and fails if they disagree,
@@ -87,21 +114,33 @@ jobs:
           node -e "
             const fs = require('fs');
             const names = ['flexlayer-render.darwin-arm64.node','flexlayer-render.linux-x64-gnu.node','flexlayer-render.win32-x64-msvc.node'];
-            const binaries = {};
+            // Each channel has its own manifest: the capped set goes to the
+            // public repo, the unlimited set stays here. Both must name one
+            // commit, and both channels must agree on it.
+            const channels = { capped: ['', 'out/'], unlimited: ['unlimited-', 'out/unlimited/'] };
             const commits = new Set();
-            for (const name of names) {
-              const entry = JSON.parse(fs.readFileSync('out/' + name + '/build-entry.json', 'utf8'));
-              binaries[name] = entry;
-              commits.add(entry.commit);
+            for (const [channel, [prefix, dir]] of Object.entries(channels)) {
+              fs.mkdirSync(dir, { recursive: true });
+              const binaries = {};
+              for (const name of names) {
+                const entryFile = prefix + name + '/build-entry' + (prefix ? '-unlimited' : '') + '.json';
+                const entry = JSON.parse(fs.readFileSync('out/' + entryFile, 'utf8'));
+                binaries[name] = entry;
+                commits.add(entry.commit);
+              }
+              fs.writeFileSync(dir + 'BUILD.json', JSON.stringify({ binaries }, null, 2) + '\n');
+              console.log(channel, JSON.stringify(binaries, null, 2));
             }
             if (commits.size !== 1) {
               console.error('binaries came from ' + commits.size + ' commits: ' + [...commits].join(', '));
               process.exit(1);
             }
-            fs.writeFileSync('out/BUILD.json', JSON.stringify({ binaries }, null, 2) + '\n');
-            console.log(fs.readFileSync('out/BUILD.json', 'utf8'));
           "
       - uses: actions/upload-artifact@v4
         with:
           name: BUILD.json
           path: out/BUILD.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BUILD-unlimited.json
+          path: out/unlimited/BUILD.json
