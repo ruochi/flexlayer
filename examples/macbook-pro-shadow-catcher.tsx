@@ -1265,7 +1265,7 @@ export default (
       <Lid />
       <Base />
       <Props />
-      <ground y={STAGE.groundY} rotateX="90" shadow-blur="42" shadow-opacity="0.78" />
+      <ground y={STAGE.groundY} rotateX="90" shadow-blur="42" shadow-opacity="1.0" />
     </layer>
     <layer x="80" y="66">
       <p style="font-family:Inter; font-size:13px; font-weight:700; letter-spacing:6.2px; color:#c88255">PRO PERFORMANCE · M4 MAX</p>
