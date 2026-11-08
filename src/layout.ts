@@ -19,7 +19,7 @@ import { classAttr, ICON_FONT_FAMILY, symbolsClassOf } from './icons.js'
 import { materialize } from './components.js'
 import { catmullRomPath } from './curve.js'
 import { isGradient, parseGradient, solidPaint } from './gradient.js'
-import { LIGHT_DEFAULTS, MATCAP_DEFAULTS } from './matcaps.js'
+import { EMISSIVE_FINISHES, FINISHES, FINISH_NAMES, isFinishName } from './finishes.js'
 import { isGradientPaint, parseColor } from './gradientField.js'
 import { glbBounds, glbSpan, primitiveBounds, primitiveSpan, resolveModelFile } from './glb.js'
 import { fromThree, holdModelPrims, modelRevision } from './three.js'
@@ -1852,13 +1852,12 @@ function readMeshLines(node: LayerNode, ctx: LayoutContext): { stroke: string; s
   return { stroke, strokeWidths, hidden, halo, ...(strokeOff ? { strokeOff: true as const } : {}) }
 }
 
-const MESH_MATERIALS = new Set(['matte', 'plastic', 'metal', 'glass', 'clay', 'mirror', 'brushed', 'lamp', 'neon'])
-const MESH_ROUGHNESS = { matte: 1, plastic: 0.4, metal: 0.25, glass: 0.08, clay: 1, mirror: 0.02, brushed: 1, lamp: 1, neon: 1 }
-// Mirror is a physical metal now (QUALITY-5 §2.1 / §3.2): the baked matcap
-// stayed soft and dark, so bare `material="mirror"` could not beat metal 0.08
-// on reflection sharpness. Clay / brushed stay matcap-only.
-const MATCAP_ONLY = new Set(['clay', 'brushed'])
-const LIGHTS = new Set(['lamp', 'neon'])
+// 一份表(`finishes.ts`)同时供 TS 解析和 Cycles 导出读，数值对齐
+// `flexlayer-render/src/material.rs`。裸名字、带数字、`finish` 子句都落到同一行，
+// 所以 `metal`、`metal 0.28`、`finish metal, roughness 0.28` 渲染结果一致。
+const MESH_MATERIALS = new Set<string>(FINISH_NAMES)
+const MESH_ROUGHNESS = Object.fromEntries(FINISH_NAMES.map((name) => [name, FINISHES[name].roughness])) as Record<string, number>
+const LIGHTS = EMISSIVE_FINISHES
 const MATERIAL_PARAMS = new Set(['color', 'roughness', 'metalness', 'clearcoat', 'transmission', 'ior', 'sheen', 'anisotropy', 'emissive'])
 const MATERIAL_HINT = '预设写 finish，例如 material="finish metal, color #c6c9ce, roughness 0.28, metalness 1"。color 盖过 fill。不写 finish 是磨砂'
 
@@ -1987,28 +1986,25 @@ function readMaterialPhrase(raw: string, ctx: LayoutContext, tag: string): MeshM
     else if (fields.metalness != null || fields.clearcoat != null || fields.sheen != null || fields.anisotropy != null) kind = 'plastic'
     else kind = 'matte'
   }
-  if ((MATCAP_ONLY.has(kind) || LIGHTS.has(kind)) && physical) {
+  if (LIGHTS.has(kind) && physical) {
     ctx.issues.push({
       level: 'warn',
       code: 'invalid-attr',
       path: ctx.pathPrefix,
       message: `${tag} 的 ${kind} 不写粗糙度`,
-      hint: '删掉数字。颜色写在 material 里，例如 finish clay, color #d4cfc4',
+      hint: '删掉数字。颜色写在 material 里，例如 finish neon, color #3ad8ff',
     })
     return {
       kind,
       roughness: MESH_ROUGHNESS[kind],
       ...(fields.color ? { color: fields.color } : {}),
-      ...(MATCAP_ONLY.has(kind) ? { matcap: kind } : {}),
       ...(fields.emissive ? { emissive: fields.emissive } : {}),
     }
   }
-  const baked = !physical && (MATCAP_ONLY.has(kind) || kind === 'plastic' || kind === 'metal')
   return {
     kind,
     roughness: fields.roughness ?? MESH_ROUGHNESS[kind],
     ...(fields.color ? { color: fields.color } : {}),
-    ...(baked ? { matcap: kind } : {}),
     ...(fields.metalness != null ? { metalness: fields.metalness } : {}),
     ...(fields.clearcoat != null ? { clearcoat: fields.clearcoat } : {}),
     ...(fields.transmission != null ? { transmission: fields.transmission } : {}),
@@ -2023,24 +2019,11 @@ function readMeshMaterial(raw: string | undefined, ctx: LayoutContext, tag: stri
   if (raw == null) return undefined
   const trimmed = raw.trim()
   if (trimmed === '' || trimmed.toLowerCase() === 'none') return undefined
+  // `matcap:` 是旧写法，现在等价于裸名字：两者都落到同一行预设，不再有
+  // 「烘焙材质球」这条并行路径。保留解析只为不破坏既有文件。
+  const text = trimmed.toLowerCase().replace(/^matcap:/, '')
   if (splitMaterialClauses(trimmed).some((clause) => materialKey(clause) === 'finish' || materialKey(clause) === 'matcap' || MATERIAL_PARAMS.has(materialKey(clause)))) {
     return readMaterialPhrase(trimmed, ctx, tag)
-  }
-  const text = trimmed.toLowerCase()
-  if (text.startsWith('matcap:')) {
-    const finish = text.slice('matcap:'.length)
-    if (!MESH_MATERIALS.has(finish)) {
-      ctx.issues.push({
-        level: 'warn',
-        code: 'invalid-attr',
-        path: ctx.pathPrefix,
-        message: `${tag} 不认识的 material: ${raw.trim()}`,
-        hint: MATERIAL_HINT,
-      })
-      return undefined
-    }
-    const kind = finish as MeshMaterial['kind']
-    return { kind, roughness: MESH_ROUGHNESS[kind], matcap: finish }
   }
   const parts = text.split(/[\s,]+/).filter((part) => part.length > 0 && part !== 'rough')
   const name = parts[0] ?? ''
@@ -2066,31 +2049,6 @@ function readMeshMaterial(raw: string | undefined, ctx: LayoutContext, tag: stri
       })
     }
     return { kind, roughness: MESH_ROUGHNESS[kind] }
-  }
-  if (MATCAP_ONLY.has(name) || ((name === 'plastic' || name === 'metal') && parts.length === 1)) {
-    if (parts.length > 1) {
-      ctx.issues.push({
-        level: 'warn',
-        code: 'invalid-attr',
-        path: ctx.pathPrefix,
-        message: `${tag} 的 ${name} 不写粗糙度`,
-        hint: '删掉数字。颜色写 fill，例如 material="mirror" fill="#e4b33a"',
-      })
-    }
-    return { kind, roughness: MESH_ROUGHNESS[kind], matcap: name }
-  }
-  // Bare mirror: physical metal at near-zero roughness (QUALITY-5 §2.1 / §3.2).
-  if (name === 'mirror') {
-    if (parts.length > 1) {
-      ctx.issues.push({
-        level: 'warn',
-        code: 'invalid-attr',
-        path: ctx.pathPrefix,
-        message: `${tag} 的 mirror 不写粗糙度`,
-        hint: '删掉数字。颜色写 fill，例如 material="mirror" fill="#e4b33a"',
-      })
-    }
-    return { kind: 'metal', roughness: MESH_ROUGHNESS.mirror, metalness: 1 }
   }
   let roughness = MESH_ROUGHNESS[kind]
   if (parts.length > 1) {
@@ -2495,7 +2453,7 @@ function layoutMesh(node: LayerNode, ctx: LayoutContext): MeshLayoutNode {
   const material = applySurfaceAttrs(readMeshMaterial(node.attrs.material, ctx, node.tag), node, ctx)
   if (material?.color) fill = material.color
   else if (node.attrs.fill == null || node.attrs.fill.trim() === '') {
-    const fallback = material?.matcap ? MATCAP_DEFAULTS[material.matcap] : material ? LIGHT_DEFAULTS[material.kind] : undefined
+    const fallback = material ? FINISHES[material.kind].color : undefined
     if (fallback) fill = fallback
   }
   return {

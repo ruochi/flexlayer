@@ -104,13 +104,15 @@ type Batch = {
   /** 被挡住时按主光变暗。 */
   receiveShadow: boolean
   /** lambert 是默认磨砂（matte）和平面的明暗。glass 不写主光阴影，半透明时不写深度。 */
-  material: 'lambert' | 'plastic' | 'metal' | 'glass' | 'lamp' | 'neon'
+  material: 'lambert' | 'plastic' | 'metal' | 'glass' | 'clay' | 'mirror' | 'brushed' | 'lamp' | 'neon'
   roughness: number
   metalness?: number
   clearcoat?: number
   clearcoatRoughness?: number
   sheen?: number
   anisotropy?: number
+  transmission?: number
+  ior?: number
   /** 预烘材质球的名字。空则走原来的明暗。 */
   matcap?: string | null
   texture: Uint8ClampedArray | null
@@ -800,6 +802,28 @@ export type MeshPrim = {
   /** 0–255。几何体是不透明，模型图元用文件里的透明度。 */
   alpha: number
   doubleSided: boolean
+  /** 每个顶点的 uv，模型图元才会带上。 */
+  uvs?: Float32Array
+  /** glb 里已经解码好的底色贴图。离线渲染器拿它当纹理。 */
+  map?: GlbPrimitive['map']
+  /** 模型图元的底色，0–255。几何体没有这一项，底色走 fill。 */
+  baseColor?: [number, number, number]
+  roughness?: number
+  metalness?: number
+  emissive?: [number, number, number]
+  /**
+   * 模型自带的物理通道。`meshPrims` 是离线渲染器唯一的数据入口，
+   * 少传一个字段，玻璃就变成不透光的多面体、釉面就少了清漆高光，
+   * 而这几个值在 `GlbPrimitive` 里本来都解析好了。
+   */
+  clearcoat?: number
+  clearcoatRoughness?: number
+  transmission?: number
+  ior?: number
+  sheen?: number
+  anisotropy?: number
+  /** 模型自带的自发光强度，和 `emissive` 的色值分开记。 */
+  emissiveIntensity?: number
 }
 
 /** 一只网格的图元。模型和几何体都从这里拿。投影用这些折点；窄圆角在绘制时另加。 */
@@ -811,6 +835,18 @@ export function meshPrims(node: MeshLayoutNode): MeshPrim[] {
       indices: prim.lines || prim.points ? new Uint32Array(0) : prim.indices,
       alpha: prim.color[3],
       doubleSided: prim.doubleSided,
+      ...(prim.uvs && prim.uvs.length > 0 ? { uvs: prim.uvs } : {}),
+      ...(prim.map ? { map: prim.map } : {}),
+      baseColor: [prim.color[0], prim.color[1], prim.color[2]] as [number, number, number],
+      ...(prim.roughness != null ? { roughness: prim.roughness } : {}),
+      ...(prim.metalness != null ? { metalness: prim.metalness } : {}),
+      ...(prim.emissive ? { emissive: prim.emissive } : {}),
+      ...(prim.clearcoat != null ? { clearcoat: prim.clearcoat } : {}),
+      ...(prim.clearcoatRoughness != null ? { clearcoatRoughness: prim.clearcoatRoughness } : {}),
+      ...(prim.transmission != null ? { transmission: prim.transmission } : {}),
+      ...(prim.ior != null ? { ior: prim.ior } : {}),
+      ...(prim.sheen != null ? { sheen: prim.sheen } : {}),
+      ...(prim.anisotropy != null ? { anisotropy: prim.anisotropy } : {}),
     }))
   }
   const geometry = geometryOf(node)
@@ -1581,10 +1617,13 @@ function planeBatch(plane: SoftwareMeshInput['planes'][number], raster: Software
   }
 }
 
-/** 磨砂和没写 material 走同一套明暗。平面也用这套。材质球名字在 matcap 上，这里仍给一个能画的退路。 */
+/**
+ * 磨砂和没写 material 走同一套 Lambert 明暗，其余 finish 一律进物理着色。
+ * 名字原样交给内核：内核按同一张预设表取粗糙度、金属度、清漆、环境 mip 和
+ * 细节纹理，所以 `clay` 和 `clay 0.6` 只是同一个档位的两个数字。
+ */
 function shadeMaterial(kind: NonNullable<MeshLayoutNode['material']>['kind'] | undefined): Batch['material'] {
-  if (!kind || kind === 'matte' || kind === 'clay' || kind === 'brushed') return 'lambert'
-  if (kind === 'mirror') return 'metal'
+  if (!kind || kind === 'matte') return 'lambert'
   return kind
 }
 
@@ -1617,7 +1656,9 @@ function surfaceScalars(material: MeshLayoutNode['material'] | undefined, prim?:
     clearcoat: material?.clearcoat ?? own?.clearcoat,
     clearcoatRoughness: own?.clearcoatRoughness,
     sheen: material?.sheen ?? own?.sheen,
-    anisotropy: material?.anisotropy ?? own?.anisotropy ?? (material?.kind === 'brushed' ? 0.8 : undefined),
+    anisotropy: material?.anisotropy ?? own?.anisotropy,
+    transmission: material?.transmission ?? own?.transmission,
+    ior: material?.ior ?? own?.ior,
   }
 }
 
@@ -1813,7 +1854,6 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
           material,
           roughness,
           ...scalars,
-          matcap: authored?.matcap ?? null,
           texture: null,
           tw: 0,
           th: 0,
@@ -1863,7 +1903,6 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
       material: surfaceMaterial(node.material),
       roughness: node.material?.roughness ?? 1,
       ...surfaceScalars(node.material),
-      matcap: node.material?.matcap ?? null,
       texture: null,
       tw: 0,
       th: 0,

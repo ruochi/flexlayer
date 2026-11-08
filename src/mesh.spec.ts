@@ -763,9 +763,11 @@ describe('网格绘制', () => {
       renderLayer(
         `<layer width="80" height="80" background="#101010" camera="400"><sphere cx="40" cy="40" r="24"${fill} material="${material}" /></layer>`,
       )
+    // 不写 fill 时用预设行的颜色；写同样的颜色必须画出同一张图。
     const bare = await imageOf((await paint('clay')).png)
     const tinted = await imageOf((await paint('clay', ' fill="#d4cfc4"')).png)
-    const legacy = await imageOf((await paint('plastic 0.4', ' fill="#888888"')).png)
+    // 裸名字和带数字现在落到同一行预设，所以两者必须完全一样。
+    const legacy = await imageOf((await paint('plastic 0.36', ' fill="#888888"')).png)
     const baked = await imageOf((await paint('plastic', ' fill="#888888"')).png)
     let same = 0
     let differ = 0
@@ -780,12 +782,17 @@ describe('网格绘制', () => {
       }
     }
     expect(same).toBe(bare.width * bare.height)
-    expect(differ).toBeGreaterThan(20)
+    expect(differ).toBe(0)
 
+    // 每个 finish 都接受粗糙度，只有自发光的 lamp / neon 没有表面可调。
     const numbered = await checkLayer(
       `<layer width="120" height="120" camera="400"><sphere cx="60" cy="60" r="20" material="clay 0.2" /></layer>`,
     )
-    const issue = numbered.issues.find((item) => item.message.includes('不写粗糙度'))
+    expect(numbered.issues.filter((item) => item.code === 'invalid-attr')).toEqual([])
+    const emissive = await checkLayer(
+      `<layer width="120" height="120" camera="400"><sphere cx="60" cy="60" r="20" material="neon 0.2" /></layer>`,
+    )
+    const issue = emissive.issues.find((item) => item.message.includes('不写粗糙度'))
     expect(issue?.hint).toContain('删掉数字')
     const kept = await checkLayer(
       `<layer width="120" height="120" camera="400"><sphere cx="60" cy="60" r="20" fill="#fff" material="metal 0.35" /></layer>`,

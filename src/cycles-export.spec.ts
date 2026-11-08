@@ -1,0 +1,410 @@
+import { describe, expect, it } from 'vitest'
+import { layoutSync, prepareAssets, readLayerRoot } from './layout.js'
+import {
+  CYCLES_DEFAULTS,
+  UNIT_SCALE,
+  exportCyclesScene,
+  layerToWorld,
+  shortSideFov,
+  viewplaneFor,
+  verticalFov,
+} from './cycles-export.js'
+import type { LayerDocument } from './types.js'
+
+const SCENE = `<layer width="960" height="640" background="#f3efe6" camera="fov 30, orbit 26 30, distance 1150, at 480 460 0">
+  <ground y="500" rotateX="90" fill="#e7e0d4" />
+  <layer x="0" y="500" width="960" height="380" origin="480 0" rotateX="90" preserve-3d>
+    <sphere cx="150" cy="150" r="72" z="72" fill="#4CC3D9" material="plastic 0.4" />
+    <rect x="300" y="120" width="150" height="100" depth="72" rx="8" z="36" fill="#EF2D5E" material="metal 0.28" />
+  </layer>
+</layer>`
+
+async function document(source: string): Promise<LayerDocument> {
+  const opened = readLayerRoot(source)
+  const assets = await prepareAssets(opened.root, process.cwd(), { fonts: opened.fonts })
+  return layoutSync(opened.root, assets)
+}
+
+describe('cycles 导出', () => {
+  it('把相机写成 <camera> 的兄弟 <transform>，矩阵按行主序', async () => {
+    const doc = await document(SCENE)
+    const { xml } = exportCyclesScene(doc, CYCLES_DEFAULTS)
+    // xml_read_camera 只读 <camera> 自己的属性；矩阵必须在外层 <transform> 上。
+    // 未自闭合的 `<camera ...>` 才会把后面的节点收成子元素。
+    expect(xml).not.toMatch(/<camera(?:(?!\/>)[^>])*>\s*<transform/)
+    expect(xml).toMatch(/<transform matrix="[^"]+"><camera type="perspective" \/><\/transform>/)
+    // <camera> 必须自闭合，否则后面的 <transform> 会被当成它的子元素。
+    expect(xml).toMatch(/<camera [^>]*\/>/)
+  })
+
+  it('每个网格的三角形数量与索引对得上', async () => {
+    const doc = await document(SCENE)
+    const { xml, counts } = exportCyclesScene(doc, CYCLES_DEFAULTS)
+    expect(counts.meshes).toBeGreaterThan(0)
+    expect(counts.triangles).toBeGreaterThan(0)
+    for (const mesh of xml.match(/<mesh [^>]*\/>/g) ?? []) {
+      const verts = /verts="([^"]*)"/.exec(mesh)?.[1]?.trim().split(/\s+/) ?? []
+      const nverts = /nverts="([^"]*)"/.exec(mesh)?.[1]?.trim().split(/\s+/) ?? []
+      const positions = /P="([^"]*)"/.exec(mesh)?.[1]?.trim().split(/\s+/) ?? []
+      expect(positions.length % 3).toBe(0)
+      expect(verts.length).toBe(3 * nverts.length)
+      for (const index of verts) expect(Number(index)).toBeLessThan(positions.length / 3)
+      for (const n of nverts) expect(Number(n)).toBe(3)
+    }
+  })
+
+  it('曝光是乘子而不是档位，不能写 0', async () => {
+    const doc = await document(SCENE)
+    const { xml } = exportCyclesScene(doc, CYCLES_DEFAULTS)
+    expect(xml).toMatch(/<film exposure="1"/)
+  })
+
+  it('相机放得下整张画布：viewplane 与 shortSideFov 同源', async () => {
+    // 横幅：长边是宽，半径 x=aspect、y=1。
+    const landscape = viewplaneFor(1600, 900, 900)
+    expect(landscape.top - landscape.bottom).toBeCloseTo(2, 6)
+    expect(landscape.right - landscape.left).toBeCloseTo((2 * 1600) / 900, 6)
+    // 竖幅：长边是高，半径 x=1、y=1/aspect。
+    const portrait = viewplaneFor(1440, 1800, 3600)
+    expect(portrait.right - portrait.left).toBeCloseTo(2, 6)
+    expect(portrait.top - portrait.bottom).toBeCloseTo((2 * 1800) / 1440, 6)
+    // Standalone 覆盖 viewplane 后，fov 必须对着短边算，每米像素数才回到 focal。
+    const fov = shortSideFov(3600, 1440, 1800)
+    expect(Math.tan(fov / 2)).toBeCloseTo(1440 / (2 * 3600), 6)
+    // 横幅时短边是高，退化成原来的 verticalFov。
+    expect(shortSideFov(900, 1600, 900)).toBeCloseTo(verticalFov(900, 900), 9)
+  })
+
+  it('层 → 世界的 y、z 翻转只做一次', () => {
+    expect(layerToWorld([100, 200, 300])).toEqual([100 * UNIT_SCALE, -200 * UNIT_SCALE, -300 * UNIT_SCALE])
+  })
+
+  it('法线不含平移：网格摆得再远，法线仍是单位长度', async () => {
+    const doc = await document(SCENE)
+    const { xml } = exportCyclesScene(doc, CYCLES_DEFAULTS)
+    for (const normals of xml.match(/N="([^"]*)"/g) ?? []) {
+      const values = normals.slice(3, -1).trim().split(/\s+/).map(Number)
+      for (let i = 0; i < values.length; i += 3) {
+        expect(Math.hypot(values[i]!, values[i + 1]!, values[i + 2]!)).toBeCloseTo(1, 3)
+      }
+    }
+  })
+
+  it('作者灯一旦写了，就不再加默认影棚光', async () => {
+    const withLight = await document(
+      `<layer width="800" height="600" camera="900">
+        <light type="directional" x="0" y="0" z="500" target="0 0 0" intensity="2" />
+        <ground y="400" rotateX="90" fill="#ddd" />
+        <rect x="300" y="200" width="200" height="120" depth="80" fill="#8ad" />
+      </layer>`,
+    )
+    const { xml, counts } = exportCyclesScene(withLight, CYCLES_DEFAULTS)
+    expect(counts.lights).toBe(1)
+    expect(xml).toContain('author-sun-0')
+    expect(xml).not.toContain('studio-key')
+    expect(xml).not.toContain('studio-fill')
+  })
+
+  it('太阳的 -z 列指向光源', async () => {
+    const doc = await document(
+      `<layer width="800" height="600" camera="900">
+        <light type="directional" x="0" y="-500" z="0" target="0 0 0" intensity="1" />
+        <ground y="400" rotateX="90" fill="#ddd" />
+        <rect x="300" y="200" width="200" height="120" depth="80" fill="#8ad" />
+      </layer>`,
+    )
+    const { xml } = exportCyclesScene(doc, CYCLES_DEFAULTS)
+    const match = /<transform matrix="([^"]+)">\s*<state shader="[^"]+">\s*<light light_type="sun"/.exec(xml)
+    expect(match).not.toBeNull()
+    const m = match![1]!.split(/\s+/).map(Number)
+    // 矩阵按行主序。Cycles 取 co = -column2 当「指向光源」的方向。
+    const co = [-m[8]!, -m[9]!, -m[10]!]
+    // 作者把灯放在层空间 y=-500（画面上方）；层 y 向下，翻到世界后是 +y 朝上，
+    // 也就是 co.y 应当是负的（光源在世界下方），主光才照到朝上的面。
+    expect(co[1]).toBeLessThan(-0.9)
+  })
+
+  /**
+   * 光栅器那条「约 1 屏幕像素」的窄倒角，Cycles 也要有，否则硬边接不住环境光，
+   * 金属机身和光栅结果对不上。倒角会增删顶点，三角形数因此变多是它的指纹。
+   */
+  it('盒子在 Cycles 里带 1 像素倒角', async () => {
+    const doc = await document(
+      `<layer width="700" height="500" background="#f4f1ec" camera="900">
+        <rect x="250" y="180" width="200" height="140" rx="12" depth="60" fill="#c6c9ce" />
+      </layer>`,
+    )
+    const { counts } = exportCyclesScene(doc, CYCLES_DEFAULTS)
+    // 未倒角的圆角盒只有几十个三角形；倒角把每条硬边切成一条窄面。
+    expect(counts.triangles).toBeGreaterThan(200)
+  })
+
+  it('描边和卡通不做倒角，和光栅器同一条判据', async () => {
+    const stroked = await document(
+      `<layer width="700" height="500" background="#f4f1ec" camera="900">
+        <rect x="250" y="180" width="200" height="140" depth="60" fill="#c6c9ce" stroke="#222" />
+      </layer>`,
+    )
+    const plain = await document(
+      `<layer width="700" height="500" background="#f4f1ec" camera="900">
+        <rect x="250" y="180" width="200" height="140" depth="60" fill="#c6c9ce" stroke="none" />
+      </layer>`,
+    )
+    const strokedTriangles = exportCyclesScene(stroked, CYCLES_DEFAULTS).counts.triangles
+    const plainTriangles = exportCyclesScene(plain, CYCLES_DEFAULTS).counts.triangles
+    expect(strokedTriangles).toBeLessThan(plainTriangles)
+  })
+
+  it('没有 fill 的地面当阴影捕捉器', async () => {
+    const doc = await document(
+      `<layer width="800" height="600" camera="900">
+        <ground y="400" rotateX="90" />
+        <rect x="300" y="200" width="200" height="120" depth="80" fill="#8ad" />
+      </layer>`,
+    )
+    const { xml, counts } = exportCyclesScene(doc, CYCLES_DEFAULTS)
+    expect(counts.grounds).toBe(1)
+    expect(xml).toContain('is_shadow_catcher="true"')
+  })
+
+  /**
+   * 假地板走 Cycles 原生 shadow catcher：`is_shadow_catcher` 的合成落在
+   * `PASS_SHADOW_CATCHER_MATTE` 上，不开近似开关这个标记会被静默忽略。
+   * 捕捉器的反照率必须是中性白，否则除法会把颜色带进阴影比。
+   */
+  it('假地板打开近似阴影捕捉，捕捉器用与实体地板一致的材质', async () => {
+    const catcher = await document(
+      `<layer width="800" height="600" camera="900">
+        <ground y="400" rotateX="90" />
+        <rect x="300" y="200" width="200" height="120" depth="80" fill="#8ad" />
+      </layer>`,
+    )
+    const catcherScene = exportCyclesScene(catcher, CYCLES_DEFAULTS)
+    expect(catcherScene.hasShadowCatcher).toBe(true)
+    expect(catcherScene.xml).toContain('use_approximate_shadow_catcher="true"')
+    // 捕捉器是场景里唯一一块地面，物体底部的反弹补光全来自它。所以它要和实体
+    // 地板用同一套材质（默认地面色 + roughness 0.85），不能写成纯白，否则前景
+    // 会被照亮、与实体地板那版对不上。
+    expect(catcherScene.xml).toContain('<shader name="ground-shadow-catcher">')
+    expect(catcherScene.xml).toMatch(
+      /<principled_bsdf name="bsdf" base_color="0\.86316 0\.80695 0\.73791" metallic="0" roughness="0\.85"/,
+    )
+    expect(catcherScene.xml).not.toContain('<diffuse_bsdf name="bsdf" color="1 1 1" />')
+
+    const filled = await document(
+      `<layer width="800" height="600" camera="900">
+        <ground y="400" rotateX="90" fill="#ddd" />
+        <rect x="300" y="200" width="200" height="120" depth="80" fill="#8ad" />
+      </layer>`,
+    )
+    const filledScene = exportCyclesScene(filled, CYCLES_DEFAULTS)
+    expect(filledScene.hasShadowCatcher).toBe(false)
+    expect(filledScene.xml).not.toContain('use_approximate_shadow_catcher')
+  })
+
+  it('omitGrounds 写出一份没有地面的同一场景', async () => {
+    const doc = await document(
+      `<layer width="800" height="600" background="#f3efe6" camera="900">
+        <ground y="400" rotateX="90" shadow-blur="20" />
+        <rect x="300" y="200" width="200" height="120" depth="80" fill="#8ad" />
+      </layer>`,
+    )
+    const plain = exportCyclesScene(doc, { ...CYCLES_DEFAULTS, omitGrounds: true })
+    expect(plain.counts.grounds).toBe(0)
+    expect(plain.xml).not.toContain('is_shadow_catcher')
+    // 相机看到的背景色不变：两张图要在背景上逐像素对得上。
+    expect(plain.xml).toContain('<background name="seen"')
+  })
+
+  /**
+   * 有镜头时默认挂影棚全景；摄影机看到的仍是画布底色，不跟 HDR 走。
+   * `environment="none"` 和没有镜头时退回中性灰照明，避免米色画布染机身。
+   */
+  it('默认用影棚全景照明，相机看到的是画布底色', async () => {
+    const warm = await document(
+      `<layer width="400" height="300" background="#f3efe6" camera="900">
+        <ground y="250" rotateX="90" fill="#ddd" />
+        <rect x="150" y="150" width="80" height="60" depth="40" fill="#8ad" />
+      </layer>`,
+    )
+    const cool = await document(
+      `<layer width="400" height="300" background="#2f6fbf" camera="900">
+        <ground y="250" rotateX="90" fill="#ddd" />
+        <rect x="150" y="150" width="80" height="60" depth="40" fill="#8ad" />
+      </layer>`,
+    )
+    const seenOf = (xml: string) => {
+      const match = /<background name="seen" color="([^"]+)"/.exec(xml)
+      expect(match).not.toBeNull()
+      return match![1]!.split(/\s+/).map(Number)
+    }
+    const warmScene = exportCyclesScene(warm, CYCLES_DEFAULTS)
+    const coolScene = exportCyclesScene(cool, CYCLES_DEFAULTS)
+    expect(warmScene.xml).toMatch(/environment_texture[^>]*filename="monochrome_studio_01_1k\.hdr"/)
+    expect(warmScene.images.some((image) => image.name === 'monochrome_studio_01_1k.hdr')).toBe(true)
+    expect(warmScene.xml).toMatch(/is_camera_ray/)
+    expect(seenOf(warmScene.xml)).not.toEqual(seenOf(coolScene.xml))
+  })
+
+  it('environment=none 时退回中性灰照明', async () => {
+    const doc = await document(
+      `<layer width="400" height="300" background="#f3efe6" camera="900" environment="none">
+        <ground y="250" rotateX="90" fill="#ddd" />
+        <rect x="150" y="150" width="80" height="60" depth="40" fill="#8ad" />
+      </layer>`,
+    )
+    const { xml, images } = exportCyclesScene(doc, CYCLES_DEFAULTS)
+    expect(xml).not.toMatch(/environment_texture/)
+    expect(images.some((image) => image.name.endsWith('.hdr'))).toBe(false)
+    const lit = /<background name="lit" color="([^"]+)"/.exec(xml)
+    expect(lit).not.toBeNull()
+    const channels = lit![1]!.split(/\s+/).map(Number)
+    expect(channels[0]).toBeCloseTo(channels[1]!, 5)
+  })
+
+  it('相机平面烘焙成带贴图或固有色的四边形', async () => {
+    const doc = await document(
+      `<layer width="400" height="300" camera="900">
+        <layer x="100" y="80" width="200" height="140" rotateX="20">
+          <rect width="200" height="140" fill="#112233" />
+          <rect x="20" y="20" width="160" height="100" fill="#ff8800" />
+        </layer>
+      </layer>`,
+    )
+    const scene = exportCyclesScene(doc, CYCLES_DEFAULTS)
+    expect(scene.counts.planes).toBeGreaterThan(0)
+    expect(scene.counts.meshes).toBeGreaterThan(0)
+    expect(scene.xml).toMatch(/plane-\d+\.png|emission_strength="1"/)
+  })
+
+  it('没有镜头的层只留背景，并明确说明', async () => {
+    const doc = await document(`<layer width="200" height="200" background="#fff"><rect width="10" height="10" fill="#000" /></layer>`)
+    const scene = exportCyclesScene(doc, CYCLES_DEFAULTS)
+    expect(scene.skipped.some((line) => line.includes('镜头'))).toBe(true)
+    expect(scene.counts.meshes).toBe(0)
+  })
+
+  /**
+   * 绕序是「物体全黑」那次事故的根因：层空间里三角形是逆时针朝外，
+   * `layerToWorld` 翻掉 y、z 之后法线仍朝外，绕序却朝里。Cycles 用绕序
+   * 定几何法线，于是每个面都在背面黑掉。这里拿几何法线和 `N` 逐一比对。
+   */
+  it('三角形的绕序和法线同向，不会整体背面朝里', async () => {
+    const doc = await document(SCENE)
+    const { xml } = exportCyclesScene(doc, CYCLES_DEFAULTS)
+    let triangles = 0
+    for (const mesh of xml.match(/<mesh [^>]*\/>/g) ?? []) {
+      const positions = /P="([^"]*)"/.exec(mesh)?.[1]?.trim().split(/\s+/).map(Number) ?? []
+      const normals = /N="([^"]*)"/.exec(mesh)?.[1]?.trim().split(/\s+/).map(Number)
+      const verts = /verts="([^"]*)"/.exec(mesh)?.[1]?.trim().split(/\s+/).map(Number) ?? []
+      if (!normals) continue
+      for (let t = 0; t + 2 < verts.length; t += 3) {
+        const i0 = verts[t]!, i1 = verts[t + 1]!, i2 = verts[t + 2]!
+        const a: [number, number, number] = [positions[i0 * 3]!, positions[i0 * 3 + 1]!, positions[i0 * 3 + 2]!]
+        const b: [number, number, number] = [positions[i1 * 3]!, positions[i1 * 3 + 1]!, positions[i1 * 3 + 2]!]
+        const c: [number, number, number] = [positions[i2 * 3]!, positions[i2 * 3 + 1]!, positions[i2 * 3 + 2]!]
+        const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
+        const v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]]
+        const geometric = [u[1]! * v[2]! - u[2]! * v[1]!, u[2]! * v[0]! - u[0]! * v[2]!, u[0]! * v[1]! - u[1]! * v[0]!]
+        const length = Math.hypot(geometric[0]!, geometric[1]!, geometric[2]!)
+        if (length < 1e-12) continue
+        const shading = [
+          (normals[i0 * 3]! + normals[i1 * 3]! + normals[i2 * 3]!) / 3,
+          (normals[i0 * 3 + 1]! + normals[i1 * 3 + 1]! + normals[i2 * 3 + 1]!) / 3,
+          (normals[i0 * 3 + 2]! + normals[i1 * 3 + 2]! + normals[i2 * 3 + 2]!) / 3,
+        ]
+        const dot = geometric[0]! * shading[0]! + geometric[1]! * shading[1]! + geometric[2]! * shading[2]!
+        expect(dot).toBeGreaterThan(0)
+        triangles++
+      }
+    }
+    expect(triangles).toBeGreaterThan(1000)
+  })
+
+  /**
+   * `Light::copy_to_kernel` 会把 `used_shaders[0]` 当灯的光谱，没挂就落到
+   * `scene->default_light`（strength 0），整盏灯等于不存在。所以每盏灯都必须
+   * 包在一段自发光 shader 的 `<state>` 里。
+   */
+  it('每盏灯都挂了自发光 shader，否则 Cycles 当它是 0 强度', async () => {
+    const doc = await document(
+      `<layer width="800" height="600" camera="900">
+        <light type="directional" x="0" y="-500" z="0" target="0 0 0" intensity="2" />
+        <light type="point" x="200" y="-300" z="400" intensity="40" />
+        <ground y="400" rotateX="90" fill="#ddd" />
+        <rect x="300" y="200" width="200" height="120" depth="80" fill="#8ad" />
+      </layer>`,
+    )
+    const { xml } = exportCyclesScene(doc, CYCLES_DEFAULTS)
+    expect(xml).toMatch(/<shader name="light-bulb">[\s\S]*?<emission [^>]*strength="1"/)
+    const lights = xml.match(/<light [^>]*\/>/g) ?? []
+    expect(lights.length).toBeGreaterThanOrEqual(2)
+    for (const light of lights) {
+      const index = xml.indexOf(light)
+      const before = xml.slice(0, index)
+      // 最近的 <state> 必须是那枚自发光 shader。
+      const state = before.lastIndexOf('<state')
+      expect(before.slice(state, state + 60)).toContain('shader="light-bulb"')
+    }
+  })
+
+  it('模型用自己的 baseColorFactor，不被 fill 的 #000000 涂黑', async () => {
+    const doc = await document(
+      `<layer width="400" height="400" camera="700">
+        <model src="examples/box.glb" x="100" y="100" width="120" height="120" material="metal 0.28" />
+      </layer>`,
+    )
+    const { xml } = exportCyclesScene(doc, CYCLES_DEFAULTS)
+    const base = /<principled_bsdf name="bsdf" base_color="([^"]+)"/.exec(xml)?.[1]?.split(/\s+/).map(Number)
+    expect(base).toBeDefined()
+    // box.glb 的 baseColorFactor 是 (0.95, 0.72, 0.2)，线性后远离 0。
+    expect(base![0]).toBeGreaterThan(0.5)
+    expect(base![2]).toBeLessThan(base![0]!)
+    expect(base!.every((channel) => channel > 0.01)).toBe(true)
+  })
+
+  it('有贴图的模型把 UV 按角点写出，长度是三角数 × 6', async () => {
+    const doc = await document(
+      `<layer width="400" height="400" camera="700">
+        <model src="examples/box.glb" x="100" y="100" width="120" height="120" />
+      </layer>`,
+    )
+    const { xml } = exportCyclesScene(doc, CYCLES_DEFAULTS)
+    for (const mesh of xml.match(/<mesh [^>]*\/>/g) ?? []) {
+      const uv = /UV="([^"]*)"/.exec(mesh)
+      if (!uv) continue
+      const nverts = /nverts="([^"]*)"/.exec(mesh)?.[1]?.trim().split(/\s+/) ?? []
+      const values = uv[1]!.trim().split(/\s+/)
+      expect(values.length).toBe(nverts.length * 6)
+    }
+  })
+
+  it('面光补一盏无衰减的远场太阳，地面才不会出现假地平线', async () => {
+    const doc = await document(
+      `<layer width="800" height="600" camera="900">
+        <light type="area" x="0" y="-400" z="600" target="400 300 0" width="800" height="400" intensity="2" />
+        <ground y="400" rotateX="90" fill="#ddd" />
+        <rect x="300" y="200" width="200" height="120" depth="80" fill="#8ad" />
+      </layer>`,
+    )
+    const { xml } = exportCyclesScene(doc, CYCLES_DEFAULTS)
+    expect(xml).toContain('author-area-0')
+    expect(xml).toContain('author-area-0-far')
+    expect(xml).toMatch(/light_type="sun"[^>]*name="author-area-0-far"/)
+  })
+
+    it('地面跨度是层像素，只经一次缩放', async () => {
+    const doc = await document(
+      `<layer width="960" height="640" camera="fov 30, distance 1150, at 480 460 0">
+        <ground y="500" rotateX="90" fill="#e7e0d4" />
+      </layer>`,
+    )
+    const { xml } = exportCyclesScene(doc, CYCLES_DEFAULTS)
+    const positions = /<mesh P="([^"]*)"/.exec(xml)?.[1]?.trim().split(/\s+/).map(Number) ?? []
+    expect(positions.length).toBe(12)
+    const xs = [positions[0]!, positions[3]!, positions[6]!, positions[9]!]
+    const span = Math.max(...xs) - Math.min(...xs)
+    // 960 × 6 × 0.01 = 57.6 m。缩两次只有 0.576 m，脚下会露空。
+    expect(span).toBeGreaterThan(50)
+  })
+})

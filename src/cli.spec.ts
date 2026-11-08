@@ -110,6 +110,40 @@ export const composition: Composition = {
     expect(existsSync(join(dir, 'scene.png'))).toBe(true)
   })
 
+  it('--help 打印用法并以 0 退出，写错参数仍是 2', () => {
+    for (const args of [['--help'], ['-h'], ['render', '--help'], ['help']]) {
+      const result = runCli(args)
+      expect(result.status, args.join(' ')).toBe(0)
+      expect(result.stderr).toContain('用法:')
+    }
+    const typo = runCli(['render', '--bogus'])
+    expect(typo.status).toBe(2)
+    expect(typo.stderr).toContain('用法:')
+  })
+
+  /**
+   * `--emit-cycles` 只导场景，不需要 cycles 二进制，所以这条测试在没有渲染器的
+   * CI 上也能跑。它同时锁住两件事：XML 写出来了、没有顺手渲一张图。
+   */
+  it('--emit-cycles 只写场景 XML，不渲染', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flexlayer-emit-'))
+    const source = join(dir, 'scene.layer')
+    writeFileSync(
+      source,
+      `<layer width="200" height="150" background="#f3efe6" camera="600">
+        <sphere cx="100" cy="75" r="40" z="40" fill="#4CC3D9" material="plastic 0.4" />
+      </layer>`,
+    )
+    const xml = join(dir, 'scene.xml')
+    const result = runCli(['render', source, '--engine', 'cycles', '--emit-cycles', xml])
+    expect(result.status, result.stderr).toBe(0)
+    const written = readFileSync(xml, 'utf8')
+    expect(written).toContain('<cycles>')
+    expect(written).toMatch(/<mesh [^>]*verts=/)
+    // 同一目录下不该冒出 PNG。
+    expect(readdirSync(dir).filter((name) => name.endsWith('.png'))).toEqual([])
+  })
+
   it('素材命令指向素材服务，不在这个程序里抠图', () => {
     for (const command of ['asset', 'cutout', 'select']) {
       const result = runCli([command, 'photo.jpg'])

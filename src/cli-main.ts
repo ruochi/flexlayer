@@ -9,16 +9,26 @@ import type { Composition, FrameInput } from './frame.js'
 import { loadLayerFile, type LoadedLayer } from './load-source.js'
 import { applyRootExpects, formatIssueLine } from './report.js'
 import { pickLayer } from './pick.js'
-import { checkLayer, renderLayer, renderPreview } from './render.js'
+import { checkLayer, exportLayerToCycles, renderLayer, renderLayerWithCycles, renderPreview } from './render.js'
 import type { LayerNode } from './parse.js'
 import type { LayerReport, Issue } from './types.js'
 
 const CONTACT_LIMIT = 300
 
-function usage(): never {
+/**
+ * `--help` 是成功路径：打印用法后以 0 退出。
+ * 参数写错仍然走 usage() 退 2，两者不能共用同一个出口。
+ */
+function help(): never {
+  printUsage()
+  process.exit(0)
+}
+
+function printUsage() {
   console.error(`用法:
   flexlayer render <file> [<file>...] [-o out.png|dir] [--report out.json|dir] [--scale 1] [--scale 2] [--debug] [--preview out.png] [--emit out.layer|dir] [--frame N] [--frames dir] [--from N] [--to N] [--step N] [--rgba -|file] [--mesh-samples 1|2|4] [--no-script] [--typecheck] [--watch]
   flexlayer check <file> [<file>...] [--report out.json|dir] [--emit out.layer|dir] [--frame N] [--frames all|ends|A-B|N] [--step N] [--no-script] [--no-typecheck] [--watch] [--quality draft|final]
+  flexlayer render <file> -o out.png --engine cycles [--samples 256] [--device CPU|GPU] [--emit-cycles scene.xml]
   flexlayer pick <file> --at x,y
   flexlayer pick --positions x,y,z,... --indices i,j,k,... --from ox,oy,oz --dir dx,dy,dz
 
@@ -36,13 +46,23 @@ check 不写 --frames 时大约每 0.5 秒抽一帧，最多 96 帧，并写明�
 --no-script 不执行 <script>，canvas 保持透明。
 --watch 在源文件和它引用的相对路径变化后再跑一遍。不和 --rgba、--frames 一起用。
 --quality draft|final 覆盖根上的 quality。不写时用文件里的值，检查默认是 draft。
+--engine native|cycles 选渲染器。native 是默认（草稿、高质量两档）；cycles 是超高质量，
+走独立的 Cycles Standalone 路径追踪器，需要 FLEXLAYER_CYCLES 或 PATH 上的 cycles。
+--samples 路径追踪采样数，缺省 256。--device CPU 或 GPU，缺省 CPU。
+--emit-cycles 只写场景 XML，不渲染，方便交给别的机器或手工调整。
 pick <file> --at x,y 用布局盒拾取，打印 { "hit": { path, localX, localY, depth } } 或 { "hit": null }。源文件有 error 时退出码是 1。
 pick --positions --indices --from --dir 用包围体射线，打印 { "hit": N } 或 { "hit": null }。`)
+}
+
+function usage(): never {
+  printUsage()
   process.exit(2)
 }
 
 function parseArgs(argv: string[]) {
   const cmd = argv[0]
+  // --help 出现在任何位置都算成功请求，不要求先写子命令。
+  if (argv.includes('--help') || argv.includes('-h')) help()
   if (cmd !== 'render' && cmd !== 'check') usage()
   const files: string[] = []
   let out: string | undefined
@@ -63,6 +83,13 @@ function parseArgs(argv: string[]) {
   let typecheckFlag = false
   let noTypecheckFlag = false
   let quality: 'draft' | 'final' | undefined
+  let engine: 'native' | 'cycles' = 'native'
+  let samples: number | undefined
+  let device: 'CPU' | 'GPU' | undefined
+  let emitCycles: string | undefined
+  /** `--emit-cycles` 只导场景；渲染要另跑一次。 */
+  let emitCyclesOnly = false
+  let cyclesBinary: string | undefined
   for (let i = 1; i < argv.length; i++) {
     const a = argv[i]!
     if (!a.startsWith('-')) {
@@ -98,7 +125,24 @@ function parseArgs(argv: string[]) {
       const value = next()
       if (value !== 'draft' && value !== 'final') usage()
       quality = value
-    } else if (a === '--mesh-samples') {
+    } else if (a === '--engine') {
+      const value = next()
+      if (value !== 'native' && value !== 'cycles') usage()
+      engine = value
+    } else if (a === '--samples') {
+      const value = Number(next())
+      if (!Number.isInteger(value) || value < 1) usage()
+      samples = value
+    } else if (a === '--device') {
+      const value = next()
+      if (value !== 'CPU' && value !== 'GPU') usage()
+      device = value
+    } else if (a === '--emit-cycles') {
+      emitCycles = next()
+      emitCyclesOnly = true
+    }
+    else if (a === '--cycles-binary') cyclesBinary = next()
+    else if (a === '--mesh-samples') {
       const n = Number(next())
       if (n !== 1 && n !== 2 && n !== 4) usage()
       meshSamples = n
@@ -120,8 +164,12 @@ function parseArgs(argv: string[]) {
   const batch = files.length > 1 || (cmd === 'render' && scales.length > 1)
   if (batch && watchMode) usage()
   if (cmd === 'render' && batch && (preview || framesArg || rgba != null || frame != null || from != null || to != null || step != null)) usage()
+  if (engine === 'cycles' && (batch || watchMode || framesArg != null || rgba != null)) usage()
+  if (cmd === 'check' && (engine !== 'native' || samples != null || device != null || emitCycles != null)) usage()
+  if (engine === 'native' && (samples != null || device != null)) usage()
+  if (emitCycles != null && engine !== 'cycles') engine = 'cycles'
   const typecheck = cmd === 'check' ? !noTypecheckFlag : typecheckFlag
-  return { cmd, files, out, report, emit, framesArg, rgba, frame, from, to, step, scales, debug, preview, meshSamples, watchMode, noScript, typecheck, quality }
+  return { cmd, files, out, report, emit, framesArg, rgba, frame, from, to, step, scales, debug, preview, meshSamples, watchMode, noScript, typecheck, quality, engine, samples, device, emitCycles, emitCyclesOnly, cyclesBinary }
 }
 
 function frameInput(frame: number, fps: number): FrameInput {
@@ -454,6 +502,7 @@ async function runPick(argv: string[]) {
 
 export async function main() {
   const command = process.argv[2]
+  if (command === '--help' || command === '-h' || command === 'help') help()
   if (command === 'pick') {
     try {
       await runPick(process.argv.slice(3))
@@ -675,6 +724,47 @@ async function execute(args: RunArgs, input: LoadedJob): Promise<boolean> {
   }
 
   const source = loaded.kind === 'markup' ? loaded.source : loaded.node
+  if (args.emitCycles) {
+    const exported = await exportLayerToCycles(source, resolve(args.emitCycles), {
+      baseDir,
+      samples: args.samples ?? 256,
+      device: args.device ?? 'CPU',
+      maxBounces: 12,
+      denoise: true,
+      transparent: false,
+      scale: args.scale,
+      binary: args.cyclesBinary,
+    })
+    say(`✓ ${args.emitCycles}  ${exported.counts.triangles} 个三角形  ${exported.counts.lights} 盏灯`)
+    for (const line of exported.skipped) say(`· ${line}`)
+    // `--emit-cycles` 是「只导场景」，写完就收工；要出图就再跑一次不带它的命令。
+    if (args.emitCyclesOnly) return false
+  }
+  if (args.engine === 'cycles') {
+    const rendered = await renderLayerWithCycles(source, {
+      baseDir,
+      samples: args.samples ?? 256,
+      device: args.device ?? 'CPU',
+      maxBounces: 12,
+      denoise: true,
+      transparent: false,
+      scale: args.scale,
+      binary: args.cyclesBinary,
+      noScript: args.noScript,
+      quality: args.quality,
+    })
+    attachFileIssues(rendered.report)
+    const cyclesPath = outPng(abs, args.out)
+    await writeFile(cyclesPath, rendered.png)
+    printIssues(rendered.report, args.showType)
+    if (args.report) await writeFile(args.report, JSON.stringify(rendered.report, null, 2))
+    const failed = failIfErrors(rendered.report)
+    say(
+      `✓ ${cyclesPath}  ${rendered.width}×${rendered.height}  cycles  ${rendered.scene.counts.triangles} 个三角形  ${Math.round(rendered.elapsedMs / 100) / 10}s`,
+    )
+    for (const line of rendered.scene.skipped) say(`· ${line}`)
+    return failed
+  }
   const { png, report } = await renderLayer(source, { baseDir, scale: args.scale, debug: args.debug, meshSamples: args.meshSamples, noScript: args.noScript, quality: args.quality })
   if (loaded.kind === 'node') await emitNode(loaded.node, args.emit, report)
   attachFileIssues(report)

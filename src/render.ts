@@ -6,9 +6,11 @@ import { loadNativeRender } from './native.js'
 import { applyPixelFilters } from './paint.js'
 import { applyCanvasScripts } from './run-scripts.js'
 import { buildReport } from './report.js'
-import type { Issue, LayerDocument, LayerLayoutNode, LayerReport, LayoutNode, RenderOptions } from './types.js'
+import type { GroundLayoutNode, Issue, LayerDocument, LayerLayoutNode, LayerReport, LayoutNode, RenderOptions } from './types.js'
 import { initFontsForMeasure, setFontsCacheDir } from './fonts.js'
 import type { LayerNode } from './parse.js'
+import type { CyclesRunOptions } from './cycles.js'
+import type { CyclesExport } from './cycles-export.js'
 
 export type RenderResult = {
   png: Buffer
@@ -240,6 +242,86 @@ export async function renderLayer(source: string | LayerNode, options: RenderOpt
     return { rgba: painted.rgba ?? Buffer.alloc(0), width: painted.width, height: painted.height, report: painted.report }
   }
   return { png: painted.png, report: painted.report }
+}
+
+/**
+ * 超高质量档：排版、素材、脚本都和 native 走同一条路，只把最后一步换成
+ * Cycles Standalone 的路径追踪。草稿和高质量两条已有路径完全不受影响。
+ */
+export type CyclesRenderResult = {
+  png: Buffer
+  width: number
+  height: number
+  report: LayerReport
+  /** 外部渲染器的统计，日志用。 */
+  scene: { counts: { meshes: number; triangles: number; lights: number; grounds: number; planes: number }; skipped: string[] }
+  elapsedMs: number
+}
+
+/**
+ * 文档里第一块「无 fill」的地面。
+ *
+ * 无 fill 的地面在光栅器里只留影子，Cycles 侧要靠两次渲染把它合出来，所以渲染前
+ * 先确认有没有，并把它写的 `shadow-opacity` / `shadow-blur` 带下去。
+ */
+function shadowCatcherGround(doc: LayerDocument): GroundLayoutNode | null {
+  const visit = (node: LayoutNode): GroundLayoutNode | null => {
+    if (node.kind === 'ground' && node.fill == null) return node
+    if (!('children' in node)) return null
+    for (const child of node.children) {
+      const found = visit(child)
+      if (found) return found
+    }
+    return null
+  }
+  return visit(doc.root)
+}
+
+export type CyclesRenderOptions = RenderOptions & CyclesRunOptions
+
+export async function renderLayerWithCycles(
+  source: string | LayerNode,
+  options: CyclesRenderOptions = {} as CyclesRenderOptions,
+): Promise<CyclesRenderResult> {
+  const prepared = await prepareDocument(source, options)
+  const { renderCycles } = await import('./cycles.js')
+  const ground = shadowCatcherGround(prepared.doc)
+  const height = prepared.doc.height
+  const rendered = await renderCycles(prepared.doc, {
+    ...options,
+    width: prepared.options.scale && prepared.options.scale !== 1
+      ? Math.round(prepared.doc.width * prepared.options.scale)
+      : prepared.doc.width,
+    height: prepared.options.scale && prepared.options.scale !== 1
+      ? Math.round(height * prepared.options.scale)
+      : height,
+  })
+  const report = buildReport(prepared.doc, {
+    frame: prepared.options.frame ?? 0,
+    fps: prepared.options.fps ?? 0,
+  })
+  for (const line of rendered.scene.skipped) {
+    report.issues.push({ level: 'info', code: 'cycles-skipped', path: 'layer', message: line, hint: '这部分留给光栅路径合成' })
+  }
+  return {
+    png: rendered.png,
+    width: rendered.width,
+    height: rendered.height,
+    report,
+    scene: rendered.scene,
+    elapsedMs: rendered.elapsedMs,
+  }
+}
+
+/** 只导出 Cycles 场景，不渲染。 */
+export async function exportLayerToCycles(
+  source: string | LayerNode,
+  target: string,
+  options: CyclesRenderOptions = {} as CyclesRenderOptions,
+): Promise<CyclesExport> {
+  const prepared = await prepareDocument(source, options)
+  const { writeCyclesScene } = await import('./cycles.js')
+  return writeCyclesScene(prepared.doc, target, options)
 }
 
 /** `<preview>` 拼成的图。文档里没有 preview 时返回 null。拼图在插件里完成，同样受长边上限约束。 */

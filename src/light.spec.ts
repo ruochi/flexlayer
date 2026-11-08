@@ -239,11 +239,18 @@ describe('material phrase', () => {
       roughness: 0.28,
       metalness: 1,
     })
-    expect(physical && physical.kind === 'mesh' ? physical.material?.matcap : 'set').toBeUndefined()
+    // 裸名字、`finish` 子句、带数字三种写法落到同一行预设：没有「烘焙材质球」这条
+    // 并行路径，所以三者解析出的 kind 和粗糙度必须一致。
     expect(baked && baked.kind === 'mesh' ? baked.fill : '').toBe('#c6c9ce')
-    expect(baked && baked.kind === 'mesh' ? baked.material?.matcap : '').toBe('metal')
+    expect(baked && baked.kind === 'mesh' ? baked.material : undefined).toMatchObject({
+      kind: 'metal',
+      roughness: 0.28,
+    })
     expect(legacy && legacy.kind === 'mesh' ? legacy.fill : '').toBe('#445566')
-    expect(legacy && legacy.kind === 'mesh' ? legacy.material?.matcap : '').toBe('metal')
+    expect(legacy && legacy.kind === 'mesh' ? legacy.material : undefined).toMatchObject({
+      kind: 'metal',
+      roughness: 0.28,
+    })
     expect(doc.issues.filter((issue) => issue.code === 'invalid-attr')).toEqual([])
   })
 

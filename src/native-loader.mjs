@@ -32,5 +32,15 @@ export async function getNativeAddon() {
     tryLoad(vendored) ||
     tryLoad('flexlayer-render') ||
     tryLoad('@ruochi/flexlayer-render')
+  if (process.env.FLEXLAYER_DEBUG_ADDON) {
+    const require2 = createRequire(import.meta.url)
+    for (const spec of [vendored, 'flexlayer-render']) {
+      try {
+        console.error('ADDON', spec, '->', require2.resolve(spec))
+      } catch (error) {
+        console.error('ADDON', spec, 'failed', error.message)
+      }
+    }
+  }
   return addonCache
 }

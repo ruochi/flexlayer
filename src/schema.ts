@@ -463,7 +463,9 @@ export const ATTRS: AttrDef[] = [
     docGroup: 'graphic',
     syntax: 'finish metal, color #c6c9ce, roughness 0.28, metalness 1',
     example: 'finish metal, color #c6c9ce, roughness 0.28, metalness 1',
-    note: 'On a solid. finish is clay, plastic, metal, mirror, brushed, glass, lamp, neon, or matte. color replaces fill. roughness, metalness, clearcoat, transmission, ior, sheen, anisotropy, and emissive are the MeshPhysicalMaterial fields',
+    // 枚举和预设数字都在 `finishes.ts`；这里只写作者能敲进去的取值，别在注释里复述
+    // 粗糙度，否则表一改文档就骗人。
+    note: 'On a solid. finish is one of matte, plastic, metal, glass, clay, mirror, brushed, lamp, neon. A bare name, a name with a roughness, and the finish clause all resolve to the same preset row, so metal, "metal 0.28", and "finish metal, roughness 0.28" shade identically. color replaces fill. roughness, metalness, clearcoat, transmission, ior, sheen, anisotropy, and emissive are the MeshPhysicalMaterial fields and each overrides that preset row',
   },
   {
     name: 'cast-shadow',
@@ -490,7 +492,7 @@ export const ATTRS: AttrDef[] = [
     defaultValue: '0',
     example: '16',
     issue: 'invalid-attr',
-    note: 'Maximum softness of a ground shadow, in layer pixels. 0 stays hard. Where the caster touches the ground the edge stays sharp',
+    note: 'Maximum softness of a ground shadow, in layer pixels. 0 stays hard. Where the caster touches the ground the edge stays sharp. On a studio floor the softness comes from how far the caster stands above the floor, so a pencil stays crisp while a laptop lid opens a wide penumbra',
   },
   {
     name: 'shadow-opacity',

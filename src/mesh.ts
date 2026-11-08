@@ -45,7 +45,7 @@ export function ownsMeshScene(layer: LayerLayoutNode): boolean {
   return visit(layer, false)
 }
 
-function paintable(node: LayoutNode): boolean {
+export function paintable(node: LayoutNode): boolean {
   if (node.kind === 'mesh' || node.kind === 'ground') return false
   if (node.kind === 'layer' || node.kind === 'flex') {
     const chrome = (node.background != null && node.background !== 'transparent') || hasBorder(node.border)
@@ -55,7 +55,7 @@ function paintable(node: LayoutNode): boolean {
 }
 
 /** 嵌套的网格场景保持原对象，好按引用取已经画好的图。其余网格从位图里拿掉。 */
-function stripMeshes(node: LayoutNode): LayoutNode | null {
+export function stripMeshes(node: LayoutNode): LayoutNode | null {
   if (node.kind === 'mesh' || node.kind === 'ground') return null
   if (node.kind === 'layer' && ownsMeshScene(node)) return node
   if (node.kind === 'layer' || node.kind === 'flex') {

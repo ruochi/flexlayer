@@ -7,6 +7,13 @@ export function rasterizeFill(config, batches, grounds = []) {
   if (!addon || !addon.renderScene) {
     throw new Error('Native renderScene is not available')
   }
+  if (process.env.FLEXLAYER_DEBUG_BATCH) {
+    for (const batch of batches) {
+      if (batch.material === 'glass' || batch.transmission > 0) {
+        console.error('GLASS', batch.material, batch.roughness, batch.transmission, batch.ior, batch.metalness, batch.clearcoat, batch.a, batch.r, batch.g, batch.b)
+      }
+    }
+  }
   const nativeBatches = batches.map((batch) => ({
     positions: batch.positions,
     normals: batch.normals,
@@ -29,11 +36,14 @@ export function rasterizeFill(config, batches, grounds = []) {
     receiveShadow: batch.receiveShadow,
     material: batch.material,
     roughness: batch.roughness,
+    materialName: batch.material,
     metalness: batch.metalness,
     clearcoat: batch.clearcoat,
     clearcoatRoughness: batch.clearcoatRoughness,
     sheen: batch.sheen,
     anisotropy: batch.anisotropy,
+    transmission: batch.transmission,
+    ior: batch.ior,
     matcap: batch.matcap || undefined,
     texture: batch.texture || undefined,
     tw: batch.tw || 0,

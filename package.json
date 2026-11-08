@@ -32,6 +32,7 @@
   "files": [
     "dist",
     "native",
+    "assets",
     "README.md",
     "LICENSE",
     "SPEC.md",

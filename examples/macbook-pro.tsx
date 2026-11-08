@@ -80,21 +80,6 @@ const touchId = allKeys[ROWS[0]!.length - 1]!
 const keyPath = allKeys.map((k) => roundRect(k.w, k.h, 4, k.x, k.y)).join(' ')
 const WELL_BOX = { x: KB.x, y: KB.y, w: KB_W, h: 6 * PITCH + 10 }
 
-function grille(x: number, y: number, w: number, h: number) {
-  // Period under ~2 px on screen reads as moiré (QUALITY-4 §3.4). Keep holes
-  // large enough that a pixel footprint covers at most one, and pad the well
-  // with the area-average grey so sparse samples still look even.
-  const step = 6.5
-  const r = 1.55
-  let d = ''
-  for (let gy = y + step / 2; gy < y + h; gy += step) {
-    for (let gx = x + step / 2; gx < x + w; gx += step) {
-      d += `M ${(gx - r).toFixed(2)} ${gy.toFixed(2)} a ${r} ${r} 0 1 0 ${2 * r} 0 a ${r} ${r} 0 1 0 ${-2 * r} 0 Z `
-    }
-  }
-  return d
-}
-
 const GRILLE_W = 56
 const GRILLE_GAP = 16
 const grilleBox = (side: -1 | 1) => ({
@@ -103,10 +88,31 @@ const grilleBox = (side: -1 | 1) => ({
   w: GRILLE_W,
   h: WELL_BOX.h - 8,
 })
-const grilles = ([-1, 1] as const).map((side) => {
-  const g = grilleBox(side)
-  return { ...g, d: grille(g.x, g.y, g.w, g.h) }
-})
+const grilles = ([-1, 1] as const).map((side) => grilleBox(side))
+
+// 扬声器孔直接开在顶壳上：孔圈追加到机身外轮廓的同一条 path 里，
+// `fill-rule="evenodd"` 把每个孔都变成真正的洞，斜视角能看到孔壁。
+// 单独抬一块「穿孔板」会让金属反射在矩形边界处断开，看起来像贴了块不同色的补丁。
+function grilleHoles(w: number, h: number, ox = 0, oy = 0) {
+  // 镜头下约 0.6 px / 单位，孔径和孔距都得够大，否则孔在屏幕上一像素宽、
+  // 采出来是一片条纹而不是孔。
+  const step = 9
+  const holeRadius = 2.75
+  let d = ''
+  for (let gy = step / 2; gy < h; gy += step) {
+    for (let gx = step / 2; gx < w; gx += step) {
+      const cx = ox + gx + holeRadius
+      const cy = oy + gy + holeRadius
+      d += `M ${cx.toFixed(2)} ${(cy - holeRadius).toFixed(2)} a ${holeRadius} ${holeRadius} 0 1 0 0 ${(2 * holeRadius).toFixed(2)} a ${holeRadius} ${holeRadius} 0 1 0 0 ${(-2 * holeRadius).toFixed(2)} Z `
+    }
+  }
+  return d
+}
+// 机身外轮廓 + 两片扬声器孔，一次挤出：顶壳是完整的一片铝。
+const grilleHolePath = grilles
+  .map((g) => grilleHoles(g.w, g.h, g.x, g.y))
+  .join('')
+const deckPath = roundRect(W, D, CORNER) + grilleHolePath
 
 // 16 英寸触控板约 160 × 100 mm，离前沿 11 mm。
 const PAD = { w: 424, h: 262 }
@@ -116,19 +122,80 @@ const padY = D - 28 - PAD.h
 function Base() {
   return (
     <layer x={STAGE.x} y={STAGE.groundY - TOP} width={W} height={D} origin={`${W / 2} 0`} rotateX="90" preserve-3d>
-      <rect width={W} height={D} rx={CORNER} round="z" fill={SILVER} material={SHELL} depth={T} stroke="none" />
-      <layer x="0" y="0" width={W} height={D} z={TOP + 0.2} cast-shadow="false">
-        <rect x={WELL_BOX.x} y={WELL_BOX.y} width={WELL_BOX.w} height={WELL_BOX.h} rx="8" fill={WELL} />
-        {grilles.map((g) => (
-          <rect x={g.x} y={g.y} width={g.w} height={g.h} rx="4" fill="#a2a5ab" />
-        ))}
-        {grilles.map((g) => (
-          <path d={g.d} fill="#2c2d32" stroke="none" />
-        ))}
-        <rect x={touchId.x - 1.5} y={touchId.y - 1.5} width={touchId.w + 3} height={touchId.h + 3} rx="5.5" fill="#a9acb2" />
-        <rect x={padX - 1.5} y={padY - 1.5} width={PAD.w + 3} height={PAD.h + 3} rx="13" fill="#8f9298" />
-        <rect x={padX} y={padY} width={PAD.w} height={PAD.h} rx="12" fill="linear-gradient(180deg, #d0d3d7 0%, #c3c6cb 100%)" />
-      </layer>
+      <path d={deckPath} fill-rule="evenodd" fill={SILVER} material={SHELL} depth={T} stroke="none" />
+      {/* 键盘井：有厚度的哑光黑托板。用 path 挤出，圆角不受薄壁的 rx 限制 */}
+      <rect
+        x={WELL_BOX.x}
+        y={WELL_BOX.y}
+        width={WELL_BOX.w}
+        height={WELL_BOX.h}
+        rx="8"
+        round="z"
+        fill={WELL}
+        material={{ finish: 'plastic', roughness: 0.72, clearcoat: 0.1 }}
+        depth="4"
+        z={TOP + 0.04 - 2}
+        stroke="none"
+      />
+      {/* 扬声器：深色腔体藏在顶壳内侧，孔本身是顶壳挤出体上的洞，
+          所以孔壁也是铝、孔底才是黑腔。 */}
+
+      {grilles.map((g) => (
+        <rect
+          x={g.x + 1}
+          y={g.y + 1}
+          width={g.w - 2}
+          height={g.h - 2}
+          rx="3"
+          round="z"
+          fill="#131518"
+          material={{ finish: 'plastic', roughness: 0.9 }}
+          depth="2"
+          z={TOP - 1.4}
+          stroke="none"
+        />
+      ))}
+      <rect
+        x={touchId.x - 1.5}
+        y={touchId.y - 1.5}
+        width={touchId.w + 3}
+        height={touchId.h + 3}
+        rx="5.5"
+        round="z"
+        fill="#a9acb2"
+        material={{ finish: 'metal', roughness: 0.3 }}
+        depth="2"
+        z={TOP + 0.05 - 1}
+        stroke="none"
+      />
+      {/* 触控板：先压一圈深色缝隙，再放玻璃面。真机是玻璃，比掌托略暗、
+          低粗糙度，边缘靠这道缝隙分界，不靠描边。 */}
+      <rect
+        x={padX - 1}
+        y={padY - 1}
+        width={PAD.w + 2}
+        height={PAD.h + 2}
+        rx="12.5"
+        round="z"
+        fill="#7c8085"
+        material={{ finish: 'plastic', roughness: 0.6 }}
+        depth="1.4"
+        z={TOP + 0.02 - 0.7}
+        stroke="none"
+      />
+      <rect
+        x={padX}
+        y={padY}
+        width={PAD.w}
+        height={PAD.h}
+        rx="12"
+        round="z"
+        fill="#dfe3e8"
+        material={{ finish: 'plastic', color: '#dfe3e8', roughness: 0.26, clearcoat: 0.5 }}
+        depth="1.2"
+        z={TOP + 0.05 - 0.6}
+        stroke="none"
+      />
       <path d={keyPath} fill={KEY} material="plastic" depth="4" z={TOP + 1.6} stroke="none" />
       {/* 转轴：黑色的转轴盖，左右收在机身圆角里 */}
       <rect x={CORNER + 24} y="-8" width={W - 2 * CORNER - 48} height="18" rx="9" fill="#2a2b2f" material="plastic" depth="18" z={TOP - 3} />
@@ -249,7 +316,7 @@ const TAG = { x: 757, y: 1171, r: 42.2, turn: 0 }
 // AirPods Pro 盒盖朝上平放。模型宽度是 60.6 / 21.7。
 const POD_W = 60.6 / 21.7
 const POD = { x: 1040, y: 990, w: 148, turn: -18 }
-const GEM = { x: 430, y: 980, r: 36, turn: 32 }
+const GEM = { x: 425, y: 985, r: 48, turn: 30 }
 
 const mat = (color: string, roughness: number, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness })
 
@@ -528,6 +595,19 @@ function revolve(profile: [number, number][], segments: number, startAngle = 0) 
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2))
   geo.setIndex(idx)
   geo.computeVertexNormals()
+  // 轮廓收到 r = 0 时，中心那一圈只有退化三角形，平均出来的法线是零向量。
+  // 零法线在三个扇形三角形里插值会塌成一块暗楔——杯底那条硬斜边就是它。
+  // 这只回转体的轴线是 +Y，底面朝上，所以零法线补成 (0,1,0)。
+  const normalAttr = geo.getAttribute('normal')
+  const nrm = normalAttr.array as Float32Array
+  for (let i = 0; i < nrm.length; i += 3) {
+    if (Math.hypot(nrm[i]!, nrm[i + 1]!, nrm[i + 2]!) < 0.5) {
+      nrm[i] = 0
+      nrm[i + 1] = 1
+      nrm[i + 2] = 0
+    }
+  }
+  normalAttr.needsUpdate = true
   return geo
 }
 
@@ -610,15 +690,17 @@ const mug = (() => {
     // 接缝转到杯后，避开正面高光。
     Math.PI,
   )
-  // 内壁要翻过来渲染：回转体的法线朝外，而看得见的是内侧那一面。
-  // 渲染器不认 BackSide，只能靠 DoubleSide；为了让内表面也吃到正确的法线，
-  // 把内壁几何的法线整体翻转过来。
+  // 内壁的几何法线朝外，但看得见的是内侧那一面：渲染器按 frag.back 已经
+  // 翻过一次，这里再手动取反等于翻回正面，高光会落在错误的一侧，
+  // 内壁就会出现一道镜面竖条，读成不锈钢内胆。
+  // 同一层釉。内壁背光，高光比外壁柔一档，避免深处的摄影棚卡片被反射成
+  // 一道锐利竖条；但它仍然是瓷，不是金属内胆。
   const liner = new THREE.MeshPhysicalMaterial({
     color: '#fbf8f2',
-    roughness: 0.16,
+    roughness: 0.26,
     metalness: 0,
-    clearcoat: 0.9,
-    clearcoatRoughness: 0.06,
+    clearcoat: 0.5,
+    clearcoatRoughness: 0.2,
     side: THREE.DoubleSide,
   })
   // 把手：上下两个根部都落在杯腹中段（0.78 与 1.66），不贴口沿也不挨桌面。
@@ -661,10 +743,6 @@ const mug = (() => {
   })
   // 内壁的可见面是背面，把法线翻过来，光照才落在内侧。
   const innerFlipped = inner.clone()
-  const normalAttr = innerFlipped.getAttribute('normal')
-  const normals = normalAttr.array as Float32Array
-  for (let i = 0; i < normals.length; i++) normals[i] = -normals[i]!
-  normalAttr.needsUpdate = true
 
   return seated([
     [body, glaze],
@@ -687,15 +765,17 @@ function airtagFace() {
   const c = n / 2
   const R = n / 2
 
-  // 拉丝钢底：先铺一层冷灰，再叠一道从右上打过来的径向高光。
-  // 底色不能给近白：environment="none" 时金属只走 rgba * shade，底太白就整面
-  // 饱和成一片平灰，弧面的明暗梯度全被压掉。给中性银灰，明暗交给光照和法线。
-  g.fillStyle = '#c9cdd2'
+  // 拉丝钢底。金属通道里这张图不是"颜色"，而是反射的乘数：光斑、渐变、
+  // 明暗全部由环境反射给，贴图只负责蚀刻出来的那几个灰阶差。
+  // 所以底色必须整体留在中高灰的一小段里——写近白会把每个像素都乘成
+  // 过曝的白斑，写近黑则整块钢被乘成黑片。这里刻意压平：
+  // 底色 #c8ccd1，再叠一道只差 6~10 级的径向。
+  g.fillStyle = '#c8ccd1'
   g.fillRect(0, 0, n, n)
   const sheen = g.createRadialGradient(c * 0.78, c * 0.7, 0, c, c, R)
-  sheen.addColorStop(0, 'rgba(255,255,255,0.95)')
-  sheen.addColorStop(0.34, 'rgba(238,243,248,0.34)')
-  sheen.addColorStop(1, 'rgba(146,152,160,0.52)')
+  sheen.addColorStop(0, 'rgba(255,255,255,0.16)')
+  sheen.addColorStop(0.4, 'rgba(238,243,248,0.05)')
+  sheen.addColorStop(1, 'rgba(120,126,134,0.16)')
   g.fillStyle = sheen
   g.fillRect(0, 0, n, n)
   // 拉丝纹：从圆心散开的极细线，疏密和明暗都带一点随机，免得读成同心圆。
@@ -735,9 +815,10 @@ function airtagFace() {
       g.save()
       g.translate(c + Math.cos(theta) * radius, c + Math.sin(theta) * radius)
       g.rotate(top ? theta + Math.PI / 2 : theta - Math.PI / 2)
-      g.fillStyle = 'rgba(255,255,255,0.9)'
+      // 激光蚀刻的读法是一条亮边压着一条暗边，两条都只比钢底浅/深几级。
+      g.fillStyle = 'rgba(255,255,255,0.30)'
       g.fillText(text[i]!, 0, -1.6)
-      g.fillStyle = '#9aa2ac'
+      g.fillStyle = 'rgba(96,104,116,0.40)'
       g.fillText(text[i]!, 0, 0)
       g.restore()
     }
@@ -746,8 +827,8 @@ function airtagFace() {
   arcText('AirTag', 42, 11, R * 0.83, true)
   arcText('Designed by Apple in California', 29, 4, R * 0.83, false)
 
-  // 中央苹果：高度约面径的 38%。钢面底改成中性银灰后，刻痕要反过来读：
-  // 亮刻痕 + 右下暗边，才有激光雕的厚度感。
+  // 中央苹果：高度约面径的 38%。同样是蚀刻，不是印刷：
+  // 一条比钢底低几级的实心，再在右下补一道更暗的边，才是雕下去的厚度。
   const s = (n * 0.38) / 21.94
   const apple = (dx: number, dy: number, fill: string) => {
     g.save()
@@ -758,8 +839,9 @@ function airtagFace() {
     g.fill(new Path2D(APPLE_PATH))
     g.restore()
   }
-  apple(1.6, 2.2, 'rgba(96,106,120,0.75)')
-  apple(0, 0, '#f7fafd')
+  // 蚀刻只比钢底低几级：这是一层哑光氧化面，不是印上去的深色标。
+  apple(1.4, 2.0, 'rgba(104,112,124,0.30)')
+  apple(0, 0, 'rgba(186,192,203,0.42)')
 
   const px = g.getImageData(0, 0, n, n).data
   const map = new THREE.DataTexture(new Uint8Array(px.buffer, px.byteOffset, px.byteLength), n, n)
@@ -777,15 +859,15 @@ const airtag = (() => {
     clearcoat: 0.7,
     clearcoatRoughness: 0.18,
   })
-  // 不锈钢面：渲染器的金属通道几乎全用环境反射替换反照率，金属度拉到 0.9 时
-  // 刻痕和苹果会被反射吃掉，只剩一块灰。这里压到 0.5，钢感交给贴图里的拉丝
-  // 高光和一层薄 clearcoat，刻痕才留得住。
+  // 真不锈钢：metalness 1，让环境反射单独负责明暗。贴图只乘在反射上，
+  // 所以它里面不能有大反差，只能有蚀刻的那几级灰（见 airtagFace）。
+  // 加一层很薄的 clearcoat 当抛光：AirTag 的钢面出厂就是镜面拉丝的。
   const steel = new THREE.MeshPhysicalMaterial({
-    color: '#eef3f8',
-    roughness: 0.16,
-    metalness: 0.72,
-    clearcoat: 0.4,
-    clearcoatRoughness: 0.2,
+    color: '#f2f5f8',
+    roughness: 0.22,
+    metalness: 1,
+    clearcoat: 0.35,
+    clearcoatRoughness: 0.12,
     map: airtagFace(),
   })
   const body = lathe([
@@ -798,7 +880,28 @@ const airtag = (() => {
     [0.84, 0.44],
     [0.74, 0.48],
   ])
-  const face = new THREE.CircleGeometry(0.72, 48).rotateX(-Math.PI / 2).translate(0, 0.5, 0)
+  // 钢面不是一个平盘，是一只很浅的球冠（AirTag 正面肉眼可见地鼓）。
+  // 平盘的法线处处相同，反射方向就处处相同，整块面只能是一个色值；
+  // 球冠让法线扫过一小段仰角，反射才会走完"顶光→侧面→地面"的整条梯度，
+  // 这是不锈钢读起来像不锈钢的关键，跟贴图无关。
+  //
+  // 用圆盘顶点做位移，不用 SphereGeometry：圆盘的 uv 是贴图要的那套径向布局，
+  // 球体的 uv 是经纬网，直接贴会把刻字和苹果拉成一块楔形。
+  const faceR = 0.72
+  const face = new THREE.CircleGeometry(faceR, 72)
+  {
+    const pos = face.getAttribute('position')
+    const domeH = 0.055
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i)
+      const y = pos.getY(i)
+      const t = Math.min(1, Math.hypot(x, y) / faceR)
+      pos.setZ(i, domeH * (1 - t * t))
+    }
+    pos.needsUpdate = true
+    face.computeVertexNormals()
+  }
+  face.rotateX(-Math.PI / 2).translate(0, 0.455, 0)
   // 机位很低，平放只能看见一条边。钢面朝镜头倾过来，底边仍然挨着桌面。
   return seated(
     [
@@ -841,10 +944,101 @@ const pencil = (() => {
 // 这个姿态台面朝上 69°、朝镜头 62°，俯视能看到完整的台面和冠部刻面。
 // 角度是用支撑点解出来的，改切工比例（台面半径 / 冠高 / 亭深）时要重解。
 const diamond = (() => {
-  const glass = mat('#eef3f8', 0.06)
-  const crown = new THREE.CylinderGeometry(0.55, 1, 0.38, 8).translate(0, 0.19, 0)
-  const pavilion = new THREE.ConeGeometry(1, 0.95, 8).rotateX(Math.PI).translate(0, -0.475, 0)
-  return seated([[crown, glass], [pavilion, glass]], new THREE.Euler(2.4086, 0, 2.7576))
+  // 真正的透射玻璃。`MeshStandardMaterial` 没有 transmission 字段，会被归到
+  // 塑料（metalness 0 → plastic），钻石于是变成一块不透光的白多面体。
+  // transmission/ior 是 three 的 MeshPhysicalMaterial 默认贴图路径，内核据此
+  // 走玻璃通道：菲涅尔反射、环境反射、折射，以及 draft 的屏幕空间透射。
+  const glass = new THREE.MeshPhysicalMaterial({
+    color: '#ffffff',
+    roughness: 0.015,
+    metalness: 0,
+    transmission: 1,
+    ior: 2.42,
+    thickness: 1.4,
+    clearcoat: 1,
+    clearcoatRoughness: 0.01,
+  })
+  // A cut stone's whole read is its facet mosaic, so every facet has to be
+  // built as its own plane. The first version used CylinderGeometry +
+  // ConeGeometry with the vertices split: geometrically that is an 8-sided
+  // crown and an 8-sided pavilion, and `toNonIndexed` only makes each of those
+  // sixteen planes flat. One plane covers a third of the stone, so the table
+  // came out as a single grey polygon and no shader could recover a mosaic
+  // from it.
+  //
+  // A round brilliant is built from rings of points instead: table, 8 bezels
+  // (kites), 16 upper-girdle facets, girdle, 16 lower-girdle facets, 8 pavilion
+  // mains, culet. Each strip of triangles between two rings is one facet, and
+  // alternating the two rings' angular offset by half a step is what makes the
+  // zigzag that reads as a cut.
+  const ring = (radius: number, y: number, count: number, phase: number) => {
+    const points: THREE.Vector3[] = []
+    for (let i = 0; i < count; i++) {
+      const angle = ((i + phase) / count) * Math.PI * 2
+      points.push(new THREE.Vector3(Math.cos(angle) * radius, y, Math.sin(angle) * radius))
+    }
+    return points
+  }
+  const TABLE_Y = 0.30
+  const GIRDLE_Y = 0.0
+  const CULET_Y = -0.86
+  const TABLE_R = 0.54
+  const girdleR = 1.0
+  // Crown: table ring (8) → bezel ring (8, radius of the kite's outer point,
+  // same phase) → upper girdle ring (16, half-step offset) → girdle (16).
+  const tableRing = ring(TABLE_R, TABLE_Y, 8, 0)
+  const bezelRing = ring(0.82, 0.20, 8, 0)
+  const upperRing = ring(0.955, 0.075, 16, 0.5)
+  const girdleRing = ring(girdleR, GIRDLE_Y, 16, 0)
+  // Pavilion: girdle → lower girdle (16, half-step) → pavilion mains (8) → culet.
+  const lowerRing = ring(0.86, -0.28, 16, 0.5)
+  const mainRing = ring(0.30, -0.66, 8, 0)
+  const culet = new THREE.Vector3(0, CULET_Y, 0)
+
+  const pos: number[] = []
+  const push = (p: THREE.Vector3) => pos.push(p.x, p.y, p.z)
+  // A fan between two rings. `outer` is the wider ring; the triangle winding is
+  // chosen so the normal points away from the stone's axis (see below).
+  const band = (inner: THREE.Vector3[], outer: THREE.Vector3[], flip = false) => {
+    const n = outer.length
+    for (let i = 0; i < n; i++) {
+      const a = inner[Math.floor((i * inner.length) / n)]!
+      const b = inner[Math.floor(((i + 1) * inner.length) / n) % inner.length]!
+      const c = outer[(i + 1) % n]!
+      const d = outer[i]!
+      if (flip) {
+        push(a); push(c); push(b)
+        push(a); push(d); push(c)
+      } else {
+        push(a); push(b); push(c)
+        push(a); push(c); push(d)
+      }
+    }
+  }
+  // Table: a fan from its centre, one triangle per table edge.
+  for (let i = 0; i < tableRing.length; i++) {
+    const a = tableRing[i]!
+    const b = tableRing[(i + 1) % tableRing.length]!
+    push(new THREE.Vector3(0, TABLE_Y, 0)); push(b); push(a)
+  }
+  band(bezelRing, tableRing, true)
+  band(upperRing, bezelRing, true)
+  band(girdleRing, upperRing, true)
+  band(lowerRing, girdleRing, true)
+  band(mainRing, lowerRing, true)
+  for (let i = 0; i < mainRing.length; i++) {
+    const a = mainRing[i]!
+    const b = mainRing[(i + 1) % mainRing.length]!
+    push(culet); push(a); push(b)
+  }
+  const cut = new THREE.BufferGeometry()
+  cut.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  // Every triangle is its own facet: split, then one normal per face. Without
+  // this the renderer averages the vertices shared by two facets and the cut
+  // shades as a smooth pebble again.
+  const geometry = cut.toNonIndexed()
+  geometry.computeVertexNormals()
+  return seated([[geometry, glass]], new THREE.Euler(2.15, 0.25, 2.50))
 })()
 
 // AirPods Pro 充电盒平放，正面（60.6 × 45.2）朝上，厚度 21.7 贴地的方向朝下。
@@ -874,11 +1068,11 @@ const pod = (() => {
   // 一枚边界死硬的椭圆，所以整层走 environment="none"（见文件末尾的相机层），
   // 光由一块大面积柔光给。这里保留正常塑料的粗糙度和清漆，白面才不会发灰。
   const shellMat = new THREE.MeshPhysicalMaterial({
-    color: '#ffffff',
-    roughness: 0.34,
+    color: '#f4f4f2',
+    roughness: 0.46,
     metalness: 0,
-    clearcoat: 0.22,
-    clearcoatRoughness: 0.32,
+    clearcoat: 0.12,
+    clearcoatRoughness: 0.45,
   })
 
   // 平面轮廓：逆时针一圈，每个点带单位外法线。滚圆就从这条线往外偏 rollR 再绕上去。
@@ -1064,7 +1258,7 @@ export default (
     <rect x="0" y="0" width="1440" height="1800" fill="linear-gradient(180deg, #f7f4ef 0%, #efe8df 100%)" />
     {/* 环境图里有一扇近距离的亮窗，正对盒体左端滚圆时会被反射成一枚死白的椭圆；
         参考图的白盒也不吃环境反射，所以关掉环境图，改由一块大面积柔光当主光。 */}
-    <layer width="1440" height="1800" camera={CAMERA} environment="none">
+    <layer width="1440" height="1800" camera={CAMERA}>
       <light type="area" x="560" y="-900" z="1500" target="900 760 0" width="3000" height="1600" intensity="2.4" />
       {/* area 光对金属只给 f0，没有方向性；补一盏弱方向光给钢面提供 GGX 高光梯度。 */}
       <light type="directional" x="-0.55" y="-0.62" z="0.56" intensity="0.30" />
