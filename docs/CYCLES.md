@@ -258,6 +258,14 @@ shadow catcher** 一趟渲完，不再靠两遍渲染相减。
 
 阴影本体（深度、轮廓、颜色）与实体地板相同。
 
+对照示例：`examples/macbook-pro-shadow-catcher.tsx` 与 `examples/macbook-pro.tsx`
+只差地面的一处 `fill`（前者没有），是干净的单变量对照，随手可复现：
+
+```
+npx tsx src/cli.ts render examples/macbook-pro-shadow-catcher.tsx --engine cycles -o a.png
+npx tsx src/cli.ts render examples/macbook-pro.tsx            --engine cycles -o b.png
+```
+
 对比图在 `compare/`：
 
 | 文件 | 内容 |
