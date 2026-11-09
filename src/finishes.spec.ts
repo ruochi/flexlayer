@@ -1,9 +1,25 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { EMISSIVE_FINISHES, FINISHES, FINISH_NAMES, isFinishName } from './finishes.js'
 
-const rustPath = fileURLToPath(new URL('../../flexlayer-render/src/material.rs', import.meta.url))
+/**
+ * The renderer sits beside this repository on a developer machine and under
+ * `vendor/` in CI, so look in both rather than pinning one layout.
+ */
+function findRustMaterialSource(): string {
+  const candidates = [
+    new URL('../../flexlayer-render/src/material.rs', import.meta.url),
+    new URL('../../vendor/flexlayer-render/src/material.rs', import.meta.url),
+  ]
+  for (const candidate of candidates) {
+    const resolved = fileURLToPath(candidate)
+    if (existsSync(resolved)) return resolved
+  }
+  throw new Error(`找不到 material.rs，试过：${candidates.map((c) => fileURLToPath(c)).join(', ')}`)
+}
+
+const rustPath = findRustMaterialSource()
 
 /** 从 Rust 的 `MaterialPreset::X` 常量里抠出某个字段的字面量。 */
 function rustPresetRoughness(constName: string): number {
