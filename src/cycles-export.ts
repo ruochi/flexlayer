@@ -21,7 +21,6 @@ import { originOffset } from './matrix.js'
 import { paintable, stripMeshes } from './mesh.js'
 import { paintLayerIsolated } from './paint.js'
 import { applyPoseMatrix, hasPerspective, type Perspective } from './perspective.js'
-import { bevelFewFaces } from './mesh-bevel.js'
 import { meshPrims, type MeshPrim } from './software-mesh.js'
 import type {
   GroundLayoutNode,
@@ -70,9 +69,9 @@ const STUDIO_HDR_NAME = 'monochrome_studio_01_1k.hdr'
  * Cycles 这边没有那些加法项，直接用 0.125 金属会落到死黑。1.0 让伞灯和
  * 白墙够亮，再靠下面的 `STUDIO_HDR_FILL` 托住暗部。
  */
-const STUDIO_HDR_STRENGTH = 1
+const STUDIO_HDR_STRENGTH = 2
 /** 暗部托底：混一点中性灰，对应光栅器柔光板把环境抬到 Y≈40 的那一步。 */
-const STUDIO_HDR_FILL = 0.28
+const STUDIO_HDR_FILL = 0
 /**
  * 全景去饱和量。`studio_map.rs` 把彩度压向灰，否则银色机身会反射出 HDRI
  * 的暖色偏。Cycles 用 `rgb_to_bw` + `combine_color` 造出灰度，
@@ -100,7 +99,28 @@ const AUTHOR_LIGHT_POWER = 700
  */
 const FLAT_FALLOFF_FILL = 0.30
 /** 地面在本地坐标里的半边长，取画面长边的若干倍，保证铺满。 */
-const GROUND_SPAN_FACTOR = 6
+/* 地面半边长 = 画面长边 × 这个倍数。
+ *
+ * 12 倍时地面的远端已经落到相机视锥之外，整幅画面都踩在地板上，天花板那侧
+ * 不再露出背景色，也就没有「地板和背景」之间那条硬线。 */
+const GROUND_SPAN_FACTOR = 12
+
+/* 主平面在法线方向上让出的深度，单位是层像素。
+ *
+ * `seated()` 这类作者写法把道具的最低点精确放在地面层的 z=0 上，于是道具底面
+ * 和地面**完全共面**：AirTag 那种圆弧底壳跟平面相切时，切点附近一大片三角形
+ * 和地板的深度差只有 1e-5，路径追踪器只能随机判胜负，渲出来就是「底壳被地面
+ * 咬掉一块」——看着像陷进桌子里。让地面整体退半个像素，道具仍然看得见接触，
+ * 但两者不再抢同一个深度。
+ *
+ * 半个层像素在 2.6 px/mm 的构图里约 0.19 mm，肉眼读不出悬空，也远小于阴影
+ * 模糊半径，接触阴影照旧贴着物体边缘。 */
+const GROUND_SEAT_EPSILON = 0.5
+
+/* 地面反照率相对作者 fill 的缩放。0.88 让 #efe8df 这类近白地板在影棚 HDRI 下
+ * 出片落在 ~246 的漫反射亮度：保住「浅色地板」的观感，又给遮挡留出约 40 级
+ * 的压缩余量，接触阴影不会因为通道饱和被裁平。 */
+const GROUND_ALBEDO_SCALE = 0.88
 
 export type CyclesEngineOptions = {
   /** 路径追踪采样数。预览 128，出片 512–2048。 */
@@ -112,6 +132,16 @@ export type CyclesEngineOptions = {
   denoise: boolean
   /** alpha 背景，便于回到 Flex Layer 里合成。 */
   transparent: boolean
+  /**
+   * 只用环境图当光源，不注入 `studio-key` / `studio-fill` 两盏默认太阳。
+   *
+   * 默认的 3.0 / 0.8 两盏太阳是光栅器的影棚主光近似，会在平坦地面上打出一块
+   * 可见的照度光斑；想让画面完全由全景天光决定时打开这一项。
+   *
+   * 场景里写 `environment="ambient"` 是等价的、更常用的入口；这个选项留给
+   * 直接调导出器的调用方。
+   */
+  ambientOnly?: boolean
 }
 
 export const CYCLES_DEFAULTS: CyclesEngineOptions = {
@@ -120,6 +150,7 @@ export const CYCLES_DEFAULTS: CyclesEngineOptions = {
   maxBounces: 12,
   denoise: true,
   transparent: false,
+  ambientOnly: false,
 }
 
 export type CyclesImage = { name: string; bytes: Buffer }
@@ -379,6 +410,11 @@ type SurfaceDef = {
   coatRoughness: number
   sheen: number
   anisotropic: number
+  /**
+   * 色散强度。玻璃/钻石的「火彩」全靠它：光在折射时按波长分开，
+   * 棱边才会闪出彩色。0 是普通玻璃，1 接近钻石那种强烈分光。
+   */
+  dispersion?: number
   emission?: { color: Vec3; strength: number }
   /**
    * 贴图接到哪个插座。`base` 是模型底色；`emission` 对应光栅器的
@@ -393,7 +429,7 @@ type SurfaceDef = {
 }
 
 function surfaceKey(def: Omit<SurfaceDef, 'name'>): string {
-  const { base, metallic, roughness, transmission, ior, coat, coatRoughness, sheen, anisotropic, emission, texture, alphaCutout } = def
+  const { base, metallic, roughness, transmission, ior, coat, coatRoughness, sheen, anisotropic, dispersion, emission, texture, alphaCutout } = def
   return [
     base.map((channel) => channel.toFixed(5)).join(','),
     metallic.toFixed(4),
@@ -404,6 +440,7 @@ function surfaceKey(def: Omit<SurfaceDef, 'name'>): string {
     coatRoughness.toFixed(4),
     sheen.toFixed(4),
     anisotropic.toFixed(4),
+    (dispersion ?? 0).toFixed(4),
     emission ? `${emission.color.join(',')}@${emission.strength.toFixed(3)}` : '-',
     texture ? `${texture.name}:${texture.uvs}:${texture.slot}` : '-',
     alphaCutout ? 'cut' : '-',
@@ -411,14 +448,18 @@ function surfaceKey(def: Omit<SurfaceDef, 'name'>): string {
 }
 
 /** `material` 的第一个词决定成型方式，其余是参数，和光栅器同一套读法。 */
-function surfaceFor(
+export function surfaceFor(
   node: MeshLayoutNode,
   fillPaint: string,
   prim: MeshPrim,
   texture: string | null,
 ): Omit<SurfaceDef, 'name'> {
   const material: MeshMaterial | undefined = node.material
-  const kind = material?.kind ?? 'matte'
+  /* 作者没写 `material` 时，用模型图元自己的成形方式——three 材质已经把
+   * `transmission >= 0.5` 判成 glass、`isMeshPhongMaterial` 判成 plastic。
+   * 这里退回 'matte' 会把钻石的玻璃通道和粗糙度一起压平，渲染成一块不透光的
+   * 灰多面体；光栅器那边用的是 `authored?.kind ?? prim.shade`，两边必须一致。 */
+  const kind = material?.kind ?? prim.shade ?? 'matte'
   // 模型图元自带 roughness / metalness / emissive，优先用文件里的。
   const roughness = material?.roughness ?? prim.roughness ?? 1
   // `<model>` 的 fill 缺省是 #000000，直接用会把 glb 的金色机身涂成黑色。
@@ -457,7 +498,9 @@ function surfaceFor(
       return {
         ...lambert,
         metallic: material?.metalness ?? prim.metalness ?? preset.metalness,
-        roughness: material?.roughness ?? preset.roughness,
+        /* 必须用 `prim.roughness`：模型自带 0.05 的镜面钢，退到 metal 预设的
+         * 0.28 会被抹成一片均匀色，AirTag 的钢面就成了白盘子。 */
+        roughness: material?.roughness ?? prim.roughness ?? preset.roughness,
         anisotropic: material?.anisotropy ?? prim.anisotropy ?? preset.anisotropy,
         ...(textureSlot ? { texture: textureSlot } : {}),
       }
@@ -468,15 +511,23 @@ function surfaceFor(
         coatRoughness: Math.min(1, Math.max(0, prim.clearcoatRoughness ?? preset.clearcoatRoughness)),
         ...(textureSlot ? { texture: textureSlot } : {}),
       }
-    case 'glass':
+    case 'glass': {
+      const ior = Math.max(1, material?.ior ?? prim.ior ?? preset.ior)
       return {
         ...lambert,
-        base: material?.color ? base : linearColor(preset.color, [0.92, 0.96, 0.95]),
+        /* 作者写了 color 用作者的；模型自己带了底色（钻石是纯白 #ffffff）就用
+         * 模型的；都没有才退回预设。退回预设会把钻石染成偏灰绿，透射进来的光
+         * 被这层灰绿乘掉，刻面就发闷。 */
+        base: material?.color || prim.baseColor ? base : linearColor(preset.color, [0.92, 0.96, 0.95]),
         roughness: roughness,
         transmission: material?.transmission ?? prim.transmission ?? preset.transmission,
-        ior: Math.max(1, material?.ior ?? prim.ior ?? preset.ior),
+        ior,
+        /* 高折射率（钻石 2.42、蓝宝石 1.77）才给色散。普通玻璃 1.5 分光太弱，
+         * 强行加只会让水杯边缘泛彩虹，不像玻璃。 */
+        ...(ior >= 1.7 ? { dispersion: 1 } : {}),
         ...(textureSlot ? { texture: textureSlot } : {}),
       }
+    }
     case 'lamp':
     case 'neon':
       return {
@@ -548,6 +599,14 @@ function surfaceXml(def: SurfaceDef, images: CyclesImage[]): string {
     `sheen_weight="${num(def.sheen)}"`,
     `anisotropic="${num(def.anisotropic)}"`,
   ]
+  if ((def.dispersion ?? 0) > 0) {
+    /* Abbe number 越小分光越强：20 会让棱边碎成满屏彩虹，读起来像肥皂泡；
+     * 35 保留看得出颜色的火彩，同时刻面还是「一块石头」而不是噪点。 */
+    principled.push(
+      `transmission_dispersion_scale="${num(def.dispersion!)}"`,
+      `transmission_dispersion_abbe_number="35"`,
+    )
+  }
   if (def.emission) {
     principled.push(
       `emission_color="${texEmission ? '1 1 1' : vec(def.emission.color)}"`,
@@ -566,7 +625,7 @@ function groundSurface(fill: string | null, name: string): string {
   const base = linearColor(fill, [0.78, 0.75, 0.7])
   return [
     `<shader name="${attr(name)}">`,
-    `  <principled_bsdf name="bsdf" base_color="${vec(base)}" metallic="0" roughness="0.85" />`,
+    `  <principled_bsdf name="bsdf" base_color="${vec(base)}" metallic="0" roughness="0.97" specular_ior_level="0.28" />`,
     `  <connect from="bsdf bsdf" to="output surface" />`,
     `</shader>`,
   ].join('\n')
@@ -647,132 +706,37 @@ function skySurface(
       // 光栅器把全景彩度压向灰，银色机身才不会反射出暖色。
       // 灰度 = rgb_to_bw 的亮度，三通道合并；再按 saturation 混回 env。
       `  <rgb_to_bw name="lum" />`,
-      `  <connect from="env color" to="lum color" />`,
-      `  <combine_color name="grey" type="rgb" />`,
-      `  <connect from="lum val" to="grey red" />`,
-      `  <connect from="lum val" to="grey green" />`,
-      `  <connect from="lum val" to="grey blue" />`,
-      `  <mix_color name="neutral" type="saturation" fac="${num(STUDIO_HDR_DESATURATE)}" />`,
-      `  <connect from="env color" to="neutral a" />`,
-      `  <connect from="grey color" to="neutral b" />`,
+      `  <connect from="env Color" to="lum Color" />`,
+      `  <combine_color name="grey" color_type="rgb" />`,
+      `  <connect from="lum Val" to="grey R" />`,
+      `  <connect from="lum Val" to="grey G" />`,
+      `  <connect from="lum Val" to="grey B" />`,
+      `  <mix_color name="neutral" blend_type="saturation" Factor="${num(STUDIO_HDR_DESATURATE)}" />`,
+      `  <connect from="env Color" to="neutral A" />`,
+      `  <connect from="grey Color" to="neutral B" />`,
       `  <background name="hdr" strength="${num(STUDIO_HDR_STRENGTH)}" />`,
-      `  <connect from="neutral color" to="hdr color" />`,
+      `  <connect from="neutral Result" to="hdr Color" />`,
       `  <background name="fill" color="${vec(fill)}" strength="1" />`,
       `  <add_closure name="lit" />`,
-      `  <connect from="hdr background" to="lit closure1" />`,
-      `  <connect from="fill background" to="lit closure2" />`,
+      `  <connect from="hdr Background" to="lit Closure1" />`,
+      `  <connect from="fill Background" to="lit Closure2" />`,
     )
   } else {
     const lighting = SKY_NEUTRAL.map((channel) => channel * strength) as Vec3
     lines.push(`  <background name="lit" color="${vec(lighting)}" strength="1" />`)
   }
   // 有全景时 lit 是 add_closure（输出 closure）；兜底时 lit 是 background（输出 background）。
-  const litSocket = studioHdr ? 'lit closure' : 'lit background'
+  const litSocket = studioHdr ? 'lit Closure' : 'lit Background'
   lines.push(
     `  <background name="seen" color="${vec(visible)}" strength="${num(SKY_VISIBLE_STRENGTH)}" />`,
-    `  <mix_closure name="mix" fac="0" />`,
-    `  <connect from="path is_camera_ray" to="mix fac" />`,
-    `  <connect from="${litSocket}" to="mix closure1" />`,
-    `  <connect from="seen background" to="mix closure2" />`,
-    `  <connect from="mix closure" to="output surface" />`,
+    `  <mix_closure name="mix" Fac="0" />`,
+    `  <connect from="path is_camera_ray" to="mix Fac" />`,
+    `  <connect from="${litSocket}" to="mix Closure1" />`,
+    `  <connect from="seen Background" to="mix Closure2" />`,
+    `  <connect from="mix Closure" to="output Surface" />`,
     `</shader>`,
   )
   return lines.join('\n')
-}
-
-/**
- * 光栅器那道「约 1 屏幕像素」的窄倒角，搬进 Cycles。
- *
- * 几何到这里已经折进层镜头空间，相机是单位旋转、只有平移（见 `cameraPose`），
- * 所以像素尺度就是 `focal / (focal - z)`——和 `perspective.ts` 的 `project`
- * 同一个式子。倒角半径因此按输出像素定，不随模型厚度或远近漂移。
- *
- * 和光栅器同一条判据链（`software-mesh.ts` 的 `paintGeometry`）：写了描边、
- * 卡通/漫画、玻璃、tube、薄圆角盖板都不倒角。差别只有一处：Cycles 用真实的
- * 路径追踪高光，1 px 的倒角在这里主要作用是把硬边切成能接住环境光的窄面，
- * 所以半径同样取 1 px 即可，不需要放大。
- */
-type BevelFrame = {
-  /** 视距像素。`parallel` 时为 null，按正交处理。 */
-  focal: number | null
-  /** 视点。 */
-  eyeX: number
-  eyeY: number
-}
-
-/** 一个世界点处的「每世界单位多少屏幕像素」。 */
-function pixelsPerWorldAt(frame: BevelFrame, x: number, y: number, z: number): number | null {
-  if (frame.focal == null) return 1
-  // 顶点在镜头空间，相机在 (cx, cy, focal) 朝 -z 看；镜头的透视缩放只跟
-  // 到相机平面的距离有关，所以这一个标量就够，横向位移不进分母。
-  const distance = frame.focal - z
-  if (!(distance > 1e-4)) return null
-  return frame.focal / distance
-}
-
-function depthOfMesh(node: MeshLayoutNode, positions: Float32Array): number {
-  const mesh = node.mesh
-  if (mesh.type === 'box' || mesh.type === 'extrude') return mesh.depth
-  if (mesh.type === 'cylinder') return mesh.height
-  if (mesh.type === 'sphere') return mesh.r * 2
-  if (mesh.type === 'torus') return mesh.tube * 2
-  if (mesh.type === 'tube') return mesh.r * 2
-  let min = Infinity
-  let max = -Infinity
-  for (let i = 2; i < positions.length; i += 3) {
-    const z = positions[i]!
-    if (z < min) min = z
-    if (z > max) max = z
-  }
-  return Number.isFinite(min) ? max - min : 0
-}
-
-/**
- * 镜头空间里的顶点，倒角之后仍然是镜头空间的顶点。
- *
- * 半径按质心的像素尺度算（native 用 AABB 八角场来抵消透视漂移；Cycles 里
- * 一个物体通常只跨几十像素，质心够用，先不引入那 15 个数的打包）。
- */
-export function bevelChunk(
-  node: MeshLayoutNode,
-  positions: Float32Array,
-  indices: Uint32Array,
-  frame: BevelFrame,
-  shading?: string,
-): { positions: Float32Array; indices: Uint32Array } | null {
-  if (node.stroke !== 'none') return null
-  if (shading === 'toon' || shading === 'manga') return null
-  if (node.material?.kind === 'glass') return null
-  if (node.mesh.type === 'tube') return null
-  const depth = depthOfMesh(node, positions)
-  const rx = node.mesh.type === 'box' || node.mesh.type === 'cylinder' ? node.mesh.rx : 0
-  if (rx > 0 && depth > 0 && depth < rx * 0.55) return null
-
-  const count = Math.floor(positions.length / 3)
-  if (count === 0) return null
-  let cx = 0
-  let cy = 0
-  let cz = 0
-  for (let i = 0; i < count; i++) {
-    cx += positions[i * 3]!
-    cy += positions[i * 3 + 1]!
-    cz += positions[i * 3 + 2]!
-  }
-  cx /= count
-  cy /= count
-  cz /= count
-  const scale = pixelsPerWorldAt(frame, cx, cy, cz)
-  if (scale == null) return null
-  // 目标就是 1 屏幕像素；投影宽度低于 0.75 px 时倒角读不出来，跳过。
-  let radius = 1 / scale
-  const minWorld = 1.5
-  if (radius < minWorld && minWorld * scale <= 1.5) radius = minWorld
-  radius = Math.min(radius, Math.max(depth, 0) * 0.12)
-  if (radius * scale < 0.75 || radius < 0.05) return null
-
-  const built = bevelFewFaces(positions, indices, radius, null)
-  if (!built) return null
-  return { positions: built.positions, indices: built.indices }
 }
 
 /** 一个网格物体的顶点与三角形。多个图元合并成一个 `<mesh>`。 */
@@ -1053,20 +1017,12 @@ function meshPrimGeometries(
   node: MeshLayoutNode,
   toLayer: Mat4,
   scale: number,
-  bevel?: { frame: BevelFrame; shading?: string },
 ): PrimGeometry[] {
   const origin = originOffset(node.origin, node.width, node.height)
   const out: PrimGeometry[] = []
   for (const prim of meshPrims(node)) {
-    // 倒角在原始几何上做，早于 UV 展开和绕序翻转：`bevelFewFaces` 会增删顶点。
-    // 带贴图的图元跳过，因为 uv 是按原顶点下标铺的，倒角后对不上。
-    const flat = prim.positions
-    const beveled =
-      bevel && !prim.map
-        ? bevelChunk(node, flat, prim.indices, bevel.frame, bevel.shading)
-        : null
-    const srcPositions = beveled ? beveled.positions : flat
-    const srcIndices = beveled ? beveled.indices : prim.indices
+    const srcPositions = prim.positions
+    const srcIndices = prim.indices
     const vertexCount = Math.floor(srcPositions.length / 3)
     if (vertexCount === 0 || prim.indices.length < 3 || prim.alpha === 0) continue
     const chunk = emptyChunk()
@@ -1117,28 +1073,201 @@ function meshPrimGeometries(
   return out
 }
 
-/** 地面：本地 z=0 上的一张大方片。没有 fill 时当阴影捕捉器，只留影子。 */
-function groundXml(node: GroundLayoutNode, toLayer: Mat4, span: number, shader: string, shadowCatcher: boolean): string {
-  const positions = [
-    -span, -span, 0,
-    span, -span, 0,
-    span, span, 0,
-    -span, span, 0,
-  ]
-  const world: number[] = []
-  for (let i = 0; i < positions.length; i += 3) {
-    const posed = applyPoseMatrix(toLayer, positions[i]!, positions[i + 1]!, positions[i + 2]!)
-    const point = layerToWorld([posed.x, posed.y, posed.z])
-    world.push(point[0], point[1], point[2])
+/**
+ * 影棚无缝背景（cyclorama）。
+ *
+ * 就地平铺一张大方片，透视下远处必然收出一条地平线，和画布底色对不上。
+ * 这里改成一条剖面沿左右方向拉开的曲面：
+ *
+ *   前坡  往镜头这侧斜着往下收走，画面下缘永远不会露出板边
+ *   主平面 尽量大，所有物体都摆在上面，接触阴影落在真正的地面上
+ *   后弯  用一段大半径圆弧把地面卷起来
+ *   背墙  接着竖直往上，一直折到**必定出画**为止
+ *
+ * 两个关键点：
+ *
+ * 1. 方向必须由相机决定。「远处」是相机眼点在地面上的投影往反方向走，不能
+ *    假设层的 +y 就是远处——地面常带 rotateX，一旦认定反了，前坡会跑到画面
+ *    顶上往下掉，露出一条硬线，而背墙被塞到相机背后。
+ * 2. 背墙高度按视角解析算：墙脚离眼点有多远、画面顶边对应多大仰角，乘出来
+ *    再留余量。这样换画幅、换镜头都不用重调，墙永远盖满顶端。
+ */
+/**
+ * 地面反照率。
+ *
+ * 作者给的 fill 是「地板上最终看到的颜色」，不是材质本身的反照率。影棚 HDRI 的
+ * 总照度远高于 1（这张图平均亮度 76/255，两倍强度下落到地面上的辐照度约 1.6），
+ * 直接把它当 albedo 会让地板在每个通道上顶到 255：红、绿通道饱和之后，遮挡只能
+ * 把值从 255 压到 255，整套接触阴影因此被裁平——画面上看起来就是「地板没有阴影」。
+ *
+ * 按 一档余量：出片后地板的漫反射亮度落在 0.95 上下，遮挡还有约 40/255 的压缩
+ * 空间，阴影深浅能读出来；再往上调红、绿通道就会顶到 255。色彩关系保持原样。
+ */
+function groundAlbedo(fill: Vec3): Vec3 {
+  return [fill[0] * GROUND_ALBEDO_SCALE, fill[1] * GROUND_ALBEDO_SCALE, fill[2] * GROUND_ALBEDO_SCALE]
+}
+
+function groundXml(
+  node: GroundLayoutNode,
+  toLayer: Mat4,
+  span: number,
+  shader: string,
+  shadowCatcher: boolean,
+  eye: Vec3 | null,
+  tanHalfV: number,
+): string {
+  const at = (lx: number, ly: number, lz: number): Vec3 => {
+    const posed = applyPoseMatrix(toLayer, lx, ly, lz)
+    return layerToWorld([posed.x, posed.y, posed.z])
   }
+  const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+  const dot = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+  const norm = (v: Vec3): Vec3 => {
+    const l = Math.hypot(v[0], v[1], v[2]) || 1
+    return [v[0] / l, v[1] / l, v[2] / l]
+  }
+
+  const origin = at(0, 0, 0)
+  const rightRaw = sub(at(1, 0, 0), origin)
+  const fwdRaw = sub(at(0, 1, 0), origin)
+  let up = norm(cross3(fwdRaw, rightRaw))
+  if (up[1] < 0) up = [-up[0], -up[1], -up[2]]   // 法线朝上
+  const awayRaw = fwdRaw
+
+  /* 「纵深方向」用地面自己的局部 +y——那是作者摆物体时定义的远方向，跟着
+   * 地面姿态一起转，天然和物体的透视配套。相机眼点只用来算背墙高度：眼点
+   * 在地上的投影距离决定了墙要折多高才出画。 */
+  const unit = span * UNIT_SCALE
+  /* `away` 必须是「远离相机」的方向；眼点缺失时退回地面局部 +y 的世界朝向。
+   * 剖面 d 就沿它度量：d 增大 = 更远。 */
+  /* `away` 取地面局部 +y 的世界朝向（s6 那版已验证的走向）：剖面沿 -away 走，
+   * 即往远处铺。眼点只用来量距离和高度，不参与定方向。 */
+  const away = norm(awayRaw)
+  let distOrigin = unit * 1.1
+  let eyeHeight = unit * 0.4
+  if (eye) {
+    const t = sub(eye, origin)
+    const h = dot(t, up)
+    const planar: Vec3 = [t[0] - up[0] * h, t[1] - up[1] * h, t[2] - up[2] * h]
+    const d = Math.hypot(planar[0], planar[1], planar[2])
+    if (d > 1e-4) distOrigin = d
+    eyeHeight = h
+  }
+  const right = norm(cross3(up, away))
+
+
+
+  /* 尺寸都以「眼点到地面的水平距离」distOrigin 为基准，主平面只铺到物体后方
+   * 一点就够，别拉到几百米外——拉太远整条剖面在画面上被压成一团，墙脚会挤到
+   * 画面顶端附近，既盖不住顶也留不住纵深。 */
+  const reachFront = distOrigin * 1.2 + unit * 0.35   // 往相机这侧伸到脚下
+  const flatFar = distOrigin * 0.45 + unit * 0.25     // 主平面往远处铺一小段
+  const bendRadius = Math.max(unit * 0.12, distOrigin * 0.28)  // 大圆角过渡
+  const frontDrop = Math.max(unit * 0.12, reachFront * 0.22)
+  const halfWidth = reachFront * 1.4 + unit * 0.8     // 左右务必盖满画面
+
+  /* 背墙高度按视角解析算：墙脚离眼点的水平距离 × 画面顶边仰角 tan，再加眼点
+   * 高度、留余量。墙脚在 distOrigin + flatFar + bendRadius 处，比主平面近得多，
+   * 折起来才能真的挡住画面顶部。 */
+  const wallFootDist = distOrigin + flatFar + bendRadius
+  const wallFootY = origin[1] + up[1] * (bendRadius + (eyeHeight > 0 ? 0 : 0))
+  const neededRise = wallFootDist * Math.max(tanHalfV, 0.18) + Math.max(eyeHeight, 0) + unit * 0.4
+  const wallReach = Math.max(neededRise / Math.max(0.25, up[1]), unit * 1.2)
+
+  type Pt = { d: number; h: number }   // d: 沿「远」方向的距离；h: 沿法线抬起的高度
+  const profile: Pt[] = []
+  const push = (d: number, h: number) => profile.push({ d, h })
+
+  /* 剖面沿 -away 铺：d 越小越远。顺序是「远端墙 → 后弯 → 主平面 → 近端」，
+   * 一路都在同一个朝上/朝镜头的曲面里，法线天然连续。近端直接收到相机脚下，
+   * 不需要额外往下折——相机在上方往下看，脚下那段本来就被画面底边裁掉。 */
+  const flatFarEnd = -(flatFar + bendRadius)      // 背墙脚（最远）
+  const flatNearEnd = reachFront                   // 主平面近端（相机脚下）
+  /* 主平面：从墙脚一路铺到相机脚下，尽量长。 */
+  const flatSteps = 26
+  for (let i = 0; i <= flatSteps; i++) {
+    push(lerp(flatFarEnd, flatNearEnd, i / flatSteps), 0)
+  }
+  /* 后弯：在远端接一段圆弧卷起来。 */
+  const bendSteps = 20
+  for (let i = 1; i <= bendSteps; i++) {
+    const a = (Math.PI / 2) * (i / bendSteps)
+    push(flatFarEnd - bendRadius * Math.sin(a), bendRadius * (1 - Math.cos(a)))
+  }
+  /* 背墙：竖直往上折到出画。 */
+  const wallSteps = 8
+  for (let i = 1; i <= wallSteps; i++) {
+    push(flatFarEnd - bendRadius, bendRadius + (wallReach * i) / wallSteps)
+  }
+
+  /* 整条剖面沿法线退 `GROUND_SEAT_EPSILON`：地面与道具底面共面时，圆弧底壳
+   * 的切点附近会有一大片三角形和地板抢同一个深度，渲出来像被地面咬掉一角。
+   *
+   * 让位量是「半个层像素」，只能乘 `UNIT_SCALE`。曾经误乘 `unit`——那是地面
+   * 半边长（海报里 216 个世界单位），让位因此变成 108，整套道具悬空 1.08 m，
+   * 接触阴影全部落到地面另一侧，画面上就是「整体地板上没有阴影」。 */
+  const seatDrop = GROUND_SEAT_EPSILON * UNIT_SCALE
+  const toWorld = (u: number, p: Pt): Vec3 => [
+    origin[0] + right[0] * u + away[0] * p.d + up[0] * (p.h - seatDrop),
+    origin[1] + right[1] * u + away[1] * p.d + up[1] * (p.h - seatDrop),
+    origin[2] + right[2] * u + away[2] * p.d + up[2] * (p.h - seatDrop),
+  ]
+
+  const world: number[] = []
+  const normals: number[] = []
+  const verts: number[] = []
+  const cols = [-halfWidth, halfWidth]
+  const index = (col: number, row: number) => row * cols.length + col
+  for (let row = 0; row < profile.length; row++) {
+    for (let col = 0; col < cols.length; col++) {
+      const p = toWorld(cols[col]!, profile[row]!)
+      world.push(p[0], p[1], p[2])
+    }
+  }
+  /* 法线 = cross(right, 剖面切线)。主平面段得到 up，背墙段得到朝镜头的 -away，
+   * 圆弧段平滑过渡；配合 `interpolation="smooth"` 不会有折边。 */
+  /* 逐行算法线，并逐行翻向观察者（主平面朝上、背墙朝镜头）。矢量绕序也跟着
+   * 这一行翻，两者始终同向——统一用一个 sign 是行不通的，因为前坡本身是下坡，
+   * cross 出来的方向天然和主平面相反。 */
+  const flipped: boolean[] = []
+  for (let row = 0; row < profile.length; row++) {
+    const prev = profile[Math.max(0, row - 1)]!
+    const next = profile[Math.min(profile.length - 1, row + 1)]!
+    const tangent = sub(toWorld(0, next), toWorld(0, prev))
+    let n = norm(cross3(tangent, right))
+    const ref: Vec3 = eye ? sub(eye, toWorld(0, profile[row]!)) : up
+    const needFlip = dot(n, ref) < 0
+    if (needFlip) n = [-n[0], -n[1], -n[2]]
+    flipped.push(needFlip)
+    for (let col = 0; col < cols.length; col++) normals.push(n[0], n[1], n[2])
+  }
+  /* 绕序按「这一行有没有翻」来定，保证四边形两个三角形的几何法线都跟着顶点
+   * 法线走。相邻两行翻转状态不同时，取下一行的状态——四边形以它为准更稳。 */
+  for (let row = 0; row < profile.length - 1; row++) {
+    const a = index(0, row)
+    const b = index(1, row)
+    const c = index(1, row + 1)
+    const d = index(0, row + 1)
+    if (flipped[row]) verts.push(a, b, c, a, c, d)
+    else verts.push(a, c, b, a, d, c)
+  }
+
   const objectAttr = shadowCatcher ? ' is_shadow_catcher="true"' : ''
   return [
     `<object${objectAttr}>`,
-    `  <state interpolation="flat" shader="${attr(shader)}">`,
-    `    <mesh P="${world.map(num).join(' ')}" verts="0 1 2 0 2 3" nverts="3 3" />`,
+    `  <state interpolation="smooth" shader="${attr(shader)}">`,
+    `    <mesh P="${world.map(num).join(' ')}" N="${normals.map(num).join(' ')}" verts="${verts.join(' ')}" nverts="${'3 '.repeat(verts.length / 3).trim()}" />`,
     `  </state>`,
     `</object>`,
   ].join('\n')
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t
+}
+
+function cross3(a: Vec3, b: Vec3): Vec3 {
+  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
 }
 
 /**
@@ -1405,14 +1534,6 @@ export function exportCyclesScene(doc: LayerDocument, options: ExportOptions): C
   }
 
   const items: CameraItem[] = layer ? cameraItems(layer) : []
-  // 倒角半径按输出像素定，所以要相机：视距是层像素，和几何同一个空间。
-  const bevelFrame: BevelFrame | undefined = layer
-    ? {
-        focal: typeof layer.perspective === 'number' ? layer.perspective : null,
-        eyeX: layer.width / 2 + (layer.vanishX ?? 0),
-        eyeY: layer.height / 2 + (layer.vanishY ?? 0),
-      }
-    : undefined
   const surfaces = new Map<string, SurfaceDef>()
   const images: CyclesImage[] = []
   const meshes: string[] = []
@@ -1503,25 +1624,35 @@ export function exportCyclesScene(doc: LayerDocument, options: ExportOptions): C
     if (item.kind === 'ground') {
       if (options.omitGrounds) continue
       const node = item.node as GroundLayoutNode
-      // 没写 fill 就是「假地板」：光栅器只留影子，Cycles 用阴影捕捉器照做。
-      // 有 fill 时仍是一块真实地板，颜色和粗糙度照作者写的来。
-      const shadowCatcher = node.fill == null
-      if (shadowCatcher) hasShadowCatcher = true
-      const name = shadowCatcher
-        ? groundShadowName
-        : rememberSurface(
-            { base: linearColor(node.fill, [0.78, 0.75, 0.7]), metallic: 0, roughness: 0.85, transmission: 0, ior: 1.45, coat: 0, coatRoughness: 0.03, sheen: 0, anisotropic: 0 },
-            'ground',
-          )
+      /* 地面一律当真地板画，不再用阴影捕捉器。
+       *
+       * 阴影捕捉器会把地板换成一块平铺的背景色，于是接触阴影周围没有「被灯
+       * 照亮的地面」托着，物体底下会留一圈脏暗边；被替换掉的那块背景还和画布
+       * 底色对不上，在地平线处露出一条硬线。
+       *
+       * 反过来把地面做成一张够大的真地板：它自然铺满整个视锥，没有边界，接触
+       * 阴影落在真实受光的地面上，和作者加了 fill 的地板完全一致。没写 fill
+       * 时取画布底色，让「地板」和「背景」本来就是同一个颜色。
+       */
+      const fill = node.fill ?? doc.background ?? '#efe8df'
+      const name = rememberSurface(
+        { base: groundAlbedo(linearColor(fill, [0.78, 0.75, 0.7])), metallic: 0, roughness: 0.85, transmission: 0, ior: 1.45, coat: 0, coatRoughness: 0.03, sheen: 0, anisotropic: 0 },
+        'ground',
+      )
       // 跨度是层像素：`applyPoseMatrix` 之后才由 `layerToWorld` 换成米。
       // 这里再乘一次 `UNIT_SCALE` 会让地面缩成 0.6 m，落在脚下看不见。
       const span = Math.max(width, height) * GROUND_SPAN_FACTOR
-      grounds.push(groundXml(node, item.toLayer, span, name, shadowCatcher))
+      /* 眼点与画面顶边的仰角 tan：背墙要靠它们算高度，才能保证折到出画。 */
+      const worldEye = layer ? layerToWorld(cameraPose(layer).eye) : null
+      const tanHalfV = layer
+        ? Math.tan(shortSideFov(cameraOf(layer).focal, width, height) / 2)
+        : Math.tan(Math.PI / 8)
+      grounds.push(groundXml(node, item.toLayer, span, name, false, worldEye, tanHalfV))
       counts.grounds += 1
       continue
     }
     const node = item.node as MeshLayoutNode
-    const geometries = meshPrimGeometries(node, item.toLayer, UNIT_SCALE, bevelFrame ? { frame: bevelFrame, shading: layer?.shading } : undefined)
+    const geometries = meshPrimGeometries(node, item.toLayer, UNIT_SCALE)
     if (geometries.length === 0) {
       skipped.push(`${node.path}：没有三角形`)
       continue
@@ -1552,7 +1683,11 @@ export function exportCyclesScene(doc: LayerDocument, options: ExportOptions): C
     const xml = authorLightXml(authorLights[i]!, i)
     if (xml) lights.push(xml)
   }
-  if (lights.length === 0) lights.push(defaultLightsXml())
+  /* `environment="ambient"` 表示「整幅画面只由全景天光决定」：这时不补那两盏
+   * 默认太阳。它们原本是光栅器影棚主光的近似（3.0 / 0.8），会在平坦台面上打出
+   * 一块可见的照度光斑，和「只用天光」的意图冲突。 */
+  const ambientOnly = options.ambientOnly || layer?.environment === 'ambient'
+  if (lights.length === 0 && !ambientOnly) lights.push(defaultLightsXml())
 
   counts.lights = layersLightCount(authorLights)
 

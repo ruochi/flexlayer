@@ -134,6 +134,17 @@ export declare function buildCylinderMesh(axisZ: boolean, radius: number, height
 export declare function buildTorusMesh(major: number, tube: number, tx: number, ty: number): BuiltMesh | null
 export declare function buildTubeMesh(radius: number, ox: number, oy: number, rings: Array<PathRing>): BuiltMesh | null
 export declare function buildExtrudeMesh(depth: number, fillRule: string, ox: number, oy: number, rings: Array<PathRing>): BuiltMesh | null
+/**
+ * Extrude with a chamfered rim, produced only for the current frame.
+ *
+ * The rim is a quarter-round: the top face is inset by `r`, then an arc band of
+ * radius `r` carries it down to the side wall, which keeps its original
+ * silhouette. Hole walls are never chamfered — a 2.75-radius speaker perforation
+ * cannot survive a 3.36 inset, and the grille must stay sharp.
+ *
+ * `build_extrude_mesh` is left untouched so authored geometry never changes.
+ */
+export declare function buildExtrudeBeveledMesh(depth: number, fillRule: string, ox: number, oy: number, rings: Array<PathRing>, radius: number, arcSteps: number): BuiltMesh | null
 export declare function meshExtractEdges(positions: Float32Array, indices: Uint32Array): Array<MeshEdgeOut>
 export declare function uniformSphere(toLayer: Array<number>, originX: number, originY: number, x: number, y: number, z: number, radius: number): SphereCenter | null
 export interface FillBatch {
@@ -163,6 +174,10 @@ export interface FillBatch {
   clearcoatRoughness?: number
   sheen?: number
   anisotropy?: number
+  /** `MeshPhysicalMaterial.transmission`. 1 puts the body on the glass path. */
+  transmission?: number
+  /** `MeshPhysicalMaterial.ior`. Sets Fresnel F0 and the refracted ray. */
+  ior?: number
   texture?: Uint8ClampedArray
   tw: number
   th: number
@@ -257,6 +272,23 @@ export interface FillLight {
   tx: number
   ty: number
   tz: number
+  /** Cut-off distance in world units. 0 means no cut-off. */
+  distance?: number
+  /** Falloff exponent. 2 is inverse square, which is the default. */
+  decay?: number
+  /** Spot cone half-angle, in radians. */
+  angle?: number
+  /** Spot soft edge, as a fraction of `angle`. 0 is a hard edge. */
+  penumbra?: number
+  /** Area light width and height, in world units. */
+  width?: number
+  height?: number
+  /** False keeps the light out of the shadow map. Defaults to true. */
+  castShadow?: boolean
+  /** Hemisphere ground colour, as 0–1 channels. Other kinds ignore it. */
+  groundR?: number
+  groundG?: number
+  groundB?: number
 }
 export interface FillFrame {
   pixels: Uint8ClampedArray

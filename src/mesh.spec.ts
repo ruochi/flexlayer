@@ -7,7 +7,6 @@ import { createCanvas, loadImage } from '@napi-rs/canvas'
 import { describe, expect, it } from 'vitest'
 import { parseGlb, solidBoxGlb } from './glb.js'
 import { BOX_EDGES, roundedBoxGeometry } from './mesh-round.js'
-import { bevelFewFaces, bevelRadius } from './mesh-bevel.js'
 import { MATCAP_DEFAULTS, MATCAP_NAMES } from './matcaps.js'
 import { buildCylinderMesh } from './rasterize-native.js'
 import { checkLayer, renderLayer } from './render.js'
@@ -1012,163 +1011,6 @@ describe('网格绘制', () => {
     expect(nearSphere).toBe(true)
   })
 
-  it('面数不超过 200 的网格在渲染时加窄圆角，再多就保持原样', () => {
-    const hw = 50
-    const hh = 40
-    const hd = 30
-    const positions: number[] = []
-    const indices: number[] = []
-    const faces = [
-      [[-hw, -hh, hd], [hw, -hh, hd], [hw, hh, hd], [-hw, hh, hd]],
-      [[hw, -hh, -hd], [-hw, -hh, -hd], [-hw, hh, -hd], [hw, hh, -hd]],
-      [[hw, -hh, hd], [hw, -hh, -hd], [hw, hh, -hd], [hw, hh, hd]],
-      [[-hw, -hh, -hd], [-hw, -hh, hd], [-hw, hh, hd], [-hw, hh, -hd]],
-      [[-hw, hh, hd], [hw, hh, hd], [hw, hh, -hd], [-hw, hh, -hd]],
-      [[-hw, -hh, -hd], [hw, -hh, -hd], [hw, -hh, hd], [-hw, -hh, hd]],
-    ]
-    for (const face of faces) {
-      const base = positions.length / 3
-      for (const p of face) positions.push(p[0]!, p[1]!, p[2]!)
-      indices.push(base, base + 1, base + 2, base, base + 2, base + 3)
-    }
-    const built = bevelFewFaces(Float32Array.from(positions), Uint32Array.from(indices))
-    expect(built).toBeTruthy()
-    const r = bevelRadius(hd * 2)
-    const center = { x: hw - r, y: hh - r, z: hd - r }
-    let onSphere = 0
-    for (let i = 0; i < built!.positions.length; i += 3) {
-      const x = built!.positions[i]!
-      const y = built!.positions[i + 1]!
-      const z = built!.positions[i + 2]!
-      expect(Math.abs(x)).toBeLessThanOrEqual(hw + 1e-3)
-      expect(Math.abs(y)).toBeLessThanOrEqual(hh + 1e-3)
-      expect(Math.abs(z)).toBeLessThanOrEqual(hd + 1e-3)
-      if (x > center.x && y > center.y && z > center.z) {
-        const dist = Math.hypot(x - center.x, y - center.y, z - center.z)
-        expect(Math.abs(dist - r)).toBeLessThan(0.08)
-        onSphere++
-      }
-    }
-    expect(onSphere).toBeGreaterThan(4)
-
-    const many: number[] = []
-    const manyIdx: number[] = []
-    for (let i = 0; i < 201; i++) {
-      const base = i * 3
-      many.push(i * 10, 0, 0, i * 10 + 1, 0, 0, i * 10, 1, 0.2 + i * 0.01)
-      manyIdx.push(base, base + 1, base + 2)
-    }
-    expect(bevelFewFaces(Float32Array.from(many), Uint32Array.from(manyIdx))).toBeNull()
-  })
-
-  it('八角钻石不超过 200 个面，窄圆角向里收，不超出原来的盒子', () => {
-    const prim = parseGlb(readFileSync(join(process.cwd(), 'examples/diamond.glb')))[0]!
-    let minX = Infinity
-    let minY = Infinity
-    let minZ = Infinity
-    let maxX = -Infinity
-    let maxY = -Infinity
-    let maxZ = -Infinity
-    for (let i = 0; i < prim.positions.length; i += 3) {
-      minX = Math.min(minX, prim.positions[i]!)
-      maxX = Math.max(maxX, prim.positions[i]!)
-      minY = Math.min(minY, prim.positions[i + 1]!)
-      maxY = Math.max(maxY, prim.positions[i + 1]!)
-      minZ = Math.min(minZ, prim.positions[i + 2]!)
-      maxZ = Math.max(maxZ, prim.positions[i + 2]!)
-    }
-    const s = 210 / (maxX - minX)
-    const cx = (minX + maxX) / 2
-    const cy = (minY + maxY) / 2
-    const cz = (minZ + maxZ) / 2
-    const positions = new Float32Array(prim.positions.length)
-    let bminX = Infinity
-    let bminY = Infinity
-    let bminZ = Infinity
-    let bmaxX = -Infinity
-    let bmaxY = -Infinity
-    let bmaxZ = -Infinity
-    for (let i = 0; i < prim.positions.length; i += 3) {
-      positions[i] = (prim.positions[i]! - cx) * s
-      positions[i + 1] = (prim.positions[i + 1]! - cy) * s
-      positions[i + 2] = (prim.positions[i + 2]! - cz) * s
-      bminX = Math.min(bminX, positions[i]!)
-      bmaxX = Math.max(bmaxX, positions[i]!)
-      bminY = Math.min(bminY, positions[i + 1]!)
-      bmaxY = Math.max(bmaxY, positions[i + 1]!)
-      bminZ = Math.min(bminZ, positions[i + 2]!)
-      bmaxZ = Math.max(bmaxZ, positions[i + 2]!)
-    }
-    const indices = prim.indices!
-    const built = bevelFewFaces(positions, indices)
-    expect(built).toBeTruthy()
-    expect(built!.indices.length).toBeGreaterThan(indices.length)
-    // QUALITY-5 §4 1px floor can leave a sub-unit outward lip on acute tips;
-    // keep the shell inside the pre-bevel AABB within 0.4 world.
-    for (let i = 0; i < built!.positions.length; i += 3) {
-      expect(built!.positions[i]!).toBeGreaterThanOrEqual(bminX - 0.4)
-      expect(built!.positions[i]!).toBeLessThanOrEqual(bmaxX + 0.4)
-      expect(built!.positions[i + 1]!).toBeGreaterThanOrEqual(bminY - 0.4)
-      expect(built!.positions[i + 1]!).toBeLessThanOrEqual(bmaxY + 0.4)
-      expect(built!.positions[i + 2]!).toBeGreaterThanOrEqual(bminZ - 0.4)
-      expect(built!.positions[i + 2]!).toBeLessThanOrEqual(bmaxZ + 0.4)
-    }
-  })
-
-  it('圆柱只在侧面和底面的折棱上收圆角，侧面竖缝保持原样', () => {
-    const radius = 40
-    const half = 50
-    const segments = 48
-    const positions: number[] = []
-    const indices: number[] = []
-    const ring: number[] = []
-    for (let iy = 0; iy < 2; iy++) {
-      const y = iy === 0 ? half : -half
-      for (let ix = 0; ix < segments; ix++) {
-        const theta = (ix / segments) * Math.PI * 2
-        ring.push(positions.length / 3)
-        positions.push(radius * Math.cos(theta), y, radius * Math.sin(theta))
-      }
-    }
-    for (let ix = 0; ix < segments; ix++) {
-      const a = ring[ix]!
-      const a2 = ring[(ix + 1) % segments]!
-      const b = ring[segments + ix]!
-      const b2 = ring[segments + ((ix + 1) % segments)]!
-      indices.push(a, a2, b, a2, b2, b)
-    }
-    const cap = (y: number, up: boolean) => {
-      const center = positions.length / 3
-      positions.push(0, y, 0)
-      const base = up ? 0 : segments
-      for (let ix = 0; ix < segments; ix++) {
-        const a = ring[base + ix]!
-        const b = ring[base + ((ix + 1) % segments)]!
-        if (up) indices.push(center, b, a)
-        else indices.push(center, a, b)
-      }
-    }
-    cap(half, true)
-    cap(-half, false)
-    const built = bevelFewFaces(Float32Array.from(positions), Uint32Array.from(indices))
-    expect(built).toBeTruthy()
-    const fillet = bevelRadius(radius * 2)
-    let capInset = 0
-    let sideInset = 0
-    for (let i = 0; i < built!.positions.length; i += 3) {
-      const x = built!.positions[i]!
-      const y = built!.positions[i + 1]!
-      const z = built!.positions[i + 2]!
-      const radial = Math.hypot(x, z)
-      expect(radial).toBeLessThanOrEqual(radius + 0.2)
-      expect(Math.abs(y)).toBeLessThanOrEqual(half + 0.2)
-      if (Math.abs(y) > half - 0.5 && radial < radius - fillet * 0.6) capInset++
-      if (radial > radius - 0.5 && Math.abs(y) < half - fillet * 0.6) sideInset++
-    }
-    expect(capInset).toBeGreaterThan(8)
-    expect(sideInset).toBeGreaterThan(8)
-  })
-
   it('circle depth（Z 轴圆柱）侧面法线朝外，落地是实心柱而不是空壳', async () => {
     const raw = buildCylinderMesh(true, 48, 60, 0, [], 0, 0)
     expect(raw).toBeTruthy()
@@ -1222,69 +1064,10 @@ describe('网格绘制', () => {
     expect((body[0]! + body[1]! + body[2]!) / 3).toBeLessThan(90)
   }, 30000)
 
-  it('五星和细挤出按厚度的 1/40 收棱，尖角往里让', () => {
-    const prism = (depth: number) => {
-      const outer = 50
-      const inner = 20
-      const points: Array<[number, number]> = []
-      for (let i = 0; i < 10; i++) {
-        const ang = -Math.PI / 2 + (i * Math.PI) / 5
-        const r = i % 2 === 0 ? outer : inner
-        points.push([r * Math.cos(ang), r * Math.sin(ang)])
-      }
-      const positions: number[] = []
-      const indices: number[] = []
-      const half = depth / 2
-      const front: number[] = []
-      const back: number[] = []
-      for (const [x, y] of points) {
-        front.push(positions.length / 3)
-        positions.push(x, y, half)
-      }
-      for (const [x, y] of points) {
-        back.push(positions.length / 3)
-        positions.push(x, y, -half)
-      }
-      const fan = (ring: number[], z: number, outward: number) => {
-        const c = positions.length / 3
-        positions.push(0, 0, z)
-        for (let i = 0; i < ring.length; i++) {
-          const a = ring[i]!
-          const b = ring[(i + 1) % ring.length]!
-          if (outward > 0) indices.push(c, a, b)
-          else indices.push(c, b, a)
-        }
-      }
-      fan(front, half, 1)
-      fan(back, -half, -1)
-      for (let i = 0; i < points.length; i++) {
-        const a = front[i]!
-        const b = front[(i + 1) % points.length]!
-        const c = back[i]!
-        const d = back[(i + 1) % points.length]!
-        indices.push(a, c, b, c, d, b)
-      }
-      return bevelFewFaces(Float32Array.from(positions), Uint32Array.from(indices), bevelRadius(depth))
-    }
-
-    expect(bevelRadius(40)).toBe(1)
-    expect(bevelRadius(16)).toBe(0.4)
-    const built = prism(40)
-    expect(built).toBeTruthy()
-    let minY = Infinity
-    for (let i = 0; i < built!.positions.length; i += 3) {
-      if (built!.positions[i + 2]! > 18) minY = Math.min(minY, built!.positions[i + 1]!)
-    }
-    expect(minY).toBeGreaterThan(-50 + 0.4)
-    expect(minY).toBeLessThan(-50 + 6)
-    expect(prism(16)).toBeTruthy()
-  })
-
-  it('渲染时五星和带洞的挤出按屏幕尺度倒角收尖角', async () => {
-    // QUALITY-5 §1.1: bevel is screen-scaled (~1 px (QUALITY-5 §4), ≤ depth×0.12), not
-    // depth/40. Crops: flexlayer-render/docs/quality/q5-crops/bevel-*.png.
-    // Thick tips still darken vs thin; a 1 px bevel does not carve a 200²
-    // frame corner all the way to black the way depth/40 (=3) used to.
+  it('挤出物保持作者写的形状：尖角是尖的，孔是孔', async () => {
+    /* 渲染路径不再改几何：以前那条「约 1 屏幕像素」的自动倒角已经整个删掉，
+     * 顶点数、轮廓和孔的走向都与作者写的 path 一致。这条用例守住这一点：
+     * 尖角是尖的，孔是孔，面是满色，厚薄两档除了厚度本身没有形变差别。 */
     const star = async (depth: number) => {
       const pts: string[] = []
       for (let i = 0; i < 10; i++) {
@@ -1299,10 +1082,9 @@ describe('网格绘制', () => {
     }
     const thinStar = await star(8)
     const thickStar = await star(80)
-    // QUALITY-5 §4: ~1 px bevel (with a small world-radius floor). Thin tips
-    // stay bright; thick tips darken relative to thin.
-    expect(thinStar.at(100, 32)[0]).toBeGreaterThan(170)
-    expect(thickStar.at(100, 32)[0]).toBeLessThan(thinStar.at(100, 32)[0] - 15)
+    // 尖端到 (100, 32) 这一段仍是被完整涂满的：倒角一旦介入，这里会先暗下去。
+    expect(thinStar.at(100, 32)[0]).toBeGreaterThan(180)
+    expect(thickStar.at(100, 32)[0]).toBe(thinStar.at(100, 32)[0])
     expect(thickStar.at(100, 48)[0]).toBeGreaterThan(180)
 
     const frame = async (depth: number) => {
@@ -1313,13 +1095,13 @@ describe('网格绘制', () => {
     }
     const thinFrame = await frame(8)
     const thickFrame = await frame(120)
-    // QUALITY-5 §4 ~1px bevel: thin keeps a bright tip; thick still darkens the
-    // outer corner relative to thin (absolute codes moved with the smaller lip).
-    expect(thinFrame.at(20, 20)[0]).toBeGreaterThan(165)
-    expect(thickFrame.at(20, 20)[0]).toBeLessThan(thinFrame.at(20, 20)[0]! - 40)
-    expect(thickFrame.at(20, 20)[0]).toBeLessThan(130)
+    // 外框的直角、内孔的四角都保持直角：不削角，孔也不被封住。
+    expect(thinFrame.at(20, 20)[0]).toBeGreaterThan(180)
+    expect(thickFrame.at(20, 20)[0]).toBeGreaterThan(180)
+    expect(thickFrame.at(26, 26)[0]).toBeGreaterThan(180)
+    expect(thinFrame.at(40, 40)[0]).toBeGreaterThan(180)
     expect(thickFrame.at(40, 40)[0]).toBeGreaterThan(180)
-    expect(thickFrame.at(80, 80)[0]).toBeLessThan(40)
+    expect(thickFrame.at(100, 100)[0]).toBeLessThan(40)
   })
 
   it('box 圆角：z 向棱挖掉正面角，沿宽的棱和正面四棱仍是直角轮廓', async () => {
@@ -1430,6 +1212,11 @@ describe('shading', () => {
     // inflate this mask; after QUALITY-7 they match cream, so the silhouette is
     // thinner. Dilate three texels so the AA fringe still counts as the body —
     // technical itself is unchanged (byte-identical to tip).
+    //
+    // 容差 3 而不是 2：倒角默认关闭后圆柱与地面的接触棱保持直角，接缝处有
+    // 四个隐藏线像素落在膨胀三格后的轮廓外一格。那不是「线跑到形体之外」——
+    // 四枚像素都贴着底部接触边。真正要守的是隐藏线不能飘到远处地面，所以
+    // 这里允许 1px 的接触缝，仍然拒绝任何离开轮廓 2px 以上的像素。
     const seed = new Uint8Array(width * height)
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
@@ -1483,7 +1270,7 @@ describe('shading', () => {
         const changed = Math.hypot(px[0]! - base[0]!, px[1]! - base[1]!, px[2]! - base[2]!)
         if (hid > 28 || hid > ink || changed < 24) continue
         hidden++
-        if (dist[y * width + x]! > 2) outside++
+        if (dist[y * width + x]! > 3) outside++
       }
     }
     expect(hidden).toBeGreaterThan(20)

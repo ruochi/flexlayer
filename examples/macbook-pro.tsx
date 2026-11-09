@@ -11,7 +11,7 @@ import { createCanvas, Path2D } from '@napi-rs/canvas'
 // 单倍直接出图：npx tsx src/cli.ts render examples/macbook-pro.tsx -o examples/macbook-pro.png --mesh-samples 4
 // 机身 940 × 656 × 28，屏幕盖 940 × 630 × 10，约 2.64 px/mm。
 // 真机是平顶、竖直侧壁、俯视四角中等圆角，棱上只有很小的倒角：
-// 所以圆角只给竖直的四条棱（round="z"），顶面和底面的折棱交给屏幕尺度倒角。
+// 所以圆角只给竖直的四条棱（round="z"），顶面和底面的折棱保持建模时的直角。
 const SILVER = '#c6c9ce'
 const SHELL = 'metal'
 const KEY = '#1f2024'

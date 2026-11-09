@@ -1,11 +1,12 @@
 name: release binaries
 
-# Builds the three platform addons from one renderer commit and writes the
-# commit into BUILD.json. The `kernel` workflow's `addon` job only loads what is
-# committed, so without this a stale or mixed set of binaries is all it can see.
+# Builds the capped addons for the three release platforms from one renderer
+# commit, records that commit in BUILD.json, and opens a pull request that
+# carries them into `native/flexlayer-render/`.
 #
-# Manual: run from the Actions tab. The run leaves the binaries and a BUILD.json
-# as artifacts; it does not push. Publishing is a separate, deliberate step.
+# Only the capped channel is built here. The `unlimited` channel is the server
+# build; it is produced in the private renderer repository and never compiled
+# or uploaded from this public one.
 #
 # The renderer is private, so RENDER_REPO_TOKEN has to be a fine-grained PAT with
 # read access to ruochi/flexlayer-render only.
@@ -17,6 +18,15 @@ on:
         description: Renderer commit or branch to build
         required: false
         default: main
+      open_pr:
+        description: Open a pull request with the binaries
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   build:
@@ -54,9 +64,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libfreetype6-dev libfontconfig1-dev
-      # Record the tree state before anything is built: `dist/unlimited/` holds
-      # tracked artifacts that the unlimited build overwrites, so asking git
-      # afterwards would always report a dirty tree.
+      # Record the tree state before anything is built. `git status` afterwards
+      # would describe the files this job wrote rather than the checkout it
+      # started from, and a dirty source is not a release.
       - name: record the source commit
         working-directory: renderer
         shell: bash
@@ -64,55 +74,51 @@ jobs:
           git rev-parse HEAD > "$RUNNER_TEMP/render-commit.txt"
           if [ -n "$(git status --porcelain)" ]; then echo 'dirty' > "$RUNNER_TEMP/render-dirty.txt"; fi
           cat "$RUNNER_TEMP/render-commit.txt"
-      # Both release channels are built from the same checkout so the capped
-      # and the uncapped addons always name the same commit.
       - name: build capped
         working-directory: renderer
         shell: bash
         run: |
           npm ci
           npx napi build --platform --release
-      - name: build unlimited
-        working-directory: renderer
-        shell: bash
-        run: |
-          npx napi build dist/unlimited --platform --release --features unlimited
-          # napi resolves the output dir against the crate root, which is not
-          # always the working directory. Report where the files landed so the
-          # next step can require them by absolute path.
-          echo "--- dist/unlimited"
-          ls -la dist/unlimited || true
-          echo "--- crate root"
-          ls -la *.node index.js 2>/dev/null || true
       - name: record the engine string
         working-directory: renderer
         shell: bash
         run: |
           commit=$(cat "$RUNNER_TEMP/render-commit.txt")
           dirty=$(test -f "$RUNNER_TEMP/render-dirty.txt" && echo 1 || echo 0)
-          # The engine string is what the loaded addon reports about itself; the
-          # addon job compares it with this manifest, so it has to come from the
-          # binary rather than from a guess.
+          # The record has to come from the binary itself: the publish job
+          # matches it against BUILD.json, so a guessed engine would verify
+          # nothing. Any `+unlimited` string means the wrong channel was built.
           node -e "
             const fs = require('fs');
             const path = require('path');
             const commit = '$commit';
             const dirty = $dirty > 0;
-            // Load the addon directly rather than through a generated index.js:
-            // napi's output directory is not reliably the working directory, so
-            // a relative require can miss the file it just wrote.
-            const channels = [
-              ['flexlayer-render.' + (process.platform === 'darwin' ? 'darwin-arm64' : process.platform === 'win32' ? 'win32-x64-msvc' : 'linux-x64-gnu') + '.node', 'build-entry.json'],
-              [path.join('dist', 'unlimited', 'flexlayer-render.' + (process.platform === 'darwin' ? 'darwin-arm64' : process.platform === 'win32' ? 'win32-x64-msvc' : 'linux-x64-gnu') + '.node'), 'build-entry-unlimited.json'],
-            ];
-            for (const [file, out] of channels) {
-              const n = require(path.resolve(process.cwd(), file));
-              const entry = { commit, dirty };
-              if (typeof n.engine === 'function') entry.engine = n.engine();
-              fs.writeFileSync(out, JSON.stringify(entry, null, 2));
-              console.log(out, file, JSON.stringify(entry));
+            const host = process.platform === 'darwin' ? 'darwin-arm64' : process.platform === 'win32' ? 'win32-x64-msvc' : 'linux-x64-gnu';
+            const file = 'flexlayer-render.' + host + '.node';
+            const addon = require(path.resolve(process.cwd(), file));
+            const engine = typeof addon.engine === 'function' ? String(addon.engine()) : '';
+            if (!engine) {
+              console.error('this binary exposes no engine()');
+              process.exit(1);
             }
+            if (engine.includes('+unlimited')) {
+              console.error('this job builds the capped channel, got ' + engine);
+              process.exit(1);
+            }
+            fs.writeFileSync('build-entry.json', JSON.stringify({ commit, dirty, engine }, null, 2) + '\n');
+            console.log(file, JSON.stringify({ commit, dirty, engine }));
           "
+      # napi rewrites `index.d.ts` on every build. Publishing the committed copy
+      # would describe a different tree than the addon beside it.
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
+        with:
+          name: types
+          path: |
+            renderer/index.js
+            renderer/index.d.ts
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.addon }}
@@ -120,56 +126,129 @@ jobs:
             renderer/${{ matrix.addon }}
             renderer/build-entry.json
           if-no-files-found: error
-      - uses: actions/upload-artifact@v4
-        with:
-          name: unlimited-${{ matrix.addon }}
-          path: |
-            renderer/dist/unlimited/${{ matrix.addon }}
-            renderer/build-entry-unlimited.json
-          if-no-files-found: error
 
-  # Collects the three artifacts into one BUILD.json and fails if they disagree,
-  # so a mixed set never looks publishable.
-  manifest:
+  # The three artifacts become one BUILD.json and one pull request. A mixed set
+  # never reaches a branch: `release-verify` fails when the commits or engines
+  # disagree, and the exported directory is reloaded here before anything is
+  # pushed.
+  publish:
     needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: out
-      - name: merge
+      # Full history and no shallow clone: the branch this job pushes is based
+      # on `main`, and a shallow checkout cannot create one.
+      - uses: actions/checkout@v4
+        with:
+          path: public
+          fetch-depth: 0
+          ref: main
+      # Check out the commit the artifacts recorded, not `inputs.render_ref`.
+      # A branch is only resolved once, in the build jobs; by the time this job
+      # runs it may have moved, and then the exported tree would pair the
+      # artifacts with a different `index.js`/`index.d.ts`. The step below
+      # proves the two agree.
+      - name: read the built commit
+        id: built
         shell: bash
         run: |
-          node -e "
-            const fs = require('fs');
-            const names = ['flexlayer-render.darwin-arm64.node','flexlayer-render.linux-x64-gnu.node','flexlayer-render.win32-x64-msvc.node'];
-            // Each channel has its own manifest: the capped set goes to the
-            // public repo, the unlimited set stays here. Both must name one
-            // commit, and both channels must agree on it.
-            const channels = { capped: ['', 'out/'], unlimited: ['unlimited-', 'out/unlimited/'] };
-            const commits = new Set();
-            for (const [channel, [prefix, dir]] of Object.entries(channels)) {
-              fs.mkdirSync(dir, { recursive: true });
-              const binaries = {};
-              for (const name of names) {
-                const entryFile = prefix + name + '/build-entry' + (prefix ? '-unlimited' : '') + '.json';
-                const entry = JSON.parse(fs.readFileSync('out/' + entryFile, 'utf8'));
-                binaries[name] = entry;
-                commits.add(entry.commit);
-              }
-              fs.writeFileSync(dir + 'BUILD.json', JSON.stringify({ binaries }, null, 2) + '\n');
-              console.log(channel, JSON.stringify(binaries, null, 2));
-            }
-            if (commits.size !== 1) {
-              console.error('binaries came from ' + commits.size + ' commits: ' + [...commits].join(', '));
-              process.exit(1);
-            }
-          "
+          commit=$(node -e "process.stdout.write(require('./out/flexlayer-render.darwin-arm64.node/build-entry.json').commit)")
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: ruochi/flexlayer-render
+          ref: ${{ steps.built.outputs.commit }}
+          token: ${{ secrets.RENDER_REPO_TOKEN }}
+          path: renderer
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: check the renderer checkout matches the build
+        shell: bash
+        run: |
+          head=$(git -C renderer rev-parse HEAD)
+          built="${{ steps.built.outputs.commit }}"
+          if [ "$head" != "$built" ]; then
+            echo "renderer checkout is $head but the addons were built from $built" >&2
+            exit 1
+          fi
+      # Validate before touching the tree: the three records have to name one
+      # commit and one capped engine, and a mixed set must not reach a branch.
+      - name: validate the capped channel
+        working-directory: public
+        shell: bash
+        run: node scripts/release-verify.mjs ../out ../build-manifest.json
+      # `export-binary` reads a flat directory: three addons and the napi
+      # generated files side by side. `out/` is one directory per artifact, so
+      # flatten it first. Passing the path explicitly keeps the export from
+      # depending on files being dropped into the renderer checkout.
+      - name: stage the artifacts flat
+        shell: bash
+        run: |
+          mkdir -p stage
+          for name in flexlayer-render.darwin-arm64.node flexlayer-render.linux-x64-gnu.node flexlayer-render.win32-x64-msvc.node; do
+            cp "out/$name/$name" "stage/$name"
+          done
+          cp out/types/index.js stage/index.js
+          cp out/types/index.d.ts stage/index.d.ts
+          ls -la stage
+      # export-binary clears `native/flexlayer-render/`, writes the three
+      # binaries, the generated files, and the loader. It reads the engines from
+      # `build-manifest.json` because one Linux job cannot load the darwin or
+      # win32 addon, refuses an unlimited engine on its own, and stamps each
+      # record with the binary's sha256 so `addon-integrity` can verify bytes.
+      - name: export into the public tree
+        shell: bash
+        run: node renderer/scripts/export-binary.mjs public "$GITHUB_WORKSPACE/build-manifest.json" "$GITHUB_WORKSPACE/stage"
+      # The export clears the directory and rewrites the manifest with digests,
+      # so BUILD.json is written after it, from that same file.
+      - name: write BUILD.json
+        shell: bash
+        run: cp "$GITHUB_WORKSPACE/build-manifest.json" public/native/flexlayer-render/BUILD.json
+      # Both checks run on the exported tree: the bytes against the recorded
+      # digests, then the host loader against `BUILD.json`.
+      - name: verify the exported tree
+        working-directory: public
+        shell: bash
+        run: |
+          node scripts/addon-integrity.mjs
+          node scripts/addon-hash.mjs --print-engine
+      - name: open the pull request
+        if: ${{ inputs.open_pr }}
+        working-directory: public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          commit=$(node -e "process.stdout.write(require('./native/flexlayer-render/BUILD.json').binaries['flexlayer-render.darwin-arm64.node'].commit)")
+          branch="release/addons-${commit:0:7}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Reuse the branch when the same commit is re-run, but never rewrite
+          # one that already exists: a force push would erase review comments
+          # and any fix someone added on top.
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            echo "branch $branch already exists; leaving it alone"
+            exit 0
+          fi
+          git checkout -b "$branch"
+          git add native/flexlayer-render
+          if git diff --cached --quiet; then
+            echo "the public tree already carries this build"
+            exit 0
+          fi
+          git commit -m "release: capped addons from renderer ${commit:0:7}"
+          git push origin "$branch"
+          body=$(printf '%s\n' \
+            "Built by \`release binaries\` from \`ruochi/flexlayer-render@${commit}\`." \
+            "" \
+            "The three binaries and \`BUILD.json\` in \`native/flexlayer-render/\` are one capped build. \`addon-hash\` loaded this set and matched \`engine()\` against the manifest before the branch was pushed. The unlimited channel is not here: it is built and kept in the private repository.")
+          gh pr create --base main --head "$branch" \
+            --title "release: capped addons from renderer ${commit:0:7}" \
+            --body "$body" || true
       - uses: actions/upload-artifact@v4
         with:
           name: BUILD.json
-          path: out/BUILD.json
-      - uses: actions/upload-artifact@v4
-        with:
-          name: BUILD-unlimited.json
-          path: out/unlimited/BUILD.json
+          path: public/native/flexlayer-render/BUILD.json

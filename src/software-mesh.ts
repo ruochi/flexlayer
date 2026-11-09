@@ -5,7 +5,6 @@ import { solidPaint } from './gradient.js'
 import { parseColor } from './gradientField.js'
 import { parseGlb, type GlbPrimitive } from './glb.js'
 import { heldModelPrims } from './three.js'
-import { bevelFewFaces, bevelRadius } from './mesh-bevel.js'
 import { originOffset } from './matrix.js'
 import type { MeshClip } from './mesh-cache.js'
 import { applyDepthOfField } from './dof.js'
@@ -211,8 +210,7 @@ function originKey(node: MeshLayoutNode) {
 function geometryCacheKey(node: MeshLayoutNode): string | null {
   const mesh = node.mesh
   if (mesh.type === 'model') return null
-  const bevel = node.stroke === 'none' ? '|b' : ''
-  const head = `${mesh.type}|${quantGeometry(node.width)}|${quantGeometry(node.height)}|${originKey(node)}${bevel}`
+  const head = `${mesh.type}|${quantGeometry(node.width)}|${quantGeometry(node.height)}|${originKey(node)}`
   if (mesh.type === 'sphere') return `${head}|${quantGeometry(mesh.r)}`
   if (mesh.type === 'box') return `${head}|${quantGeometry(mesh.depth)}|${quantGeometry(mesh.rx)}|${mesh.edges.join(',')}`
   if (mesh.type === 'extrude') return `${head}|${quantGeometry(mesh.depth)}|${mesh.fillRule}|${mesh.d}`
@@ -225,9 +223,8 @@ function geometryCacheKey(node: MeshLayoutNode): string | null {
 function modelCacheKey(node: MeshLayoutNode): string | null {
   if (node.mesh.type !== 'model') return null
   const mesh = node.mesh
-  const bevel = node.stroke === 'none' ? '|b' : ''
   const unit = mesh.unit != null && mesh.unit > 0 ? `|u${quantGeometry(mesh.unit)}` : ''
-  const tail = `${quantGeometry(node.width)}|${quantGeometry(node.height)}|${quantGeometry(node.opacity)}|${originKey(node)}${bevel}${unit}`
+  const tail = `${quantGeometry(node.width)}|${quantGeometry(node.height)}|${quantGeometry(node.opacity)}|${originKey(node)}${unit}`
   if (mesh.revision) return `mem|${mesh.revision}|${tail}`
   if (!mesh.file) return null
   let stamp = 'missing'
@@ -583,194 +580,6 @@ function geometryOfFresh(node: MeshLayoutNode): MeshGeometry | null {
   return geo
 }
 
-/** 沿厚度收棱。盒子和挤出用 depth，圆柱用轴向长度，其余用 z 向跨度。 */
-function bevelDepth(node: MeshLayoutNode, positions: Float32Array): number {
-  const mesh = node.mesh
-  if (mesh.type === 'box' || mesh.type === 'extrude') return mesh.depth
-  if (mesh.type === 'cylinder') return mesh.height
-  if (mesh.type === 'sphere') return mesh.r * 2
-  if (mesh.type === 'torus') return mesh.tube * 2
-  if (mesh.type === 'tube') return mesh.r * 2
-  let min = Infinity
-  let max = -Infinity
-  for (let i = 2; i < positions.length; i += 3) {
-    const z = positions[i]!
-    if (z < min) min = z
-    if (z > max) max = z
-  }
-  return Number.isFinite(min) ? max - min : 0
-}
-
-type BevelCamera = {
-  toLayer: number[]
-  originX: number
-  originY: number
-  perspective: Perspective
-  vx: number
-  vy: number
-}
-
-/** Pixels per mesh unit at a point, by projecting a 1-unit offset. */
-function screenScaleAt(
-  toLayer: number[],
-  ox: number,
-  oy: number,
-  x: number,
-  y: number,
-  z: number,
-  vx: number,
-  vy: number,
-  perspective: Perspective,
-): number | null {
-  const a = transformPointNative(toLayer, ox, oy, x, y, z)
-  const b = transformPointNative(toLayer, ox, oy, x + 1, y, z)
-  const pa = project(vx, vy, perspective, a)
-  const pb = project(vx, vy, perspective, b)
-  if (!pa || !pb) return null
-  const s = Math.hypot(pb.x - pa.x, pb.y - pa.y)
-  return s > 1e-6 ? s : null
-}
-
-function meshCentroid(positions: Float32Array): { x: number; y: number; z: number } {
-  let x = 0
-  let y = 0
-  let z = 0
-  const n = Math.floor(positions.length / 3)
-  if (n <= 0) return { x: 0, y: 0, z: 0 }
-  for (let i = 0; i < n; i++) {
-    x += positions[i * 3]!
-    y += positions[i * 3 + 1]!
-    z += positions[i * 3 + 2]!
-  }
-  return { x: x / n, y: y / n, z: z / n }
-}
-
-/**
- * QUALITY-5 §4: world radius so the bevel is ~1 screen px at the sample
- * point. Skip when that would land under 0.75 px (sub-pixel dashes).
- */
-export function bevelRadiusFromScale(scale: number, depth: number): number | null {
-  if (!(scale > 1e-6)) return null
-  // Target ~1.0 screen px (QUALITY-5 §4). `bevel_few_faces` needs a little
-  // world radius to inset on parallel unit-scale shots; floor toward 1.5 world
-  // only while the projected width stays ≤ ~1.5 px.
-  let r = 1.0 / scale
-  const minWorld = 1.5
-  if (r < minWorld && minWorld * scale <= 1.5) r = minWorld
-  r = Math.min(r, Math.max(depth, 0) * 0.12)
-  if (r * scale < 0.75 || r < 0.05) return null
-  return r
-}
-
-/** 窄圆角只进光栅。投影仍用原来的折点，避免圆角把正面的角标成挡住。 */
-function paintGeometry(
-  node: MeshLayoutNode,
-  positions: Float32Array,
-  normals: Float32Array,
-  indices: Uint32Array,
-  shading: string | undefined,
-  camera?: BevelCamera,
-) {
-  // 卡通和漫画要硬边。技术图只加线，实体和 studio 用同一份倒角。
-  const flatLook = (shading === 'toon' || shading === 'manga') && !node.strokeOff
-  if (node.stroke !== 'none' || flatLook) return { positions, normals, indices }
-  // Glass transmit / SSIM is measured on the sphere silhouette; a chamfer
-  // eats the clear face and drops glassClearSsim under 0.6 (QUALITY-5).
-  if (node.material?.kind === 'glass') return { positions, normals, indices }
-  const mesh = node.mesh
-  if (mesh.type === 'tube') return { positions, normals, indices }
-  // A box `rx` only rounds the vertical corners. The top/front crease of a
-  // laptop shell is still a hard 90° and needs the screen-scaled bevel
-  // (QUALITY-4 §2). Bevel on an already-rounded mesh is a no-op when no
-  // sharp crease remains.
-  const depth = bevelDepth(node, positions)
-  // Thin round-rect lids (macbook lid depth 10 / rx 24): bevel × arc chords
-  // cut a hard rectangular stroke (QUALITY-5 §1.4). Skip bevel; keep `rx`.
-  const rx = mesh.type === 'box' || mesh.type === 'cylinder' ? mesh.rx : 0
-  if (rx > 0 && depth > 0 && depth < rx * 0.55) {
-    return { positions, normals, indices }
-  }
-  let radius = bevelRadius(depth)
-  let scaleField: Float64Array | null = null
-  if (camera) {
-    const c = meshCentroid(positions)
-    const scale = screenScaleAt(
-      camera.toLayer,
-      camera.originX,
-      camera.originY,
-      c.x,
-      c.y,
-      c.z,
-      camera.vx,
-      camera.vy,
-      camera.perspective,
-    )
-    const scaled = scale == null ? null : bevelRadiusFromScale(scale, depth)
-    if (scaled == null) return { positions, normals, indices }
-    radius = scaled
-    // QUALITY-5 §4: per-edge radii from an AABB scale field so near/far lips
-    // stay near 1 px under perspective (centroid-only drifted past 1.25×).
-    let minX = Infinity
-    let minY = Infinity
-    let minZ = Infinity
-    let maxX = -Infinity
-    let maxY = -Infinity
-    let maxZ = -Infinity
-    const n = Math.floor(positions.length / 3)
-    for (let i = 0; i < n; i++) {
-      const x = positions[i * 3]!
-      const y = positions[i * 3 + 1]!
-      const z = positions[i * 3 + 2]!
-      if (x < minX) minX = x
-      if (y < minY) minY = y
-      if (z < minZ) minZ = z
-      if (x > maxX) maxX = x
-      if (y > maxY) maxY = y
-      if (z > maxZ) maxZ = z
-    }
-    const xs = [minX, maxX]
-    const ys = [minY, maxY]
-    const zs = [minZ, maxZ]
-    const field = new Float64Array(15)
-    field[0] = minX
-    field[1] = minY
-    field[2] = minZ
-    field[3] = maxX
-    field[4] = maxY
-    field[5] = maxZ
-    let fi = 6
-    for (let iz = 0; iz < 2; iz++) {
-      for (let iy = 0; iy < 2; iy++) {
-        for (let ix = 0; ix < 2; ix++) {
-          const s = screenScaleAt(
-            camera.toLayer,
-            camera.originX,
-            camera.originY,
-            xs[ix]!,
-            ys[iy]!,
-            zs[iz]!,
-            camera.vx,
-            camera.vy,
-            camera.perspective,
-          )
-          field[fi++] = s ?? scale ?? 1
-        }
-      }
-    }
-    field[14] = 1.0
-    scaleField = field
-  }
-  let built = bevelFewFaces(positions, indices, radius, scaleField)
-  // QUALITY-5 §4: some shells fail the inset near 1 px; retry up toward the
-  // legacy 1.75 px world radius before dropping the chamfer.
-  if (!built && camera) {
-    const retry = Math.min(radius * 1.75, Math.max(depth, 0) * 0.12)
-    if (retry > radius + 1e-6) built = bevelFewFaces(positions, indices, retry, null)
-  }
-  return built ?? { positions, normals, indices }
-}
-
-
 function geometryOf(node: MeshLayoutNode): MeshGeometry | null {
   const key = geometryCacheKey(node)
   if (key && geometryCache.has(key)) {
@@ -824,6 +633,12 @@ export type MeshPrim = {
   anisotropy?: number
   /** 模型自带的自发光强度，和 `emissive` 的色值分开记。 */
   emissiveIntensity?: number
+  /**
+   * 模型图元自带的成形方式（three 材质已经判好 matte/plastic/metal/glass）。
+   * 作者没在 JSX 上写 `material` 时，两个渲染器都以它为准；丢掉这一项，钻石的
+   * `transmission 1 / ior 2.42` 会被压成一块不透光的灰多面体。
+   */
+  shade?: 'matte' | 'plastic' | 'metal' | 'glass'
 }
 
 /** 一只网格的图元。模型和几何体都从这里拿。投影用这些折点；窄圆角在绘制时另加。 */
@@ -847,6 +662,7 @@ export function meshPrims(node: MeshLayoutNode): MeshPrim[] {
       ...(prim.ior != null ? { ior: prim.ior } : {}),
       ...(prim.sheen != null ? { sheen: prim.sheen } : {}),
       ...(prim.anisotropy != null ? { anisotropy: prim.anisotropy } : {}),
+      ...(prim.shade ? { shade: prim.shade } : {}),
     }))
   }
   const geometry = geometryOf(node)
@@ -1820,17 +1636,9 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
           })
           continue
         }
-        const bevelCam: BevelCamera = {
-          toLayer: instance.toLayer,
-          originX: o.x,
-          originY: o.y,
-          perspective,
-          vx: layer.width / 2 + (layer.vanishX ?? 0),
-          vy: layer.height / 2 + (layer.vanishY ?? 0),
-        }
         const painted = prim.map || prim.colors
           ? { positions: prim.positions, normals: prim.normals, indices: prim.indices }
-          : paintGeometry(node, prim.positions, prim.normals, prim.indices, layer.shading, bevelCam)
+          : { positions: prim.positions, normals: prim.normals, indices: prim.indices }
         const authored = node.material
         const material = authored ? surfaceMaterial(authored) : prim.shade ? shadeMaterial(prim.shade) : prim.metalness >= 0.5 ? 'metal' : 'plastic'
         const roughness = authored ? authored.roughness : prim.roughness
@@ -1872,15 +1680,7 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
     }
     const geometry = geometryOf(node)
     if (!geometry) continue
-    const bevelCam: BevelCamera = {
-      toLayer: instance.toLayer,
-      originX: o.x,
-      originY: o.y,
-      perspective,
-      vx: layer.width / 2 + (layer.vanishX ?? 0),
-      vy: layer.height / 2 + (layer.vanishY ?? 0),
-    }
-    const painted = paintGeometry(node, geometry.positions, geometry.normals, geometry.indices, layer.shading, bevelCam)
+    const painted = { positions: geometry.positions, normals: geometry.normals, indices: geometry.indices }
     const glass = node.material?.kind === 'glass'
     const clear = node.fill === 'none' || node.fill === 'transparent'
     const fillNone = clear && !glass

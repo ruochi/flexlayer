@@ -515,7 +515,11 @@ export type LayerLayoutNode = LayoutNodeBase & {
   /** 作者灯。不写时用影棚主光和补光。 */
   lights?: LightSpec[]
   /** 环境。不写是 studio。none 关掉环境。其余是 hdr 资源名。 */
-  environment?: string
+  /**
+   * `none` 关掉环境；`ambient` 只用全景当天光、不补任何默认灯；
+   * 其它值为影棚全景名（`studio` 是默认）。
+   */
+  environment?: 'none' | 'ambient' | (string & {})
   /** 色调映射。不写是 neutral。 */
   tonemap?: 'neutral' | 'agx' | 'none'
   /** 灯跟世界还是跟镜头。不写是 world。camera 把主光锁在镜头上。 */

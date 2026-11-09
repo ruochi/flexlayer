@@ -27,6 +27,14 @@ type PackOptions = {
   meshSamples?: 1 | 2 | 4
   meshCache?: number | false
   native: NativeRender
+  /**
+   * 跳过所有三维网格帧（mesh / ground），只留二维内容。
+   *
+   * Cycles 出图时用：三维部分交给路径追踪器，这里只要一张只含文字、
+   * 描边、渐变的二维底板，渲染完叠在 Cycles 结果上。屏幕、键盘这些
+   * 二维贴面也因此能保住矢量级的清晰度。
+   */
+  skip3d?: boolean
 }
 
 /**
@@ -244,7 +252,7 @@ export function packPaintTree(doc: LayerDocument, options: PackOptions): PackedP
     return out
   }
 
-  const root = packNode(doc.root, false)
+  const root = packNode(doc.root, options.skip3d === true)
   return {
     json: JSON.stringify({
       width: doc.width,

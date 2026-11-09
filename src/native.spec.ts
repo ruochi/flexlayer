@@ -1,9 +1,11 @@
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { loadNativeRender } from './native.js'
+import { RELEASE, verifyBuild, verifyDigest, verifyLayout } from '../scripts/addon-verify.mjs'
 
 const prev = process.env.FLEXLAYER_RENDER
 
@@ -83,5 +85,18 @@ describe('预编译渲染器', () => {
   it('路径不存在时当作没有渲染器', () => {
     process.env.FLEXLAYER_RENDER = join(tmpdir(), 'flexlayer-render-missing.node')
     expect(loadNativeRender()).toBeNull()
+  })
+})
+
+describe('提交进仓库的二进制', () => {
+  it('目录布局和 BUILD.json 都描述这一份构建', () => {
+    const dir = fileURLToPath(new URL('../native/flexlayer-render', import.meta.url))
+    const build = JSON.parse(readFileSync(join(dir, 'BUILD.json'), 'utf8'))
+    expect(verifyLayout(readdirSync(dir))).toEqual([])
+    expect(verifyBuild(build)).toEqual([])
+    for (const name of RELEASE) {
+      const digest = createHash('sha256').update(readFileSync(join(dir, name))).digest('hex')
+      expect(verifyDigest(build, name, digest)).toEqual([])
+    }
   })
 })

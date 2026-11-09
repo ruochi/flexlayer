@@ -21,13 +21,22 @@ jobs:
       # which is the intent: a green job that tested a stale committed binary
       # would verify nothing.
       #
-      # RENDER_REF pins the renderer. Unset: on a PR, prefer the same branch
-      # name as the PR head (paired quality branches); otherwise main. Override
-      # with the repository variable when the renderer lives on another ref.
+      # RENDER_REF pins the renderer. A paired quality branch on the renderer
+      # is used when it exists; otherwise main. A release pull request is the
+      # exception: its head branch exists only here, so that name never exists
+      # on the renderer. Those runs pin the commit `BUILD.json` recorded, which
+      # is the exact tree the addons were built from.
+      - name: resolve the renderer ref
+        id: render-ref
+        shell: bash
+        env:
+          RENDER_REF: ${{ vars.RENDER_REF }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: node scripts/renderer-ref.mjs >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:
           repository: ruochi/flexlayer-render
-          ref: ${{ vars.RENDER_REF || github.event.pull_request.head.ref || 'main' }}
+          ref: ${{ steps.render-ref.outputs.ref }}
           token: ${{ secrets.RENDER_REPO_TOKEN }}
           path: vendor/flexlayer-render
       - uses: actions/setup-node@v4
@@ -41,12 +50,20 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libfreetype6-dev libfontconfig1-dev
+      # The committed linux addon is replaced by this build, so the manifest no
+      # longer describes the file on disk. `--allow-replaced` keeps the commit
+      # and layout checks and skips the digest, which is the one thing a source
+      # build is allowed to differ in. The `addon` job never builds, so it still
+      # checks the committed digest.
       - name: linux addon from the renderer
         working-directory: vendor/flexlayer-render
         run: |
           npm ci
           npx napi build --platform --release
           cp flexlayer-render.linux-x64-gnu.node "$GITHUB_WORKSPACE/native/flexlayer-render/flexlayer-render.linux-x64-gnu.node"
+      - name: the committed manifest still describes a release
+        shell: bash
+        run: node scripts/addon-hash.mjs --allow-replaced
       - run: npm ci
       - run: npm test
       - name: golden flip
@@ -75,6 +92,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      # A binary diffs as "Bin 20151488 -> ...", so a stray `subdir/b.node` once
+      # sat in this repository for weeks. Anything that is not one of the three
+      # release addons fails before the files are even loaded.
+      - name: only the three release addons may carry a binary
+        shell: bash
+        run: node scripts/check-addon-history.mjs --range ${{ github.event.pull_request.base.sha || github.event.before }}..${{ github.sha }}
+      # This job never builds, so all three committed files must match
+      # `BUILD.json` byte for byte. `addon-hash` loads the host one; the other
+      # two are checked by digest only, which needs no loader.
+      - name: the committed addons are the recorded ones
+        shell: bash
+        run: node scripts/addon-integrity.mjs
       - name: load the platform addon
         shell: bash
         run: node scripts/addon-hash.mjs
@@ -83,10 +112,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: resolve the renderer ref
+        id: render-ref
+        shell: bash
+        env:
+          RENDER_REF: ${{ vars.RENDER_REF }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: node scripts/renderer-ref.mjs >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:
           repository: ruochi/flexlayer-render
-          ref: ${{ vars.RENDER_REF || github.event.pull_request.head.ref || 'main' }}
+          ref: ${{ steps.render-ref.outputs.ref }}
           token: ${{ secrets.RENDER_REPO_TOKEN }}
           path: vendor/flexlayer-render
       - uses: actions/setup-node@v4
@@ -104,6 +140,9 @@ jobs:
           npm ci
           npx napi build --platform --release
           cp flexlayer-render.linux-x64-gnu.node "$GITHUB_WORKSPACE/native/flexlayer-render/flexlayer-render.linux-x64-gnu.node"
+      - name: the committed manifest still describes a release
+        shell: bash
+        run: node scripts/addon-hash.mjs --allow-replaced
       - run: npm ci
       - name: gallery metrics
         run: npx tsx scripts/gallery-metrics.mjs --check

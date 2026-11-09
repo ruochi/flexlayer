@@ -7,3 +7,16 @@ coverage/
 examples/pythagoras.mp4
 examples/pythagoras-sheet.png
 examples/pythagoras-keyframes.png
+
+# Scratch files used to be committed here (beveltest.mjs, covtest*.mjs,
+# dumpnorm*.mjs, .tmp/, subdir/). A debugging script that measures something
+# belongs in flexlayer-render/docs/quality/; this repository is public and
+# carries the check, not the probes behind it.
+/.tmp/
+/subdir/
+/beveltest*.mjs
+/captest*.mjs
+/covtest*.mjs
+/dumpnorm*.mjs
+/scripts/.*.mts
+*.node.bak

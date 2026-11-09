@@ -13,6 +13,9 @@ export const RELEASE = [
   'flexlayer-render.win32-x64-msvc.node',
 ]
 
+/** The generated loader, the committed types, the manifest, and the note beside the addons. */
+export const COMPANIONS = ['index.cjs', 'index.d.ts', 'index.js', 'README.md', 'BUILD.json']
+
 /** Which release file this host would load, or null off the release matrix. */
 export function hostBinary(platform = process.platform, arch = process.arch) {
   if (platform === 'darwin' && arch === 'arm64') return 'flexlayer-render.darwin-arm64.node'
@@ -42,6 +45,44 @@ export function verifyBuild(build) {
     errors.push(`addon-hash: the three binaries were not built from one commit\n${RELEASE.map((file, i) => `  ${file} ${commits[i] || '(none)'}`).join('\n')}`)
   }
   return errors
+}
+
+/**
+ * The files beside the addons. A binary dropped in `native/` itself, a leftover
+ * from the hand-copied era, or a half-written directory all load nothing and
+ * `index.cjs` only ever looks in `native/flexlayer-render/`, so anything else
+ * there is a mistake that must not reach a release.
+ */
+export function verifyLayout(dirNames) {
+  const errors = []
+  for (const name of dirNames) {
+    if (!RELEASE.includes(name) && !COMPANIONS.includes(name)) {
+      errors.push(`addon-hash: unexpected file in native/flexlayer-render: ${name}`)
+    }
+  }
+  for (const name of [...RELEASE, ...COMPANIONS]) {
+    if (!dirNames.includes(name)) {
+      errors.push(`addon-hash: native/flexlayer-render is missing ${name}`)
+    }
+  }
+  return errors
+}
+
+/**
+ * A binary that no longer matches its record. `engine()` says what the build
+ * was configured to do, not which bytes were copied, so a local rebuild beside
+ * an untouched `BUILD.json` used to pass. The digest is the only thing that
+ * catches that, and a missing digest is a failure rather than "not checked".
+ */
+export function verifyDigest(build, file, actual) {
+  const recorded = file ? build?.binaries?.[file]?.sha256 ?? null : null
+  if (!recorded) {
+    return [`addon-hash: BUILD.json records no sha256 for ${file}`]
+  }
+  if (recorded !== actual) {
+    return [`addon-hash: ${file} is not the binary BUILD.json describes\n  got ${actual}\n  expected ${recorded}`]
+  }
+  return []
 }
 
 /**

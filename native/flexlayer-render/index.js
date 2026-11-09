@@ -310,7 +310,7 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { pickRay, renderScene, renderDrawList, webglDraw, distanceToSites, inkDistanceField, smoothstep, bandCoverage, outerEdgeFade, circleOfConfusion, planDepthOfField, compositeDof, downsampleSurface, coverStrokes, testExactTransform, testExactProject, testExactShade, testSphereIntersection, renderExactSimple, matcapNames, lightNames, bevelRadius, bevelFewFaces, buildSphereMesh, buildBoxMesh, buildCylinderMesh, buildTorusMesh, buildTubeMesh, buildExtrudeMesh, meshExtractEdges, uniformSphere, triTriSegment, meshIntersections, applyPoseMatrix, layerProjectExact, transformPointExact, transformNormalExact, snapDown, snapUp, testVertexTransform, roundedBoxGeometry, roundedCylinderGeometry, sphereRingPoints, meshStrokeRuns, renderMeshNative, clampCorners, roundRectCommands, roundedCornerCommands, borderQuads, rasterizeLambertTriangle, preprocessShader, parseShaderProgram, transformPoint, transformNormal, layerProject, getMeshSamples, walkTriangle, resolveGrid, fakeDraw, fakeClear, render, renderFrames, previewSheet, contactSheet, engine, solidPng, renderStylePng, renderScenePng } = nativeBinding
+const { pickRay, renderScene, renderDrawList, webglDraw, distanceToSites, inkDistanceField, smoothstep, bandCoverage, outerEdgeFade, circleOfConfusion, planDepthOfField, compositeDof, downsampleSurface, coverStrokes, testExactTransform, testExactProject, testExactShade, testSphereIntersection, renderExactSimple, matcapNames, lightNames, bevelRadius, bevelFewFaces, buildSphereMesh, buildBoxMesh, buildCylinderMesh, buildTorusMesh, buildTubeMesh, buildExtrudeMesh, buildExtrudeBeveledMesh, meshExtractEdges, uniformSphere, triTriSegment, meshIntersections, applyPoseMatrix, layerProjectExact, transformPointExact, transformNormalExact, snapDown, snapUp, testVertexTransform, roundedBoxGeometry, roundedCylinderGeometry, sphereRingPoints, meshStrokeRuns, renderMeshNative, clampCorners, roundRectCommands, roundedCornerCommands, borderQuads, rasterizeLambertTriangle, preprocessShader, parseShaderProgram, transformPoint, transformNormal, layerProject, getMeshSamples, walkTriangle, resolveGrid, fakeDraw, fakeClear, render, renderFrames, previewSheet, contactSheet, engine, solidPng, renderStylePng, renderScenePng } = nativeBinding
 
 module.exports.pickRay = pickRay
 module.exports.renderScene = renderScene
@@ -341,6 +341,7 @@ module.exports.buildCylinderMesh = buildCylinderMesh
 module.exports.buildTorusMesh = buildTorusMesh
 module.exports.buildTubeMesh = buildTubeMesh
 module.exports.buildExtrudeMesh = buildExtrudeMesh
+module.exports.buildExtrudeBeveledMesh = buildExtrudeBeveledMesh
 module.exports.meshExtractEdges = meshExtractEdges
 module.exports.uniformSphere = uniformSphere
 module.exports.triTriSegment = triTriSegment

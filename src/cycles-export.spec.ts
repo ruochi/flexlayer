@@ -6,6 +6,7 @@ import {
   exportCyclesScene,
   layerToWorld,
   shortSideFov,
+  surfaceFor,
   viewplaneFor,
   verticalFov,
 } from './cycles-export.js'
@@ -105,6 +106,20 @@ describe('cycles 导出', () => {
     expect(xml).not.toContain('studio-fill')
   })
 
+  it('environment="ambient" 时只用天光，不补默认影棚光', async () => {
+    const ambient = await document(
+      `<layer width="800" height="600" camera="900" environment="ambient">
+        <ground y="400" rotateX="90" />
+        <rect x="300" y="200" width="200" height="120" depth="80" fill="#8ad" />
+      </layer>`,
+    )
+    const { xml, counts } = exportCyclesScene(ambient, CYCLES_DEFAULTS)
+    expect(counts.lights).toBe(0)
+    expect(xml).not.toContain('studio-key')
+    expect(xml).not.toContain('studio-fill')
+    expect(xml).toContain('environment_texture')
+  })
+
   it('太阳的 -z 列指向光源', async () => {
     const doc = await document(
       `<layer width="800" height="600" camera="900">
@@ -125,37 +140,10 @@ describe('cycles 导出', () => {
   })
 
   /**
-   * 光栅器那条「约 1 屏幕像素」的窄倒角，Cycles 也要有，否则硬边接不住环境光，
-   * 金属机身和光栅结果对不上。倒角会增删顶点，三角形数因此变多是它的指纹。
+   * 地面一律是实体无缝背景（cyclorama），不再有「没有 fill = 阴影捕捉器」的分支。
+   * 捕捉器那套除法合成会在画布底色上留下黑圈，这里彻底不用。
    */
-  it('盒子在 Cycles 里带 1 像素倒角', async () => {
-    const doc = await document(
-      `<layer width="700" height="500" background="#f4f1ec" camera="900">
-        <rect x="250" y="180" width="200" height="140" rx="12" depth="60" fill="#c6c9ce" />
-      </layer>`,
-    )
-    const { counts } = exportCyclesScene(doc, CYCLES_DEFAULTS)
-    // 未倒角的圆角盒只有几十个三角形；倒角把每条硬边切成一条窄面。
-    expect(counts.triangles).toBeGreaterThan(200)
-  })
-
-  it('描边和卡通不做倒角，和光栅器同一条判据', async () => {
-    const stroked = await document(
-      `<layer width="700" height="500" background="#f4f1ec" camera="900">
-        <rect x="250" y="180" width="200" height="140" depth="60" fill="#c6c9ce" stroke="#222" />
-      </layer>`,
-    )
-    const plain = await document(
-      `<layer width="700" height="500" background="#f4f1ec" camera="900">
-        <rect x="250" y="180" width="200" height="140" depth="60" fill="#c6c9ce" stroke="none" />
-      </layer>`,
-    )
-    const strokedTriangles = exportCyclesScene(stroked, CYCLES_DEFAULTS).counts.triangles
-    const plainTriangles = exportCyclesScene(plain, CYCLES_DEFAULTS).counts.triangles
-    expect(strokedTriangles).toBeLessThan(plainTriangles)
-  })
-
-  it('没有 fill 的地面当阴影捕捉器', async () => {
+  it('没有 fill 的地面也是实体背景，不再当阴影捕捉器', async () => {
     const doc = await document(
       `<layer width="800" height="600" camera="900">
         <ground y="400" rotateX="90" />
@@ -164,42 +152,85 @@ describe('cycles 导出', () => {
     )
     const { xml, counts } = exportCyclesScene(doc, CYCLES_DEFAULTS)
     expect(counts.grounds).toBe(1)
-    expect(xml).toContain('is_shadow_catcher="true"')
+    expect(xml).not.toContain('is_shadow_catcher')
+    expect(xml).not.toContain('use_approximate_shadow_catcher')
   })
 
   /**
-   * 假地板走 Cycles 原生 shadow catcher：`is_shadow_catcher` 的合成落在
-   * `PASS_SHADOW_CATCHER_MATTE` 上，不开近似开关这个标记会被静默忽略。
-   * 捕捉器的反照率必须是中性白，否则除法会把颜色带进阴影比。
+   * 地面是影棚无缝背景：一大段水平主平面 + 后部圆弧卷成竖直背墙 + 前坡下收。
+   * 这样铺开以后相机里没有地平线，背景和地面是同一块连续的表面。
    */
-  it('假地板打开近似阴影捕捉，捕捉器用与实体地板一致的材质', async () => {
-    const catcher = await document(
+  it('地面铺成无缝影棚背景：水平主平面接后弯背墙', async () => {
+    const doc = await document(
       `<layer width="800" height="600" camera="900">
         <ground y="400" rotateX="90" />
         <rect x="300" y="200" width="200" height="120" depth="80" fill="#8ad" />
       </layer>`,
     )
-    const catcherScene = exportCyclesScene(catcher, CYCLES_DEFAULTS)
-    expect(catcherScene.hasShadowCatcher).toBe(true)
-    expect(catcherScene.xml).toContain('use_approximate_shadow_catcher="true"')
-    // 捕捉器是场景里唯一一块地面，物体底部的反弹补光全来自它。所以它要和实体
-    // 地板用同一套材质（默认地面色 + roughness 0.85），不能写成纯白，否则前景
-    // 会被照亮、与实体地板那版对不上。
-    expect(catcherScene.xml).toContain('<shader name="ground-shadow-catcher">')
-    expect(catcherScene.xml).toMatch(
-      /<principled_bsdf name="bsdf" base_color="0\.86316 0\.80695 0\.73791" metallic="0" roughness="0\.85"/,
-    )
-    expect(catcherScene.xml).not.toContain('<diffuse_bsdf name="bsdf" color="1 1 1" />')
+    const { xml } = exportCyclesScene(doc, CYCLES_DEFAULTS)
+    // 剖面是一条带平滑法线的扫掠带，不是 4 个点的方片。
+    const positions = /<mesh P="([^"]*)"/.exec(xml)?.[1]?.trim().split(/\s+/).map(Number) ?? []
+    expect(positions.length / 3).toBeGreaterThan(20)
+    // 至少有顶点明显高于地面基准，说明后部卷起了背墙。
+    const ys = positions.filter((_, i) => i % 3 === 1)
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(20)
+    expect(xml).toContain('interpolation="smooth"')
+  })
 
-    const filled = await document(
-      `<layer width="800" height="600" camera="900">
-        <ground y="400" rotateX="90" fill="#ddd" />
-        <rect x="300" y="200" width="200" height="120" depth="80" fill="#8ad" />
+  /**
+   * 回归：地面让位量必须只有「半个层像素」，不能按地面半边长缩放。
+   *
+   * 曾经写成 `GROUND_SEAT_EPSILON * unit`，而 `unit` 是半边长（海报里 216），
+   * 让位因此变成 108 个世界单位。整套道具于是悬空 1.08 m，接触阴影落到地面
+   * 另一侧，画面上就是「整体地板上没有阴影」。
+   */
+  it('地面只退半个层像素，道具底面贴在主平面上', async () => {
+    const doc = await document(
+      `<layer width="1440" height="1800" camera="fov 28, orbit 16 14, distance 4900, at 720 1000 0">
+        <layer x="0" y="1060" width="1440" height="1300" origin="720 0" rotateX="90" preserve-3d>
+          <rect x="300" y="400" width="120" height="80" fill="#8ad" />
+        </layer>
+        <ground y="1060" rotateX="90" />
       </layer>`,
     )
-    const filledScene = exportCyclesScene(filled, CYCLES_DEFAULTS)
-    expect(filledScene.hasShadowCatcher).toBe(false)
-    expect(filledScene.xml).not.toContain('use_approximate_shadow_catcher')
+    const { xml } = exportCyclesScene(doc, CYCLES_DEFAULTS)
+    const meshes = [...xml.matchAll(/<mesh(?: name="([^"]*)")? P="([^"]*)"[^>]*N="([^"]*)"/g)].map((match) => ({
+      name: match[1] ?? null,
+      points: match[2]!.trim().split(/\s+/).map(Number),
+      normals: match[3]!.trim().split(/\s+/).map(Number),
+    }))
+    const ground = meshes.find((mesh) => mesh.name === null)
+    const box = meshes.find((mesh) => mesh.name !== null)
+    expect(ground).toBeDefined()
+    expect(box).toBeDefined()
+
+    // 主平面法线直接取扫掠带顶点法线（第一行左端），它由剖面切线叉乘得到。
+    const normal: [number, number, number] = [
+      ground!.normals[0]!,
+      ground!.normals[1]!,
+      ground!.normals[2]!,
+    ]
+    const centroid: [number, number, number] = [0, 0, 0]
+    for (let i = 0; i < 54 * 3; i += 3) {
+      centroid[0] += ground!.points[i]! / 54
+      centroid[1] += ground!.points[i + 1]! / 54
+      centroid[2] += ground!.points[i + 2]! / 54
+    }
+    const planeOffset =
+      normal[0] * centroid[0] + normal[1] * centroid[1] + normal[2] * centroid[2]
+
+    let lowest = Number.POSITIVE_INFINITY
+    for (let i = 0; i < box!.points.length; i += 3) {
+      const distance =
+        normal[0] * box!.points[i]! +
+        normal[1] * box!.points[i + 1]! +
+        normal[2] * box!.points[i + 2]! -
+        planeOffset
+      lowest = Math.min(lowest, distance)
+    }
+    // 平面片就坐在 z=0：让位只有半像素（0.005 m）。
+    expect(lowest).toBeGreaterThan(-0.02)
+    expect(lowest).toBeLessThan(0.02)
   })
 
   it('omitGrounds 写出一份没有地面的同一场景', async () => {
@@ -393,7 +424,7 @@ describe('cycles 导出', () => {
     expect(xml).toMatch(/light_type="sun"[^>]*name="author-area-0-far"/)
   })
 
-    it('地面跨度是层像素，只经一次缩放', async () => {
+    it('地面左右铺得足够宽，脚下方片不会露空', async () => {
     const doc = await document(
       `<layer width="960" height="640" camera="fov 30, distance 1150, at 480 460 0">
         <ground y="500" rotateX="90" fill="#e7e0d4" />
@@ -401,10 +432,58 @@ describe('cycles 导出', () => {
     )
     const { xml } = exportCyclesScene(doc, CYCLES_DEFAULTS)
     const positions = /<mesh P="([^"]*)"/.exec(xml)?.[1]?.trim().split(/\s+/).map(Number) ?? []
-    expect(positions.length).toBe(12)
-    const xs = [positions[0]!, positions[3]!, positions[6]!, positions[9]!]
+    const xs = positions.filter((_, i) => i % 3 === 0)
     const span = Math.max(...xs) - Math.min(...xs)
-    // 960 × 6 × 0.01 = 57.6 m。缩两次只有 0.576 m，脚下会露空。
+    // 层像素 × UNIT_SCALE 之后再放大到能盖满画面，几十米量级。
     expect(span).toBeGreaterThan(50)
   })
+
+  /**
+   * 作者没写 `material` 的模型要靠图元自己的 `shade` 走通道。之前这里退回
+   * 'matte'，钻石的 transmission 被压平、roughness 还被 matte 预设覆盖成 1，
+   * 整颗石头渲染成不透光的灰多面体。
+   */
+  it('模型自带的玻璃通道和粗糙度不会被 matte 预设压平', () => {
+    const prim = {
+      positions: new Float32Array(9),
+      normals: new Float32Array(9),
+      indices: new Uint32Array(3),
+      alpha: 255,
+      doubleSided: false,
+      shade: 'glass' as const,
+      roughness: 0.015,
+      metalness: 0,
+      transmission: 1,
+      ior: 2.42,
+      clearcoat: 1,
+    }
+    const surface = surfaceFor({ material: undefined } as never, '#000000', prim, null)
+    expect(surface.transmission).toBe(1)
+    expect(surface.roughness).toBeCloseTo(0.015)
+    expect(surface.ior).toBeCloseTo(2.42)
+    // 高折射率才给色散，普通玻璃不该泛彩虹。
+    expect(surface.dispersion).toBe(1)
+  })
+
+  /**
+   * 金属分支原来跳过 `prim.roughness`、直接吃 metal 预设的 0.28。镜面拉丝的
+   * 不锈钢（0.05）被抹成一片均匀反射，AirTag 的钢面就读成一只白盘子。这和
+   * 钻石那条是同一类 bug：模型自带的物理参数被预设盖掉。
+   */
+  it('金属沿用模型自带的粗糙度，不被 metal 预设盖掉', () => {
+    const prim = {
+      positions: new Float32Array(9),
+      normals: new Float32Array(9),
+      indices: new Uint32Array(3),
+      alpha: 255,
+      doubleSided: false,
+      shade: 'metal' as const,
+      roughness: 0.05,
+      metalness: 1,
+    }
+    const surface = surfaceFor({ material: undefined } as never, '#c8ccd1', prim, null)
+    expect(surface.metallic).toBe(1)
+    expect(surface.roughness).toBeCloseTo(0.05)
+  })
+
 })

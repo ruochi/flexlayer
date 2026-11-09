@@ -288,7 +288,7 @@ npx tsx src/cli.ts render examples/macbook-pro.tsx            --engine cycles -o
 
 ### 对 Cycles 源码的三处必要修改
 
-官方 Standalone（我们用 `/Users/ruochi/cycles-src` 自编）跑不出这个效果，
+官方 Standalone（我们用 `~/cycles-src` 自编）跑不出这个效果，
 查下来是三个独立缺陷：
 
 1. **`src/app/cycles_xml.cpp`** — `<object>` 里嵌的 `<mesh>` 会重新建一个

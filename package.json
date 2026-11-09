@@ -1,6 +1,6 @@
 {
   "name": "flexlayer",
-  "version": "0.17.9",
+  "version": "0.17.10",
   "engines": {
     "node": ">=20"
   },
@@ -49,7 +49,8 @@
     "gallery": "tsx scripts/render-gallery.ts",
     "gallery:3d": "tsx scripts/gallery-3d.ts",
     "gallery:metrics": "tsx scripts/gallery-metrics.mjs",
-    "anim:metrics": "tsx scripts/anim-metrics.mjs"
+    "anim:metrics": "tsx scripts/anim-metrics.mjs",
+    "verify:addons": "node scripts/addon-integrity.mjs && node scripts/addon-hash.mjs"
   },
   "license": "MIT",
   "dependencies": {

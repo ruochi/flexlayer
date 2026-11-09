@@ -10,6 +10,7 @@ import type { GroundLayoutNode, Issue, LayerDocument, LayerLayoutNode, LayerRepo
 import { initFontsForMeasure, setFontsCacheDir } from './fonts.js'
 import type { LayerNode } from './parse.js'
 import type { CyclesRunOptions } from './cycles.js'
+import { findCameraLayer } from './cycles-export.js'
 import type { CyclesExport } from './cycles-export.js'
 
 export type RenderResult = {
@@ -132,7 +133,11 @@ async function stampCustomFilters(canvas: Canvas, node: LayoutNode, prepared: Pr
   if (backdrop.length > 0) applyPixelFilters(canvas, backdrop, scale, node.x, node.y, node.width, node.height)
 }
 
-async function paintNative(prepared: Prepared, wantRgba: boolean): Promise<{ png: Buffer; rgba?: Buffer; width: number; height: number; report: LayerReport }> {
+async function paintNative(
+  prepared: Prepared,
+  wantRgba: boolean,
+  skip3d = false,
+): Promise<{ png: Buffer; rgba?: Buffer; width: number; height: number; report: LayerReport }> {
   const native = loadNativeRender()
   if (!native?.render) {
     throw new Error('出图需要带 render 的 flexlayer-render。在 flexlayer-render 里构建，并把 FLEXLAYER_RENDER 指到那个目录。')
@@ -146,6 +151,7 @@ async function paintNative(prepared: Prepared, wantRgba: boolean): Promise<{ png
     meshSamples: options.meshSamples,
     meshCache: options.meshCache,
     native,
+    skip3d,
   })
   const out = native.render(packed.json, packed.images, packed.rasters, wantRgba)
   const report = buildReport(prepared.doc, { frame: options.frame ?? 0, fps: options.fps ?? 0 })
@@ -303,14 +309,100 @@ export async function renderLayerWithCycles(
   for (const line of rendered.scene.skipped) {
     report.issues.push({ level: 'info', code: 'cycles-skipped', path: 'layer', message: line, hint: '这部分留给光栅路径合成' })
   }
+
+  /* 二维层叠回 Cycles 结果。
+   *
+   * Cycles 只认相机层里的三维几何：标题、说明、按钮、分隔线这些都在相机层
+   * 之外，路径追踪器根本不碰它们。所以再走一遍光栅路径，但把三维网格帧全部
+   * 跳过（`skip3d`），背景设成透明，只留二维内容，最后原位叠到 Cycles 图上。
+   *
+   * 这样文字仍是光栅的矢量级清晰度，屏幕、键盘这类二维贴面也不会丢；
+   * 三维部分则全权交给路径追踪。 */
+  const png = await compositeCanvasLayers(prepared, rendered.png, rendered.width, rendered.height)
   return {
-    png: rendered.png,
+    png,
     width: rendered.width,
     height: rendered.height,
     report,
     scene: rendered.scene,
     elapsedMs: rendered.elapsedMs,
   }
+}
+
+/**
+ * 把「只画二维」的一张透明底板叠到 Cycles 出的图上。
+ *
+ * 底板用和成片一致的像素尺寸，缺一层就直接返回原图，不让合成成为出图的
+ * 单点故障。
+ */
+async function compositeCanvasLayers(
+  prepared: Prepared,
+  below: Buffer,
+  width: number,
+  height: number,
+): Promise<Buffer> {
+  const plate = await paintOverlayPlate(prepared, width, height)
+  if (plate.length === 0) return below
+  const base = await loadImage(below)
+  const canvas = createCanvas(base.width, base.height)
+  const ctx = canvas.getContext('2d')
+  ctx.drawImage(base, 0, 0)
+  const top = await loadImage(plate)
+  ctx.drawImage(top, 0, 0, base.width, base.height)
+  return canvas.toBuffer('image/png')
+}
+
+/**
+ * 只含二维层的透明底板。
+ *
+ * 三维全关在相机层里，二维文字、按钮、分隔线都在相机层之外。所以把相机层
+ * 整块掏空、背景设成透明，跑一遍光栅就能得到「只有二维」的一张图，尺寸和
+ * 成片一致，直接原位叠到 Cycles 结果上。
+ */
+async function paintOverlayPlate(
+  prepared: Prepared,
+  width: number,
+  height: number,
+): Promise<Buffer> {
+  const camera = findCameraLayer(prepared.doc.root)
+  if (!camera) return Buffer.alloc(0)
+  const hollow = (node: LayoutNode): LayoutNode => {
+    if (node === camera) {
+      // 相机层保留定位（宽高、透视），但内容清空：三维和层内二维都不画，
+      // 它们要么由 Cycles 出，要么本来就不可见。
+      return { ...(node as LayerLayoutNode), children: [] }
+    }
+    if (node.kind === 'layer' || node.kind === 'flex' || node.kind === 'group') {
+      return { ...node, children: node.children.map(hollow).filter(Boolean) } as LayoutNode
+    }
+    return node
+  }
+  /* 铺满画布的背景块（海报底色那种）不进底板。
+   *
+   * Cycles 已经把同一块背景连同灯光一起渲好；底板再画一遍会把三维全糊掉。
+   * 判据是「铺满整幅画布」——这种块只可能是底色，不会是文字、按钮这类局部内容。 */
+  const dropsBackdrop = (node: LayoutNode): boolean =>
+    node.kind === 'shape' &&
+    node.x <= 0.5 &&
+    node.y <= 0.5 &&
+    node.width >= width - 1 &&
+    node.height >= height - 1
+  const flat: LayerDocument = {
+    ...prepared.doc,
+    width,
+    height,
+    background: 'transparent',
+    root: hollow({
+      ...(prepared.doc.root as LayerLayoutNode),
+      children: (prepared.doc.root as LayerLayoutNode).children.filter((c) => !dropsBackdrop(c)),
+    }) as LayerLayoutNode,
+  }
+  const plate = await paintNative({ ...prepared, doc: flat }, false, true)
+  if (process.env.FLEXLAYER_DUMP_PLATE) {
+    const { writeFileSync } = await import('node:fs')
+    writeFileSync(process.env.FLEXLAYER_DUMP_PLATE, plate.png)
+  }
+  return plate.png
 }
 
 /** 只导出 Cycles 场景，不渲染。 */

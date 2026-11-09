@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { RELEASE, hostBinary, verifyAddon, verifyBuild } from '../scripts/addon-verify.mjs'
+import { COMPANIONS, RELEASE, hostBinary, verifyAddon, verifyBuild, verifyDigest, verifyLayout } from '../scripts/addon-verify.mjs'
 
 /** A manifest where all three release files agree. */
 function manifest(overrides = {}) {
   const commit = 'f1075b772842e5c2c415bc387757019ea1375362'
   const binaries = {}
-  for (const file of RELEASE) binaries[file] = { commit, engine: 'flexlayer-render/0.0.2+cap1080' }
+  for (const file of RELEASE) binaries[file] = { commit, engine: 'flexlayer-render/0.0.2+cap1080', sha256: `sha-${file}` }
   for (const [file, patch] of Object.entries(overrides)) binaries[file] = { ...binaries[file], ...patch }
   return { binaries }
 }
@@ -73,5 +73,44 @@ describe('addon-hash 的判定', () => {
     expect(hostBinary('linux', 'x64')).toBe(linux)
     expect(hostBinary('win32', 'x64')).toBe('flexlayer-render.win32-x64-msvc.node')
     expect(hostBinary('linux', 'arm64')).toBe(null)
+  })
+})
+
+describe('目录布局', () => {
+  it('三份二进制、加载器、类型、清单和说明都在时通过', () => {
+    expect(verifyLayout([...RELEASE, ...COMPANIONS])).toEqual([])
+  })
+
+  it('多出文件时失败，并指出文件名', () => {
+    const errors = verifyLayout([...RELEASE, ...COMPANIONS, 'flexlayer-render.darwin-arm64.node.bak'])
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toContain('unexpected file')
+    expect(errors[0]).toContain('flexlayer-render.darwin-arm64.node.bak')
+  })
+
+  it('少一份时失败，并指出缺哪份', () => {
+    const missing = RELEASE[0]
+    const errors = verifyLayout([...RELEASE.slice(1), ...COMPANIONS])
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toContain('missing')
+    expect(errors[0]).toContain(missing)
+  })
+})
+
+describe('二进制指纹', () => {
+  it('字节和清单一致时通过', () => {
+    expect(verifyDigest(manifest(), darwin, `sha-${darwin}`)).toEqual([])
+  })
+
+  it('本机重编后字节变了就失败，即使 engine() 没变', () => {
+    const errors = verifyDigest(manifest(), darwin, 'sha-rebuilt')
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toContain('not the binary BUILD.json describes')
+  })
+
+  it('清单没记指纹时不假装验证过', () => {
+    const errors = verifyDigest(manifest({ [darwin]: { sha256: undefined } }), darwin, 'sha-anything')
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toContain('records no sha256')
   })
 })
