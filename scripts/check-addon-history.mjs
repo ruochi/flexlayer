@@ -19,18 +19,45 @@ function git(...args) {
   return execFileSync('git', [...args], { encoding: 'utf8' })
 }
 
+function tryGit(...args) {
+  try {
+    return git(...args)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * `A...B` (three dots) diffs from the merge base, which is what a pull request
+ * means: only what the branch added. `A..B` compares the two tips directly and
+ * fails outright when one is not an ancestor of the other, which is exactly
+ * the release-branch case.
+ *
+ * A first push reports an all-zero `before`, and a shallow runner may not have
+ * both ends. Neither is a reason to fail: fall back to the index, and to HEAD's
+ * parent, so a check that cannot see a range never blocks a merge.
+ */
 function changedAddons(range) {
-  // A first push reports an all-zero `before`, and a release branch may have no
-  // merge base. Neither is a reason to fail: with no range, check the index.
-  const zero = range && /^0+$/.test(range.split('..')[0] ?? '')
-  const usable = range && !zero
-  const args = usable
-    ? ['diff', '--name-only', '--diff-filter=A', range]
-    : ['diff', '--name-only', '--diff-filter=A', '--cached']
-  return git(...args)
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.endsWith('.node'))
+  const candidates = []
+  if (range) {
+    const [left, right] = range.split('...');
+    if (left && right && !/^0+$/.test(left)) {
+      candidates.push(['diff', '--name-only', '--diff-filter=A', `${left}...${right}`])
+    }
+  }
+  candidates.push(['diff', '--name-only', '--diff-filter=A', '--cached'])
+  candidates.push(['diff', '--name-only', '--diff-filter=A', 'HEAD~1..HEAD'])
+
+  for (const args of candidates) {
+    const out = tryGit(...args)
+    if (out !== null) {
+      return out
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.endsWith('.node'))
+    }
+  }
+  return []
 }
 
 const rangeIndex = process.argv.indexOf('--range')
