@@ -99,13 +99,6 @@ export interface ExactBatchInput {
 export declare function renderExactSimple(config: ExactRenderConfig, batches: Array<ExactBatchInput>): Array<number>
 export declare function matcapNames(): string
 export declare function lightNames(): string
-export interface BevelGeometry {
-  positions: Float32Array
-  normals: Float32Array
-  indices: Uint32Array
-}
-export declare function bevelRadius(depth: number): number
-export declare function bevelFewFaces(srcPos: Float32Array, srcIdx: Uint32Array, radiusOpt?: number | undefined | null, scaleField?: Float64Array | undefined | null): BevelGeometry | null
 export interface BuiltMesh {
   positions: Float32Array
   normals: Float32Array
@@ -134,17 +127,6 @@ export declare function buildCylinderMesh(axisZ: boolean, radius: number, height
 export declare function buildTorusMesh(major: number, tube: number, tx: number, ty: number): BuiltMesh | null
 export declare function buildTubeMesh(radius: number, ox: number, oy: number, rings: Array<PathRing>): BuiltMesh | null
 export declare function buildExtrudeMesh(depth: number, fillRule: string, ox: number, oy: number, rings: Array<PathRing>): BuiltMesh | null
-/**
- * Extrude with a chamfered rim, produced only for the current frame.
- *
- * The rim is a quarter-round: the top face is inset by `r`, then an arc band of
- * radius `r` carries it down to the side wall, which keeps its original
- * silhouette. Hole walls are never chamfered — a 2.75-radius speaker perforation
- * cannot survive a 3.36 inset, and the grille must stay sharp.
- *
- * `build_extrude_mesh` is left untouched so authored geometry never changes.
- */
-export declare function buildExtrudeBeveledMesh(depth: number, fillRule: string, ox: number, oy: number, rings: Array<PathRing>, radius: number, arcSteps: number): BuiltMesh | null
 export declare function meshExtractEdges(positions: Float32Array, indices: Uint32Array): Array<MeshEdgeOut>
 export declare function uniformSphere(toLayer: Array<number>, originX: number, originY: number, x: number, y: number, z: number, radius: number): SphereCenter | null
 export interface FillBatch {
