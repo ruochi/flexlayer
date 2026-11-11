@@ -22,7 +22,6 @@ export function rasterizeFill(config, batches, grounds = []) {
     indices: batch.indices,
     segmentIndices: batch.segmentIndices || undefined,
     pointIndices: batch.pointIndices || undefined,
-    creaseSegments: batch.creaseSegments || undefined,
     bevelWorld: batch.bevelWorld ?? undefined,
     toLayer: Array.from(batch.toLayer),
     originX: batch.originX,

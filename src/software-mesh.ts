@@ -136,7 +136,6 @@ type Batch = {
   /** 卡通和漫画跟这条曲线走。不写是平面。 */
   form?: 'sphere' | 'cylinder' | 'flat'
   /** 折棱线段，`[ia, ib, n0x, n0y, n0z, n1x, n1y, n1z]` 八元组。 */
-  creaseSegments?: Float32Array | null
   /**
    * 这个网格的倒角半径，**世界单位**。由 `bevel-recommend.ts` 的全局统计给出：
    * 参考尺度锚点（场景里「一个正常物体多大」/ 除数）与自身最薄边的钳制取小。
@@ -1060,49 +1059,6 @@ export function meshEdges(positions: Float32Array, indices: Uint32Array): MeshEd
   return edges
 }
 
-/**
- * 折棱表：真正需要倒角的那几条边，打包成内核要的扁平数组。
- *
- * 每条 8 个 float：`[ia, ib, n0x, n0y, n0z, n1x, n1y, n1z]` —— 两个端点的
- * 局部顶点下标，加两侧面法线。
- *
- * 三条筛选条件，缺一不可：
- *
- *   - `crease`：相邻两面夹角超过 40°，曲面细分出来的缝不算折棱。
- *   - `n1 != null`：只保留**两张面共享**的边。边界边（洞口、网格外轮廓、
- *     剪影）只有一张面，没有「另一侧」可言，给它倒角就是在洞口描一圈亮线。
- *   - 交给内核后只认本三角形的三条边，所以背面的棱物理上不可能影响正面。
- */
-function creaseSegments(positions: Float32Array, indices: Uint32Array): Float32Array | null {
-  const edges = meshEdges(positions, indices)
-  if (!edges.length) return null
-  /* 上界同样重要：`crease` 只挡了「太平」（<40°），没挡「对折」。
-   * 薄板的上下两面在边缘几乎反向，那里没有可倒的角，只有零厚度刀口；
-   * 当成折棱去做圆弧，法线会被拉向一个几乎相反的邻居，反射甩到镜面上，
-   * 棱上就爆出一串白点。140° 以上视为对折，不算折棱。 */
-  const kept = edges.filter(
-    (edge) =>
-      edge.crease &&
-      edge.n1 != null &&
-      edge.n0[0] * edge.n1[0] + edge.n0[1] * edge.n1[1] + edge.n0[2] * edge.n1[2] > Math.cos((140 * Math.PI) / 180),
-  )
-  if (!kept.length) return null
-  const packed = new Float32Array(kept.length * 8)
-  for (let i = 0; i < kept.length; i++) {
-    const edge = kept[i]!
-    const n1 = edge.n1!
-    packed[i * 8] = edge.a
-    packed[i * 8 + 1] = edge.b
-    packed[i * 8 + 2] = edge.n0[0]
-    packed[i * 8 + 3] = edge.n0[1]
-    packed[i * 8 + 4] = edge.n0[2]
-    packed[i * 8 + 5] = n1[0]
-    packed[i * 8 + 6] = n1[1]
-    packed[i * 8 + 7] = n1[2]
-  }
-  return packed
-}
-
 function meshLineFields(
   node: MeshLayoutNode,
   opacity: number,
@@ -1110,18 +1066,16 @@ function meshLineFields(
   indices: Uint32Array,
   owner: number,
   shading?: string,
-): Pick<Batch, 'edges' | 'lines' | 'outline' | 'owner' | 'form' | 'creaseSegments'> {
+): Pick<Batch, 'edges' | 'lines' | 'outline' | 'owner' | 'form'> {
   const lines = lineStyleOf(node, opacity, shading)
   const outline = sphereOutlineOf(node)
-  const creases = creaseSegments(positions, indices)
-  if (!lines) return { edges: NO_EDGES, lines: null, outline, owner, form: formOf(node), creaseSegments: creases }
+  if (!lines) return { edges: NO_EDGES, lines: null, outline, owner, form: formOf(node) }
   return {
     edges: meshEdges(positions, indices),
     lines,
     outline,
     owner,
     form: formOf(node),
-    creaseSegments: creases,
   }
 }
 
@@ -1550,11 +1504,14 @@ function surfaceScalars(material: MeshLayoutNode['material'] | undefined, prim?:
  */
 function assignBevelRadii(batches: Batch[]): void {
   /* 只有光面金属有可辨认的圆角高光；塑料键帽、橡胶、布料硬做只会把键盘
-   * 画成网格。这层筛在内核里也有一道，两处保持一致。 */
+   * 画成网格。这层筛在内核里也有一道，两处保持一致。
+   *
+   * 不需要折棱表：内核按射线自己找相邻面，于是没有面法线可查的网格
+   * （`<model>`）也能做。 */
   const eligible = batches.filter(
     (batch) =>
-      batch.creaseSegments != null &&
-      batch.creaseSegments.length > 0 &&
+      batch.positions.length >= 9 &&
+      batch.indices.length >= 3 &&
       (batch.material === 'metal' || batch.material === 'mirror' || batch.material === 'brushed'),
   )
   if (!eligible.length) return
@@ -1811,9 +1768,9 @@ export function renderMeshSoftware(input: SoftwareMeshInput): MeshFrame {
     batch.owner = plane.node.sharp ? -(ownerId + 1) : ownerId
     batches.push(batch)
   }
-  /* 倒角整体关闭：现在出纯渲染的版本，顶壳和屏幕盖都按建模直角走。
-   * 要恢复法线倒角，把这行打开即可（几何倒角路径已经从 buildExtrudeMesh 撤掉）。 */
-  // assignBevelRadii(batches)
+  /* 打磨机：给光面金属定一个世界半径，内核按射线探测把棱法线转成圆弧。
+   * 几何倒角那条路已经从 buildExtrudeMesh 撤掉，这里不动任何顶点。 */
+  assignBevelRadii(batches)
   if (layer.dof && perspective !== 'parallel' && grounds.length === 0) {
     return rasterizeDofObjects(batches, layer, perspective, scale, samples, clip)
   }
