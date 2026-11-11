@@ -123,6 +123,28 @@ function Base() {
   return (
     <layer x={STAGE.x} y={STAGE.groundY - TOP} width={W} height={D} origin={`${W / 2} 0`} rotateX="90" preserve-3d>
       <path d={deckPath} fill-rule="evenodd" fill={SILVER} material={SHELL} depth={T} stroke="none" />
+      {/* 掌托前沿凹槽：在触控板前方绘制深色凹槽标记 */}
+      <rect
+        x={(W - (PAD.w + 20)) / 2}
+        y={padY + PAD.h + 8}
+        width={PAD.w + 20}
+        height={16}
+        rx="8"
+        fill="#6d7278"
+        z={TOP + 0.01}
+        stroke="none"
+      />
+      {/* 凹槽内部亮面 */}
+      <rect
+        x={(W - (PAD.w + 12)) / 2}
+        y={padY + PAD.h + 10}
+        width={PAD.w + 12}
+        height={12}
+        rx="6"
+        fill="#9da1a6"
+        z={TOP + 0.015}
+        stroke="none"
+      />
       {/* 键盘井：有厚度的哑光黑托板。用 path 挤出，圆角不受薄壁的 rx 限制 */}
       <rect
         x={WELL_BOX.x}
@@ -302,21 +324,15 @@ const FLOOR = { w: 1440, h: 1300 }
 // 杯子挪到机身前沿中段，右前角（接口那一侧）整个露出来。
 // turn：印花朝镜头偏中心，把手朝右前。
 const MUG = { cx: 690, cy: 1055, r: 105.7, turn: -34 }
-// 铅笔横在机身前沿，笔尖朝左，和钻石之间留一段空桌面。
-// 相机俯角 14°，进深每差 20px 屏幕上只差约 14px，所以尾端要在平面上离机身前沿
-// 留出 100px 以上，屏幕上才有 30px 左右看得见的空隙。再往里推，橡皮尾巴就会
-// 压到机身轮廓线上，读起来像插进电脑里。turn 也随之收到 -9°，让笔不那么斜。
-const PENCIL = { x: 630, y: 838, r: 11, turn: -9 }
-// AirTag 斜靠在马克杯右前的外壁上。位置是解出来的，不是目测的：把 AirTag 的
-// 实际顶点（含倾角的盘体和顶面圆盘）投到地面，对杯子的旋转轮廓求最小距离，
-// 取间隙 ≈ 1.5px 的那一档。注意桌面层有 rotateX 90°，平面的 +y 指向镜头，
-// y 越大越靠前——写反了会整只躲到杯子后面，只剩一道边露出来。
-// 它和 MUG 绑定，杯子一动要跟着走。
-const TAG = { x: 757, y: 1171, r: 42.2, turn: 0 }
+// 铅笔横在机身前沿，笔尖朝左，位置调整以配合新的更长铅笔
+const PENCIL = { x: 640, y: 850, r: 10.6, turn: -8 }
+// AirTag 位置微调，配合新的布局
+const TAG = { x: 760, y: 1168, r: 42.2, turn: 0 }
 // AirPods Pro 盒盖朝上平放。模型宽度是 60.6 / 21.7。
 const POD_W = 60.6 / 21.7
 const POD = { x: 1040, y: 990, w: 148, turn: -18 }
-const GEM = { x: 425, y: 985, r: 48, turn: 30 }
+// 钻石位置微调
+const GEM = { x: 435, y: 995, r: 46, turn: 28 }
 
 const mat = (color: string, roughness: number, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness })
 
@@ -405,29 +421,24 @@ const STARBUCKS_PATH = [
   '317 2.3617z',
 ].join('')
 
-/**
- * 马克杯外壁贴图。
- *
- * 整只杯子是素白瓷，只有正面一枚绿色圆形塞壬标。
- * 画布尺寸按杯面展开的真实比例给（横向一圈 ARC_U，纵向整条轮廓 ARC_V），
- * 于是画布像素在两个方向是同一个世界尺度，画圆就是圆；贴上去用 three 的
- * 默认 UV 采样，不需要任何额外的拉伸校正。
- */
-// 外轮廓：圈足是唯一落地的一圈，侧壁略收腰，口沿是一圈带圆角的唇 ——
-// 真实马克杯的口沿是卷起来的圆边，不是一条水平的切面；平口会在低机位下
-// 读成一根厚壁管子，所以这里用五段弧把 0.12 的壁厚收成一个圆唇。
+// 马克杯外壁贴图。
+// 整只杯子是素白瓷，只有正面一枚绿色圆形塞壬标。
+// 轮廓优化：严格圆柱形侧壁，口沿和底部平滑过渡
 const MUG_OUTER: [number, number][] = [
   [0, 0.028],
   [0.58, 0.028],
-  [0.7, 0],
-  [0.79, 0.006],
-  [0.9, 0.05],
-  [0.955, 0.14],
-  [0.975, 0.4],
-  [0.962, 1.2],
-  [0.978, 1.95],
-  [0.992, 2.2],
-  [0.999, 2.28],
+  [0.68, 0.01],
+  [0.76, 0.02],
+  [0.84, 0.06],
+  [0.90, 0.12],
+  [0.945, 0.22],
+  [0.96, 0.38],  // 开始进入圆柱段
+  [0.96, 0.85],  // 圆柱段 - 保持恒定半径
+  [0.96, 1.32],  // 圆柱段
+  [0.96, 1.78],  // 圆柱段
+  [0.968, 2.0],  // 向口沿过渡
+  [0.982, 2.18],
+  [0.994, 2.26],
   // 唇顶：从外壁翻过口沿，再落回内径
   [1.0, 2.302],
   [0.996, 2.325],
@@ -670,24 +681,26 @@ const mug = (() => {
     clearcoatRoughness: 0.05,
     map: mugWrapMap(),
   })
-  // 内壁自带杯底（0.195），上缘收进 0.88 的口沿内径。
+// 内壁自带杯底（0.195），上缘收进口沿内径，与外壁形成均匀厚度
   const inner = revolve(
     [
-      // 上缘从唇顶内侧平滑收进来：直接一刀切到 2.28 会在杯口内圈
-      // 留下一条法线硬边，低机位下高光把它照成一道细白线。
+      // 上缘从唇顶内侧平滑收进来
       [0.874, 2.335],
       [0.872, 2.3],
       [0.868, 2.24],
       [0.862, 2.1],
-      [0.858, 1.2],
-      [0.85, 0.55],
-      [0.815, 0.3],
-      [0.71, 0.215],
-      [0.5, 0.195],
+      [0.858, 1.78],  // 圆柱段内壁
+      [0.858, 1.32],
+      [0.858, 0.85],
+      [0.858, 0.52],
+      [0.85, 0.32],
+      [0.82, 0.24],
+      [0.74, 0.20],
+      [0.58, 0.195],
       [0, 0.195],
     ],
     72,
-    // 接缝转到杯后，避开正面高光。
+    // 接缝转到杯后，避开正面高光
     Math.PI,
   )
   // 内壁的几何法线朝外，但看得见的是内侧那一面：渲染器按 frag.back 已经
@@ -704,36 +717,34 @@ const mug = (() => {
     side: THREE.DoubleSide,
   })
   // 把手：上下两个根部都落在杯腹中段（0.78 与 1.66），不贴口沿也不挨桌面。
-  // 轮廓是一条外扩的 C：出杯后先向外抬一点，再竖直走一段，收口时压回杯壁。
-  // 用 CatmullRom 太容易在根部起鼓包，这里直接给一条平滑的三次曲线。
-  // 控制点按一个椭圆的一半来布：最外点 1.55，纵向从 1.66 跨到 0.78，
-  // 拐角处多给一个点，避免 CatmullRom 在肩部把圆弧拉成方角。
+  // 优化：更自然的 C 形曲线，根部过渡更平滑，截面椭圆化
   const handlePath = new THREE.CatmullRomCurve3(
     [
-      new THREE.Vector3(0.9, 1.7, 0),
-      new THREE.Vector3(1.2, 1.74, 0),
-      new THREE.Vector3(1.42, 1.64, 0),
-      new THREE.Vector3(1.53, 1.44, 0),
-      new THREE.Vector3(1.56, 1.22, 0),
-      new THREE.Vector3(1.52, 1.0, 0),
-      new THREE.Vector3(1.4, 0.86, 0),
-      new THREE.Vector3(1.16, 0.78, 0),
-      new THREE.Vector3(0.9, 0.76, 0),
+      new THREE.Vector3(0.88, 1.68, 0),
+      new THREE.Vector3(1.15, 1.72, 0),
+      new THREE.Vector3(1.38, 1.62, 0),
+      new THREE.Vector3(1.50, 1.42, 0),
+      new THREE.Vector3(1.54, 1.18, 0),
+      new THREE.Vector3(1.50, 0.98, 0),
+      new THREE.Vector3(1.38, 0.84, 0),
+      new THREE.Vector3(1.15, 0.80, 0),
+      new THREE.Vector3(0.88, 0.78, 0),
     ],
     false,
     'catmullrom',
-    0.5,
+    0.4,
   )
-  const R_HANDLE = 0.108
-  const handle = taperTube(handlePath, 110, 28, (t) => {
-    // 根部渐扩：用 smoothstep 而不是平方，避免在根部末端收得太急、
-    // 留下一个外凸的尖角。中段保持等径。
+  const R_HANDLE = 0.095
+  const handle = taperTube(handlePath, 120, 32, (t) => {
+    // 根部渐扩优化：更平滑的过渡
     const end = Math.min(t, 1 - t)
-    const k = Math.max(0, 1 - end / 0.26)
+    const k = Math.max(0, 1 - end / 0.22)
     const eased = k * k * (3 - 2 * k)
-    return R_HANDLE * (1 + 0.42 * eased)
+    // 中段略细，形成自然的弧度
+    const mid = 1 - 4 * (t - 0.5) * (t - 0.5)
+    return R_HANDLE * (1 + 0.5 * eased - 0.08 * mid * (1 - eased))
   })
-  handle.scale(1, 1, 0.9)
+  handle.scale(1, 1, 0.85)
   const handleMat = new THREE.MeshPhysicalMaterial({
     color: '#f6f3ec',
     roughness: 0.14,
@@ -758,6 +769,17 @@ const APPLE_PATH =
 
 const TAG_TEX = 1024
 
+/**
+ * AirTag 钢面上的蚀刻标记。**透明底，只画标记本身。**
+ *
+ * 早先这张图连金属底一起画（一层 #c8ccd1 打底 + 拉丝纹 + 径向光），想靠贴图
+ * 去"模拟"不锈钢。问题是金属的明暗本来就该由环境反射给：贴图一旦接管底色，
+ * 反射梯度就被压平，钢面只剩一块死灰，越调越假。
+ *
+ * 现在贴图只负责"刻了什么"：标记处给一点的哑光灰（蚀刻是凹下去的氧化面，
+ * 比抛光钢面粗糙），其余保持透明、交给材质本身。alpha 在 shader 里驱动
+ * metallic 遮罩——透明处是纯金属（吃满环境反射），标记处是非金属哑光。
+ */
 function airtagFace() {
   const n = TAG_TEX
   const cv = createCanvas(n, n)
@@ -765,39 +787,10 @@ function airtagFace() {
   const c = n / 2
   const R = n / 2
 
-  // 拉丝钢底。金属通道里这张图不是"颜色"，而是反射的乘数：光斑、渐变、
-  // 明暗全部由环境反射给，贴图只负责蚀刻出来的那几个灰阶差。
-  // 所以底色必须整体留在中高灰的一小段里——写近白会把每个像素都乘成
-  // 过曝的白斑，写近黑则整块钢被乘成黑片。这里刻意压平：
-  // 底色 #c8ccd1，再叠一道只差 6~10 级的径向。
-  g.fillStyle = '#c8ccd1'
-  g.fillRect(0, 0, n, n)
-  const sheen = g.createRadialGradient(c * 0.78, c * 0.7, 0, c, c, R)
-  sheen.addColorStop(0, 'rgba(255,255,255,0.16)')
-  sheen.addColorStop(0.4, 'rgba(238,243,248,0.05)')
-  sheen.addColorStop(1, 'rgba(120,126,134,0.16)')
-  g.fillStyle = sheen
-  g.fillRect(0, 0, n, n)
-  // 拉丝纹：从圆心散开的极细线，疏密和明暗都带一点随机，免得读成同心圆。
-  // 用固定种子的序列，重跑一次是同一张贴图。
-  let seed = 20261105
-  const rnd = () => {
-    seed = (seed * 1103515245 + 12345) & 0x7fffffff
-    return seed / 0x7fffffff
-  }
-  for (let i = 0; i < 1600; i++) {
-    const a = rnd() * Math.PI * 2
-    const r0 = R * (0.05 + rnd() * 0.08)
-    const r1 = R * (0.86 + rnd() * 0.14)
-    g.strokeStyle = i % 2 ? 'rgba(255,255,255,0.08)' : 'rgba(130,138,148,0.045)'
-    g.lineWidth = 0.6 + rnd() * 1.5
-    g.beginPath()
-    g.moveTo(c + Math.cos(a) * r0, c + Math.sin(a) * r0)
-    g.lineTo(c + Math.cos(a) * r1, c + Math.sin(a) * r1)
-    g.stroke()
-  }
+  // 全透明起步：没有标记的地方一个像素都不画。
+  g.clearRect(0, 0, n, n)
 
-  // 刻字：沿圆周逐字摆，先垫一道白边再压一道深灰，错开 1px 才读成凹槽。
+  // 刻字：沿圆周逐字摆，先垫一道浅边再压一道深灰，错开 1px 才读成凹槽。
   const arcText = (text: string, size: number, track: number, radius: number, top: boolean) => {
     g.save()
     g.font = `500 ${size}px Helvetica`
@@ -815,10 +808,11 @@ function airtagFace() {
       g.save()
       g.translate(c + Math.cos(theta) * radius, c + Math.sin(theta) * radius)
       g.rotate(top ? theta + Math.PI / 2 : theta - Math.PI / 2)
-      // 激光蚀刻的读法是一条亮边压着一条暗边，两条都只比钢底浅/深几级。
-      g.fillStyle = 'rgba(255,255,255,0.30)'
+      // 蚀刻的读法是一条亮边压着一条暗边。用半透明让下层的金属透一点出来，
+      // 才像刻进钢里，而不是印在钢上的一层漆。
+      g.fillStyle = 'rgba(236,240,245,0.85)'
       g.fillText(text[i]!, 0, -1.6)
-      g.fillStyle = 'rgba(96,104,116,0.40)'
+      g.fillStyle = 'rgba(126,134,146,0.95)'
       g.fillText(text[i]!, 0, 0)
       g.restore()
     }
@@ -827,8 +821,7 @@ function airtagFace() {
   arcText('AirTag', 42, 11, R * 0.83, true)
   arcText('Designed by Apple in California', 29, 4, R * 0.83, false)
 
-  // 中央苹果：高度约面径的 38%。同样是蚀刻，不是印刷：
-  // 一条比钢底低几级的实心，再在右下补一道更暗的边，才是雕下去的厚度。
+  // 中央苹果：高度约面径的 38%，同样是蚀刻。
   const s = (n * 0.38) / 21.94
   const apple = (dx: number, dy: number, fill: string) => {
     g.save()
@@ -839,11 +832,34 @@ function airtagFace() {
     g.fill(new Path2D(APPLE_PATH))
     g.restore()
   }
-  // 蚀刻只比钢底低几级：这是一层哑光氧化面，不是印上去的深色标。
-  apple(1.4, 2.0, 'rgba(104,112,124,0.30)')
-  apple(0, 0, 'rgba(186,192,203,0.42)')
+  apple(1.4, 2.0, 'rgba(134,142,154,0.95)')
+  apple(0, 0, 'rgba(226,231,238,0.85)')
 
-  const px = g.getImageData(0, 0, n, n).data
+  /* 圆盘是 `CircleGeometry` 再 `rotateX(-90°)` 铺到 +Z 面上的：那一步把 UV 的
+   * v 方向翻了过来，于是贴图按原样贴上去时，苹果和文字是**倒着**的。
+   * 这里在画布上竖直翻一次把方向扳正，比在材质里改 offset/repeat 更稳——
+   * 后者依赖 three 的 uv 变换矩阵，跨渲染器（我们的 Cycles 导出也在读同一套
+   * uv）容易又翻回去。 */
+  const flipped = createCanvas(n, n)
+  const fg = flipped.getContext('2d')
+  fg.translate(0, n)
+  fg.scale(1, -1)
+  fg.drawImage(cv, 0, 0)
+
+  const px = fg.getImageData(0, 0, n, n).data
+  /* 空白像素补上钢色，但 alpha 保持 0。
+   *
+   * 金属的 `base_color` 是**反射的染色**而不是漫反射底色：整个钢面只有贴着
+   * 一张 alpha=0、RGB=0 的图，反射会被染成黑铁。canvas 里 `fillStyle` 带 0
+   * alpha 是空操作（不写 RGB），所以只能拿到 ImageData 之后自己刷。 */
+  for (let i = 0; i < px.length; i += 4) {
+    if (px[i + 3]! < 8) {
+      px[i] = 233
+      px[i + 1] = 237
+      px[i + 2] = 242
+      px[i + 3] = 0
+    }
+  }
   const map = new THREE.DataTexture(new Uint8Array(px.buffer, px.byteOffset, px.byteLength), n, n)
   map.flipY = false
   map.needsUpdate = true
@@ -862,13 +878,21 @@ const airtag = (() => {
   // 真不锈钢：metalness 1，让环境反射单独负责明暗。贴图只乘在反射上，
   // 所以它里面不能有大反差，只能有蚀刻的那几级灰（见 airtagFace）。
   // 加一层很薄的 clearcoat 当抛光：AirTag 的钢面出厂就是镜面拉丝的。
+  /* 真不锈钢：metalness 1，明暗完全由环境反射负责。这才是"金属"该有的样子——
+   * 贴图不该去模拟钢面的明暗，那会把反射梯度压成一块死灰。
+   *
+   * 贴图在这里只做两件事：`map` 给蚀刻标记的灰阶，它的 **alpha** 顺带当
+   * metallic 遮罩用（透明处是纯抛光钢，标记处是哑光氧化面）。这一层由
+   * Cycles 导出侧接到 `bsdf alpha` 上，见 cycles-export.ts 的 texBaseAlpha。
+   * 粗糙度 0.18 是出厂镜面拉丝的观感；clearcoat 再补一道抛光层。 */
   const steel = new THREE.MeshPhysicalMaterial({
-    color: '#f2f5f8',
-    roughness: 0.22,
+    color: '#e9edf2',
+    roughness: 0.18,
     metalness: 1,
-    clearcoat: 0.35,
-    clearcoatRoughness: 0.12,
+    clearcoat: 0.5,
+    clearcoatRoughness: 0.08,
     map: airtagFace(),
+    transparent: true,
   })
   const body = lathe([
     [0, 0.03],
@@ -902,38 +926,60 @@ const airtag = (() => {
     face.computeVertexNormals()
   }
   face.rotateX(-Math.PI / 2).translate(0, 0.455, 0)
-  // 机位很低，平放只能看见一条边。钢面朝镜头倾过来，底边仍然挨着桌面。
+  // 机位很低，平放只能看见一条边，所以要朝镜头倾过来。
+  //
+  // 倾角直接决定钢面的曝光：面越「躺」越正对顶光，整块镜面把大面积光弹回相机，
+  // 刻字和苹果标就被冲成一片死白。实测 0.80 rad（46°）时平均亮度 246/255、
+  // 82% 像素饱和，比原来更糟；立到 1.30 rad（74°）后法线离开镜面方向，
+  // 反射让开，蚀刻的几级灰才读得出来，同时正面仍朝着镜头。
+  // 立起来还会把盘体抬离杯壁：最小间隙从 70 增到 84 层像素，底边仍在桌面上。
   return seated(
     [
       [body, white],
       [face, steel],
     ],
-    new THREE.Euler(1.05, 0, 0),
+    new THREE.Euler(1.45, 0, 0),
   )
 })()
 
-// 黄色六角铅笔，沿 x 躺着，一个平面贴地。木色削尖、石墨笔芯，尾端是一截棕红色橡皮。
-// 外接圆半径 1，长度按 175 / 4 的比例。
+// 优化的六角铅笔：更真实的比例和细节
+// 笔身直径 7.5mm，长度 175mm，六角对边距 7.5mm
 const pencil = (() => {
-  const L = 34
+  const L = 43.75  // 175mm / 4 = 43.75 单位
   const along = (geo: THREE.BufferGeometry, x: number) => geo.rotateZ(Math.PI / 2).translate(x, 0, 0)
+
+  // 六角半径（外接圆）
+  const hexR = 1.0
+  // 圆柱半径用于金属箍和橡皮
+  const roundR = 0.92
+
   const hex = (r0: number, r1: number, len: number, x: number) => along(new THREE.CylinderGeometry(r1, r0, len, 6), x)
+  const cyl = (r0: number, r1: number, len: number, x: number) => along(new THREE.CylinderGeometry(r1, r0, len, 24), x)
+
   const parts: [THREE.BufferGeometry, THREE.Material][] = [
-    [hex(1, 1, L, 0), mat('#f2b52a', 0.32)],
-    [hex(1, 0.3, 4, -L / 2 - 2), mat('#e3c08f', 0.85)],
-    [hex(0.3, 0.02, 1, -L / 2 - 4.5), mat('#2e2e31', 0.45)],
-    [along(new THREE.CylinderGeometry(1.03, 1.03, 2.2, 16), L / 2 + 1.1), mat('#7a382c', 0.42, 0.2)],
-    [along(new THREE.CylinderGeometry(0.96, 0.96, 1.8, 16), L / 2 + 3.1), mat('#a34b3c', 0.72)],
+    // 主笔身：黄色漆面
+    [hex(hexR, hexR, L, 0), mat('#f4b733', 0.28)],
+    // 削尖部分：木色锥体，更长更自然
+    [hex(hexR, 0.18, 5.2, -L / 2 - 2.6), mat('#d4b896', 0.75)],
+    // 笔芯：深灰色细锥
+    [cyl(0.18, 0.01, 1.4, -L / 2 - 5.9), mat('#2b2b2d', 0.38)],
+    // 金属箍：铝制，带一点金属光泽
+    [cyl(roundR + 0.04, roundR + 0.04, 2.8, L / 2 + 1.4), mat('#b8bec6', 0.32, 0.65)],
+    // 橡皮：粉红色哑光橡胶
+    [cyl(roundR - 0.02, roundR - 0.05, 3.6, L / 2 + 3.6), mat('#e8978e', 0.82)],
   ]
-  // 六棱柱默认一条棱朝上；转 30° 让平面朝下。seated 会把 y 转到 z，所以截面先从 y-z 转回来。
+
+  // 六棱柱默认一条棱朝上；转 30° 让平面朝下
   for (const [geo] of parts) geo.rotateX(Math.PI / 6).rotateX(-Math.PI / 2)
-  // 六棱柱的法线默认平滑过渡，拆开三角形重算，六个面才各自一个明暗。
+
+  // 六棱柱的法线需要平面化处理
   const faceted = parts.map(([geo, m], i): [THREE.BufferGeometry, THREE.Material] => {
-    if (i > 2) return [geo, m]
+    if (i >= 3) return [geo, m]  // 金属箍和橡皮保持圆柱
     const flat = geo.toNonIndexed()
     flat.computeVertexNormals()
     return [flat, m]
   })
+
   return seated(faceted)
 })()
 

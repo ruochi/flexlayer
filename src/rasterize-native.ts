@@ -84,6 +84,10 @@ type Batch = {
   lines?: unknown
   segmentIndices?: unknown
   pointIndices?: unknown
+  /** 折棱线段，`[ia, ib, nx, ny, nz]` 五元组。只含需要倒角的硬边。 */
+  creaseSegments?: Float32Array | null
+  /** 倒角半径，**世界单位**。由 `bevel-recommend.ts` 全场景统计给出。 */
+  bevelWorld?: number | null
 }
 
 const MAX_RASTER_SIDE = 8192

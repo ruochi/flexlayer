@@ -85,6 +85,7 @@ function parseArgs(argv: string[]) {
   let quality: 'draft' | 'final' | undefined
   let engine: 'native' | 'cycles' = 'native'
   let samples: number | undefined
+  let seed: number | undefined
   let device: 'CPU' | 'GPU' | undefined
   let emitCycles: string | undefined
   /** `--emit-cycles` 只导场景；渲染要另跑一次。 */
@@ -137,6 +138,10 @@ function parseArgs(argv: string[]) {
       const value = next()
       if (value !== 'CPU' && value !== 'GPU') usage()
       device = value
+    } else if (a === '--seed') {
+      const value = Number(next())
+      if (!Number.isInteger(value) || value < 0) usage()
+      seed = value
     } else if (a === '--emit-cycles') {
       emitCycles = next()
       emitCyclesOnly = true
@@ -169,7 +174,7 @@ function parseArgs(argv: string[]) {
   if (engine === 'native' && (samples != null || device != null)) usage()
   if (emitCycles != null && engine !== 'cycles') engine = 'cycles'
   const typecheck = cmd === 'check' ? !noTypecheckFlag : typecheckFlag
-  return { cmd, files, out, report, emit, framesArg, rgba, frame, from, to, step, scales, debug, preview, meshSamples, watchMode, noScript, typecheck, quality, engine, samples, device, emitCycles, emitCyclesOnly, cyclesBinary }
+  return { cmd, files, out, report, emit, framesArg, rgba, frame, from, to, step, scales, debug, preview, meshSamples, watchMode, noScript, typecheck, quality, engine, samples, device, seed, emitCycles, emitCyclesOnly, cyclesBinary }
 }
 
 function frameInput(frame: number, fps: number): FrameInput {
@@ -729,6 +734,7 @@ async function execute(args: RunArgs, input: LoadedJob): Promise<boolean> {
       baseDir,
       samples: args.samples ?? 256,
       device: args.device ?? 'CPU',
+      seed: args.seed,
       maxBounces: 12,
       denoise: true,
       transparent: false,
@@ -745,6 +751,7 @@ async function execute(args: RunArgs, input: LoadedJob): Promise<boolean> {
       baseDir,
       samples: args.samples ?? 256,
       device: args.device ?? 'CPU',
+      seed: args.seed,
       maxBounces: 12,
       denoise: true,
       transparent: false,
