@@ -137,6 +137,11 @@ export interface FillBatch {
   indices: Uint32Array
   segmentIndices?: Uint32Array
   pointIndices?: Uint32Array
+  /**
+   * 倒角半径，**世界单位**。由 JS 侧 `bevel-recommend.ts` 全场景统计给出
+   * （参考尺度 / 除数，再与自身最薄边取小）。内核只把它按批次深度折成像素。
+   */
+  bevelWorld?: number
   toLayer: Array<number>
   originX: number
   originY: number
