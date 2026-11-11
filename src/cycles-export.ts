@@ -13,6 +13,7 @@ import { createCanvas, type Canvas } from '@napi-rs/canvas'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { recommendBevels } from './bevel-recommend.js'
 import { cameraItems, mulMat4, type CameraItem } from './camera.js'
 import { FINISHES } from './finishes.js'
 import { parseColor } from './gradientField.js'
@@ -122,9 +123,98 @@ const GROUND_SEAT_EPSILON = 0.5
  * 的压缩余量，接触阴影不会因为通道饱和被裁平。 */
 const GROUND_ALBEDO_SCALE = 0.88
 
+/**
+ * 棱的自动倒角：只改法线，不动几何。
+ *
+ * 这是 Cycles 的 `bevel` 着色节点，按半径在物体表面做多次射线采样再揉法线。
+ * 顶点、索引、UV 一律不碰，所以剪影保持硬边、贴图不会错位——和几何倒角
+ * （内缩面 + 铺圆弧带）是两条完全不同的路。
+ *
+ * **半径怎么定**交给 `bevel-recommend.ts`：那里先按拓扑闭合度筛掉地板/背景板，
+ * 再用投影面积加权的中位尺度定出全局锚点，最后按每个物体自己的最薄边钳住。
+ * 这里只负责把「引擎无关的世界半径」落成 Cycles 的数值，并决定挂不挂节点。
+ * 早先的实现只看相机距离（1 像素目标），对 3 cm 的 AirTag 和 10 m 的笔记本
+ * 给出同样的绝对半径，会直接把细小件磨成圆球。
+ */
+const BEVEL_SAMPLES = 8
+
+/**
+ * 读一个数值型环境变量，非法或缺省时回落到默认值。
+ *
+ * 倒角强度是个**审美参数**：产品图的夸张程度、物理写实的严谨程度，取决于
+ * 交付场景，不该硬编码在渲染器里。留一个环境变量出口，调参时不用改源码、
+ * 重编译，也不必为一个数字的分歧在代码里留下多套分支。
+ */
+function bevelTuning(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (raw == null || raw === '') return fallback
+  const value = Number(raw)
+  return Number.isFinite(value) && value > 0 ? value : fallback
+}
+
+/**
+ * 全局锚点 = 参考尺度 / 此值。**越小圆角越明显。**
+ *
+ * 100 是产品图常见的艺术夸张强度（1440×1800 下约 1 像素过渡带）；真实工业件
+ * 的圆角/长度多在 400–600。可用 `CYCLES_BEVEL_DIVISOR` 覆盖。
+ *
+ * **这是唯一真正控制粗细的参数。** 在 MacBook 海报场景（相机距 36、画幅半高
+ * 1.25、高 1800，约 20 px/世界单位）实测各档的大件像素半径：
+ *
+ * | divisor | 半径    | 观感                             |
+ * |---------|---------|----------------------------------|
+ * | 25      | 5.48 px | 过粗，杯子翻边像被磨圆           |
+ * | 50      | 2.74 px | 偏粗                             |
+ * | 60      | 2.29 px | 偏软                             |
+ * | 80      | 1.71 px | 可用的上限                       |
+ * | 100     | 1.37 px | 产品图的夸张强度                 |
+ * | 120     | 1.14 px | 可用的下限                       |
+ * | 150     | 0.91 px | 偏硬，接近刀切                   |
+ * | 200     | 0.69 px | 偏细                             |
+ * | 400     | 0.34 px | **默认值**，真实工业件量级       |
+ *
+ * 默认取 400（≈0.34 px）是把它当「工业件的真实倒角」而不是「艺术夸张的圆角」：
+ * 1440×1800 的产品图上只留一道极窄的高光过渡，放大到 1:1 才看得清。想要更明显
+ * 的圆角观感就往 100 走，但那是刻意的风格化，不是精度。
+ */
+const BEVEL_SCALE_DIVISOR = bevelTuning('CYCLES_BEVEL_DIVISOR', 400)
+/**
+ * 半径相对物体最薄边的上限。0.2 表示圆角最多从单面吃掉 20% 壁厚；到 0.5
+ * 薄板就会从两面同时被磨穿，表面读起来是塌边而不是倒角。
+ * 可用 `CYCLES_BEVEL_CLAMP` 覆盖。
+ */
+const BEVEL_THICKNESS_CLAMP = bevelTuning('CYCLES_BEVEL_CLAMP', 0.2)
+/**
+ * 半径投影后短于这个像素数就整条 shader 不挂节点。
+ *
+ * 0.25 px 是「还能读成一条边、而不是一圈灰雾」的下限。早先用 0.5，结果物理上
+ * 合理的细倒角（例如参考尺度 1/400 ≈ 0.27 px）会被整条跳过——等于悄悄关掉了
+ * 倒角，反而比稍软的高光更失真。注意这**不是 Cycles 的限制**：它的 bevel 节点
+ * 只接受半径与采样数，给多细就渲多细；跳过与否完全由我们这侧决定。
+ *
+ * **这个参数不要用来看画面。** 它只是个「省掉看不见的节点的计算」开关，不是
+ * 强度旋钮。实测两轮扫描都是零可见差异：
+ *
+ * - divisor 100 时，19 个物体半径 0.60–1.37 px，门槛在 0.25~0.50 之间逐字节
+ *   同样的输出（PNG 的 MD5 完全相同）。
+ * - divisor 200 时，半径 0.04–0.69 px，门槛在 0.01~0.20 之间同样零差异
+ *   （最大像素差 2/255）——因为那些 0.04–0.15 px 的薄件在画面上本来就读不出。
+ *
+ * 想要棱更明显/更含蓄，改 `BEVEL_SCALE_DIVISOR`；改这里只会白掉节点。
+ */
+const BEVEL_MIN_PX = bevelTuning('CYCLES_BEVEL_MIN_PX', 0.25)
+
 export type CyclesEngineOptions = {
   /** 路径追踪采样数。预览 128，出片 512–2048。 */
   samples: number
+  /**
+   * 采样随机种子。省略时由 Cycles 自行取随机值。
+   *
+   * 需要「同一场景两次渲染逐像素相同」时必须传——A/B 对比参数微调（比如倒角
+   * 半径差一倍）时，两次采样序列不同会让噪声盖过真实差异，量出来的数字随机
+   * 摇摆，看起来像是参数没生效。
+   */
+  seed?: number
   device: 'CPU' | 'GPU'
   /** 光线深度上限。 */
   maxBounces: number
@@ -142,6 +232,13 @@ export type CyclesEngineOptions = {
    * 直接调导出器的调用方。
    */
   ambientOnly?: boolean
+  /**
+   * 棱的自动倒角（Cycles `bevel` 着色节点）。只改法线，不动几何。
+   *
+   * 缺省关：它会让所有硬棱变软，静帧海报要看效果得显式打开。
+   * 环境变量 `CYCLES_BEVEL=1` 等价。
+   */
+  bevel?: boolean
 }
 
 export const CYCLES_DEFAULTS: CyclesEngineOptions = {
@@ -151,6 +248,7 @@ export const CYCLES_DEFAULTS: CyclesEngineOptions = {
   denoise: true,
   transparent: false,
   ambientOnly: false,
+  bevel: false,
 }
 
 export type CyclesImage = { name: string; bytes: Buffer }
@@ -420,16 +518,44 @@ type SurfaceDef = {
    * 贴图接到哪个插座。`base` 是模型底色；`emission` 对应光栅器的
    * unshaded 平面（屏幕墙纸、键盘井），按固有色发光，不吃灯光明暗。
    */
-  texture?: { name: string; uvs: boolean; slot: 'base' | 'emission' }
+  /**
+   * `alphaOnly`：只取贴图的 alpha 当遮罩，**不接 RGB 到 base_color**。
+   *
+   * 抛光金属的底色该由材质固有色给；一旦把以黑为底的透明贴图接到 base_color，
+   * 反射会被染成黑铁。这时 `slot` 只剩记录用途。
+   */
+  texture?: { name: string; uvs: boolean; slot: 'base' | 'emission'; alphaOnly?: boolean }
+  /**
+   * 用底色贴图的 **alpha** 驱动 metallic / roughness，做「透明处是抛光金属、
+   * 标记处是哑光蚀刻」的遮罩。
+   *
+   * 金属的明暗本来就该由环境反射给；把整个钢面画进贴图会压平反射梯度。
+   * 拆开之后贴图只负责「刻了什么」，金属底由材质自己长出来。
+   *
+   * `polished` 是 alpha=0（空白）处的值，`etched` 是 alpha=1（标记）处的值，
+   * 中间按 alpha 线性插值。蚀刻面要同时降金属度、抬粗糙度才读得出凹痕；
+   * 只降金属度会得到一层发亮的灰漆。
+   */
+  baseAlphaMask?: {
+    polished: { metallic: number; roughness: number }
+    etched: { metallic: number; roughness: number }
+  }
   /**
    * 平面位图带透明：甲板层只有井 / 触控板是实的，其余 alpha=0。
    * 不按 alpha 切掉的话，透明像素会以黑 emission 盖住下面的银色机身。
    */
   alphaCutout?: boolean
+  /**
+   * 棱的自动倒角半径，世界单位（米）。缺省不挂 Bevel 节点。
+   *
+   * 必须进 `surfaceKey`：同一组材质参数在不同相机距离下半径不同，漏掉这一项
+   * 会让远处和近处的物体错误共用同一个 shader。
+   */
+  bevel?: number
 }
 
-function surfaceKey(def: Omit<SurfaceDef, 'name'>): string {
-  const { base, metallic, roughness, transmission, ior, coat, coatRoughness, sheen, anisotropic, dispersion, emission, texture, alphaCutout } = def
+export function surfaceKeyOf(def: Omit<SurfaceDef, 'name'>): string {
+  const { base, metallic, roughness, transmission, ior, coat, coatRoughness, sheen, anisotropic, dispersion, emission, texture, alphaCutout, bevel, baseAlphaMask } = def
   return [
     base.map((channel) => channel.toFixed(5)).join(','),
     metallic.toFixed(4),
@@ -444,7 +570,138 @@ function surfaceKey(def: Omit<SurfaceDef, 'name'>): string {
     emission ? `${emission.color.join(',')}@${emission.strength.toFixed(3)}` : '-',
     texture ? `${texture.name}:${texture.uvs}:${texture.slot}` : '-',
     alphaCutout ? 'cut' : '-',
+    (bevel ?? 0).toFixed(7),
+    texture?.alphaOnly ? 'a1' : '-',
+    baseAlphaMask
+      ? `${baseAlphaMask.polished.metallic.toFixed(3)}/${baseAlphaMask.polished.roughness.toFixed(3)}~` +
+        `${baseAlphaMask.etched.metallic.toFixed(3)}/${baseAlphaMask.etched.roughness.toFixed(3)}`
+      : '-',
   ].join('|')
+}
+
+/** 一组世界坐标顶点的均值。空数组返回 null。 */
+function centroidOf(positions: number[]): Vec3 | null {
+  const count = Math.floor(positions.length / 3)
+  if (count === 0) return null
+  let x = 0
+  let y = 0
+  let z = 0
+  for (let i = 0; i < count; i++) {
+    x += positions[i * 3]!
+    y += positions[i * 3 + 1]!
+    z += positions[i * 3 + 2]!
+  }
+  return [x / count, y / count, z / count]
+}
+
+/**
+ * 这个物体附近「每世界单位多少输出像素」。
+ *
+ * 相机在世界空间里，`eye` 是它的眼点（米），`at` 是物体代表点（米）。
+ * 沿视线方向的距离就是两个 z 之差；透视缩放只跟这个距离有关。
+ *
+ * `viewplaneTop` 是相机在距离 1 处的半高，Cycles 的 `<camera>` 用的就是它。
+ * 所以半高 1 个世界单位在屏幕上占 `height/2` 像素，距离 `d` 处按 `1/d` 摊薄：
+ *
+ *     ppu = (height / 2) / (viewplaneTop * d)
+ *
+ * 这里**全程在世界单位和像素之间换算**，不碰层单位。混用层/世界两套比例是
+ * 这类半径最容易出错的地方：差一个 `UNIT_SCALE` 就是 100 倍。
+ */
+function pixelsPerWorld(eye: Vec3, at: Vec3, viewplaneTop: number, height: number): number | null {
+  const distance = Math.abs(eye[2] - at[2])
+  if (!(distance > 1e-6) || !(viewplaneTop > 1e-9)) return null
+  return height / 2 / (viewplaneTop * distance)
+}
+
+/**
+ * 待出片的网格图元：倒角半径要等全场景统计完才能定，先攒着。
+ * `radius` 由 `applyBevelRadii` 回填，null 表示这个图元不该挂倒角节点。
+ */
+type PendingMesh = {
+  node: MeshLayoutNode
+  fill: string
+  geometry: ReturnType<typeof meshPrimGeometries>[number]
+  texture: string | null
+  radius?: number | null
+}
+
+/**
+ * 把「引擎无关的推荐半径」落到这批待出片网格上。
+ *
+ * 三个输入都由 `bevel-recommend.ts` 消化：
+ * - 每个网格的世界顶点 → 闭合度（筛掉地板/背景板）与包围盒（定尺度、厚度上限）
+ * - `pixelsPerWorld` 回调 → 让参考尺度按**屏幕占比**加权，而不是按几何面积
+ * - `minPixels` → 细到看不见的倒角直接不挂
+ *
+ * 这里不做任何半径计算，只负责把 Cycles 的相机参数翻译成像素比例。
+ */
+function applyBevelRadii(
+  pending: PendingMesh[],
+  eye: Vec3 | null,
+  viewplaneTop: number | null,
+  height: number,
+): void {
+  if (pending.length === 0) return
+  /* 必须连 `triangles` 一起给：`chunk.positions` 是紧凑顶点表，不是按三角形
+   * 展开的。丢索引会让焊接把「每连续 3 个顶点」当成一个三角形，拓扑全错。 */
+  const meshes = pending.map((entry) => ({
+    positions: entry.geometry.chunk.positions,
+    indices: entry.geometry.chunk.triangles,
+  }))
+  const recommendation = recommendBevels(meshes, {
+    scaleDivisor: BEVEL_SCALE_DIVISOR,
+    thicknessClamp: BEVEL_THICKNESS_CLAMP,
+    minPixels: BEVEL_MIN_PX,
+    pixelsPerWorld: (mesh) => {
+      const at = centroidOf(Array.from(mesh.positions))
+      if (!at || !eye || viewplaneTop == null) return null
+      return pixelsPerWorld(eye, at, viewplaneTop, height)
+    },
+  })
+  for (let i = 0; i < pending.length; i++) {
+    const report = recommendation.meshes[i]
+    const at = centroidOf(pending[i]!.geometry.chunk.positions)
+    pending[i]!.radius = visibleBevelRadius(report?.radius ?? null, at, eye, viewplaneTop, height)
+  }
+}
+
+/**
+ * 一条棱该用多大的倒角半径，**世界单位（米）**。null 表示这条 shader 不该挂节点。
+ *
+ * 半径由 `recommendBevels` 统一决定（参考尺度锚点 + 逐物体厚度钳制），这里只
+ * 负责最后一道「看不看得见」的闸门：投影到画幅上短于 `BEVEL_MIN_PX` 就整条
+ * 不挂。那个尺度上节点只会把边缘糊成一圈灰边，比不倒更难看。
+ */
+function visibleBevelRadius(
+  radius: number | null,
+  at: Vec3 | null,
+  eye: Vec3 | null,
+  viewplaneTop: number | null,
+  height: number,
+): number | null {
+  if (radius == null || at == null || eye == null || viewplaneTop == null) return radius
+  const ppu = pixelsPerWorld(eye, at, viewplaneTop, height)
+  if (ppu == null) return radius
+  if (!(radius * ppu >= BEVEL_MIN_PX)) return null
+  return radius
+}
+
+/**
+ * 贴图里是否存在**真正透明**的像素（alpha 明显小于 1）。
+ *
+ * 用来判断「这张图是只画了标记，还是连底色一起画」。前者该把 alpha 当遮罩、
+ * 让金属由材质自己长出来；后者是整块面都靠贴图着色，不能拿 alpha 做遮罩。
+ */
+function mapHasAlpha(map: { rgba: Uint8ClampedArray }): boolean {
+  const data = map.rgba
+  if (data.length < 4) return false
+  /* 每 37 个像素抽一个：全透明的图在头几十个采样里就会露出来，逐像素扫一张
+   * 1024² 的图要多花几十毫秒，而这里只需要一个布尔判断。 */
+  for (let i = 3; i < data.length; i += 4 * 37) {
+    if (data[i]! < 200) return true
+  }
+  return false
 }
 
 /** `material` 的第一个词决定成型方式，其余是参数，和光栅器同一套读法。 */
@@ -502,7 +759,27 @@ export function surfaceFor(
          * 0.28 会被抹成一片均匀色，AirTag 的钢面就成了白盘子。 */
         roughness: material?.roughness ?? prim.roughness ?? preset.roughness,
         anisotropic: material?.anisotropy ?? prim.anisotropy ?? preset.anisotropy,
-        ...(textureSlot ? { texture: textureSlot } : {}),
+        /* 金属面带一张「透明底、只有标记」的贴图时，只取它的 alpha 当遮罩：
+         * 标记处走哑光蚀刻，其余留纯抛光金属。RGB 故意不接——钢色由 `base`
+         * 固有色给，否则黑底会把反射染黑。 */
+        ...(textureSlot && prim.map && mapHasAlpha(prim.map)
+          ? { texture: { ...textureSlot, alphaOnly: true } }
+          : textureSlot
+            ? { texture: textureSlot }
+            : {}),
+        /* 金属面带一张「透明底、只有标记」的贴图时，把 alpha 当遮罩：标记处
+         * 走哑光蚀刻，其余留纯抛光金属。没有贴图 alpha 的金属不受影响。 */
+        ...(textureSlot && prim.map && mapHasAlpha(prim.map)
+          ? {
+              baseAlphaMask: {
+                polished: {
+                  metallic: material?.metalness ?? prim.metalness ?? 1,
+                  roughness: material?.roughness ?? prim.roughness ?? 0.18,
+                },
+                etched: { metallic: 0, roughness: 0.55 },
+              },
+            }
+          : {}),
       }
     case 'plastic':
       return {
@@ -567,7 +844,7 @@ function surfaceXml(def: SurfaceDef, images: CyclesImage[]): string {
   if (def.alphaCutout && def.texture?.slot === 'emission') {
     return [
       `<shader name="${attr(def.name)}">`,
-      `  <image_texture name="tex" filename="${attr(def.texture.name)}" colorspace="sRGB" interpolation="smart" extension="clip" />`,
+      `  <image_texture name="tex" filename="${attr(def.texture.name)}" colorspace="sRGB" interpolation="smart" extension="black" />`,
       `  <emission name="emit" strength="1" />`,
       `  <connect from="tex color" to="emit color" />`,
       `  <transparent_bsdf name="tr" color="1 1 1" />`,
@@ -585,7 +862,9 @@ function surfaceXml(def: SurfaceDef, images: CyclesImage[]): string {
       `  <image_texture name="tex" filename="${attr(def.texture.name)}" colorspace="sRGB" interpolation="smart" extension="periodic" />`,
     )
   }
-  const texBase = def.texture?.slot === 'base'
+  /* `alphaOnly` 的贴图不算 base 贴图：它只贡献 alpha，RGB 不参与着色。 */
+  const texBase = def.texture?.slot === 'base' && !def.texture.alphaOnly
+  const texAlpha = def.texture != null && def.texture.slot === 'base' && def.texture.alphaOnly === true
   const texEmission = def.texture?.slot === 'emission'
   const principled: string[] = [
     `name="bsdf"`,
@@ -613,9 +892,49 @@ function surfaceXml(def: SurfaceDef, images: CyclesImage[]): string {
       `emission_strength="${num(def.emission.strength)}"`,
     )
   }
+  /* 棱的自动倒角。节点必须在 bsdf **之前**声明，`connect` 也只能连到已经
+   * 出现过的名字——Cycles 的 XML 读取器按文档顺序建节点。
+   *
+   * `from` / `to` 的两段是「节点名 内部插座名」，不是 UI 名：输出叫 `bevel`，
+   * 输入叫 `normal`。写 UI 上的 "Normal" 也能过（匹配用 `string_iequals`，
+   * 大小写不敏感），但内部名更稳。 */
+  const wantBevel = def.bevel != null && def.bevel > 0
+  if (wantBevel) {
+    lines.push(`  <bevel name="bv" radius="${num(def.bevel!)}" samples="${BEVEL_SAMPLES}" />`)
+  }
+  /* 底色贴图的 alpha 当遮罩：透明处是抛光金属，画了标记的地方是哑光蚀刻。
+   *
+   * `tex alpha` 在标记处接近 1、空白处是 0，所以
+   *
+   *     value = etched + (1 - alpha) × (polished - etched)
+   *
+   * 用 `subtract` 求 (1-alpha)，再 `multiply_add` 一次算完乘加。
+   * connect 只能连到已经声明过的节点，所以三个 math 必须排在 bsdf 之前，
+   * 真正的 `bsdf metallic` 连接放在 bsdf 声明之后。
+   */
+  const mask = def.baseAlphaMask
+  if (mask && (texBase || texAlpha)) {
+    lines.push(`  <math name="inv" math_type="subtract" value1="1.0" />`)
+    lines.push(`  <connect from="tex alpha" to="inv value2" />`)
+    /* 每个通道一条链：value = etched + (1 - alpha) × (polished - etched)。
+     * `inv`、`span`、`met` 共用一条；粗糙度那条要自己的 span/sum，名字都加 `_r`。 */
+    const channel = (tag: string, polished: number, etched: number) => {
+      lines.push(`  <math name="span${tag}" math_type="subtract" value1="${num(polished)}" value2="${num(etched)}" />`)
+      lines.push(`  <math name="val${tag}" math_type="multiply_add" value3="${num(etched)}" />`)
+      lines.push(`  <connect from="inv value" to="val${tag} value1" />`)
+      lines.push(`  <connect from="span${tag} value" to="val${tag} value2" />`)
+    }
+    channel('', mask.polished.metallic, mask.etched.metallic)
+    channel('_r', mask.polished.roughness, mask.etched.roughness)
+  }
   lines.push(`  <principled_bsdf ${principled.join(' ')} />`)
   if (texBase) lines.push(`  <connect from="tex color" to="bsdf base_color" />`)
   if (texEmission) lines.push(`  <connect from="tex color" to="bsdf emission_color" />`)
+  if (mask && (texBase || texAlpha)) {
+    lines.push(`  <connect from="val value" to="bsdf metallic" />`)
+    lines.push(`  <connect from="val_r value" to="bsdf roughness" />`)
+  }
+  if (wantBevel) lines.push(`  <connect from="bv bevel" to="bsdf normal" />`)
   lines.push(`  <connect from="bsdf bsdf" to="output surface" />`, `</shader>`)
   void images
   return lines.join('\n')
@@ -1492,7 +1811,10 @@ function integratorTag(options: CyclesEngineOptions): string {
     `<integrator max_bounce="${Math.max(1, options.maxBounces)}" max_diffuse_bounce="${Math.max(1, Math.min(options.maxBounces, 6))}"`,
     ` max_glossy_bounce="${Math.max(1, Math.min(options.maxBounces, 8))}" max_transmission_bounce="${Math.max(1, Math.min(options.maxBounces, 12))}"`,
     ` use_adaptive_sampling="true" adaptive_threshold="0.01" use_denoise="${options.denoise ? 'true' : 'false'}"`,
-    ` denoiser_type="openimagedenoise" use_light_tree="true" sample_clamp_indirect="8" />`,
+    ` denoiser_type="openimagedenoise" use_light_tree="true" sample_clamp_indirect="8"`,
+    // 固定 seed 让同一场景两次渲染逐像素一致。对比「差一点点参数」时必须有它：
+    // 否则采样噪声比要观察的差异还大，量出来的数字会随机摇摆。
+    options.seed != null ? ` seed="${Math.max(0, Math.floor(options.seed))}" />` : ' />',
   ].join('')
 }
 
@@ -1534,9 +1856,23 @@ export function exportCyclesScene(doc: LayerDocument, options: ExportOptions): C
   }
 
   const items: CameraItem[] = layer ? cameraItems(layer) : []
+  /* 相机的两个量在循环外取一次：眼点定距离，viewplane 定像素比例。半径
+   * 本身要按每个物体各自的深度算（见 `bevelRadiusAt`），所以不能整幅图共用一个。 */
+  const wantBevel = options.bevel ?? process.env.CYCLES_BEVEL === '1'
+  /* 相机眼点的世界坐标与画幅半高：前者定距离，后者把「1 像素」换成世界长度。
+   * 半径本身由 `recommendBevels` 决定，这两个量只服务于最后的可见性闸门。 */
+  const bevelEye = layer ? layerToWorld(cameraPose(layer).eye) : null
+  const bevelViewplaneTop = layer ? viewplaneFor(width, height, cameraOf(layer).perspective).top : null
   const surfaces = new Map<string, SurfaceDef>()
   const images: CyclesImage[] = []
   const meshes: string[] = []
+  /* 网格图元先收集起来：半径依赖全场景统计，必须等所有几何都到齐再算。 */
+  const pending: PendingMesh[] = []
+  /* 落盘贴图的编号。**必须独立于 `textures`**：后者只在网格真正写出时才增长，
+   * 而贴图在收集阶段就要写文件。曾经两处都用 `textures.length` 编号，整轮循环
+   * 恒读到 0，所有贴图都叫 tex-0.png 互相覆盖——杯子的星巴克标被 AirTag 顶掉。
+   * 这里用一个只增不减的计数器，平面贴图和网格贴图共用，保证文件名唯一。 */
+  let textureSeq = 0
   const grounds: string[] = []
   // 阴影捕捉器是否出现过：它决定 film 要不要开近似合成。
   let hasShadowCatcher = false
@@ -1546,7 +1882,7 @@ export function exportCyclesScene(doc: LayerDocument, options: ExportOptions): C
   const shaders: string[] = []
 
   const rememberSurface = (def: Omit<SurfaceDef, 'name'>, base: string): string => {
-    const key = surfaceKey(def)
+    const key = surfaceKeyOf(def)
     const existing = surfaces.get(key)
     if (existing) return existing.name
     const name = `${base}-${surfaces.size + 1}`
@@ -1576,7 +1912,7 @@ export function exportCyclesScene(doc: LayerDocument, options: ExportOptions): C
       const solid = uniformRgba(pixels.data)
       let textureName: string | null = null
       if (!solid) {
-        const texture = writePlaneTexture(painted, textures.length, '')
+        const texture = writePlaneTexture(painted, textureSeq++, '')
         images.push(texture)
         textures.push(texture.name)
         textureName = texture.name
@@ -1659,16 +1995,29 @@ export function exportCyclesScene(doc: LayerDocument, options: ExportOptions): C
     }
     const fill = node.fill ?? '#c8c8c8'
     for (const geometry of geometries) {
-      const texture = writeTexture(geometry.prim, textures.length, '')
+      /* 倒角半径是**全场景统一**决定的（要先知道所有物体多大，才能定出参考
+       * 尺度），所以这里只收集，等循环结束再一次性算完回填。 */
+      /* 贴图编号必须用**独立的计数器**，不能用 `textures.length`：后者只在真正
+       * 写出网格时才增长，而贴图在这里就要落盘。曾用 `textures.length` 编号，
+       * 结果整轮循环都读到 0，所有贴图都叫 `tex-0.png`，后写的覆盖先写的——
+       * 杯子的星巴克标被 AirTag 的面板贴图顶掉了。 */
+      const texture = writeTexture(geometry.prim, textureSeq++, '')
       if (texture) images.push(texture)
-      const def = surfaceFor(node, fill, geometry.prim, texture ? texture.name : null)
-      const name = rememberSurface(def, 'mat')
-      const meshName = `${sanitize(node.path)}-${counts.meshes}`
-      meshes.push(meshXml(meshName, IDENTITY4, geometry.chunk, name))
-      counts.meshes += 1
-      counts.triangles += geometry.triangles
-      if (texture) textures.push(texture.name)
+      pending.push({ node, fill, geometry, texture: texture ? texture.name : null })
     }
+  }
+
+  if (wantBevel) applyBevelRadii(pending, bevelEye, bevelViewplaneTop, height)
+
+  for (const entry of pending) {
+    const def = surfaceFor(entry.node, entry.fill, entry.geometry.prim, entry.texture)
+    if (entry.radius != null) def.bevel = entry.radius
+    const name = rememberSurface(def, 'mat')
+    const meshName = `${sanitize(entry.node.path)}-${counts.meshes}`
+    meshes.push(meshXml(meshName, IDENTITY4, entry.geometry.chunk, name))
+    counts.meshes += 1
+    counts.triangles += entry.geometry.triangles
+    if (entry.texture) textures.push(entry.texture)
   }
 
   for (const surface of surfaces.values()) shaders.push(surfaceXml(surface, images))

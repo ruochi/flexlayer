@@ -7,10 +7,12 @@ import {
   layerToWorld,
   shortSideFov,
   surfaceFor,
+  surfaceKeyOf,
   viewplaneFor,
   verticalFov,
 } from './cycles-export.js'
 import type { LayerDocument } from './types.js'
+
 
 const SCENE = `<layer width="960" height="640" background="#f3efe6" camera="fov 30, orbit 26 30, distance 1150, at 480 460 0">
   <ground y="500" rotateX="90" fill="#e7e0d4" />
@@ -484,6 +486,159 @@ describe('cycles 导出', () => {
     const surface = surfaceFor({ material: undefined } as never, '#c8ccd1', prim, null)
     expect(surface.metallic).toBe(1)
     expect(surface.roughness).toBeCloseTo(0.05)
+  })
+
+  /*
+   * 倒角是「只改法线」的那条路：顶点、索引一个不动，只在每个材质的 shader 里
+   * 多一个 bevel 节点。这几条测的是它**不该**悄悄改变别的东西。
+   */
+  it('缺省不写 bevel 节点', async () => {
+    const doc = await document(SCENE)
+    const xml = exportCyclesScene(doc, { ...CYCLES_DEFAULTS }).xml
+    expect(xml).not.toContain('<bevel')
+    expect(xml).not.toContain('bsdf normal')
+  })
+
+  /* 默认 divisor=400 是「工业件真实倒角」的尺度，半径只投影到零点几像素：
+   * 这个场景在 960×640 与 1920×1280 下都低于 `BEVEL_MIN_PX`，节点被整条跳过。
+   * 所以这一组统一用 3840×2560 出图，让倒角真的可见。想在小画幅上看到倒角，
+   * 把 `CYCLES_BEVEL_DIVISOR` 调到 100 量级。 */
+  it('打开 bevel 后每个材质挂一个节点，并接到 bsdf 的法线', async () => {
+    const doc = await document(SCENE)
+    const xml = exportCyclesScene(doc, { ...CYCLES_DEFAULTS, bevel: true, width: 3840, height: 2560 }).xml
+    const nodes = xml.match(/<bevel name="bv"[^>]*>/g) ?? []
+    expect(nodes.length).toBeGreaterThan(0)
+    // 每个节点都有一条把它的输出接到 bsdf 法线的 connect。
+    const links = xml.match(/<connect from="bv bevel" to="bsdf normal" \/>/g) ?? []
+    expect(links.length).toBe(nodes.length)
+    // 节点必须声明在 bsdf 之前：Cycles 的 XML 读取器按文档顺序建节点。
+    for (const shader of xml.match(/<shader name="mat-[^"]*">[\s\S]*?<\/shader>/g) ?? []) {
+      const bevelAt = shader.indexOf('<bevel')
+      if (bevelAt < 0) continue
+      expect(bevelAt).toBeLessThan(shader.indexOf('<principled_bsdf'))
+    }
+  })
+
+  it('倒角半径按世界单位写，且不超过物体自身的厚度余量', async () => {
+    const doc = await document(SCENE)
+    const xml = exportCyclesScene(doc, { ...CYCLES_DEFAULTS, bevel: true, width: 3840, height: 2560 }).xml
+    const radii = [...xml.matchAll(/<bevel name="bv" radius="([^"]+)" samples="(\d+)"/g)]
+    expect(radii.length).toBeGreaterThan(0)
+    /*
+     * 半径是**世界单位（米）**，由「参考尺度 / 100」定，再被物体最薄边钳住。
+     * 这个场景的球直径 1.44 m、立方体最小边 1.32 m，所以半径落在
+     * `1.6 / 100 = 0.016 m` 量级，绝不会超过 0.2 × 1.32 = 0.26 m。
+     */
+    for (const match of radii) {
+      const meters = Number(match[1])
+      expect(meters).toBeGreaterThan(0)
+      expect(meters).toBeLessThan(0.1)
+      expect(Number(match[2])).toBe(8)
+    }
+  })
+
+  it('半径由场景尺度决定，不随画幅尺寸漂移', async () => {
+    /* 旧实现按「1 个像素」定半径，画幅一变半径就跟着变。新实现按物理尺度定，
+     * 画幅只影响「看不看得见」这一道闸门。 */
+    const doc = await document(SCENE)
+    const radiusOf = (xml: string) => {
+      const match = xml.match(/<bevel name="bv" radius="([^"]+)"/)
+      return match ? Number(match[1]) : null
+    }
+    const base = radiusOf(exportCyclesScene(doc, { ...CYCLES_DEFAULTS, bevel: true, width: 3840, height: 2560 }).xml)
+    const larger = radiusOf(exportCyclesScene(doc, { ...CYCLES_DEFAULTS, bevel: true, width: 7680, height: 5120 }).xml)
+    expect(base).not.toBeNull()
+    expect(larger).not.toBeNull()
+    /* 画幅翻倍不会让半径翻倍——物理尺度只由场景决定，画幅只决定可不可见。 */
+    expect(larger!).toBeCloseTo(base!, 10)
+  })
+
+  it('倒角半径进 surfaceKey：不同半径不会共用同一个 shader', async () => {
+    const a = surfaceFor({ material: undefined } as never, '#c8ccd1', {
+      positions: new Float32Array(9), normals: new Float32Array(9),
+      indices: new Uint32Array(3), alpha: 255, doubleSided: false,
+      shade: 'metal' as const, roughness: 0.3, metalness: 1,
+    }, null)
+    const doc = await document(SCENE)
+    const xmlNear = exportCyclesScene(doc, { ...CYCLES_DEFAULTS, bevel: true, width: 3840, height: 2560 }).xml
+    expect(xmlNear).toContain('radius=')
+    /* 两个不同半径必须产生两个不同的 key，否则 rememberSurface 会合并它们。 */
+    expect(surfaceKeyOf({ ...a, bevel: 0.001 })).not.toBe(surfaceKeyOf({ ...a, bevel: 0.002 }))
+  })
+
+  it('倒角细到读不出来时整条不挂节点', async () => {
+    /* 可见门槛是 0.25 px。这是「还读得成一条边」的下限；再细只会糊成灰雾。
+     * 这个场景半径固定，所以只要把画幅缩得足够小，投影像素就会掉到门槛之下。 */
+    const doc = await document(SCENE)
+    const tiny = exportCyclesScene(doc, { ...CYCLES_DEFAULTS, bevel: true, width: 320, height: 213 }).xml
+    const large = exportCyclesScene(doc, { ...CYCLES_DEFAULTS, bevel: true, width: 3840, height: 2560 }).xml
+    expect(tiny).not.toContain('<bevel')
+    expect(large).toContain('<bevel')
+  })
+
+  it('地板不参与参考尺度，半径只由实体决定', async () => {
+    const doc = await document(SCENE)
+    const xml = exportCyclesScene(doc, { ...CYCLES_DEFAULTS, bevel: true, width: 3840, height: 2560 }).xml
+    const first = Number(/<bevel name="bv" radius="([^"]+)"/.exec(xml)?.[1])
+    /* 地板跨度是画幅的几十倍；如果它进了统计，参考尺度会到几十米。 */
+    expect(first).toBeLessThan(0.1)
+  })
+
+
+  it('同一份场景导两次，贴图编号稳定且不重复', async () => {
+    /* 这条守的是「贴图落盘时的编号来源」这个契约：编号必须在收集阶段就单调
+     * 递增。曾经平面贴图和网格贴图都取 `textures.length`，而它只在网格写出
+     * 时才增长——收集阶段恒为 0，两张不同贴图写进同一个文件，杯子的星巴克标
+     * 就被 AirTag 的面板贴图覆盖了。 */
+    const doc = await document(SCENE)
+    const first = exportCyclesScene(doc, { ...CYCLES_DEFAULTS })
+    const second = exportCyclesScene(doc, { ...CYCLES_DEFAULTS })
+    const names = (out: typeof first) => out.images.map((image) => image.name)
+    expect(names(first)).toEqual(names(second))
+    expect(new Set(names(first)).size).toBe(names(first).length)
+  })
+
+  it('传了 seed 就写进 integrator，没传就不写', async () => {
+    /* A/B 对比细到 1 像素量级的参数（倒角半径 1.37 vs 0.69 px）时，两次采样
+     * 序列不同会让噪声盖过真实差异，量出来的数字随机摇摆。固定 seed 是让
+     * 这类对比可复现的唯一办法。 */
+    const doc = await document(SCENE)
+    const seeded = exportCyclesScene(doc, { ...CYCLES_DEFAULTS, seed: 7 })
+    expect(seeded.xml).toContain('seed="7"')
+    const plain = exportCyclesScene(doc, { ...CYCLES_DEFAULTS })
+    expect(plain.xml).not.toContain('seed=')
+  })
+
+  it('金属面的透明 logo 贴图只贡献 alpha，不接底色', async () => {
+    /* 钢面贴一张「透明底、只画标记」的 PNG 时，贴图 RGB 绝对不能接到
+     * base_color：金属的底色是反射的染色，接一张以黑为底的图会把整块钢染成
+     * 黑铁。正确做法是 RGB 不接，alpha 走 math 链驱动 metallic / roughness。
+     *
+     * `math_type` 和 `extension` 的值都必须是 Cycles 认识的小写枚举：写成
+     * `SUBTRACT` / `clip` 会让整个 shader 读取失败，而失败是静默的——渲染
+     * 出来只是「一片平的金属」，看不出是这里挂了。 */
+    const doc = await document(SCENE)
+    const out = exportCyclesScene(doc, { ...CYCLES_DEFAULTS })
+    const xml = out.xml
+    expect(xml).not.toContain('extension="clip"')
+    expect(xml).not.toContain('math_type="SUBTRACT"')
+    expect(xml).not.toContain('math_type="MULTIPLY_ADD"')
+  })
+
+  it('alpha 遮罩只在贴图真的有透明像素时才挂', () => {
+    /* 判据是「图里有没有真正透明的像素」：只有透明底的贴图才该让 alpha 去
+     * 驱动遮罩；一张整块填满的贴图（比如木纹）不能拿 alpha 做金属遮罩，
+     * 否则整块面会突然变成非金属。 */
+    expect(surfaceKeyOf({
+      base: [0.8, 0.8, 0.8], metallic: 1, roughness: 0.2, transmission: 0, ior: 1.5,
+      coat: 0, coatRoughness: 0.03, sheen: 0, anisotropic: 0,
+      texture: { name: 'a.png', uvs: true, slot: 'base', alphaOnly: true },
+      baseAlphaMask: { polished: { metallic: 1, roughness: 0.2 }, etched: { metallic: 0, roughness: 0.55 } },
+    })).not.toBe(surfaceKeyOf({
+      base: [0.8, 0.8, 0.8], metallic: 1, roughness: 0.2, transmission: 0, ior: 1.5,
+      coat: 0, coatRoughness: 0.03, sheen: 0, anisotropic: 0,
+      texture: { name: 'a.png', uvs: true, slot: 'base' },
+    }))
   })
 
 })
