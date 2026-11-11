@@ -333,8 +333,49 @@ const POD_W = 60.6 / 21.7
 const POD = { x: 1040, y: 990, w: 148, turn: -18 }
 // 钻石位置微调
 const GEM = { x: 435, y: 995, r: 46, turn: 28 }
+// 材质测试球：右前那块空地（x 1150~1400、y 1100~1250）一直是空的，离机身、
+// 杯子、AirPods 盒都够远，摆一排不会被挡也不会穿模。
+const SPHERES = { x: 1130, y: 1150, r: 32, gap: 74 }
 
 const mat = (color: string, roughness: number, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness })
+
+/**
+ * 材质测试球：一列同尺寸的球，只换材质，用来判断环境贴图反射和 finish 参数
+ * 到底起没起作用。
+ *
+ * 单个球看不出问题——球面法线朝各个方向，任何环境都只会给出「一条高光+一圈
+ * 暗边」的通用形状。一排不同粗糙度/金属度的球并排放，反射的**锐利程度**和
+ * **染色**才比得出来：镜面那只应该清楚映出环境里所有的亮区，粗糙那只应该只剩
+ * 一片柔和的明暗渐变，中间几只逐级过渡。
+ *
+ * 球本身用 `SphereGeometry` 而不是别的：UV 经纬网在球面上采样最均匀，也不需要
+ * 任何贴图。
+ */
+const testSpheres = (() => {
+  /* 几何体按**半径 1** 建，实际大小由 `<model unit>` 给（unit = 1 个模型单位
+   * 对应多少像素）。这样球的实际半径就是 unit，不会被几何尺寸再乘一遍。 */
+  const R = 1
+  /* 第一只刻意和 AirTag 钢面**完全同参数**（base/roughness/clearcoat 都对齐），
+   * 用来验证那块钢面的观感到底来自材质本身还是它的球冠几何。两者唯一的差别是
+   * 形状：球是完整球面，AirTag 是很浅的球冠，法线扫过的角度小得多。
+   *
+   * 其余三只从镜面到非金属排开，方便逐级比对反射的锐利程度。 */
+  const finishes: [THREE.Material, string][] = [
+    [new THREE.MeshPhysicalMaterial({
+      color: '#e9edf2',
+      metalness: 1,
+      roughness: 0.18,
+      clearcoat: 0.5,
+      clearcoatRoughness: 0.08,
+    }), 'AirTag 钢面同款'],
+    [new THREE.MeshPhysicalMaterial({ color: '#f0d9b5', metalness: 1, roughness: 0.16, clearcoat: 0 }), '香槟金'],
+    [new THREE.MeshPhysicalMaterial({ color: '#c9ced6', metalness: 1, roughness: 0.34, clearcoat: 0 }), '拉丝钢'],
+    [new THREE.MeshPhysicalMaterial({ color: '#f6f4ef', metalness: 0, roughness: 0.22, clearcoat: 0.8, clearcoatRoughness: 0.1 }), '珠光白瓷'],
+  ]
+  /* 每只球各建一份几何体。共用一份再 `clone()` 在 `seated` 里连着做旋转变换，
+   * 边界盒会互相污染；独立建一份最省心，顶点数本来也不多。 */
+  return finishes.map(([m]) => seated([[new THREE.SphereGeometry(R, 32, 20), m]]))
+})()
 
 // Starbucks 塞壬：simple-icons 的 24×24 单色路径。用 evenodd 填充，
 // 王冠、双尾之间的镂空和脸部才留得下来。
@@ -915,7 +956,18 @@ const airtag = (() => {
   const face = new THREE.CircleGeometry(faceR, 72)
   {
     const pos = face.getAttribute('position')
-    const domeH = 0.055
+    /* 弧高决定这块钢面**能反射到环境的多大一片**。
+     *
+     * 反射方向跟着法线走，球冠的法线最大偏转 = atan(2H/R)。原来 H=0.055 时只有
+     * 8.7°，也就是整块面只看到环境里极窄的一条，反射梯度全挤在那一点点角度里，
+     * 渲染出来就是一片均匀的灰——这正是「钢面看不出是金属」的原因，跟贴图无关。
+     *
+     * 真机实测弧高/半径约 0.031（偏转 3.5°），比这还平；但那是产品的真实形态，
+     * 靠的是一整圈亮环境才读得出金属。这张图的环境贴图本身很暗，需要给法线更大的
+     * 扫描余量才立得住。0.18 让偏转到 26.6°，是原来的 3 倍。
+     *
+     * 代价是外形更鼓：AirTag 会显得比真机厚一点，但这比「一块平白钢片」好。 */
+    const domeH = 0.35
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i)
       const y = pos.getY(i)
@@ -1295,6 +1347,19 @@ function Props() {
       <layer x={GEM.x} y={GEM.y} width="0" height="0" rotate={GEM.turn} preserve-3d>
         <model object={diamond} unit={GEM.r} x="0" y="0" />
       </layer>
+      {/* 右前：一列材质测试球。只换 finish，几何完全一样，方便逐只比对反射。 */}
+      {testSpheres.map((sphere, i) => (
+        <layer
+          key={`sphere-${i}`}
+          x={SPHERES.x + i * SPHERES.gap}
+          y={SPHERES.y}
+          width="0"
+          height="0"
+          preserve-3d
+        >
+          <model object={sphere} unit={SPHERES.r} x="0" y="0" />
+        </layer>
+      ))}
     </layer>
   )
 }
